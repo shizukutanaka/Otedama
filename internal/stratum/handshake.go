@@ -31,15 +31,15 @@ import (
 // SetupConnection is the first message sent by the client to negotiate
 // the protocol version and capabilities.
 type SetupConnection struct {
-	Protocol        Protocol
-	MinVersion      uint16
-	MaxVersion      uint16
-	Flags           uint32
 	Endpoint        string // STR0_255
 	Vendor          string // STR0_255
 	HardwareVersion string // STR0_255
 	Firmware        string // STR0_255
 	DeviceID        string // STR0_255
+	Protocol        Protocol
+	MinVersion      uint16
+	MaxVersion      uint16
+	Flags           uint32
 }
 
 // Encode serialises the message into a payload byte slice.
@@ -122,8 +122,8 @@ func DecodeSetupConnectionSuccess(payload []byte) (SetupConnectionSuccess, error
 
 // SetupConnectionError is returned when the pool rejects a connection.
 type SetupConnectionError struct {
-	Flags uint32
 	Error string // STR0_255: human-readable reason
+	Flags uint32
 }
 
 // Encode serialises SetupConnectionError.
@@ -160,8 +160,8 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 // version of this struct carried a MaxTargetNBits field that Encode
 // never serialized; it was removed rather than left silently dropped.
 type OpenMiningChannel struct {
-	ReqID           uint32  // caller-assigned, echoed in response
 	User            string  // STR0_255: worker identifier (usually Bitcoin address)
+	ReqID           uint32  // caller-assigned, echoed in response
 	NominalHashrate float32 // H/s, informational
 }
 
@@ -202,9 +202,6 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 // OpenMiningChannelSuccess is sent by the pool to confirm the channel
 // and provide the initial difficulty target.
 type OpenMiningChannelSuccess struct {
-	ReqID     uint32   // echoes OpenMiningChannel.ReqID
-	ChannelID uint32   // assigned by pool
-	Target    [32]byte // U256 (fixed 32 bytes, no length prefix): initial target hash
 	// Extranonce is B0_32 per the SV2 spec (1-byte length prefix, max 32
 	// bytes). Postel's law applies here: Encode is strict (appendB0_32
 	// rejects >32 bytes, since a value Otedama generates must be
@@ -213,6 +210,9 @@ type OpenMiningChannelSuccess struct {
 	// bounded and allocation-safe, so we accept and use it rather than
 	// dropping an otherwise-working connection over a spec-length nit.
 	Extranonce      []byte
+	ReqID           uint32   // echoes OpenMiningChannel.ReqID
+	ChannelID       uint32   // assigned by pool
+	Target          [32]byte // U256 (fixed 32 bytes, no length prefix): initial target hash
 	ExtraNonce2Size uint16
 }
 
@@ -261,8 +261,8 @@ func DecodeOpenMiningChannelSuccess(payload []byte) (OpenMiningChannelSuccess, e
 
 // OpenMiningChannelError is returned when the pool rejects a channel request.
 type OpenMiningChannelError struct {
-	ReqID uint32
 	Error string // STR0_255
+	ReqID uint32
 }
 
 // Encode serialises OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
