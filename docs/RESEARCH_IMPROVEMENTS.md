@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 495 — .github/oss-fuzz-integration.md の陳腐化2件 + CONTRIBUTING.md Go 要件を訂正
+
+**Sweep.** `.github/oss-fuzz-integration.md`（未提出の統合文書）の全クレームを上流ソースと照合 + `CONTRIBUTING.md`（166行）精読。
+
+**発見（3件訂正）。**
+- **「Bug bounties (~$500–$5000 per accepted vulnerability)」→ 陳腐化**: OSS-Fuzz reward program は sunset（google/oss-fuzz#15478 で確認）。24/7 ファズ・issue filing・coverage reports は無料継続 — bounty 行を取消線＋訂正。
+- **準備済み `build.sh` が obsolete interface**: `go-118-fuzz-build -o x.a -func F pkg` + 手動 `$CXX $LIB_FUZZING_ENGINE` リンクは旧式 — 現行 OSS-Fuzz Go ガイドの `compile_native_go_fuzzer <pkg> <func> <name>` ヘルパーに置換（base-builder-go 同梱・go-118-fuzz-build を内部駆動）。
+- **CONTRIBUTING.md「Go 1.22以上」** → 実効 ≥1.24（README/AUDIT_CHECKLIST に続く同クレーム5箇所目）。
+
+**検証済み・変更なし。** Fuzz* 関数2件の記述（FuzzDecodeHeader/FuzzDecoder_ReadFrame）・提出手順・メンテナ工数見積・`primary_contact` は提出時差し替えのテンプレートとして妥当。CONTRIBUTING の make ターゲット・DCO・二重レビュー方針（Phase-1 単独メンテ下での意図的ポリシー）・Braiins/DEMAND 手検証クレームは正確。
