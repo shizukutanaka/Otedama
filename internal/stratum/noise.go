@@ -50,11 +50,11 @@ import (
 type HandshakeState struct {
 	localEphemeral *ecdh.PrivateKey
 	remoteStatic   *ecdh.PublicKey
-	sendCipher     *CipherState
-	recvCipher     *CipherState
 	h              [32]byte // running hash (h)
 	ck             [32]byte // chaining key
 	complete       bool
+	sendCipher     *CipherState
+	recvCipher     *CipherState
 }
 
 // CipherState encrypts/decrypts transport messages after the handshake.

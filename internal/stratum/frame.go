@@ -143,8 +143,8 @@ func (h Header) Validate() error {
 // caller beyond the lifetime of the Frame, because the Decoder may
 // reuse its internal buffer for the next frame.
 type Frame struct {
-	Payload []byte
 	Header  Header
+	Payload []byte
 }
 
 // ChannelID extracts the channel_id from a channel message's payload.

@@ -31,26 +31,19 @@ type Work struct {
 // SubmitSharesStandard.version must match the hashed header, or the pool
 // recomputes a different hash and rejects the share).
 type Share struct {
-	// DeviceID is the HAL identity of the device whose worker found this
-	// share. Set from WorkerConfig.DeviceID; empty when not configured.
-	DeviceID string
-
 	ChannelID uint32
 	JobID     uint32
 	Nonce     uint32
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// DeviceID is the HAL identity of the device whose worker found this
+	// share. Set from WorkerConfig.DeviceID; empty when not configured.
+	DeviceID string
 }
 
 // WorkerConfig controls the behaviour of a Worker.
 type WorkerConfig struct {
-	// DeviceID is the HAL identity of the hardware device this worker
-	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
-	// emits so the engine can attribute shares per device.
-	// Empty string means "unidentified device".
-	DeviceID string
-
 	// Threads is the number of goroutines to spawn. Zero or negative
 	// values are replaced with runtime.NumCPU().
 	Threads int
@@ -65,6 +58,12 @@ type WorkerConfig struct {
 	// available hash rate (each of Threads goroutines redundantly
 	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
+
+	// DeviceID is the HAL identity of the hardware device this worker
+	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
+	// emits so the engine can attribute shares per device.
+	// Empty string means "unidentified device".
+	DeviceID string
 }
 
 // DefaultWorkerConfig returns a WorkerConfig that uses all available
@@ -90,13 +89,10 @@ type Stats struct {
 //
 // The zero value is not usable; use NewWorker.
 type Worker struct {
-	// Pointer-containing fields first: keeps the GC scan span short.
-	cancel context.CancelFunc
-	work   *Work // current job; nil means idle
-	done   chan struct{}
-	cfg    WorkerConfig
+	cfg WorkerConfig
 
 	mu      sync.Mutex
+	work    *Work  // current job; nil means idle
 	workVer uint64 // bumped on every SetWork call
 
 	// Atomic counters for stats.
@@ -105,6 +101,9 @@ type Worker struct {
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
 	startTime  atomic.Int64  // UnixNano
 	started    atomic.Bool   // guards Start against a second call
+
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // NewWorker creates a Worker with the given configuration.

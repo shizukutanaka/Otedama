@@ -316,9 +316,9 @@ func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
 
 // SubmitSharesError is returned when the pool rejects a share.
 type SubmitSharesError struct {
-	Error          string // STR0_255
 	ChannelID      uint32
 	SequenceNumber uint32
+	Error          string // STR0_255
 }
 
 // Encode serialises SubmitSharesError (symmetric inverse of DecodeSubmitSharesError).
@@ -393,8 +393,8 @@ type Message struct {
 
 // UnknownMessage wraps a frame whose msg_type is not recognised.
 type UnknownMessage struct {
-	Payload []byte
 	MsgType uint8
+	Payload []byte
 }
 
 // DispatchFrame decodes the payload of f into the appropriate Message field.

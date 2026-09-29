@@ -939,26 +939,3 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
-
-## Session 533 — fieldalignment pass + local GOOS build matrix
-
-- **Local build matrix**: `GOOS×GOARCH` compile check — linux,
-  darwin, windows, freebsd, openbsd, netbsd × amd64 plus linux/arm64,
-  linux/386, windows/arm64 all build clean. (CI advertises multi-OS
-  builds; verified locally for the first time.)
-- **fieldalignment sweep**: reordered pointer-containing fields to
-  the front of stratum/miner structs so the GC scan span ends early —
-  `Share` (submit hot path) 64→8 B, `HandshakeState` 104→32,
-  `OpenMiningChannel` shrinks 32→24 B (25%), plus `Frame`,
-  `WorkerConfig`, `Worker`, `SetupConnection`,
-  `SetupConnectionError`, `OpenMiningChannelSuccess`,
-  `OpenMiningChannelError`, `SubmitSharesError`, `UnknownMessage`.
-  All literal uses are keyed — no behavioral change; `go test -race`
-  green on miner/stratum/engine.
-- Remaining findings recorded for later: engine option/config structs
-  (`sessionOpts`, `reconnectOpts`, `Options`, `engineMetrics`,
-  `LatencyTracker`, `HashrateMonitor`, `hashrateWindow`,
-  `arbitrationLoopOpts`) and arbitration (`Stream`, `Assignment`,
-  `Input`) — same mechanical class, deferred to keep this diff inside
-  the two leaf packages (engine files are the highest PR-collision
-  surface).
