@@ -940,6 +940,24 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 338 — set_extranonce race fix + V1 method-surface audit
+
+**set_extranonce data race [FIXED].** `mining.set_extranonce` (read
+goroutine) replaced `extranonce1`/`extranonce2Size` while `Submit`
+(caller goroutine) read them — plain fields, a real race whenever a
+pool rotated extranonce mid-session. Both now atomic
+(`atomic.Pointer[string]` / `atomic.Int64`); a concurrent dispatch+load
+test locks the fix in. Benign-read note: today's V1 path leaves
+`MerkleRoot` to the pool (poolproto.Job comment), so rotation stales
+no in-flight work; a future en1-dependent coinbase path (open #417)
+must additionally flush queued jobs on rotation.
+**V1 method coverage [AUDITED — clean].** Handled: mining.notify,
+set_difficulty, set_extranonce, client.show_message,
+client.reconnect/mining.reconnect. mining.set_version_mask and other
+extensions are deliberately ignored (forward-compatible). Requests
+with an id are never sent pool→client by conforming pools; unknown
+methods are dropped without reply.
+
 ## Session 383 — SV2 nominal_hashrate seeding
 
 [FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.

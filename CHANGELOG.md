@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 338 — set_extranonce のデータレース修正)
+
+`mining.set_extranonce`（リードゴルーチン）が `extranonce1`/
+`extranonce2Size` を書き換え、`Submit`（呼び出し元ゴルーチン）が
+同フィールドを読む — 素のフィールドでデータレースが発生していた
+問題を `atomic.Pointer[string]`/`atomic.Int64` 化で修正。
+
 ### 修正 (session 383)
 
 - Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
