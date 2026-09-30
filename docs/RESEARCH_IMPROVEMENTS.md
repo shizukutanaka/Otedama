@@ -950,3 +950,15 @@ the concurrency-heavy suites (engine, stratumv1/v2, doctor's
 correctly under serialization. Combined with the race (s517),
 flake (s535), and shuffle (s540) sweeps, the suite is robust
 across every Go scheduler dimension.
+
+## Session 542 — ecosystem recheck: sv2-spec #220/#221/#224/#209
+
+Four new spec merges since session 530: #220 fixes Noise Act 2 to
+exactly 234 bytes (wire-level normative; Otedama's ReadMessage2 is
+lenient >=32 — recorded as a §2 forward requirement), #221 drops
+Lightning "Act" terminology for Noise "steps" (docs only), #224
+editorial, #209 prohibits active-job_id reuse and SetNewPrevHash
+references to unreceived jobs (engine already pauses+warns on
+unknown-job refs; duplicate job_id is last-wins defensively).
+SRI still v1.11.1 — its SV1 difficulty round-up fix (#2227) does
+not apply here: sha256d.go computes targets with exact big.Int math.
