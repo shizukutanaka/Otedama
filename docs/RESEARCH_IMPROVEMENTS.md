@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 552 — upstream-reachable input cost: map complete
+
+Following session 551's base58 bound, the symmetric checks:
+- `ValidateBech32Address` already enforces the BIP-173 90-char
+  cap before decoding (bech32.go:120) — symmetric bound present.
+- V1 wire input is bounded at the reader:
+  `bufio.NewReaderSize(conn.raw, maxLineBytes)` + ReadSlice's
+  ErrBufferFull path — a newline-free pool write can never grow
+  memory (stratumv1.go:131,185).
+- V2 frames bounded (earlier sessions); YAML/config is local.
+Every upstream-reachable decode now has a pre-work length bound.
