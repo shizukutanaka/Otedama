@@ -19,7 +19,7 @@ import (
 // struct — never a panic (length-prefix overruns, short fixed fields).
 func FuzzHandshakeDecoders(f *testing.F) {
 	// Real encodings as seeds so mutations start past the length guards.
-	if enc, err := (SetupConnection{
+	if enc, err := (&SetupConnection{
 		Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2,
 		Endpoint: "pool.example.com:3333", Vendor: "otedama",
 		HardwareVersion: "asic-x", Firmware: "1.0", DeviceID: "dev0",
