@@ -965,6 +965,217 @@ validation ([0,1) hysteresis, ≥0 floors); doctor `--bitcoin-address`
 flag exists as documented; AUDIT_CHECKLIST scrypt claim (N=32768 vs
 actual 1<<17) already corrected in open #494 — no re-delivery needed.
 
+## Session 529 — BENCHMARKS re-verified against go1.27.1/arm64
+
+- **Measured `BenchmarkHashHeader`**: ~112 ns/op, 0 allocs on
+  virtualized Apple M4 → ~8.9 MH/s/thread — added the missing M4 row
+  to the single-thread table (the existing rows predate M4).
+- **Frame-decode section corrected** (two stale claims surviving
+  session 484's pass): the cited `BenchmarkDecoder_ReadFrame` does not
+  exist in the tree (only `BenchmarkHmacSHA256_*` in `internal/stratum`)
+  so the reproduce command ran zero benchmarks; and "fuzzed
+  continuously in CI" is false (no fuzz job — KNOWN_LIMITATIONS §13;
+  fifth doc with this phantom). Table re-labeled as unverified
+  targets, not measurements.
+
+## Session 530 — sv2-spec drift: cert version now normative
+
+Recorded in ADR-009:
+
+- **sv2-spec #230 merged (Sep 10)**: Noise certificate `version` MUST
+  be 0; initiator MUST reject unsupported versions (was undefined;
+  implementations disagreed, #229). Forward requirement for Otedama:
+  `internal/stratum/noise*.go` does not yet parse the responder cert,
+  so when cert validation lands it must include the `version == 0`
+  check — recorded where implementers will look.
+- **sv2-spec #233 merged (Sep 23)**: upstream added `AGENTS.md` —
+  meta, no protocol impact.
+- SRI remains at v1.11.1 (no release since the V1-difficulty fix).
+
+## Session 531 — per-package coverage measured
+
+`go test -cover ./...` under go1.27.1: **24 packages, all green;
+median ~97% statement coverage.** Distribution:
+
+- 100%: arbitration, clock, i18n, logger, metrics, poolproto, version
+- 97–99.7%: btccrypto, doctor, hal, httpserver, i18n/messages, miner,
+  poolproto/stratumv1, poolproto/stratumv2, provider, rates, stratum,
+  tui
+- 92–95%: config, daemon, engine, lightning
+- 88%: `cmd/otedama` — the only package below the 90% intent.
+
+The two <50% functions inside cmd/otedama are `main` (0% — untestable
+entrypoint by design) and `cmdRun` (36.4%). cmdRun's uncovered
+residue is the live-run tail — `engine.Run(...)` call site, the
+signal-NotifyContext wiring, HTTP server Start/Stop — i.e.
+integration-only territory already exercised by the session-527/528
+binary E2E smokes rather than unit tests. Recorded as a
+coverage-gap verdict, not a defect: unit coverage of the remaining
+paths would require a live pool or a scripted service manager.
+
+## Session 534 — escape analysis: hot path clean
+
+`go build -gcflags='-m'` on `internal/miner`: every heap escape is on
+a cold path — `diff1Target` (package-init big.Int), error-string
+literals in `NBitsFromTarget`/`TargetFromDifficulty` (invalid-input
+paths only), `&Worker{}`/`wg` (once per construction/Start).
+`TargetFromDifficulty` allocates `big.Float` per call but runs once
+per `mining.set_difficulty`, not per hash. The grind loop itself is
+allocation-free, consistent with `BenchmarkHashHeader` 0 allocs/op.
+No action needed; recorded as an audit verdict.
+
+## Session 535 — flake sweep: timing-sensitive packages clean
+
+Repeat-run sweep of the packages whose tests touch timers,
+goroutines, or the network: `go test -count=3 ./internal/engine`
+and `-race -count=2` on `internal/engine`, `internal/stratum`,
+`internal/poolproto` — all green, zero flakes observed on
+go1.27.1/arm64. Combined with the `-race` full-tree run in session
+517, no nondeterminism evidence remains anywhere in the suite.
+No action needed; recorded as an audit verdict.
+
+## Session 536 — extended vet analyzers: nilness + shadow
+
+`nilness` (x/tools, go1.26.8): zero findings across the whole tree —
+no impossible-nil or nil-deref paths.
+`shadow`: 13 findings, all the `if err := f(); err != nil` idiom —
+each inner `err` is scoped to the `if` and checked immediately; the
+outer `err` continues to be read afterward (wallet.go:136,
+handshake.go:243, engine/run.go:1212, stratumv1/dialer.go:67,
+stratumv2/dialer.go:121 — all verified benign, no dropped errors).
+Standard vet's `loopclosure`/`unusedresult`/`atomicalign` already
+run clean via `go vet ./...`. No action needed.
+
+## Session 537 — stdlib modernization: sort → slices complete
+
+Audit found every non-test sort already on `slices`/`cmp`/`maps`
+(stdlib since Go 1.21) across metrics, rates, hal, btccrypto,
+arbitration, i18n, engine. The single holdout — `sort.Strings` in
+`internal/i18n/messages/messages_test.go` — is now `slices.Sort`,
+so the tree no longer imports `sort` or calls `reflect.DeepEqual`
+anywhere. `go test ./internal/i18n/...` green.
+
+## Session 538 — checkptr sweep: pointer safety clean
+
+`go test -gcflags=all=-d=checkptr ./...` ran the whole suite with
+checkptr instrumentation (unsafe.Pointer arithmetic validation):
+all 24 packages green, zero violations. The tree uses almost no
+`unsafe` (only the syscall-free design), and what little pointer
+manipulation exists in the wire codecs is spec-conformant.
+No action needed; recorded as an audit verdict.
+
+## Session 539 — dependency & import-boundary audit
+
+`go mod verify`: all modules verified — module-cache integrity
+clean. External dep surface is exactly two modules (`x/crypto`
+chacha20/chacha20poly1305/scrypt/pbkdf2 for Noise + wallet KDF;
+`yaml.v3` for config), both already documented in go.mod comments.
+
+Import graph verified as a proper DAG matching CLAUDE.md's
+architecture map: 13 leaf packages with zero internal imports;
+`arbitration→hal`, `provider→hal`, `config→btccrypto`,
+`daemon→config`, `doctor→{btccrypto,config}`, `httpserver→metrics`,
+`stratumv1→poolproto`, `stratumv2→{poolproto,stratum}`; `engine` is
+the sole aggregator and `cmd/otedama` wires the entrypoint. No
+upward imports, no cycles, no forbidden paths.
+
+## Session 540 — test-order dependence: -shuffle=on clean
+
+`go test -shuffle=on ./...` twice with different seeds — all 24
+packages green both runs. No test depends on package-level
+execution order (no shared fixture state leaking between tests),
+consistent with the session-517 race sweep and session-535 flake
+sweep: the suite is deterministic and order-independent.
+No action needed; recorded as an audit verdict.
+
+## Session 541 — serialized scheduling: -cpu=1 clean
+
+`go test -cpu=1 ./...` (GOMAXPROCS=1, single-threaded scheduling)
+twice over the full tree — all 24 packages green both runs. No
+test implicitly requires a multi-CPU scheduler to make progress;
+the concurrency-heavy suites (engine, stratumv1/v2, doctor's
+17 parallel checks) all drive goroutines through channels/sync
+correctly under serialization. Combined with the race (s517),
+flake (s535), and shuffle (s540) sweeps, the suite is robust
+across every Go scheduler dimension.
+
+## Session 542 — ecosystem recheck: sv2-spec #220/#221/#224/#209
+
+Four new spec merges since session 530: #220 fixes Noise Act 2 to
+exactly 234 bytes (wire-level normative; Otedama's ReadMessage2 is
+lenient >=32 — recorded as a §2 forward requirement), #221 drops
+Lightning "Act" terminology for Noise "steps" (docs only), #224
+editorial, #209 prohibits active-job_id reuse and SetNewPrevHash
+references to unreceived jobs (engine already pauses+warns on
+unknown-job refs; duplicate job_id is last-wins defensively).
+SRI still v1.11.1 — its SV1 difficulty round-up fix (#2227) does
+not apply here: sha256d.go computes targets with exact big.Int math.
+
+## Session 544 — runtime integrity: checkptr=2, invalidptr, binary audit
+
+- `checkptr=2` (stricter: also checks unsafe.Pointer→uintptr
+  conversions) on miner+stratum — green; `GODEBUG=invalidptr=1`
+  on the same — green. With s538's tree-wide checkptr=1, every
+  pointer-safety level now verifies clean.
+- `go version -m` on a local build: dep closure = x/crypto +
+  yaml.v3 only (matches s539). Local builds link CGO
+  (libSystem/CoreFoundation/Security via darwin resolver — default
+  platform behavior), but the shipped path pins `CGO_ENABLED=0`
+  in both .goreleaser.yaml and the Dockerfile, so release artifacts
+  are fully static per ADR-003. Verified, no drift.
+
+## Session 545 — pprof: hot loop is ~100% FIPS SHA-256
+
+`go test -bench=BenchmarkHashHeader -benchmem -memprofile
+-cpuprofile`: 105.3 ns/op, **0 B/op 0 allocs/op** — and
+`alloc_space` shows zero bytes attributable to HashHeader itself
+(every byte is test-harness/pprof machinery). CPU: 98.5% of
+samples inside `HashHeader` → `crypto/internal/fips140/sha256`
+(go1.27 routes crypto/sha256 through the FIPS-validated
+implementation, matching the FIPS posture in GODEBUG_NOTES).
+
+Optimization analyzed and rejected: the classic mining midstate
+trick (header bytes 0–63 are constant per job → precompute the
+SHA-256 state after block 1, compress only block 2 per nonce)
+would cut ~1 of 3 compressions (~25–30% of hash cost). Go stdlib
+exposes no midstate/partial-compression API; the only path is a
+hand-rolled compression function, which CLAUDE.md forbids
+(no custom crypto — audited libraries only). Recorded with the
+measured headroom so the constraint-vs-payoff trade is explicit.
+
+## Session 565 — atomic API surface
+
+- All `sync/atomic` usage is the typed Go-1.19+ API:
+  `atomic.Uint64` (8), `atomic.Bool` (7), `atomic.Pointer[T]` (4),
+  `atomic.Int64` (1). Zero legacy `atomic.AddInt64(&field)`-style
+  calls — so the 386-misalignment panic class (64-bit atomics on
+  unaligned fields) is structurally absent; the typed API
+  guarantees alignment internally.
+
+## Session 566 — JSON/YAML decode boundary
+
+- Every `json.Unmarshal` takes a `&`-pointer and checks its error;
+  every `json.Marshal` checks `err`. The only two ignored results
+  are the documented best-effort tolerations in parse.go:164/176
+  ("tolerate non-string" — deliberate lenient parsing for pool
+  quirks), each carrying an inline justification comment.
+- yaml: the config-file decode uses `yaml.NewDecoder` with
+  `KnownFields(true)` (unknown keys rejected), checks `Decode`'s
+  error, and treats io.EOF as "use defaults" — the fuzz target for
+  this boundary exists (session 391).
+
+## Session 567 — package-init surface
+
+- `func init()` exists in exactly four files:
+  - `lightning/english_wordlist.go` — splits the embedded BIP-39
+    wordlist and **panics at startup** if the count is not 2048 or
+    the SHA-256 doesn't match — fail-fast integrity self-check.
+  - `btccrypto/secp256k1.go`, `stratumv1` and `stratumv2` dialer
+    registration — the canonical `init()` plugin-registry pattern,
+    each paired with compile-time `var _ Interface =` assertions.
+- No init performs I/O, spawns goroutines, or mutates shared state
+  beyond registration — all are idempotent and order-independent.
+
 ## Session 568 — recover() + goroutine-spawn audit
 
 - Zero `recover()` calls in non-test code: no panic-swallowing
