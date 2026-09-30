@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 376)
+
+- `.goreleaser.yaml` のリリースノート本文が存在しない `docs/verify-release.md` を参照し、チェックサムファイル名も `checksums.txt`（実際の生成名は `otedama_<ver>_checksums.txt`）と不一致だった点を修正 — リンクは絶対 URL で `docs/DEPLOYMENT.md` へ。
+
 ### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
 
 - `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
