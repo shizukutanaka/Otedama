@@ -957,6 +957,25 @@ surface (everything prior was library-level testing):
 
 The documented CLI contract holds end-to-end on the built artifact.
 
+## Session 528 — non-custodial core path verified end-to-end
+
+Ran the real binary against a temp data dir; the product's core
+promise holds E2E:
+
+- **First run**: wallet auto-created → the 24-word BIP-39 phrase is
+  shown exactly once with its fingerprint and the "not saved to disk /
+  not in any log" banner → `wallet.dat` written at mode 0600 (+ a
+  `wallet.fingerprint` sidecar) → devices detected, worker spawned,
+  V2 connect attempted → plaintext-transport warning correctly
+  advises `stratum+v2tls://` → exponential-backoff reconnect loop on
+  DNS failure → clean shutdown on SIGTERM ("Your wallet remains
+  safe").
+- **Second run**: same fingerprint (`27d96d0d`), phrase NOT re-shown —
+  one-time disclosure honored.
+
+Also observed live: the sandbox can't resolve the default pool's DNS,
+so the connect loop's backoff behavior was exercised directly.
+
 ## Session 529 — BENCHMARKS re-verified against go1.27.1/arm64
 
 - **Measured `BenchmarkHashHeader`**: ~112 ns/op, 0 allocs on

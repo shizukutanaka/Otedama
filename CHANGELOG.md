@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   validate` (exit 78 per §2.1) all verified against their documented
   contracts on the go1.27.1-built artifact.
 
+### Documentation & audit (session 528 — non-custodial E2E)
+
+- Verified the core non-custodial path on the real binary: first run
+  creates the wallet and shows the 24-word phrase exactly once
+  (`wallet.dat` at 0600); second run loads the same fingerprint and
+  never re-shows the phrase; connect loop backs off gracefully and
+  shuts down clean on SIGTERM.
+
 ### Documentation & audit (session 529 — benchmarks re-verified)
 
 - `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
