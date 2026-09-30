@@ -66,7 +66,7 @@ Braiins OS+は、Stratum V2プロトコルの実装で業界を先導するBraii
 
 **第三の空白は、多言語ネイティブサポート**です。Braiins OS+、Hive OS、Awesome Miner、CGMinerは実質英語のみ、Kryptexはロシア語と英語です。日本語・中国語・韓国語・スペイン語・アラビア語などの主要言語に最初からネイティブ対応する製品は存在せず、これは非英語圏ユーザーへの明確な差別化ポイントです。Otedamaの「主要10言語人間レビュー＋1,000言語機械翻訳」方針は、この空白を埋める戦略的決定です。
 
-**第四の空白は、Stratum V2対応の家庭用ツール**です。Braiins OS+はStratum V2対応だがASIC限定、CGMinerは対応が不完全、NiceHashは独自プロトコル中心です。「家庭ユーザーが使えるStratum V2ネイティブクライアント」は未充足であり、Bitcoin Core v30がStratum V2を公式サポートしたこのタイミングで参入する戦略的価値は高いです。
+**第四の空白は、Stratum V2対応の家庭用ツール**です。Braiins OS+はStratum V2対応だがASIC限定、CGMinerは対応が不完全、NiceHashは独自プロトコル中心です。「家庭ユーザーが使えるStratum V2ネイティブクライアント」は未充足であり、Bitcoin Core v30が**experimental IPC Mining Interface**を出荷したこのタイミングで参入する戦略的価値は高いです。**Correction (session 506):** v30 が公式サポートするのは Stratum V2 そのものではなく、外部の SV2 クライアント（Template Provider 等）が接続する実験的 IPC ソケット（`bitcoin -m node -ipcbind=unix`）です — ノード自体は SV2 を話しません。この差は重要で、逆に Go 製クライアントが Template Provider を実装する場合は IPC Mining Interface への直接バインドが最短経路になります。
 
 **第五の空白は、Lightning Network決済の標準化**です。どの競合もLightning Network決済を中核機能として組み込んでおらず、オンチェーン決済の手数料負担と遅延が、小規模マイナーの実質収益を圧迫しています。Lightning Networkでの即時・低手数料決済を標準実装する製品は市場で未充足です。
 
@@ -87,6 +87,8 @@ Braiins OS+は、Stratum V2プロトコルの実装で業界を先導するBraii
 ## 改善点のTDDサイクルでの実装順序
 
 競合分析で特定された改善点のうち、TDDサイクルで実装可能な粒度に分割された優先事項を以下に示します。これらは次のスプリントで順次実装対象となります。
+
+**Note (session 506):** 本節は起案時の計画であり、出荷された実装は2点で分岐しています — ウォレットは LDK バインディングではなく stdlib BIP-39/scrypt/AES-256-GCM（ADR-001）、i18n は `golang.org/x/text` ではなく独自カタログ（`internal/i18n/messages`、ADR-003 のゼロ依存方針に適合）。
 
 第一優先は**ハードウェア自動検出ロジック**です。Otedamaが起動時に実行するデバイス検出が、CGMinerのような「設定ファイルでデバイスを明示する」方式より優れている必要があります。TDDサイクルで、モックデバイスを使った検出ロジックの実装から開始します。
 
