@@ -950,6 +950,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
