@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 541 — serialized scheduling: -cpu=1 clean
+
+`go test -cpu=1 ./...` (GOMAXPROCS=1, single-threaded scheduling)
+twice over the full tree — all 24 packages green both runs. No
+test implicitly requires a multi-CPU scheduler to make progress;
+the concurrency-heavy suites (engine, stratumv1/v2, doctor's
+17 parallel checks) all drive goroutines through channels/sync
+correctly under serialization. Combined with the race (s517),
+flake (s535), and shuffle (s540) sweeps, the suite is robust
+across every Go scheduler dimension.
