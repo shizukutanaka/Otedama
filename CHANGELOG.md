@@ -16,6 +16,14 @@ pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
 WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
 quoteCh 置換 caveat は未到達パスとして文書化。
 
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
 ### 修正 (session 406)
 
 API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
