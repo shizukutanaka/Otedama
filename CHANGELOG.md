@@ -17,6 +17,16 @@ dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監�
 記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
 文書化済み事項として再確認。
 
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
 ### 修正 (session 408)
 
 MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
