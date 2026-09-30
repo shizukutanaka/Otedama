@@ -953,6 +953,325 @@ the arXiv listing; all API endpoints against current vendor documentation.*
   in both .goreleaser.yaml and the Dockerfile, so release artifacts
   are fully static per ADR-003. Verified, no drift.
 
+## Session 568 — recover() + goroutine-spawn audit
+
+- Zero `recover()` calls in non-test code: no panic-swallowing
+  surface anywhere — every error propagates as a returned error,
+  matching the library-kill audit (session 562).
+- 20 `go` spawn sites across 10 packages — the exact set mapped in
+  session 553's leak-coverage table. Each is ctx-scoped
+  (readLoop/renderLoop/arbitration), wg-tracked (fan-in
+  collectors closing via `wg.Wait(); close`), or a one-shot
+  trigger (`go s.Close()`). NumGoroutine shutdown evidence from
+  session 553 covers all of them.
+
+## Session 569 — `any` usage audit
+
+- The only `any` values in non-test code are: V1 JSON-RPC wire
+  struct fields (`ID`, `Result`, `Error`, `result`, `errResult`)
+  — spec-mandated untyped payloads at the wire boundary, parsed
+  into typed values by the parsers; `sync.Pool.New`'s required
+  `func() any` signature; and `fanIn[T any]` — a generic
+  constraint, the correct modern form.
+- Zero loose-typing escapes at internal package boundaries; every
+  internal API is concretely typed.
+
+## Session 570 — enum exhaustiveness audit
+
+- Five iota-enum types (`Format`, `ValueOrigin`, `Status`,
+  `AddressType`, `Policy`). Every switch over them is either
+  exhaustive (`doctor.go:177` enumerates all four Status cases) or
+  uses a correct default: `logger.go` FormatJSON→JSON,
+  default→text (two-value enum); `doctor.go:114` counts only
+  Warn/Fail — correct for exit-code semantics; `config.go` string
+  field with explicit validation default.
+- Zero silent pass-through on an unhandled enum value.
+
+## Session 571 — context cancel-function audit
+
+- Six `context.WithTimeout/WithCancel` sites; every cancel is
+  paired: three use immediate `defer cancel()` (checks.go:772,
+  httpserver:138, doctor.go:36) and three store the func into a
+  lifecycle field that is unconditionally invoked — `p.cancel`
+  called at polling.go:87 with nil-reset under lock, `s.ctxCancel`
+  inside `closeOnce.Do` (stratumv1:377), `w.cancel` retrieved by
+  worker Stop (worker.go:158).
+- Zero leaked contexts; no `WithCancel` whose cancel is dropped.
+
+## Session 315 — submit in-flight depth gauge (ESP-Miner v2.15.0 pending-shares parity)
+
+**Finding [FETCHED — bitaxeorg/ESP-Miner v2.15.0 release notes, 2026-08-21].**
+ESP-Miner added "Show pending SV2 shares on the dashboard" (#1735) —
+exposing submit→ack in-flight depth as a first-class operational signal.
+
+**Fix [OBSERVED].** New `otedama_shares_submit_in_flight` gauge publishes
+`len(submitTimes)` on the 30 s stats tick (V2 path; V1 submits
+synchronously and stays 0). SPECIFICATION §6 catalogue row added —
+`TestMetricsDocumentedInSpecification` green. Also audited [OBSERVED]:
+V1 fractional difficulty + negative/zero difficulty are already handled
+(`[]float64` parse + `TargetFromDifficulty` `>0`/IsInf guard).
+
+## Session 388 — arbitration property tests + ecosystem re-check
+
+[FETCHED — 2026-09-25] Stratum V2 SRI: v1.12.0 (2026-09-17) remains the latest release — channels_sv2 hardening pass, codec_sv2/framing_sv2 refactor (Frame enum → MessageFrame/SerializedFrame), BIP323 adaptations, AES-256-GCM dropped from noise_sv2 leaving ChaCha20-Poly1305 sole cipher. All mapped onto Otedama in earlier sessions (this client never implemented AES-256-GCM; framing is Otedama's own). ESP-Miner v2.15.3 (2026-09-20) remains latest; no new stratum-facing changes to chase.
+
+[FIXED — session 388] **Arbitration property tests** (`internal/arbitration/fuzz_test.go`): the `Decide` doc comment has always claimed its invariants "are verified by property-based tests" but no such test existed — a doc/code drift and a real coverage gap on the package CLAUDE.md explicitly requires property tests for. `FuzzDecide` generates randomized devices/streams/policies/margins/previous-allocations (seeded `math/rand` over a fuzz `int64`) and asserts on every run: bijective DeviceID assignment in sorted order; no assignment to an unknown or family-incompatible stream; idle only when no compatible stream both yields >0 and clears MinYieldSatsPerSec; `TotalYield` == exact IEEE-754 sum of ExpectedYield; `ForegoneSatsPerSec` >= 0; byte-identical determinism via a second `Decide` call; and — on a quarter of runs that force PolicyMaximizeEarnings + zero hysteresis + no Previous — the documented greedy-optimality invariant (TotalYield equals the per-device max). 13.5M execs in 90s, zero violations.
+
+[AUDITED — clean] Open-PR review-comment sweep: #495, #496, #497, #498 all mergeable, zero unresolved reviewer/Devin-Review comments. Re-delivery queue stays exhausted (audit recorded in session-387 entry).
+
+## Session 543 — sync.Pool wiring: Noise handshake hashers
+
+`noise_pool.go` shipped a correctness-tested `hmacSHA256Pooled`
+that the file itself documented as "not yet wired" — hkdf2/hkdf3
+still called the unpooled `hmacSHA256`, allocating ~12 hasher
+objects per handshake. Wired hkdf2 (3 calls) and hkdf3 (4 calls)
+to the pooled variant; the unpooled `hmacSHA256` remains as the
+test reference implementation. Equivalence is covered by the
+existing pooled-vs-reference test matrix; `go test -race
+./internal/stratum/` green. Frame-codec `make([]byte)` calls are
+per-message (share/notify rate), not per-hash — pooling there
+would not pay; recorded as reviewed-and-skipped.
+
+## Session 398 — SV2 encode-side round-trip fuzz
+
+**`FuzzMessageRoundTrip` [FIXED — coverage gap].** The six steady-state
+mining-channel messages (`NewMiningJob`, `SetNewPrevHash`, `SetTarget`,
+`SubmitSharesStandard`, `SubmitSharesSuccess`, `SubmitSharesError`)
+previously had decode-only fuzzers (#479): arbitrary bytes never wedge
+the parser, but nothing proved the encode direction is correct or
+canonical. The new fuzzer builds every message from fuzz input and
+asserts three invariants per type: Encode never fails, Decode of the
+output returns an identical value, and re-encoding is byte-identical
+(canonical-form stability in both directions). 60 s / 8.7 M execs clean
+(`internal/stratum/roundtrip_fuzz_test.go`). With this, both directions
+of every SV2 message type Otedama emits or consumes have property
+coverage.
+
+## Session 389 — fuzz coverage for target bitmath + numeric env resolution
+
+[FIXED — session 389] **Target-math fuzzers** (`internal/miner/fuzz_test.go`): `TargetFromNBits` and `TargetFromDifficulty` convert pool-supplied wire values into the 256-bit targets shares are compared against — until now covered only by fixed vectors. `FuzzTargetFromNBits` asserts: never panic; accepted inputs produce a positive target; `TargetFromNBits(NBitsFromTarget(t))` reproduces the identical target (value round-trip, since re-encoding may pick a non-canonical nBits); the all-zero hash meets every valid target. `FuzzTargetFromDifficulty` asserts invalid difficulties (NaN/±Inf/≤0) always error and accepted ones produce positive targets. `FuzzTargetFromDifficultyMonotonic` asserts d1<d2 ⟹ target1≥target2 (weak monotonicity under float truncation). ~41M execs total, zero violations.
+
+[FIXED — session 389] **Numeric env-resolution fuzz** (`internal/config/fuzz_test.go`): `FuzzResolveNumericEnv` drives `EnvWarnings` + `ResolveWithOrigins` with arbitrary strings on each `OTEDAMA_*` float key, asserting the documented contract both ways — a parseable value lands on its field bit-exact with `OriginEnv`, while an unparseable non-empty value yields exactly one warning naming the key and leaves the field untouched (no env origin). Covers typo classes the unit tests missed (comma decimals, overflow exponents, "NaN" literals). ~7M execs, zero violations.
+
+## Session 481
+
+**Ecosystem drift check (SRI 1.11.1, 2026-07-22).** The reference
+implementation's translation proxy rounded *up* Stratum V1 difficulty
+values during V1→V2 conversion (stratum-mining/stratum#2227), making the
+effective share target stricter than the pool assigned. Otedama's
+`miner.TargetFromDifficulty` performs full-precision division
+(`target = diff1Target / difficulty` at 256-bit `big.Float` precision,
+truncation error <1 ULP) — the same defect class is not present. The
+V1 notification parsers (`parseNotify`, `parseDifficulty`,
+`parseSetExtranonce`, `parseShowMessage`, `client.reconnect`) were
+re-audited: all bounded, and the zero-fill fallbacks are on the
+pool-side-invalid V1 share path (KNOWN_LIMITATIONS §17), so they cannot
+produce misleading mining behaviour beyond what is already documented.
+
+**Repo hygiene sweep — one real fix.** `Makefile` targets were all
+inventoried: every referenced binary, path, and subcommand exists; the
+only remaining stale reference is `docs-serve`'s
+`golang.org/x/tools/cmd/godoc@latest`, which resolves to
+`v0.1.0-deprecated` (godoc was split out of x/tools and abandoned — it
+still runs today but upstream is dead and a future `@latest`
+resolution can fail outright; left as-is since `setup:` uses the same
+`@latest` convention and the correct replacement choice — pkgsite vs.
+`go doc` static output — is a maintainer call).
+
+The committed `.claude/settings.local.json` was deleted and added to
+`.gitignore`. It is a per-developer Claude Code permissions file that
+must not be versioned (upstream convention: `settings.local.json` is
+local-only; the shared file is `settings.json`). The committed copy
+accumulated 130+ stale `Bash(...)` allow-entries for a pre-rewrite
+project shape that no longer exists — `internal/mining`,
+`internal/crypto`, `internal/monitoring`, `internal/database`,
+`cmd/improvements`, `cmd/demo`, `cmd/test-runner`, WSL paths
+(`/mnt/c/...`, `"C:\Program Files\Go"`), and phantom helper scripts
+(`./fix_imports.sh`, `./cleanup_tests.sh`, `dos2unix`) — plus
+broad `Bash(rm:*)`/`Bash(git push:*)` grants. Removing it cannot break
+the tool: Claude Code regenerates the file locally on first use.
+
+## Session 482
+
+**ROADMAP.md reconciliation against shipped code — four stale entries
+corrected.** The v3.1.0/v3.2.0 milestone lists still described the
+pre-integration state:
+
+- `engine → poolproto 統合` claimed `engine.Run` was still on
+  `stratum.NewDecoder` + raw TCP and that "SV1 transport 等が使えない" —
+  false since the `runSessionV1` dispatch shipped: V1 connections go
+  through `poolproto.DialURL` and the `poolproto.Session` interface
+  (`Jobs()`/`Submit()`). The remaining gap is narrower: the V2 loop is
+  still on the native decoder path, and `internal/poolproto/stratumv2`
+  (registered dialer) has no engine caller — the open decision is
+  "migrate the V2 loop onto poolproto" vs "drop the unused dialer".
+- `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` —
+  "informational" was inaccurate: neither tool runs in any CI workflow;
+  govulncheck exists only in the local `security`/`audit`/`setup`
+  Makefile targets and osv-scanner is absent from the repo entirely.
+- `internal/poolproto/ 抽象化レイヤ` — marked partially complete: only
+  the SV1 switch actually dispatches through the abstraction.
+- `Stratum V1 互換の追加` — marked connection-complete: the dialer,
+  handshake, extranonce/difficulty notifications, and submit path all
+  ship, but V1 jobs hash a zero MerkleRoot (coinbase is never
+  reconstructed — `stratumv1/parse.go`), so pools cannot accept the
+  shares; V1 remains a connectivity/diagnostic path, SV2 is required
+  for real revenue.
+
+## Session 395 — fuzz for the V1 notification parsers
+
+[FIXED — session 395] **V1 notification-parser fuzz** (`internal/poolproto/stratumv1/notify_fuzz_test.go`): `parseNotify`, `parseReconnect`, `parseSetExtranonce`, `parseShowMessage` — pool-controlled params decoders reachable on every read-loop tick. The dispatch-level fuzzer (#478) reaches them only after producing a well-formed method string; direct seeds drive the parsers past their length guards into per-field unmarshal and hex/dec paths. ~15M execs clean; `client.reconnect` verified to always yield a directive (its host/port remain advisory-only and are never dialed — documented anti-redirection design).
+
+[AUDITED — clean] `parseReconnect` Wait field is stored but unconsumed on master (no sleep path); `parseSubscribeResult` fuzz lives in open #478; `extranonce2_size` bounds are open in #428/#450. The dormant Noise handshake stub (x-only fallback completes without DH) is documented as unwired alpha in KNOWN_LIMITATIONS §2 — targeted for spec-compliant replacement in v3.1.0, deliberately not hardened in place.
+
+## Session 332 — yaml.v3 maintained-continuation migration
+
+**gopkg.in/yaml.v3 archived [FETCHED + FIXED].** The gopkg.in yaml repo
+was archived April 2025; the Yaml project continues it as
+`go.yaml.in/yaml/v3` (v3.0.5). Violated CLAUDE.md external-dependency
+criterion 3 (meaningful maintenance within the last year). API-identical
+drop-in: only the two import sites changed (cmd/otedama/configfile.go,
+internal/config/config_file_test.go). Re-delivers the dep-swap portion
+of closed #367.
+
+## Session 391 — fuzz for the config-file decode boundary
+
+[FIXED — session 391] **YAML config-file fuzz** (`cmd/otedama/fuzz_test.go`): `loadConfigFile` turns arbitrary on-disk bytes into a `config.Config` — the last input-facing boundary without fuzz coverage. `FuzzLoadConfigFile` writes each input to a temp file and asserts the decode+`KnownFields`+`Validate` path returns without panic on non-UTF8 bytes, deep nesting, self-referential aliases, binary junk, and unknown-field documents. 98K execs clean (slower rate is per-exec file I/O by design — the load path is file-backed). With this landed plus #478/#479/#481/#499/#500, every untrusted-input surface — V1 wire, SV2 frames and typed messages, payout addresses, pool difficulty/nBits, numeric env vars, arbitration inputs, and config files — has fuzz or property coverage.
+
+[AUDITED — clean] Session-level sweep recorded: all packages 92–99% statement coverage (≥90% bar met); zero TODO/FIXME/`unsafe` in non-test code; hot paths benchmarked.
+
+## Session 498 — config.yaml.example の虚偽クレーム訂正 + コメント文言再検証
+
+**Sweep.** `config.yaml.example`（~190行の説明コメント全部）を `internal/config`・`internal/engine`・`internal/i18n` と再照合（field 網羅性は session 465 で clean 確認済み、本ラウンドは「コメントの挙動記述」）。
+
+**発見（1件訂正）。**
+- **「pools が空なら built-in recommended pool list（V2 優先・0% fee）を使用」→ 虚偽**: `config.go` の PoolConfig コメントが明示する通りキュレーション済みリストは**存在せず**、単一 `DefaultPoolURL`（slushpool V2）へのフォールバックのみ — failover したいユーザーは明示列挙が必要と訂正（ドキュメント側が「ある」と言い、コード側が「ない」と書いている典型的二重記述乖離）。
+
+**検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
+
+## Session 501 — .golangci.yml 非推奨キー移行 + run.go バージョン訂正 + govulncheck clean
+
+**Sweep.** (a) ルート直下の未精読ファイル（.editorconfig・CODEOWNERS・LICENSE 著作権行・NOTICE）→ 全て正確。(b) `golangci-lint config verify` で schema 検証 → 3件の不整合を発見。(c) `govulncheck -mode=source ./...` → **0 reachable vulns**（依存内22件は未到達 — yaml.v3/x/crypto とも import 経路が脆弱コードに触れない）。
+
+**発見（1件修正 — 設定ファイルの陳腐化）。**
+- **`run.skip-dirs` / `output.format` が deprecated**（v1.64 系で警告＋`config verify` が schema 拒否）→ `issues.exclude-dirs` / `output.formats`（array form）へ移行。併せて `run.go: "1.22"` を実効要件の `"1.24"` に訂正 — 「Go 1.22 記述」クラスの6箇所目（AUDIT_CHECKLIST・README・CONTRIBUTING・GODEBUG_NOTES・BENCHMARKS に続く）。検証: `config verify` exit 0・`run` で警告ゼロ。
+
+**検証済み・変更なし。** LICENSE 著作権行（Monu (shizukutanaka) 記入済み）・CODEOWNERS の全パターン（noise* 2ルール含め実パス解決）・.editorconfig・service.go/version.go の CLI 実装。
+
+## Session 392 — fuzz for the BIP-39 restore boundary
+
+[FIXED — session 392] **BIP-39 mnemonic parse fuzz** (`internal/lightning/fuzz_test.go`): `MnemonicToEntropy` consumes operator-typed word sequences on the wallet-restore path — the last untrusted-input parser without fuzz coverage. Two fuzzers: `FuzzMnemonicToEntropy` (1.5M execs) asserts arbitrary word slices — wrong counts, unknown words, case-mismatch, empty strings — always error rather than panic, and any accepted mnemonic re-encodes identically; `FuzzMnemonicRoundtrip` (3.0M execs) asserts `EntropyToMnemonic` → `MnemonicToEntropy` is bit-exact across all five legal entropy sizes, pinning the checksum math.
+
+[AUDITED — clean] gh CLI is unauthenticated in this environment (expected); open-PR mergeability was verified via the builtin git tools instead — recent PRs (#497, #498, #502) report MERGEABLE.
+
+## Session 434 — サブコマンド did-you-mean 提案 [UX]
+
+CATEGORY_AUDIT session-250 で「実在・低重要度・deferred」と記録されていた
+唯一のコード補完可能項目を実装: `otedama verson` 等の誤記時に
+`did you mean "version"?` を stderr に提案（exit 64 は不変）。
+
+- `suggestSubcommand`: 全サブコマンド名との Levenshtein 距離 ≤2 で
+  最近接を提案 — transposition（rnu→run）・脱字（srvce→service）・
+  打ち違い（doktor→doctor）をカバーし、無関係入力（xyzzy-plugh）には
+  提案しない。先頭ダッシュは除去（`--versio` → version）。
+- 既存の静的リスト慣例（completion スクリプトと同型）に倣い
+  `knownSubcommands` を dispatch switch と同期コメント付きで定義。
+- 新規依存ゼロ（stdlib `min` + 2行 DP）。テスト3件追加
+  （dispatch 統合2件 + 距離表10ケース）。
+
+注意: open の #529 が `wallet` を switch に追加するため、そちらが先に
+マージされた場合 `knownSubcommands` への追記が必要（#529 側で対応可、
+または本 PR マージ後の一行フォローアップ）。
+
+## Session 396 — fuzz for the SV2 handshake decoders
+
+[FIXED — session 396] **Handshake-decoder fuzz** (`internal/stratum/handshake_fuzz_test.go`): `FuzzHandshakeDecoders` covers the five connection-phase decoders — the first wire bytes a pool controls after TCP accept (`SetupConnection`/`+Success`/`+Error`, `OpenMiningChannel`/`+Success`). Real `Encode()` outputs seed the corpus so mutations start past the length guards into the STR0_255/B0_255 field reads. `OpenMiningChannelSuccess` additionally asserts decode→encode→decode is stable (8.1M execs clean). With #479's steady-state decoders, every SV2 server→client message type has fuzz coverage.
+
+[AUDITED — clean] `decode→encode` for a leniently-decoded `Extranonce` >32B correctly fails strict `appendB0_32` (documented Postel asymmetry) — verified by the round-trip guard.
+
+## Session 413 — cross-reference sweep + dependabot dead key [FIXED]
+
+**CODEOWNERS sample in solo-operations.md listed nonexistent paths
+[FIXED].** §7.1's sample claimed `/internal/security/` and
+`/internal/auth/` rules — both are CLAUDE.md forbidden paths that
+don't exist and would never match anything. Replaced with the real
+`.github/CODEOWNERS` contents (lightning/btccrypto/poolproto/
+stratum-noise rules) plus a note explaining why those paths are
+absent.
+
+**Dead Dependabot key removed [FIXED].** `.github/dependabot.yml`'s
+github-actions section had an `automerge: [dependency-type: direct]`
+block — `automerge` is not a Dependabot option; GitHub silently
+ignores unknown keys, so the config implied auto-merge that never
+happened. Replaced with a comment pointing at the real mechanism
+(repo auto-merge + `gh pr merge --auto` / merge queue).
+
+**§-number cross-reference audit — clean:** every
+`KNOWN_LIMITATIONS §N` reference in code/docs resolves correctly,
+including the resolved entries (all carry "resolved session NNN"
+annotations); `runSessionV1` V1-via-poolproto vs V2-inline split
+matches §3's resolution wording; DEPLOYMENT.md command/flag/path
+references all exist; README badges/links valid.
+
+## Session 415 — Lint-debt cleanup: 350 → 65 findings [LINT]
+
+**動機.** `.golangci.yml` は errcheck・errorlint・gosec・gocritic・misspell
+(locale: US)・gofumpt・prealloc・goconst・unparam・dogsled・nilerr 等を必須と
+明記しているが、CI の Lint ジョブは setup 段階で常に失敗しており債務が不可視
+だった。手元で golangci-lint v1.64.8 を実行すると ~350 件。このセッションで
+機械的・意味的修正を一括適用した。
+
+**適用した修正（全てリポジトリ自身の lint 設定が要求する規則）.**
+
+- **gofumpt -extra（21ファイル）**: `0600`→`0o600` 8進リテラル、var グループ化、
+  composite literal の整形。
+- **misspell（locale US、~140件）**: コメント・godoc の英英式綴りを米式へ
+  （sanitises→sanitizes、recognises→recognizes、behaviour→behavior 等）。
+  i18n メッセージカタログと BIP-39 英語ワードリストは**除外** — カタログは
+  非英語文字列を破壊し、ワードリストの `artefact` は正規データ（SHA-256 の
+  init 時整合チェックが実際に検出した）。`english_wordlist.go` を misspell
+  対象から exclude-rules で恒久的に除外。
+- **errorlint**: `err == flag.ErrHelp` / `err == io.EOF` / `err != context.Canceled`
+  の等価比較を `errors.Is` へ（cmd/otedama ×4、configfile、coverage_test、
+  metrics_test、noise_test 群）。`isFatal` の型アサートを `errors.As` へ —
+  **これは意味変更を伴う**: ラップされた fatalError が従来「非 fatal＝無限再試行」
+  だったのを正しく fatal 判定へ（テストが将来の移行を明記していたため期待値を更新）。
+  `fmt.Errorf("%w: %v", a, b)` → 複数 `%w`。
+- **unparam**: `parseReconnect` の常に true の ok 戻り値を除去、`pruneStaleStreams`
+  の冗長 ttl パラメータを除去（呼び出し側・テスト3箇所を追従）。
+- **unused**: `remoteStatic` フィールド（noise.go）・テスト専用 `parseFloat` を削除。
+- **prealloc**: 8箇所のスライスに容量ヒント（arbitration candidates、setup workers、
+  metrics entries 等）。
+- **goconst**: 本番側の繰り返しリテラルを定数化（`helpFlag`/`displayDefault`、
+  `logLevelInfo`/`logFormatText`、daemon/doctor の `goosLinux` 等）。テスト内
+  リテラルは .golangci.yml 既存の除外方針どおり据え置き。
+- **gocritic（機械的なもの）**: 空の else/fallthrough 除去、unnecessaryDefer
+  （return 直前の defer → 直接呼出）、builtinShadow（`cap` パラメータ）、
+  stringXbytes、emptyStringTest（`len(name)==0`→`name==""`）、appendAssign、
+  ifElseChain→switch（wallet.go）、httpNoBody、emptyFallthrough。
+- **dogsled**: 3連ブランク代入を `_ = ferr` パターンへ。
+- **SA9003**: 空の許容ブランチを `t.Log`/コメントで明示。
+- **bodyclose**: テストの `http.Get` レスポンスボディを Close。
+- **gosec G306**: systemd unit / launchd plist の 0644 → 0600（serviceArgs を
+  埋め込むため厳格化が安全側）。
+- **gosec G115 ×18**: 全サイトを個別検証し、有界変換（5/8ビット群、BIP-39 チェック
+  サム bit、nBits 指数、maxNoiseFrame 検査済み ciphertext 長等）に根拠コメント付き
+  `//nolint:gosec` を付与。uintID は負値でも unmatched key 化するのみで安全。
+- **sprintfQuotedString**: `sc.exe` の `"%s"` と Prometheus ラベル `"%s"` は %q の
+  Go エスケープで意味が変わるため `//nolint:gocritic` と根拠を記録。
+
+**意図的に残した判定（65件）.**
+- **hugeParam ×53**: `Decide(in Input)` 等の値渡しは純粋関数の意図的設計で、
+  ポインタ化はシグネチャ・全呼出し・テストを巻き込む。単独 PR での判断が適切。
+- **gocyclo ×12**: chooseForDevice、ResolveWithOrigins、run 系等の分解は
+  振る舞いリスクを伴うリファクタ — 個別対応。
+
+**残課題.** CI の Lint ジョブ自体が setup（Go バージョン固定）で壊れており、
+債務の可視化には workflow 修正が別途必要。
+
+*検証: go build ./...、go test ./...（全24 pkg green）、go vet クリーン、
+golangci-lint 350→65 件（残りは hugeParam/gocyclo のみ）。*
+
 ## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
 
 **Finding [OBSERVED — code-verified].** A pool that stops delivering jobs

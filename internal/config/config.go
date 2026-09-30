@@ -161,7 +161,7 @@ type Config struct {
 	// PowerWatts is the user's estimated total system power draw in watts.
 	// When set (> 0), Otedama computes and exposes
 	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
-	// miners optimise for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
+	// miners optimize for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
 	// Power measurement from hardware sensors is not yet available; this
 	// field lets users enter their measured TDP or wall-meter reading.
 	//
@@ -247,6 +247,11 @@ type WorkerConfig struct {
 	Name string `yaml:"name"`
 }
 
+const (
+	logLevelInfo  = "info"
+	logFormatText = "text"
+)
+
 // Defaults returns a Config populated with Otedama's built-in defaults.
 //
 // The returned Config is not usable for mining on its own (BitcoinAddress
@@ -258,8 +263,8 @@ func Defaults() Config {
 		Pools:                    nil, // resolved from built-in recommendations at startup
 		Workers:                  WorkerConfig{},
 		Language:                 "", // resolved from POSIX locale env at startup
-		LogLevel:                 "info",
-		LogFormat:                "text",
+		LogLevel:                 logLevelInfo,
+		LogFormat:                logFormatText,
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
 		CurtailBelowBTCUSD:       0,  // disabled by default
@@ -624,7 +629,7 @@ func (c Config) Validate() error {
 	}
 
 	switch c.LogLevel {
-	case "debug", "info", "warn", "error":
+	case "debug", logLevelInfo, "warn", "error":
 		// ok
 	case "":
 		// empty LogLevel is unreachable post-Resolve (defaults supply "info"),
@@ -634,7 +639,7 @@ func (c Config) Validate() error {
 	}
 
 	switch c.LogFormat {
-	case "text", "json":
+	case logFormatText, "json":
 		// ok
 	case "":
 		// empty is unreachable post-Resolve (defaults supply "text").
