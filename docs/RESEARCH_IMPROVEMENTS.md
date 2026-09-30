@@ -940,6 +940,17 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 570 — enum exhaustiveness audit
+
+- Five iota-enum types (`Format`, `ValueOrigin`, `Status`,
+  `AddressType`, `Policy`). Every switch over them is either
+  exhaustive (`doctor.go:177` enumerates all four Status cases) or
+  uses a correct default: `logger.go` FormatJSON→JSON,
+  default→text (two-value enum); `doctor.go:114` counts only
+  Warn/Fail — correct for exit-code semantics; `config.go` string
+  field with explicit validation default.
+- Zero silent pass-through on an unhandled enum value.
+
 ## Session 571 — context cancel-function audit
 
 - Six `context.WithTimeout/WithCancel` sites; every cancel is

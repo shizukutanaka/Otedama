@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 570 — enum exhaustiveness)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all switches over the five
+  iota-enum types are exhaustive or use a correct default — no
+  silent pass-through on unhandled values.
+
 ### Documentation & audit (session 571 — ctx cancel)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: all six WithTimeout/WithCancel
