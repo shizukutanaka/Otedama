@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
+
+V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
+ヘッダ LE ハッシュの整合性、SIGTERM/Interrupt → ctx → conn.Close
+の完全シャットダウン経路を監査済みと記録。
+
 ### 監査判定 (session 397 — トランスポート/ファンイン/エンコード側)
 
 V1 アウトバウンドリクエスト面（authorize/submit はオペレータ由来フィールドのみ、
