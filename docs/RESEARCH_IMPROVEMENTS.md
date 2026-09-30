@@ -961,6 +961,24 @@ on master under go1.26.8: 0 vulnerabilities reachable in Otedama code;
 called paths (module updates still worth landing via #444's yaml
 migration).
 
+## Session 363 — provider lifecycle verdicts
+
+**Polling lifecycle [AUDITED — clean].** `pollingProvider`: bounded
+quote channel with drop-oldest backpressure, ctx-aware sends,
+WaitGroup + channel-close teardown. Double-Start rejected before any
+state mutation. Publish math is deterministic and finite — fallback
+rate (95000) only on `rate <= 0`; a hypothetical non-finite remote
+rate would fail JSON decode (`1e999` errors at unmarshal) before
+reaching `BTCUSDRate`.
+
+**Latent caveat [OBSERVED — unreachable today].** `Stop()` recreates
+`quoteCh`, but `runArbitrationLoop` holds the *old* channel; a
+Stop→Start cycle would leave quotes going to a channel nobody reads
+after the old one closes (the loop exits on `ok=false`). Providers are
+started once and stopped only at shutdown — the path is unreachable.
+Recorded rather than fixed: a proper fix needs an API-level decision
+(reconnectable quote source), not a drive-by change.
+
 ## Session 364 — wire-format + shutdown verdicts
 
 **V1 share serialization [AUDITED — correct].** `mining.submit` emits
