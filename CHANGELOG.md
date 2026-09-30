@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 515 — metrics/clock/tui read)
+
+- **`internal/metrics`, `internal/clock`, `internal/tui` read
+  end-to-end.** Verdicts: metric cross-type collisions panic at
+  registration (one bad name would silently kill the whole scrape);
+  exposition escaping, NaN/±Inf rendering, and deterministic ordering
+  correct; Fake clock's non-monotonic contract documented; Dashboard
+  Start/Stop atomics + WaitGroup ordering close the writer race they
+  describe; `truncateVisible` correctly preserves ANSI state. Two
+  residuals recorded without code change: `metricKey`'s unescaped
+  label-value serialization (needs a `,`/`=` in a device ID — today's
+  producers can't emit one) and a `truncateToBudget`/`shortenURL`
+  duplication candidate for the Issue ledger.
+
 ### Documentation & audit (session 516 — doctor/config read; full tree complete)
 
 - **`internal/doctor` + `internal/config` read end-to-end — every
