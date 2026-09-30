@@ -31,6 +31,7 @@ otedama run [flags]
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
 | `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
+| `--pprof` | bool | `false` | Mount Go pprof profiling at `/debug/pprof/` on the `--http-addr` server (intended for loopback/private addresses only). |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
 **Exit codes:**
@@ -97,9 +98,12 @@ Inspect or validate the effective configuration.
 
 Install, remove, or query the auto-start service.
 
-- `otedama service install [--config path] [--data-dir path]`
+- `otedama service install [--config path] [--data-dir path]
+  [--bitcoin-address addr] [--log-level lvl] [--log-format fmt]
+  [--language tag]`
   Install the user-level service (systemd user unit on Linux,
-  LaunchAgent on macOS, Windows service on Windows).
+  LaunchAgent on macOS, Windows service via `sc.exe` on Windows).
+  `--bitcoin-address` is required when no config file supplies one.
 - `otedama service uninstall` — Remove and stop the service.
 - `otedama service status` — Print installation and running state.
 
