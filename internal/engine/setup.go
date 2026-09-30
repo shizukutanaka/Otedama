@@ -11,10 +11,16 @@
 package engine
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
+	"math/big"
+	"os"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -57,23 +63,63 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 // returns the workers and a merged share channel. Returns an error if
 // no SHA256d-capable device is present. The caller owns worker shutdown.
 func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
-	var workers []*miner.Worker
-	var shareChans []<-chan miner.Share
+	var sha256d []hal.Device
 	for _, dev := range devices {
-		if !dev.Capabilities().SHA256d {
-			continue
+		if dev.Capabilities().SHA256d {
+			sha256d = append(sha256d, dev)
 		}
+	}
+	if len(sha256d) == 0 {
+		return nil, nil, fmt.Errorf("engine: no SHA256d-capable devices found")
+	}
+	workers := make([]*miner.Worker, 0, len(sha256d))
+	shareChans := make([]<-chan miner.Share, 0, len(sha256d))
+	for i, dev := range sha256d {
 		cfg := miner.DefaultWorkerConfig()
 		cfg.DeviceID = dev.Identity().ID
+		// Partition the nonce space across workers: without this,
+		// every device grinds the same job from nonce=threadID with
+		// the same step — identical (header, nonce) work duplicated
+		// per device and the loser's shares all rejected as
+		// duplicates. Worker i starts each thread at i*Threads with
+		// a shared step of next-pow2(threads×workers), so every
+		// (worker, thread) pair owns a residue class forever.
+		// total can never exceed the nonce space: stride stays a power
+		// of two ≤ 2^31 and every offset is < total.
+		if total := cfg.Threads * len(sha256d); len(sha256d) > 1 && total <= 1<<31 {
+			stride := uint32(1)
+			for uint64(stride) < uint64(total) {
+				stride <<= 1
+			}
+			//nolint:gosec // i*Threads < total ≤ 2^31 per the guard above
+			cfg.NonceOffset = uint32(i * cfg.Threads)
+			cfg.NonceStep = stride
+		}
 		w := miner.NewWorker(cfg)
 		workers = append(workers, w)
 		shareChans = append(shareChans, w.Start(ctx))
 		log("info", fmt.Sprintf("engine: worker for %s", dev.Identity()))
 	}
-	if len(workers) == 0 {
-		return nil, nil, fmt.Errorf("engine: no SHA256d-capable devices found")
-	}
 	return workers, mergeShares(ctx, shareChans), nil
+}
+
+// nominalMiningHashrate estimates the workers' combined nominal hashrate
+// from their devices' capability families. The SV2 OpenMiningChannel
+// handshake must declare a nominal_hashrate before any work has run, so a
+// live-stats readout (always ~0 at handshake time) is useless there — pools
+// seed vardiff from the declared value. The estimate is per *worker*, not
+// per device, so it counts exactly the SHA256d-capable devices that will
+// actually hash. Unknown families contribute 0.
+func nominalMiningHashrate(devices []hal.Device, workers []*miner.Worker) float64 {
+	family := make(map[string]hal.Family, len(devices))
+	for _, d := range devices {
+		family[d.Identity().ID] = d.Identity().Family
+	}
+	var h float64
+	for _, w := range workers {
+		h += provider.DefaultHashrates[family[w.DeviceID()]]
+	}
+	return h
 }
 
 // startProviders constructs and starts the mining and Akash providers.
@@ -84,8 +130,11 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 // When non-empty, a closure over workers is set on the MiningProvider's
 // HashrateFunc so each publish() call samples the live worker.Stats().HashRate
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
+func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provider.RateSource, hashSource provider.NetworkHashrateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+	if hashSource != nil {
+		miningProvider.NetworkHashrateFunc = hashSource.CurrentHashrate
+	}
 	if len(workers) > 0 {
 		// Capture workers by value so the closure stays valid after this
 		// function returns. Each call samples the current hashrate; no
@@ -114,7 +163,7 @@ func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider
 // wallet fingerprint, or an empty string if no wallet was configured
 // or initialisation failed (errors are logged, not propagated, so the
 // engine can run mining without a wallet).
-func setupWallet(opts Options, log func(level, msg string)) string {
+func setupWallet(opts *Options, log func(level, msg string)) string {
 	if opts.WalletPassphrase == "" || opts.Config.DataDir == "" {
 		return ""
 	}
@@ -125,7 +174,8 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	}
 	wm, err := lightning.NewWalletManager(
 		opts.Config.DataDir, opts.WalletPassphrase, nil, wl,
-		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase))
+		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase),
+	)
 	if err != nil {
 		log("warn", fmt.Sprintf("wallet: %v", err))
 		return ""
@@ -134,6 +184,11 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
 		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
+		if stdinIsTerminal(opts.Input) {
+			if !verifyBackupPhrase(opts.Input, opts.Output, wm.Mnemonic()) {
+				log("warn", "wallet: recovery-phrase backup NOT verified — funds are unrecoverable if wallet.dat is lost")
+			}
+		}
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
@@ -191,14 +246,126 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 
   This phrase is not saved to disk and is not written to any log.
   Otedama cannot show it to you again.
+
+  After writing it down, verify your backup with:
+      otedama wallet verify
 ========================================================================
 
 `, mnemonic.String(), fingerprint, len(mnemonic))
 }
 
+// ----- first-run backup verification (RESEARCH_IMPROVEMENTS Cat-8 #8) -----
+
+// stdinIsTerminal reports whether r is an interactive terminal. Non-file
+// readers (tests, pipes) and non-character devices are non-interactive —
+// the verification prompt must never appear on a headless start, where it
+// would block forever or silently consume piped input.
+func stdinIsTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// backupCheckCount is how many distinct word positions the user is asked
+// to re-enter on first run — enough to catch an unwritten or transposed
+// backup without turning onboarding into a quiz.
+const backupCheckCount = 3
+
+// pickWordPositions returns k distinct, ascending word indices in
+// [0, n), drawn from crypto/rand. n < k returns every index.
+func pickWordPositions(n, k int) []int {
+	if n <= 0 || k <= 0 {
+		return nil
+	}
+	if k >= n {
+		k = n
+	}
+	seen := make(map[int]struct{}, k)
+	out := make([]int, 0, k)
+	for len(out) < k {
+		i64, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+		if err != nil {
+			// crypto/rand failing is a broken-machine condition; fall back
+			// to an evenly-spread selection rather than aborting the run.
+			fallback := make([]int, 0, k)
+			for i := 0; i < k; i++ {
+				fallback = append(fallback, i*n/k)
+			}
+			return fallback
+		}
+		i := int(i64.Int64())
+		if _, dup := seen[i]; dup {
+			continue
+		}
+		seen[i] = struct{}{}
+		out = append(out, i)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// verifyBackupPhrase asks the user to re-enter backupCheckCount randomly
+// chosen words of the mnemonic they were just shown — the fund-loss
+// prevention step RESEARCH_IMPROVEMENTS Cat-8 #8 calls for. A blank line
+// skips a position (and fails verification overall): we would rather the
+// user see a loud "NOT verified" warning than a false sense of safety.
+// Returns true only when every prompted word matches.
+func verifyBackupPhrase(in io.Reader, out io.Writer, mnemonic lightning.Mnemonic) bool {
+	return verifyBackupPositions(in, out, mnemonic, pickWordPositions(len(mnemonic), backupCheckCount))
+}
+
+// verifyBackupPositions is the position-explicit core of
+// verifyBackupPhrase — split out so tests can drive a deterministic
+// quiz instead of predicting crypto/rand.
+func verifyBackupPositions(in io.Reader, out io.Writer, mnemonic lightning.Mnemonic, positions []int) bool {
+	if out == nil || len(mnemonic) == 0 || len(positions) == 0 {
+		return false
+	}
+	fmt.Fprintf(out, `
+------------------------------------------------------------------------
+  BACKUP VERIFICATION — re-enter %d of the %d words to confirm you
+  wrote them down. An empty answer counts as "not backed up".
+------------------------------------------------------------------------
+`, len(positions), len(mnemonic))
+
+	reader := bufio.NewReader(in)
+	verified := true
+	for _, pos := range positions {
+		if pos < 0 || pos >= len(mnemonic) {
+			verified = false
+			continue
+		}
+		fmt.Fprintf(out, "  Word #%d: ", pos+1)
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			verified = false
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(line), mnemonic[pos]) {
+			verified = false
+		}
+	}
+	if !verified {
+		fmt.Fprintf(out, `
+  Backup NOT verified. The phrase above is the ONLY recovery path —
+  it is not stored on disk and cannot be shown again. If your written
+  copy is wrong or missing, your funds are unrecoverable when
+  wallet.dat is lost.
+------------------------------------------------------------------------
+
+`)
+	} else {
+		fmt.Fprintln(out, "  Backup verified.")
+	}
+	return verified
+}
+
 // defaultPoolURL returns the first configured pool URL, or the built-in
 // default when none is configured.
-func defaultPoolURL(cfg config.Config) string {
+func defaultPoolURL(cfg *config.Config) string {
 	if len(cfg.Pools) > 0 {
 		return cfg.Pools[0].URL
 	}
@@ -210,7 +377,7 @@ func defaultPoolURL(cfg config.Config) string {
 // the next pool when the current one fails (matching the multi-pool
 // failover behaviour of cgminer/bfgminer/Braiins). Falls back to the
 // built-in default when no pools are configured.
-func poolURLs(cfg config.Config) []string {
+func poolURLs(cfg *config.Config) []string {
 	if len(cfg.Pools) == 0 {
 		return []string{config.DefaultPoolURL}
 	}
@@ -227,7 +394,7 @@ func poolURLs(cfg config.Config) []string {
 // rotates to the next address only when the current one has never
 // established a session (see runReconnectLoop), so a working payout
 // address is never abandoned due to a transient pool or network failure.
-func payoutAddresses(cfg config.Config) []string {
+func payoutAddresses(cfg *config.Config) []string {
 	seen := make(map[string]bool)
 	var addrs []string
 	add := func(a string) {
