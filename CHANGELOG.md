@@ -19,6 +19,29 @@ SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
 根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
 当方クライアント側バウンドで既にミラー済み。
 
+### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
+
+V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
+ヘッダ LE ハッシュの整合性、SIGTERM/Interrupt → ctx → conn.Close
+の完全シャットダウン経路を監査済みと記録。
+
+### 監査判定 (session 397 — トランスポート/ファンイン/エンコード側)
+
+V1 アウトバウンドリクエスト面（authorize/submit はオペレータ由来フィールドのみ、
+pending-RPC マップは全出口で解放）。V1 `readLine` は ReadSlice+64KiB 上限。
+両 TLS ダイアラは TLS1.2+・検証常時・ServerName 自動・平文フォールバックなし。
+`fanIn` は ctx 双方向対応でリークなし。hal sysfs は kernel 生成値のみ。
+BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 `ExtraNonce2Size` は
+decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
+エコシステム不変（SRI v1.12.0）。
+
+### 監査判定 (session 400)
+
+プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
+発見・記録（電力無駄なし: ジョブなしワーカーはアイドル待機。AI 再配分は設計判断
+項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
+の収益計算・信頼度・フォールバックは監査 clean。
+
 ### 監査判定 (session 401)
 
 最後の未個別監査ファイル `internal/lightning/seedstore.go` を監査 clean —
