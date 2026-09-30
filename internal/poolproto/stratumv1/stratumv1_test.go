@@ -138,6 +138,43 @@ func TestParseNotify_MalformedJSON(t *testing.T) {
 }
 
 // ============================================================================
+// parseNotify — malformed required-header fields (fail closed)
+// ============================================================================
+
+// A notify whose required header fields fail to decode must be rejected:
+// a zero-filled job produces shares that all fail self-verification —
+// silent wasted work. coinb/merkle keep their documented soft-degrade.
+func TestParseNotify_MalformedHeaderFields(t *testing.T) {
+	prev := `"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"`
+	base := func(p1, p5, p6, p7 string) json.RawMessage {
+		// merkle_branch carries one undecodable and one wrong-length entry:
+		// both must be dropped (soft-degrade), never error.
+		return json.RawMessage(`["60",` + p1 + `,"01","ff",["zz","aabb"],` + p5 + `,` + p6 + `,` + p7 + `,true]`)
+	}
+	cases := map[string]json.RawMessage{
+		"prevhash bad hex":      base(`"zz"`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"prevhash short":        base(`"01"`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"version bad hex":       base(prev, `"gg"`, `"1d00ffff"`, `"68d36c5e"`),
+		"nbits bad hex":         base(prev, `"00000002"`, `"xx"`, `"68d36c5e"`),
+		"ntime bad hex":         base(prev, `"00000002"`, `"1d00ffff"`, `"zz"`),
+		"ntime too wide (>32b)": base(prev, `"00000002"`, `"1d00ffff"`, `"1ffffffff"`),
+	}
+	for name, raw := range cases {
+		if _, err := parseNotify(raw); err == nil {
+			t.Errorf("%s: expected parseNotify error, got nil", name)
+		}
+	}
+	// coinb/merkle still soft-degrade per the legacy-pool fallback.
+	job, err := parseNotify(base(prev, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`))
+	if err != nil {
+		t.Fatalf("soft-degrade fixture should still parse: %v", err)
+	}
+	if len(job.MerkleBranch) != 0 {
+		t.Error("bad merkle entries should drop, not error")
+	}
+}
+
+// ============================================================================
 // parseDifficulty
 // ============================================================================
 

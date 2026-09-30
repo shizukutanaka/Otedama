@@ -100,17 +100,26 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 			job.MerkleBranch = append(job.MerkleBranch, b)
 		}
 	}
-	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
-		job.Version = uint32(v)
+	// Header fields are required: a malformed value would zero-fill and
+	// produce a job whose every share fails self-verification — silent
+	// wasted work until the next notify. Reject the notify instead.
+	v, err := strconv.ParseUint(versionHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: version: %w", err)
 	}
-	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
-		job.NBits = uint32(v)
+	job.Version = uint32(v)
+	if v, err = strconv.ParseUint(nbitsHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: nbits: %w", err)
 	}
-	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
-		job.NTime = uint32(v)
+	job.NBits = uint32(v)
+	if v, err = strconv.ParseUint(ntimeHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: ntime: %w", err)
 	}
+	job.NTime = uint32(v)
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
+	} else {
+		return poolproto.Job{}, fmt.Errorf("notify: prevhash: malformed or wrong length")
 	}
 	// MerkleRoot is completed by the session (completeV1Job) once the
 	// negotiated extranonce1/2 are folded into the coinbase.
