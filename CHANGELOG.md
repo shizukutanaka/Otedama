@@ -20,6 +20,12 @@ closed #402 の未マージ修正を master へ再デリバー。
 超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
 SPECIFICATION/API/THREAT_MODEL 同期済み。
 
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
 ### Fixed (session 348 — プール通知サニタイズ)
 
 `client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
