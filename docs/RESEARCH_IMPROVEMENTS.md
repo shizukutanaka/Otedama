@@ -952,6 +952,53 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 394 — bounded --log-file growth
+
+[FIXED — session 394] **Log-file rotation** (`cmd/otedama/logfile.go`): `--log-file` was an unbounded `O_APPEND` writer — a miner left running for months grew its audit log without limit, and no rotation existed (not in KNOWN_LIMITATIONS either). `cappedLogFile` rotates at 32 MiB to a single `path.old` backup (total ≤ ~64 MiB), preserves the 0600 mode, appends across restarts, and on a failed rotate falls back to the existing file rather than dropping writes. Tests: rotation at cap, total-disk bound, single-backup invariant, append-reopen, mode 0600 — race clean.
+
+[AUDITED — clean] Remaining low-coverage spots verified benign: `config.DefaultDataDir` (per-OS branches), `miner.HasWork` (trivial exported getter), `doctor.checkHardware` (Linux sysfs path is darwin-skipped), `lightning save()` (covered by open #501).
+
+## Session 321 — count pool-reported batch accepts (re-delivers closed #386/#400/#410)
+
+**Finding [OBSERVED — code-verified].** `SubmitSharesSuccess` credited
+`shares_accepted` by +1 per message, ignoring the pool-reported
+`NewSubmitsAccepted` batch count — on batching pools the acceptance rate
+drifted low.
+
+**Fix [OBSERVED].** `shares_accepted` now credits
+`NewSubmitsAccepted` (pool-reported batch count) instead of +1 per
+message.
+
+**Tests [OBSERVED].** Engine suite green; batch-accept cases added.
+
+## Session 322 — classify canonical SV2 reject codes (re-delivers closed #387/#399/#409)
+
+**Finding [OBSERVED — code-verified].** `rejectClass` handled standard
+`SubmitSharesError` codes via substring heuristics only:
+`invalid-job-id`/`invalid-channel-id` landed in `hardware` when they are
+stale-class; `difficulty-too-low` fell to `other` instead of
+`difficulty`.
+
+**Fix [OBSERVED].** Canonical codes are now classified explicitly before
+substring heuristics.
+
+**Tests [OBSERVED].** `TestRejectClass` canonical 9-case table green.
+
+## Session 370 — nonce-space exhaustion (ntime roll)
+
+**[FIXED]** `miner.Worker.grind` wrapped `nonce` past 2^32 with no
+compensation: once a thread finished its stride slice it silently
+re-hashed identical (header, nonce) pairs for the rest of the job —
+wasted power plus *duplicate* shares the pool rejects. Now each wrap
+increments `ntimeRoll` and rolls `Header.Time` forward (standard stratum
+ntime roll; V1 submit and SV2 `SubmitSharesStandard.ntime` both carry
+`Share.NTime` so the rolled value is what the pool sees; forward rolls
+stay ≥ SV2 `min_ntime`). Verified by `TestWorker_NonceWrapRollsNTime`
+(`NonceStep=2^31` forces a wrap every other iteration).
+
+**Audited clean.** Share→submit ntime plumbing (`run.go` 934/1132,
+`stratumv1.go` `%08x`) propagates the rolled value on both protocols.
+
 ## Session 335 — transition-reject fix re-delivered (from closed #367)
 
 **Benign retarget rejects [PORTED].** `miner.Share.Target` carries the
