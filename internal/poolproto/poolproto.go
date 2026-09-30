@@ -132,6 +132,26 @@ func StripScheme(url string) (host string, err error) {
 	return "", fmt.Errorf("%w: %q", ErrUnknownProtocol, url)
 }
 
+// StripUserinfo removes any credentials embedded in a pool URL's authority
+// (scheme://user:pass@host → scheme://host) for display and logging.
+// Config pool URLs today may carry userinfo, and echoing them into logs,
+// doctor output, or the TUI would leak the pool password. Malformed URLs
+// are returned unchanged — redaction must never corrupt diagnostics.
+func StripUserinfo(url string) string {
+	i := strings.Index(url, "://")
+	if i < 0 {
+		return url
+	}
+	rest := url[i+3:]
+	// Redact only a '@' inside the authority (before the first '/').
+	if at := strings.LastIndexByte(rest, '@'); at >= 0 {
+		if slash := strings.IndexByte(rest, '/'); slash < 0 || at < slash {
+			return url[:i+3] + rest[at+1:]
+		}
+	}
+	return url
+}
+
 // ----- Core types -----
 
 // Job is a unit of mining work delivered by the pool. Pure data; the
