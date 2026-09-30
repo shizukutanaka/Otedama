@@ -1231,6 +1231,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 			}
+			if opts.m != nil {
+				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
+			}
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
 		}
 	}
