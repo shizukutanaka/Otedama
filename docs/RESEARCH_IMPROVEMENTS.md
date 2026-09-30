@@ -940,6 +940,29 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 541 — serialized scheduling: -cpu=1 clean
+
+`go test -cpu=1 ./...` (GOMAXPROCS=1, single-threaded scheduling)
+twice over the full tree — all 24 packages green both runs. No
+test implicitly requires a multi-CPU scheduler to make progress;
+the concurrency-heavy suites (engine, stratumv1/v2, doctor's
+17 parallel checks) all drive goroutines through channels/sync
+correctly under serialization. Combined with the race (s517),
+flake (s535), and shuffle (s540) sweeps, the suite is robust
+across every Go scheduler dimension.
+
+## Session 542 — ecosystem recheck: sv2-spec #220/#221/#224/#209
+
+Four new spec merges since session 530: #220 fixes Noise Act 2 to
+exactly 234 bytes (wire-level normative; Otedama's ReadMessage2 is
+lenient >=32 — recorded as a §2 forward requirement), #221 drops
+Lightning "Act" terminology for Noise "steps" (docs only), #224
+editorial, #209 prohibits active-job_id reuse and SetNewPrevHash
+references to unreceived jobs (engine already pauses+warns on
+unknown-job refs; duplicate job_id is last-wins defensively).
+SRI still v1.11.1 — its SV1 difficulty round-up fix (#2227) does
+not apply here: sha256d.go computes targets with exact big.Int math.
+
 ## Session 544 — runtime integrity: checkptr=2, invalidptr, binary audit
 
 - `checkptr=2` (stricter: also checks unsafe.Pointer→uintptr
