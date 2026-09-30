@@ -612,3 +612,14 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 598 update — metrics-cardinality + stale-share semantics audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | Prometheus label cardinality — a label whose values come from pool-controlled or device-controlled strings explodes series count (memory + scrape cost). | ✅ Clean: every label value is bounded — `reason` ∈ 5 fixed categories from `rejectClass` ("stale"/"difficulty"/"duplicate"/"hardware"/"other"; canonical SV2 codes checked before substring heuristics), `device` bounded by hardware count, `address` bounded to the configured failover list, `status`/`quantile`/buildInfo are fixed enums. No pool string reaches a label. |
+| S | V1 `Submit` lacks a client-side staleness check — a share for a job purged by `clean_jobs` is sent anyway. | ✅ By protocol: pools expect and reject stale shares by design (`stale-share` is a canonical SV2 code; V1 pools reject with a stale reason). Client-side pre-checking saves nothing — the worker's share was already computed; the pool-side reject is the correctness boundary. |
+
+All packages build, vet, and test green.
