@@ -56,19 +56,14 @@ COPY build.sh $SRC/
 #!/bin/bash -eu
 
 # OSS-Fuzz expects fuzz binaries written to $OUT.
-# We discover all FuzzXxx tests under internal/ and compile each.
+# The base-builder-go image provides compile_native_go_fuzzer for
+# Go 1.18+ native fuzz targets (it drives go-118-fuzz-build itself).
+# Correction (session 495): the previous build.sh hand-rolled calls
+# to `go-118-fuzz-build -o x.a -func F pkg` plus manual
+# $CXX/$LIB_FUZZING_ENGINE linking — an obsolete interface; the
+# documented helper below is the supported path.
 
 cd $SRC/otedama
-
-# go-fuzz-build is provided by the base-builder-go image.
-compile_native_go_fuzzer() {
-  local pkg=$1
-  local fn=$2
-  local out=$3
-
-  go-118-fuzz-build -o "${out}.a" -func "${fn}" "${pkg}"
-  $CXX $CXXFLAGS $LIB_FUZZING_ENGINE "${out}.a" -o "${OUT}/${out}"
-}
 
 compile_native_go_fuzzer ./internal/stratum FuzzDecodeHeader fuzz_decode_header
 compile_native_go_fuzzer ./internal/stratum FuzzDecoder_ReadFrame fuzz_decoder_read_frame
@@ -81,8 +76,10 @@ compile_native_go_fuzzer ./internal/stratum FuzzDecoder_ReadFrame fuzz_decoder_r
 - **Coverage reports** at https://oss-fuzz-coverage.storage.googleapis.com/
 - **Issue filing** with private 90-day disclosure window.
 - **Reproducer binaries** for every crash.
-- **Bug bounties** (~$500–$5000 per accepted vulnerability via the
-  Open Source Security Foundation rewards program, when applicable).
+- ~~**Bug bounties**~~ — **Correction (session 495):** the OSS-Fuzz
+  reward program has been sunset (google/oss-fuzz#15478), so no bounty
+  applies anymore. The 24/7 compute, issue filing, and coverage reports
+  above remain free.
 
 ## Maintainer commitment
 
