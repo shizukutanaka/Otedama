@@ -17,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   clarified, single-port SV1/SV2 auto-detection pattern noted.
   Japanese-source recheck: no drift.
 
+### Documentation & audit (session 522 — EROSION threat modeled)
+
+- `docs/THREAT_MODEL.md`: added the missing network-adversary DoS
+  class — the EROSION single-packet Noise-nonce-desync attack (S&P'24),
+  with Otedama's verified posture (frame/decrypt error → reconnect →
+  fresh handshake; no silent degradation) and its residual (bounded
+  reconnect loop, inherent).
+
+### Documentation & audit (session 524 — golangci-lint pin divergence)
+
+- `docs/KNOWN_LIMITATIONS.md` §13: recorded that golangci-lint is
+  pinned at three different versions (ci.yml `v1.55.2` curl-install,
+  `golangci-lint-action@v3`, local `v1.64.8`) while upstream is at
+  `v2.13.x`; v2.13.0 adds the go1.27 support the local toolchain
+  already needs. Upgrade implies a `.golangci.yml` v2-config migration
+  — maintainer-owned.
+
 ### Documentation & audit (session 526 — fuzz smoke verification)
 
 - Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
