@@ -293,7 +293,7 @@ func TestDialer_Protocol_TLS(t *testing.T) {
 
 func TestDialer_DialBadURL(t *testing.T) {
 	d := &Dialer{}
-	_, err := d.Dial(context.Background(), "ftp://example.com", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "ftp://example.com", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with non-stratum scheme should fail")
 	}
@@ -647,7 +647,7 @@ func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
 			return nil, fmt.Errorf("injected dial error")
 		},
 	}
-	_, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with failing dialFn should return error")
 	}
@@ -664,7 +664,7 @@ func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
 func TestDialer_Dial_TLSBadPEM_ReturnsError(t *testing.T) {
 	d := &Dialer{useTLS: true} // dialFn and tlsConfig are nil: production path
 	creds := poolproto.Credentials{TLSRootCAsPEM: []byte("not-a-pem-certificate")}
-	_, err := d.Dial(context.Background(), "stratum+tls://pool.example.test:3334", creds)
+	_, err := d.Dial(context.Background(), "stratum+tls://pool.example.test:3334", &creds)
 	if err == nil {
 		t.Error("Dial with invalid TLS CA PEM should return an error")
 	}
@@ -680,7 +680,7 @@ func makeNegotiateConn(t *testing.T) (*Dialer, poolproto.Connection, net.Conn) {
 			return clientConn, nil
 		},
 	}
-	conn, err := d.Dial(context.Background(), "stratum+tcp://test.local:3333", poolproto.Credentials{})
+	conn, err := d.Dial(context.Background(), "stratum+tcp://test.local:3333", &poolproto.Credentials{})
 	if err != nil {
 		clientConn.Close()
 		serverConn.Close()
@@ -817,7 +817,7 @@ func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
 			return clientConn, nil
 		},
 	}
-	c, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	c, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", &poolproto.Credentials{})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -1087,7 +1087,7 @@ func TestDialer_Dial_UnreachableHost_TimesOut(t *testing.T) {
 	defer cancel()
 
 	// 198.51.100.1 is TEST-NET-2 (RFC 5737) — routable nowhere.
-	_, err := d.Dial(ctx, "stratum+tcp://198.51.100.1:39999", poolproto.Credentials{})
+	_, err := d.Dial(ctx, "stratum+tcp://198.51.100.1:39999", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial to unreachable host should fail")
 	}
@@ -1101,7 +1101,7 @@ func TestDialer_Dial_InvalidURL_ReturnsError(t *testing.T) {
 		"http://wrong-scheme:3333",
 		"stratum+tcp://",
 	} {
-		_, err := d.Dial(context.Background(), url, poolproto.Credentials{})
+		_, err := d.Dial(context.Background(), url, &poolproto.Credentials{})
 		if err == nil {
 			t.Errorf("Dial(%q) should fail", url)
 		}
@@ -1753,7 +1753,7 @@ func makeTestSession(cap int) *session {
 
 func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "j1", CleanJobs: false})
+	s.sendJob(&poolproto.Job{JobID: "j1", CleanJobs: false})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
 	}
@@ -1765,10 +1765,10 @@ func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 
 func TestSendJob_DropsOldestWhenFullAndCleanJobsFalse(t *testing.T) {
 	s := makeTestSession(2)
-	s.sendJob(poolproto.Job{JobID: "old1"})
-	s.sendJob(poolproto.Job{JobID: "old2"})
+	s.sendJob(&poolproto.Job{JobID: "old1"})
+	s.sendJob(&poolproto.Job{JobID: "old2"})
 	// Channel is now full (cap 2). Sending with clean_jobs=false must drop old1.
-	s.sendJob(poolproto.Job{JobID: "new"})
+	s.sendJob(&poolproto.Job{JobID: "new"})
 
 	// Drain channel; should contain old2 and new (old1 was dropped).
 	var got []string
@@ -1787,14 +1787,14 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 	s := makeTestSession(8)
 	// Pre-fill with 5 stale jobs.
 	for i := range 5 {
-		s.sendJob(poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
+		s.sendJob(&poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
 	}
 	if got := len(s.jobsCh); got != 5 {
 		t.Fatalf("pre-fill: jobsCh len = %d, want 5", got)
 	}
 
 	// New block: clean_jobs=true must discard all 5 stale jobs.
-	s.sendJob(poolproto.Job{JobID: "newblock", CleanJobs: true})
+	s.sendJob(&poolproto.Job{JobID: "newblock", CleanJobs: true})
 
 	if got := len(s.jobsCh); got != 1 {
 		t.Fatalf("after clean_jobs: jobsCh len = %d, want 1", got)
@@ -1807,7 +1807,7 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 
 func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
+	s.sendJob(&poolproto.Job{JobID: "only", CleanJobs: true})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
 	}
@@ -1948,7 +1948,7 @@ func TestDialer_DialTimeout(t *testing.T) {
 		return nil, ctx.Err()
 	}}
 	start := time.Now()
-	_, err := d.Dial(context.Background(), "stratum+tcp://127.0.0.1:1", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "stratum+tcp://127.0.0.1:1", &poolproto.Credentials{})
 	if err == nil {
 		t.Fatal("Dial should fail when the dial attempt times out")
 	}
