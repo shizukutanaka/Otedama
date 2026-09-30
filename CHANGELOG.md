@@ -19,6 +19,13 @@ Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
 config 数値パース（warn+skip）、provider quote チャネル（bounded）
 ——全て master 上で健全と確認し記録。
 
+### 監査判定 (session 356 — hal/V1 ディスパッチ)
+
+GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
+dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監査済みと
+記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
+文書化済み事項として再確認。
+
 ### 監査判定 (session 362 — btccrypto/依存態勢)
 
 btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
