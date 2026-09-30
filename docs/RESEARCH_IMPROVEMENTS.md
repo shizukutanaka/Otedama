@@ -952,6 +952,27 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記
+
+**Sweep.** `docs/architecture.md`（112行）全文精読。session 243 の免責ブロックが主要乖離（provider 単数形・2系統収益・HAL ドライバ・lightning・observability・API層）を網羅済みだが、2件の未免責の虚偽主張を発見・免責へ追記。
+
+**発見（日英両免責に追記）。**
+- `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` の非実在が未免責 — プラグイン基盤・gRPC/REST API・ZKP 認証は全て未実装で、`internal/auth/` は CLAUDE.md 禁止パス（v4.0 スコープ）。
+- 「SRI（Stratum Reference Implementation）のGoバインディングを統合利用」（§44）および「自前実装ではなくSRIを選択」（§100）の理由付けは**実態と逆** — SRI（`stratum-mining/stratum`）は Rust 実装で Go バインディングは存在せず、`internal/stratum` は本プロジェクトの自前フレーム/コーデック/Noise 実装。LDK についても lightningdevkit のメンテ済み言語バインディング（Swift/Kotlin/Java/TypeScript 等）に Go は含まれない。
+
+**検証済み・変更なし（免責が既にカバー）。** providers 複数形、収益源4系統の内2系統未実装、asic/cuda/rocm ドライバ非実在、LDK 統合・チャネル管理・自動決済・LSP 未実装、observability パッケージ非実在、API 層非実在 — 全て session 243 免責済み。
+
+## Session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正
+
+**Sweep.** `docs/solo-operations.md`（690行）全文精読。設計マニュアルとして将来形の推奨事項は正当だが、現在形の「設定済み/実施済み」クレームを `.github/workflows/`・`Makefile`・`.goreleaser.yaml` と照合。
+
+**発見（3件訂正、#561 が直した SHA-pinning 虚偽と同クラス）。**
+- Scorecard リスト「Signed-Releases（cosign設定済み → 自動高スコア）」→ 虚偽: `.goreleaser.yaml` の cosign 設定は残るが `release.yml` が goreleaser を一切呼ばない dead code（session 480 で検証済み）— 署名リリース非存在で Scorecard 低スコアのまま。
+- Scorecard リスト「Fuzzing（go test -fuzz → CIで継続実行 → 設定済み）」→ 虚偽: `.github/workflows/` にファズ参照ゼロ、`make fuzz` はローカルのみ（session 483-485 で横断検証済み、6文書目の同クラス）。
+- リスク1 対策「`govulncheck` は週次で自動実行済み」→ 虚偽: 全ワークフローに govulncheck/osv-scanner 参照ゼロ — Makefile ローカルターゲットのみ。Lightning ゼロデイ対策として列挙した根拠が未実装。
+
+**検証済み・変更なし。** 第1層〜第7層の推奨設計（SHA pinning 原則・Renovatebot 設定例・Private Vulnerability Reporting・DCO・CODEOWNERS サンプル・週10時間上限）は全て将来形の設計提案として正しく記述されており実装要求ではない。Dependabot 設定済み・Branch-Protection「設定必要」表記は正直。CodeQL/Semgrep の security.yml 存在も確認。
+
 ## Session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正
 
 **Sweep.** `docs/AUDIT_CHECKLIST.md`（148行）全文精読 — 第三者監査人が「各行を検証せよ」と設計した文書ゆえに誤誘導の影響が大きい。全行を ci.yml/security.yml/.golangci.yml/go.mod/実装と照合。併せて `docs/API.md` 残節（HTTP エンドポイント・メトリクスカタログ・ウォレット形式・終了挙動・API 安定性）を照合 — 全 clean（env 変数表の欠落は open #517 の担当域）。
