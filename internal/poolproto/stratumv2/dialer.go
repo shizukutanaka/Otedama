@@ -80,6 +80,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
+// handshakeTimeout bounds the whole Negotiate handshake. The steady-state
+// read loop is unblocked via Close()/ctx cancellation, but during the
+// handshake nothing closes the socket — a peer that accepts TCP yet never
+// answers SetupConnection would otherwise hang DialURL (and the engine's
+// reconnect loop inside it) forever.
+var handshakeTimeout = 15 * time.Second
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -87,6 +94,11 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if !ok {
 		return nil, fmt.Errorf("stratumv2: Negotiate received non-V2 connection: %T", c)
 	}
+
+	// Bound the handshake reads; cleared on return since the session read
+	// loop is governed by Close/ctx, not deadlines.
+	_ = conn.raw.SetReadDeadline(time.Now().Add(handshakeTimeout))
+	defer func() { _ = conn.raw.SetReadDeadline(time.Time{}) }()
 
 	dec := stratum.NewDecoder(conn.raw)
 
