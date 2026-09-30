@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 399)
+
+マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
+(header, nonce) を各デバイスが重複計算し、後着シェアが duplicate 拒否されていた。
+`WorkerConfig.NonceOffset` を追加し、エンジンがワーカー i に `i*Threads` オフセット・
+共有ステップ `next-pow2(threads×workers)` を割当 — 各 (worker, thread) がジョブ全期間で
+互いに素な剰余類を所有。単一デバイス時の挙動は不変。
+
 ### 修正 (session 462)
 
 1. TUI のカラム揃えずれを修正 — ANSI エスケープを含むフィールドを

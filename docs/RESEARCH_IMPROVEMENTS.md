@@ -940,6 +940,24 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 399 — cross-worker nonce-space partition
+
+**Duplicate grinding across devices [FIXED].** Every `miner.Worker`
+started each thread at `nonce = threadID` with `NonceStep = Threads` —
+on a multi-device rig, N workers hashing the same job ran identical
+nonce sequences, so every device but the fastest duplicated work already
+done by a sibling and earned "duplicate" rejects for it. V1 offers no
+rescue: `Share` carries no extranonce2, so submissions also collided at
+en2 = "00…0".
+
+`WorkerConfig` gains `NonceOffset`; `startMinerWorkers` now assigns
+worker i an offset of `i*Threads` and a shared `NonceStep` of
+next-pow2(threads × workers). Because the stride is a power of two
+dividing 2^32, each (worker, thread) pair owns a residue class for the
+job's whole lifetime — including through u32 wraparound — with zero
+allocation change on the hot loop. `TestWorker_NoncePartitionAcrossWorkers`
+proves the parity partition end-to-end; miner + engine suites race-clean.
+
 ## Session 462
 
 TUI column-layout bug fixed: three line builders padded fields with
