@@ -34,8 +34,8 @@ func FuzzParseNotify(f *testing.F) {
 
 // FuzzParseReconnect feeds arbitrary params to the client.reconnect
 // parser. Host/Port are recorded but deliberately never dialed (see
-// reconnectDirective's doc); the contract is no panic and ok=true even
-// on garbage — the bare notification is itself the signal.
+// reconnectDirective's doc); the contract is no panic and a directive for
+// every input, garbage included — the bare notification is itself the signal.
 func FuzzParseReconnect(f *testing.F) {
 	f.Add(`["pool.example.com",3333,30]`)
 	f.Add(`["host","notaport","notawait"]`)
@@ -43,10 +43,7 @@ func FuzzParseReconnect(f *testing.F) {
 	f.Add(`"notanarray"`)
 	f.Add(`[{"a":1},[1],{"b":2}]`)
 	f.Fuzz(func(t *testing.T, data string) {
-		d, ok := parseReconnect(json.RawMessage(data))
-		if !ok {
-			t.Fatalf("parseReconnect rejected %q — every input must yield a directive", data)
-		}
+		d := parseReconnect(json.RawMessage(data))
 		_ = d // Host/Port/Wait are advisory-only; bounds enforced by consumers
 	})
 }
