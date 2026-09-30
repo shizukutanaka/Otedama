@@ -981,6 +981,44 @@ so a future TUI/metrics reader doesn't add one silently.
 With this, every file under `internal/` and `cmd/` has been audited at
 least once across sessions 340–401.
 
+## Session 402 — skills/ drift fixed [FIXED]
+
+**`skills/tdd.md` described test infrastructure that never existed**
+[FIXED]. Three fabricated mechanisms corrected to match the real
+Makefile/test topology:
+
+- "integration tests gated by `//go:build integration`, run via
+  `make test-integration`" → reality: no build tag exists anywhere in
+  the repo; slower tests are gated by `testing.Short()` and live in
+  ordinary `_test.go` files; `make test-integration` runs the full
+  suite. The old text silently instructed contributors to add files
+  under a tag nothing consumes.
+- "E2E tests under `//go:build e2e` run via `make test-e2e`" → no E2E
+  suite or `test/e2e/` package has ever existed; the Makefile
+  documents the target's deliberate omission. Rewritten to state that
+  plainly and point at the engine fake-pool integration tests as the
+  current end-to-end coverage.
+- "LDK regtest harness / channel tests" and "zkSNARK circuit tests" →
+  Lightning payment channels and ZKP auth are v4.0 scope per CLAUDE.md
+  and do not exist in the codebase; the paragraphs now read as future
+  guidance rather than describing present infrastructure (the existing
+  BIP-39/AES-GCM wallet test surface is named instead).
+
+**`skills/release-procedure.md` [FIXED]** — the release checklist
+demanded a green run of `otedama migrate-from-v2`, a subcommand that
+has never existed. Replaced with a config-load-path verification and a
+note that `make test-e2e` does not exist (prevents a releaser failing
+the checklist on a phantom step).
+
+Note: the integration/E2E/`migrate-from-v2` corrections in `skills/tdd.md`
+and `skills/release-procedure.md` had already landed on master in
+session 483, so the duplicate paragraphs were dropped from this change;
+only the Lightning/ZKP v4.0-scope rewrite in `skills/tdd.md` remains.
+
+`skills/code-review.md`, `security-audit.md`, and both quality-pass
+files contain no phantom commands [AUDITED — clean]; the "24 package"
+count in the quality-pass files matches `go list ./...` = 24.
+
 ## Session 404 — docs/ flag sweep; phantom --worker-threads fixed [FIXED]
 
 **`docs/TROUBLESHOOTING.md` recommended a nonexistent flag [FIXED].**
