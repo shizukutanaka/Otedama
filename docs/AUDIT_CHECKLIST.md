@@ -36,11 +36,9 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Correction (session 488): currently fails** — every `uses:` is a tag/branch ref (`@v4`, `@master`), none are SHA-pinned; this row is the target state, not the current state |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are tag refs (`@v4`, one `@master`) — no SHA pins yet |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Correction (session 488): currently fails** — `release.yml` never invokes goreleaser or cosign; the `.goreleaser.yaml` `signs:` block is dead config and no signed artefact exists |
 | 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Gap:** release.yml produces no signatures — VERIFY.md documents the unsigned status |
 | 13 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install; optional cosign `verify-blob` path exists but signatures are not yet published by the release workflow |
 | 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
@@ -90,21 +88,22 @@ If any row does not pass, open a security advisory.
 This is the set of checks a PR must pass before merge. An auditor can
 verify these are enforced by inspecting `.github/workflows/ci.yml`.
 **Correction (session 488):** the list below previously claimed standalone
-`go vet`, `staticcheck`, `govulncheck`, and a 5-OS/arch `go build` matrix —
-none of those jobs exist. `govet` and `staticcheck` run only as linters
-inside `golangci-lint run`; `govulncheck` is absent from all workflows
-(Makefile local target only). The accurate gate is:
+`go vet`, `staticcheck`, and `govulncheck` jobs — none exist in `ci.yml`.
+`govet` and `staticcheck` run only as linters inside `golangci-lint run`
+(a standalone `go vet` step exists only in `test.yml`); `govulncheck` is
+absent from all workflows (Makefile local target only). The accurate gate is:
 
 - `golangci-lint run` (Lint job; includes `govet` + `staticcheck` via `.golangci.yml`)
 - `gosec` (Security Scan job, SARIF upload)
 - `go fmt` check + `go mod tidy` check (Lint job)
 - `go test -v -timeout 10m -race ./...` on Linux/macOS; without `-race` on Windows
+- `go build` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 (Build job matrix)
 
 Nightly additional checks: **none exist.** `FuzzDecodeHeader` and
 `FuzzDecoder_ReadFrame` are real fuzz targets in
 `internal/stratum/frame_fuzz_test.go`, but no workflow schedules them —
 `make fuzz` is local-only. The Benchmark job runs benchmarks and uploads
-`benchmark-results.txt` as an artifact; it does not compare against main
+`benchmark.txt` (artifact `benchmark-results`); it does not compare against main
 or gate on a regression threshold.
 
 ---

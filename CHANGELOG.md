@@ -13,8 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
 
 * 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
-* 行11「SHA pinning」・行13「cosign 署名済み」→ 両方現状 fails と明記（uses: は全てタグ参照、release.yml は goreleaser 未呼出）。
-* CI gate 節を実態に書換 — 独立した `go vet`/`staticcheck`/`govulncheck`/5-OS ビルド行列は非存在（govet+staticcheck は golangci-lint 内で実行）、nightly ファズ・ベンチマーク比較ジョブも非存在。
+* 行11「SHA pinning」・行13「cosign 署名済み」は master 側の Gap 注記が先に着地済みのため重複追記せず。
+* CI gate 節を実態に書換 — ci.yml に独立した `go vet`/`staticcheck`/`govulncheck` ジョブは非存在（govet+staticcheck は golangci-lint 内で実行、5-OS ビルド行列は Build ジョブに実在）、nightly ファズ・ベンチマーク比較ジョブも非存在。
 
 ### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
 
