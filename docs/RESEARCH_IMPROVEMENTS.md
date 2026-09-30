@@ -955,6 +955,14 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 1. **本番セットの拡充**: stratumprotocol.org 公式表で production プールが Blitzpool/MKPool/NexusPool/Public Pool/PyBlock（solo）+ Braiins/DMND（DMND は miner-selected templates）に拡大、Auradine FluxOS・Bitaxe・BraiinsOS の SV2 ネイティブファームウェアも稼働。
 2. **BIP-110 = 初のライブ template-signaling 展開**: Reduced Data Temporary Softfork が Knots ベース activation client で listening node の ~10% に到達。OCEAN は BIP110/非シグナルの2専用 endpoint を追加し split 時は「2つのプール」として運用すると発表（7月）。テンプレート所有が**どの consensus chain に着陸するか**を左右する初の実例 — ADR-009 の solo/JDP 提案が「プールではなく自ノードの consensus rule で検証」を要する根拠として記録。
 
+## Session 383 — SV2 nominal_hashrate seeding
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.
+
+[FIXED] **engine `handshake` declared `nominal_hashrate ≈ 0`** (`internal/engine/run.go`, `setup.go`): the value was summed from `w.Stats().HashRate`, which is always ~0 at handshake time because no job has been hashed yet. Pools use `nominal_hashrate` to seed variable difficulty, so a 0 declaration mis-seeds vardiff for real hardware. Fix: compute a capability-based nominal estimate in `Run` (per-worker sum of `provider.DefaultHashrates` over each worker's device family, via `nominalMiningHashrate`), thread it through `reconnectOpts`/`sessionOpts`, and declare it whenever the live rate is non-positive. On reconnect the live rate wins, reflecting sustained throughput. Tests: `TestHandshake_DeclaresNominalHashrateWhenWorkersCold` (net.Pipe server asserts the declared float) and `TestNominalMiningHashrate`.
+
+[AUDITED — clean] SV2 `DispatchFrame` (messages.go:406-483): every known msg type decodes or errors (error → session drop → reconnect); unknown types become `UnknownMessage` and are ignored; the 16 MiB frame cap is enforced in `ReadFrame` before allocation.
+
 ## Session 374 — config-layer pool URL validation hardening
 
 [AUDITED — clean] `config show`/`config validate` output: passphrases are
