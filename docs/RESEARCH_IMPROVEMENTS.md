@@ -974,6 +974,56 @@ payload buffer — a malicious length header cannot force a large
 allocation. Already covered by the v1.12.0-alignment pass; re-verified
 on master this session.
 
+## Session 352 — wallet-write, TUI, doctor audit verdicts (all clean)
+
+**Wallet save path [AUDITED — hardened].** `wallet.dat` is written via
+`CreateTemp` + `Sync` + `Chmod 0600` (before rename, so the file is
+never world-readable even momentarily) + atomic `Rename` on the same
+filesystem — a mid-write kill cannot corrupt the wallet. The public
+fingerprint file is a best-effort convenience write (0600, recoverable
+from the seed); `loadExisting` caps the input (session 333) and returns
+an opaque error on wrong passphrase — no oracle.
+
+**TUI render path [AUDITED — clean].** The dashboard renders only
+operator-config strings (pool URL) and numeric stats; `shortenURL`
+byte-truncates for narrow terminals. No wire-derived text reaches the
+dashboard. (The show_message notice would arrive sanitized by the
+session-348 parser change.)
+
+**Doctor checks [AUDITED — clean].** All 17 checks reviewed; the only
+network probe is `checkPoolReachability` — `net.Dialer{Timeout: 5s}`,
+ctx-aware, closes the connection, and quotes the URL with `%q`. The
+host string logged is the operator's own config value. Clock-skew and
+rates probes were hardened in earlier sessions (no redirects, bounded
+bodies).
+
+## Session 356 — hal/sysfs and V1 dispatch verdicts
+
+**GPU sysfs enumeration [AUDITED — clean].** `internal/hal/gpu_linux.go`
+enumerates `/sys/class/drm` via `os.ReadDir` and reads sysfs attributes
+with `readSysFile` (unbounded `os.ReadFile`). Both inputs are
+kernel-generated; fabricating them needs root, which is already outside
+the threat model — a local-root attacker owns the box. No bound added.
+
+**V1 server→client dispatch [AUDITED — complete].** All six handled
+methods (`mining.notify`, `set_difficulty`, `set_extranonce`,
+`client.show_message`, `client.reconnect`/`mining.reconnect`) are
+parsed-or-dropped; unknown methods (`set_version_mask`, etc.) fall
+through harmlessly — ignoring version-rolling masks is correct for a
+CPU/GPU arbiter (no version-rolling hardware path exists). In-flight
+fixes for `set_extranonce` atomicity (PR #450) and `set_difficulty`
+validation (PR #456) are deliberately not re-delivered here.
+
+**Noise transport wiring [OBSERVED — intentionally dormant].**
+`internal/stratum`'s `NewHandshakeInitiator`/`NewEncryptedConn` are
+unwired from `poolproto` — V2 runs plaintext per KNOWN_LIMITATIONS §3,
+which documents the gap and the logged warning. Not dead code to
+delete; it is the staged substrate for a future encryption land.
+
+**Ecosystem [FETCHED — steady].** SRI v1.12.0 (Sep 17) and ESP-Miner
+v2.15.3 (Sep 20) remain latest; no new stratum-facing changes since
+session 346.
+
 ## Session 362 — btccrypto + dependency-posture verdicts
 
 **btccrypto [AUDITED — clean].** Bech32: BIP-173 length cap (90),
