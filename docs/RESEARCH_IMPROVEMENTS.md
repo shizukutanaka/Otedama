@@ -952,6 +952,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**

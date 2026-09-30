@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
 * §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
