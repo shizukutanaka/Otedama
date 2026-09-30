@@ -16,6 +16,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
   386-misalignment panic class is absent.
 
+### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
+
+V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
+文字列を `%q` でクォート（制御文字エスケープ）し、OpenMiningChannel
+拒否の理由を fatal としてログに明示。従来は理由が破棄されていた。
+
+### Fixed (session 295 — V2 経路でプール難易度がメトリクスに公開されず飢餓警告も出なかった問題を解消)
+
+**問題.** `publishDifficulty` は V1 の stats tick でのみ呼ばれ、V2 経路では
+`otedama_pool_difficulty` ゲージが更新されず、難易度飢餓の warn も発火
+しなかった（V1/V2 の非対称）。closed #395 の未マージ修正を master へ
+再デリバー。
+
+**修正.** V2 の share target（OpenMiningChannelSuccess/SetTarget の
+U256）を新 `miner.DifficultyFromTarget` で Stratum 難易度へ変換し、
+V2 stats tick で publish + 飢餓 warn（session-294 と同閾値）。ゼロ
+target は +Inf で「収益ゼロ」を表現。
+
+### 修正 (session 390)
+
+- save() のクラッシュ/失敗で残った `.wallet-*.tmp` がデータディレクトリに永久蓄積していた問題を修正 — NewWalletManager 起動時に mtime が1分超の古い temp ファイルのみ掃除（インフライトの save() や他プロセスの新規 tmp は保全、best-effort で起動を阻害しない）。併せて `save()` の失敗経路（暗号化エラー・書き込み不可ディレクトリ・tmp 残留なし）のテストを追加。
+
+### Added (session 320 — ライブ・ネットワークハッシュレートフィード)
+
+**問題.** マイニング収益推定はコンパイル時定数（1e21 H/s）を使っていた
+——実際のネットワークハッシュレートは変動するのに値が固定。
+KNOWN_LIMITATIONS §7 の「live difficulty feed」未実装項を着地。
+closed #378/#415 の未マージ修正を master へ再デリバー。
+
+**修正.** `rates.HashrateFetcher` が mempool.space + blockchain.info を
+ポーリングし、中央値（妥当性バンド内）を `MiningProvider.
+NetworkHashrateFunc` 経由で収益推定へ注入。フィード不可・未配線時は
+従来の定数へフォールバック（オフライン起動に影響なし）。
+
 ### 修正 (session 379)
 
 - リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
