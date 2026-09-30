@@ -952,6 +952,63 @@ decision) in `docs/CATEGORY_AUDIT.md`:
   collision possible only if a label value contains those characters;
   unreachable from today's producers but live on the API surface.
 
+## Session 520 — Go 1.27 verification + upstream sv2-ui orchestrator
+
+- **Go 1.27 released Aug 2026** — environment toolchain auto-upgraded to
+  go1.27.1; `go test ./...` green on all 23 packages; no >`go 1.22`
+  stdlib symbols → 1.27's new `stdversion` vet is clean; godebug block
+  parses under the new removed-setting acceptance rule. Toolchain bump
+  remains closed-PR-owned (#369).
+- **`stratum-mining/sv2-ui`** — upstream Docker orchestrator (translator
+  + JDC + Core IPC 30.x/31.x) for JDP stacks; recorded in ADR-009 as the
+  deployment target a future Otedama JDC would compose with.
+- ESP-Miner still at v2.15.3 (AxeOS UI now embedded in the main
+  firmware binary + mDNS since 2.15.0); DATUM gateway v0.4.1beta, no
+  protocol drift.
+
+## Session 521 — ecosystem recheck: SV2 trajectory, repo landscape
+
+- SV2 transport ~15–20% of hashrate early 2026 (estimate); SRI WG
+  projects 40–60% by end-2026 (forecast). 7-pool WG commitment remains
+  the load-bearing datapoint — recorded in ADR-009.
+- `stratum-mining/stratum` (SRI monorepo) and `stratum-mining/sv2-apps`
+  (translator/JDC/sv2-ui) coexist — JD tooling lives in sv2-apps.
+- `cbyam/solo-pool-rs` demonstrates single-port SV1/SV2 auto-detection
+  from the first frame byte.
+- Japanese-source recheck (Qiita/Zenn): no new mining-protocol or
+  arbitration content — coverage gap persists, no drift.
+
+## Session 522 — EROSION network-adversary threat modeled
+
+Recorded in THREAT_MODEL's DoS section (a class previously unmodeled —
+network adversary disruption, vs pool-side DoS):
+
+- **EROSION (Tran/von Arx/Vanbever, IEEE S&P'24)**: one corrupted SV2
+  ciphertext desynchronizes Noise nonce counters → session dies while
+  the miner keeps hashing stale jobs; 91% of surveyed pools reachable,
+  one malicious AS could hit 96% of BTC hashrate.
+- **Otedama posture verified**: any frame/decrypt error is session
+  fatal → reconnect → fresh handshake re-syncs counters. No
+  silent-degradation mode; residual = bounded reconnect loop under
+  sustained tampering (inherent; countermeasure is routing hygiene).
+- Spot-GPU scheduling literature (SkyNomad, committed-horizon spot
+  allocators) reviewed — tangential to the current provider layer
+  (simulated); noted for future arbitration work only.
+
+## Session 524 — golangci-lint version divergence recorded
+
+Recorded in KNOWN_LIMITATIONS §13 (CI-workflow ledger):
+
+- **Three different pins**: `ci.yml` curl-installs `v1.55.2`;
+  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3`; local tooling
+  is `v1.64.8`. Upstream is at `v2.13.x` — v2.13.0 added go1.27
+  support (needed locally since go1.27.1's export data exceeds
+  v1.64.8's typecheck decoder; run under `GOTOOLCHAIN=go1.26.8`).
+- Upgrading implies a v2 config migration of `.golangci.yml` plus
+  bumping both CI pin sites — maintainer-owned (workflow files).
+- Repo's GitHub Issues #2/#3 (duplication ledger links) re-checked:
+  still open, status unchanged.
+
 ## Session 526 — in-tree fuzz targets smoke-verified
 
 CI has no fuzz job (recorded in KNOWN_LIMITATIONS §13), so the two
