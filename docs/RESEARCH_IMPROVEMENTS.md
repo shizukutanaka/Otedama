@@ -967,6 +967,249 @@ practice.
 (`docs/API.md`) were already verified against `cmd/otedama` in
 sessions 339/346.
 
+## Session 387 — first-run wallet backup verification re-delivery
+
+[FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
+
+[AUDITED — clean] Re-check of remaining closed-unmerged queue for re-delivery eligibility: #372/#386/#400/#410 (batch accepts) → live as open #433; #374/#384/#398/#411 (extranonce2 bound) → live as open #428; #377/#385/#397/#412 (job-map bounds) → live as open #429; #387/#399/#409 (reject-code classification) → live as open #434; #388/#413 (reconnect wait) → live as open #430; #381/#414 (wallet mode audit) → live as open #431; #378/#415 (live hashrate feed) → live as open #432; #389/#393/#403/#404 (seq validation) → live as open #422/#423; #426 ntime roll → open #426; #427 in-flight gauge → open; #416/#418–#421/#425/#435–#446 → all open. #375 FIPS doctor still blocked (go1.26 module directive vs CI pin), #380 hashrate gauges blocked by #432, #271 halves blocked by #417. #371 both halves landed this stretch (mnemonic flake → #497; atomic.Bool → pushed to #447's branch). Docs-only closed #469/#471/#472 remain low-value. No eligible candidate left un-delivered.
+
+## Session 311 — drop SubmitSharesError frames with unsent sequence numbers (re-delivers closed #404)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesError` was
+counted without checking the sequence number — a forged reject frame
+with an unsent seq inflated the reject rate, feeding curtailment.
+
+**Fix [OBSERVED].** Frames with `SequenceNumber > seqNum` drop at debug
+level; error responses for real seqs still settle `submitTimes` and run
+reject classification.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqRejectIgnored`.
+
+## Session 366 — rates NaN injection + parser fuzz
+
+**Fixed [FIXED — real reachable bug].** `strconv.ParseFloat` accepts the
+literals `"NaN"`, `"Infinity"`, `"-Inf"` with nil error, and the doFetch
+sanity band `rate < min || rate > max` cannot reject NaN (every
+comparison against NaN is false). A price source returning
+`{"data":{"amount":"NaN"}}` (Coinbase shape) or `{"c":["NaN",…]}`
+(Kraken shape) — compromised endpoint or a proxy sitting inside TLS —
+injected NaN into the median, producing a NaN BTC/USD rate that
+poisons every downstream yield estimate. Two-layer fix: a `parseRate`
+helper rejects non-finite values at the extractor, and the band check
+is now a negated in-range test (`!(x >= lo && x <= hi)`) so NaN fails
+closed for any future source. New `FuzzSourceExtract` asserts every
+extractor's contract: no panic, and err==nil implies a finite rate —
+1.9M execs clean.
+
+**Fixed [FIXED — fuzzer-found].** `parseSubscribeResult` accepted an
+empty `extranonce1` (`[[], "", 0]` — found by the new fuzzer on its
+first pass): shares built on an empty extranonce are guaranteed
+invalid, silently burning accepted-looking work. Empty en1 now errors,
+terminating the handshake instead.
+
+**New fuzz coverage [FIXED — CLAUDE.md parity].** `FuzzDispatchLine`
+drives the session's JSON-RPC dispatcher (mining.notify /
+set_difficulty / set_extranonce / show_message / reconnect /
+response-id routing) over net.Pipe with arbitrary lines — 1.7M execs,
+no panic/block. `FuzzParseSubscribeResult` covers the subscribe
+response shape; its crash seed lives in testdata as a regression
+input. This brings the cleartext V1 wire — the most exposed parser in
+the codebase — under the fuzz mandate alongside the SV2 frame
+fuzzers.
+
+## Session 373 — wallet lifecycle audit + docs-code drift fix
+
+[AUDITED — clean] `internal/lightning` wallet lifecycle: wallet.dat writes
+are fully atomic (tempfile + Sync + Close + pre-rename chmod 0600 + Rename
+into a 0700 data dir); decrypt errors are deliberately opaque ("wallet
+unlock failed"); the WalletManager is short-lived in the engine
+(`setupWallet` keeps only the fingerprint string, so the BIP-39 mnemonic
+is collectable after first-run display).
+
+[AUDITED — clean] BIP-39 wordlist + derivation: `GenerateEntropy`
+restricts to valid bit widths and requires a full read; `MnemonicToEntropy`
+rejects invalid word counts and enforces the checksum (transcription
+errors caught); `Fingerprint` is an HMAC so it reveals nothing about the
+seed. Intermediate derivation buffers are zeroed (session 340, PR #452).
+
+[FIXED] Docs-code drift on the wallet KDF work factor: THREAT_MODEL and
+AUDIT_CHECKLIST claimed `scrypt N=32768`; the actual constant is
+`scryptN = 1 << 17` = 131072 in `internal/lightning/seedstore.go`
+(4x understatement — the brute-force residual-risk paragraph materially
+understates the real work factor). AUDIT_CHECKLIST also pointed item 22
+at `internal/lightning/seed.go`; the call site is `seedstore.go`.
+Corrected both. `docs/API.md` already documented N=2^17 correctly.
+
+[AUDITED — clean] THREAT_MODEL channel bound: the SV2 reader channel is
+`make(chan poolMsg, 32)` (run.go), matching the documented "Job channel
+is bounded (buffer size 32)" claim.
+
+## Session 382 — re-delivery of #485 + arbitration pause persistence fix
+
+[FETCHED] Re-delivered the closed-unmerged #485 (docs-code drift on the
+wallet scrypt work factor: THREAT_MODEL/AUDIT_CHECKLIST said N=32768;
+implementation is `scryptN = 1 << 17` = 131072) — cherry-picked onto
+master verbatim; no equivalent open PR exists.
+
+[FIXED] Arbitration device pause was defeated by the next pool job:
+`applyAllocation` pauses below-floor/idle/AI-routed workers with
+`SetWork(nil)`, but `updateWork`/`applyJob` re-armed *every* worker on
+each new pool job — undoing the pause for the ~30 s until the next Decide
+tick. Introduced `pauseSet` (sync.Map), the per-device counterpart of
+`curtailGate`: `reconcileArbPauses` rewrites the set after every Decide
+(before applyAllocation), and both job-dispatch paths skip paused device
+IDs. Hashing resumes on the next job after arbitration routes the device
+back to a mining stream.
+
+[FIXED] `updateLiveness` now treats "every worker arbitration-paused" the
+same as curtailment — stall monitor not advanced, `otedama_up` stays 1 —
+preventing false "hashrate stalled" warnings while the rig is
+deliberately idle below the yield floor. Partial pause still stalls
+normally (a nominally-mining device at 0 rate is a real fault).
+
+[AUDITED — clean] fanIn share-merge backpressure: buffer 4·N capped at
+64; when full during a reconnect the producers block and workers drop
+shares via the dropped-share counter — bounded loss, no unbounded queue.
+
+## Session 319 — doctor audits wallet.dat file mode (re-delivers closed #381/#414)
+
+**Finding [OBSERVED — code-verified].** The wallet-permission audit
+checked only the containing directory; a wallet restored via scp/rsync
+or unpacked from a tarball lands 0644 inside a correctly-moded 0700
+directory, silently exposing the encrypted seed.
+
+**Fix [OBSERVED].** `doctor` now audits `wallet.dat`'s own file mode and
+warns with a `chmod 0600` remediation (Unix-only; Windows builds report
+N/A as before).
+
+**Tests [OBSERVED].** Mode-audit cases green.
+
+## Session 358 — engine V2 handshake deadline
+
+**Live V2 handshake had no read bound [FIXED].** The engine's inline
+`handshake()` (the *actual* V2 connect path — the `poolproto/stratumv2`
+adapter remains unwired per KNOWN_LIMITATIONS §3) performed two
+`dec.ReadFrame()` calls with no deadline. A pool that accepts TCP but
+never answers SetupConnection held the failover loop forever; on
+net.Pipe-style silent peers the write deadline alone fired after 10 s,
+but a reader-draining silent peer never returned at all. A shared
+`handshakeTimeout = 15 s` (var, test-overridable) now covers the whole
+exchange via `conn.SetDeadline`, cleared on return so steady-state
+session reads stay unbounded — matching the adapter-side `Negotiate`
+deadline from session 327 (PR #439) that never applied to this path.
+
+**V2 mid-session silence [OBSERVED — covered by #408].** The inline
+reader goroutine exits cleanly on `ctx.Done` via `defer conn.Close()`
+unblocking `ReadFrame`; a *live-but-silent* pool mid-session is a
+detection problem already addressed by the pool-silence warning on
+open PR #408 — deliberately not duplicated.
+
+## Session 365 — re-delivery + ecosystem
+
+**Re-delivered [FIXED].** The live-path V2 handshake deadline
+(originally session 358, PR #470, closed unmerged in review flow) is
+re-delivered standalone on master. `handshake()` — the engine's real
+V2 connect path (`poolproto/stratumv2` adapter is unwired per
+KNOWN_LIMITATIONS §3) — set no deadline on its two `ReadFrame` waits,
+letting a TCP-accepting-but-silent pool hold the failover hop
+forever. `var handshakeTimeout = 15 * time.Second` bounds both reads;
+the deadline is cleared on return so mid-session reads stay governed
+by ctx/keepalive, not a stale timer.
+
+**Ecosystem [FETCHED — steady].** SRI release train unchanged from
+the v1.12.0 line (sv2-apps repo carries app roles post v1.6.0 split);
+ESP-Miner v2.15.x line unchanged. No new alignment gaps.
+
+## Session 339 — V1 handshake timeout (mirrors s327's V2 fix)
+
+**V1 Negotiate [FIXED].** `call()` waited only on the caller's ctx and
+the read loop's 5-minute per-line deadline — a pool that trickles a
+heartbeat line under 5 min but never answers `mining.subscribe` wedged
+the handshake forever. Negotiate now wraps all three calls in
+`context.WithTimeout(ctx, handshakeTimeout)` (30 s, var-overridable),
+mirroring the V2 `Negotiate` read deadline from session 327. The 30 s
+budget is shared across subscribe+authorize+extranonce.subscribe.
+
+## Session 337 — SV2 channel_id validation + protocol-surface audit
+
+**Foreign-channel frames [FIXED].** The live V2 loop processed
+channel-scoped frames without checking `channel_id` against the
+channel opened in handshake. A confused or hostile pool could mutate
+`jobs`/prevHash/`shareTarget` via frames for a channel Otedama never
+opened. `channelIDOf` extracts the id from the five channel-scoped
+types; mismatches drop with a warn. Non-channel frames pass through.
+**Message surface [AUDITED — clean].** Standard-channel message set is
+complete (SetupConnection*/OpenMiningChannel*/NewMiningJob/
+SetNewPrevHash/SetTarget/SubmitShares*); extended-channel and unknown
+types land in `Message.Unknown` without error. `Decoder.MaxFrameSize`
+bounds every frame at 16 MiB — matching SRI — so a peer announcing a
+max-U24 payload cannot force an oversized allocation. The
+`internal/poolproto/stratumv2` adapter's `channel_id`/pending-map gaps
+are moot: it is not the live V2 path (its own comment + KNOWN_LIMITATIONS
+§3), and pending-map bounding ships separately in #429.
+
+## Session 317 — bound outstanding V2 job maps (re-delivers closed #385/#397/#412)
+
+**Finding [OBSERVED — code-verified].** Two SV2 maps were unbounded: the
+engine's live-loop `jobs` map and the adapter's `pending` future-job set.
+A hostile/compromised pool flooding distinct `NewMiningJob` IDs without
+rotating the tip could grow memory without bound (Noise encrypts the
+wire, so the attacker IS the pool itself).
+
+**Fix [OBSERVED].** `jobsCap`/`pendingCap` = 64 with oldest-first FIFO
+eviction on both stores.
+
+**Tests [OBSERVED].** Engine store-bound test + dialer flood test over a
+real net.Pipe read loop.
+
+## Session 355 — V1 RPC-call wait timeout
+
+**Goroutine/pending leak on a silent pool [FIXED].** `session.call`
+waited on `respCh` or `ctx.Done()` only. A pool that keeps TCP alive
+but stops answering (wedged server, silent failure) left the waiting
+goroutine and its `pending[id]` entry forever — V1 submits run one
+goroutine per share, so the leak compounded at the share rate for the
+session's whole life. `callTimeout = 60s` (var, test-overridable) now
+bounds the wait: on expiry the pending entry is deleted and the caller
+gets a "timed out" error, which the submit goroutine logs and exits.
+
+**Remaining in-flight state [AUDITED — bounded].** `submitTimes`
+(1024-cap oldest-evict) and the `jobsCh`/`noticeCh` buffers (8 each,
+drop-oldest) are bounded on master; the V2 engine `jobs` map remains
+bounded only on open PR #397/#429 — not re-implemented here.
+
+## Session 340 — BIP-39 intermediate-buffer zeroization
+
+**Secret-material wipe [FIXED].** `EntropyToMnemonic` and
+`MnemonicToEntropy` built the mnemonic/entropy through a `bits` slice
+holding the full secret bitstream (one byte per bit) that was left for
+the GC; `MnemonicToSeed` left the mnemonic-derived `password` and raw
+PBKDF2 `seed` buffers likewise. All are wiped via the package's
+existing `zeroBytes` on every return path (defer). Residual: the
+`m.String()` mnemonic string itself and `salt` are Go strings —
+immutable, unzeroable — an accepted language limitation now recorded.
+Touched `internal/lightning` — CODEOWNERS maintainer review applies.
+
+## Session 327 — V2 handshake read deadline (real fix)
+
+**Negotiate reads unbounded [OBSERVED + FIXED].** The dialer's two
+handshake `ReadFrame` calls ran with no deadline and no ctx wiring —
+unlike `sendMsg` (write deadline, s324) and the steady-state read loop
+(unblocked by Close/ctx). A pool that accepts TCP then goes silent hung
+`DialURL` inside the engine's synchronous reconnect loop: no backoff, no
+failover, and shutdown could not cancel it. `handshakeTimeout` = 15 s now
+bounds the phase (cleared on return — steady state stays
+Close/ctx-governed). Test: `TestNegotiate_HandshakeTimeout` (net.Pipe,
+draining-but-silent peer) fails Negotiate in 50 ms.
+
+## Session 509 — V1 reject メトリクスのデータレース修正（実害）
+
+**Sweep.** `internal/engine/metrics.go`（581行・未精読）の排他制御監査: lazy 作成 map 4件全て専用 mutex（`lastRejectByReasonMu`・`sharesFoundPerDeviceMu`・`payoutInfoMu`・`submitTimes` ローカル）保有なのに **`rejectByReason` のみロック欠落**を発見。
+
+**実害**: `runSessionV1` はシェア毎に `go func()` で submit を非同期化し、reject 時に `rejectReason(category)` を呼ぶ → 2件の拒否が同時解決すると map への同時書き込み。さらに stats ループの `updateShareRates` が `m.rejectByReason["stale"]` をロックなしで読む → goroutine 書き込みとの同時 read/write。両経路とも `fatal error: concurrent map read/write`（recover 不可・プロセス強制終了）。Counter/Gauge 自体は atomic/RWMutex で安全 — map へのポインタ格納だけが問題だった。
+
+**対応**: `rejectByReasonMu sync.Mutex` を追加し両アクセスを保護（兄弟の既存パターンと同一形状）。回帰テスト `TestRejectByReasonConcurrent`: 8 goroutine が rejectReason を競合呼出 + 4 goroutine が updateShareRates を競合読取 → mutex 除去で `-race` が DATA RACE を検出することを確認済み（付けると緑）。engine パッケージ全テスト緑。
+
 ## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
 
 **Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
