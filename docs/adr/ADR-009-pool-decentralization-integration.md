@@ -229,6 +229,10 @@ DATUM's wire format is **Stratum V1-compatible** with extended fields for the co
 
 ### Sub-domain 5 — Solo mining mode
 
+**Update (session 504):** the production set is wider than when this ADR was drafted — the official stratumprotocol.org ecosystem table now lists **Blitzpool, MKPool, NexusPool, Public Pool, and PyBlock Pool** as production solo pools, plus Braiins Pool and DMND as production pools (DMND with miner-selected templates), and SV2-native firmware in production from Auradine (FluxOS), Bitaxe, and BraiinsOS.
+
+**Update (session 504 — BIP110):** July 2026 saw the first live template-signaling deployment: **BIP-110 (Reduced Data Temporary Softfork)** reached ~10% of listening nodes via a Knots-based activation client, and OCEAN launched dedicated signaling Stratum endpoints (`bip110.mine.ocean.xyz:3110`, `no-signal.mine.ocean.xyz:3000`) plus a chain-split contingency that effectively runs OCEAN as two pools on either side of a split. This is directly relevant here: template authorship now determines not just transaction selection but *which consensus chain a miner lands on* — strengthening this ADR's requirement that any solo/JDP path verify its work against the miner's own node's consensus rules, not the pool's.
+
 **State of the art:** Blitzpool currently runs SV2 for solo miners. The "solo mining" pattern is: miner runs their own Bitcoin node, constructs templates, **submits found blocks directly to the network**, and pays themselves 100% of the reward (no pool variance smoothing, but no pool fees either). At ~1 PH/s, expected block-finding interval is roughly a decade; at ~100 PH/s, a few months. Useful for testnet, regtest, and users with very large hashrate or strong ideological preference for variance.
 
 **Otedama proposal:** A `SoloMining` template source that bypasses pool protocols entirely:
