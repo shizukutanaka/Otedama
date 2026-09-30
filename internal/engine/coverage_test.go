@@ -924,7 +924,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		serverConn.Read(buf) //nolint:errcheck
 		// Send a valid SetupConnectionSuccess but then a second one instead of
 		// the expected OpenMiningChannel flow — here we deliberately send
-		// an OpenMiningChannelError which is recognised but sets neither
+		// an OpenMiningChannelError which is recognized but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
@@ -1177,7 +1177,7 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
 					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+					`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}()
@@ -1255,7 +1255,7 @@ func fakeV1PoolHighDiff(t *testing.T) string {
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"1",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		// Stay connected so the stats ticker keeps firing.
 		time.Sleep(10 * time.Second)
 	}()
@@ -1369,7 +1369,7 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 		t.Error("onConnected was not called")
 	}
 	// Ends with pool disconnect.
-	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
+	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1610,7 +1610,7 @@ func TestRunSessionV1_ContextCancelled(t *testing.T) {
 		interval: 500 * time.Millisecond,
 		log:      func(_, _ string) {},
 	})
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)
 	}
 }
@@ -2456,7 +2456,7 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
