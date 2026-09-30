@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 )
 
 // testWordList returns a synthetic 2048-word list for testing.
@@ -360,5 +362,82 @@ func TestNewWalletManager_RejectsEmptyPassphrase(t *testing.T) {
 func TestNewWalletManager_RejectsNilWordList(t *testing.T) {
 	if _, err := NewWalletManager(t.TempDir(), "p", nil, nil); err == nil {
 		t.Error("nil WordList accepted")
+	}
+}
+
+// ----- Stale temp-file sweep + save failure paths -----
+
+// A temp file left by a crashed save() is swept once it is older than
+// staleTempMaxAge; fresh temp files (a concurrent live writer) and
+// unrelated files are left alone.
+func TestNewWalletManager_SweepsStaleTempFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	stale := filepath.Join(dir, ".wallet-stale.tmp")
+	if err := os.WriteFile(stale, []byte("abandoned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * staleTempMaxAge)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	fresh := filepath.Join(dir, ".wallet-fresh.tmp")
+	if err := os.WriteFile(fresh, []byte("in-flight"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	decoy := filepath.Join(dir, "wallet-other.tmp") // no leading dot
+	if err := os.WriteFile(decoy, []byte("not ours"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewWalletManager(dir, "p", deterministicReader(0x42), testWL(t)); err != nil {
+		t.Fatalf("NewWalletManager: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("stale .wallet-*.tmp survived startup sweep")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Error("fresh .wallet-*.tmp was swept (could belong to a live writer)")
+	}
+	if _, err := os.Stat(decoy); err != nil {
+		t.Error("unrelated file was swept")
+	}
+	if _, err := os.Stat(filepath.Join(dir, walletFile)); err != nil {
+		t.Error("wallet.dat missing after startup sweep")
+	}
+}
+
+// save() failure mid-encrypt (entropy ok, salt read fails) propagates
+// the wrapped error and leaves no temp file behind.
+func TestNewWalletManager_SaveEncryptFailureLeavesNoTemp(t *testing.T) {
+	dir := t.TempDir()
+	// 32 bytes: enough for GenerateEntropy (256 bits), nothing left for
+	// EncryptSeed's salt read.
+	r := &failAfterNReader{remaining: 32}
+	_, err := NewWalletManager(dir, "p", r, testWL(t))
+	if err == nil {
+		t.Fatal("expected error from exhausted reader")
+	}
+	matches, _ := filepath.Glob(filepath.Join(dir, ".wallet-*.tmp"))
+	if len(matches) != 0 {
+		t.Fatalf("temp files leaked after failed save: %v", matches)
+	}
+}
+
+// A read-only data dir fails CreateTemp inside save(); the error is
+// wrapped, not swallowed.
+func TestNewWalletManager_ReadOnlyDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-based read-only dirs are not meaningful on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; permission checks are bypassed")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewWalletManager(dir, "p", deterministicReader(0x11), testWL(t)); err == nil {
+		t.Error("expected error writing wallet into a read-only dir")
 	}
 }

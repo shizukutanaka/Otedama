@@ -123,6 +123,26 @@ func TestIdentity_Validate(t *testing.T) {
 			id:      Identity{ID: "path/to/gpu", Family: FamilyGPU},
 			wantErr: true,
 		},
+		{
+			name:    "ID with carriage return rejected",
+			id:      Identity{ID: "gpu\r0", Family: FamilyGPU},
+			wantErr: true,
+		},
+		{
+			name:    "ID with vertical tab rejected",
+			id:      Identity{ID: "gpu\v0", Family: FamilyGPU},
+			wantErr: true,
+		},
+		{
+			name:    "ID with form feed rejected",
+			id:      Identity{ID: "gpu\f0", Family: FamilyGPU},
+			wantErr: true,
+		},
+		{
+			name:    "ID with non-breaking space rejected",
+			id:      Identity{ID: "gpu\u00a00", Family: FamilyGPU},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
