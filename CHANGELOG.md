@@ -17,6 +17,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
 が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
 
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
+### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
+
+Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +
+OpenMiningChannel の応答読み取り）が deadline も ctx 観測もなく
+ブロッキング read で、`DialURL` が応答しないプールで無期限に
+ハングしエンジンの reconnect ループ全体を stall させていた問題を
+修正。ハンドシェイク全体を 15s にバウンドし、定常状態では
+従来どおり Close()/ctx で解除されるよう終了時にクリア。
+
 ### Fixed (session 324 — SV2 書き込み deadline の追加)
 
 **問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
