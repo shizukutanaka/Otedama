@@ -15,6 +15,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -48,12 +49,19 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	return poolproto.ProtocolStratumV2
 }
 
+// dialTimeout bounds one pool dial attempt — TCP connect — so failover
+// is not stalled by a blackhole endpoint when the caller's context
+// carries no deadline. Var (not const) so tests can shorten it.
+var dialTimeout = 15 * time.Second
+
 // Dial opens a TCP (or, when configured, TLS) connection to the pool.
 func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := poolproto.StripScheme(url)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: %w", err)
 	}
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
 	dialFn := d.dialFn
 	if dialFn == nil {
 		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
@@ -68,7 +76,10 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			return dialer.DialContext(ctx, "tcp", address)
 		}
 	}
-	raw, err := dialFn(ctx, address)
+	raw, err := dialFn(dctx, address)
+	if err != nil && errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("dial timeout after %s", dialTimeout)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
@@ -125,7 +136,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.SetupConnectionError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
 	}
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
@@ -149,7 +160,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.OpenMiningChannelError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during channel open", f.Header.MsgType)
