@@ -3,7 +3,7 @@
 // Package stratum — messages.go
 //
 // This file defines the Stratum V2 Mining Protocol message types and
-// their binary (de)serialisation. The Mining Protocol is the V2
+// their binary (de)serialization. The Mining Protocol is the V2
 // successor of Stratum V1 and is the only sub-protocol Otedama
 // implements in v3.0.0. Job Declaration and Template Distribution
 // are deferred to a later milestone.
@@ -37,7 +37,7 @@
 //
 // Otedama does not implement all fields of every message; fields that
 // are not used in the home-mining use-case are present as zero values
-// and correctly serialised/deserialised so that interoperability with
+// and correctly serialized/deserialised so that interoperability with
 // compliant pools is maintained.
 package stratum
 
@@ -100,7 +100,7 @@ type NewMiningJob struct {
 	MerkleRoot  [32]byte
 }
 
-// Encode serialises NewMiningJob (includes channel_id prefix).
+// Encode serializes NewMiningJob (includes channel_id prefix).
 func (m NewMiningJob) Encode() ([]byte, error) {
 	size := 4 + 4 + 1 + 4 + 32
 	if m.HasMinNtime {
@@ -176,7 +176,7 @@ type SetNewPrevHash struct {
 	NBits     uint32 // network compact target
 }
 
-// Encode serialises SetNewPrevHash (includes channel_id prefix).
+// Encode serializes SetNewPrevHash (includes channel_id prefix).
 func (m SetNewPrevHash) Encode() ([]byte, error) {
 	buf := make([]byte, 4+4+32+4+4)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
@@ -217,7 +217,7 @@ type SetTarget struct {
 	MaxTarget [32]byte // U256, same byte order as miner.Hash (LE, MSB at [31])
 }
 
-// Encode serialises SetTarget (includes channel_id prefix).
+// Encode serializes SetTarget (includes channel_id prefix).
 func (m SetTarget) Encode() ([]byte, error) {
 	buf := make([]byte, 4+32)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
@@ -251,7 +251,7 @@ type SubmitSharesStandard struct {
 	NVersion       uint32
 }
 
-// Encode serialises SubmitSharesStandard.
+// Encode serializes SubmitSharesStandard.
 func (m SubmitSharesStandard) Encode() ([]byte, error) {
 	buf := make([]byte, 24)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
@@ -290,7 +290,7 @@ type SubmitSharesSuccess struct {
 	NewSharesSummed    uint32
 }
 
-// Encode serialises SubmitSharesSuccess. It is the symmetric inverse of
+// Encode serializes SubmitSharesSuccess. It is the symmetric inverse of
 // DecodeSubmitSharesSuccess, used by the server side (and tests that stand
 // in for a pool) to acknowledge accepted shares.
 func (m SubmitSharesSuccess) Encode() ([]byte, error) {
@@ -326,7 +326,7 @@ type SubmitSharesError struct {
 	Error          string // STR0_255
 }
 
-// Encode serialises SubmitSharesError (symmetric inverse of DecodeSubmitSharesError).
+// Encode serializes SubmitSharesError (symmetric inverse of DecodeSubmitSharesError).
 func (m SubmitSharesError) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 16), m.ChannelID)
 	b = appendU32LE(b, m.SequenceNumber)
@@ -367,7 +367,7 @@ func WrapMessage(msgType uint8, isChannelMsg bool, payload []byte) (Frame, error
 	h := Header{
 		ExtensionType: ext,
 		MsgType:       msgType,
-		MsgLength:     uint32(len(payload)),
+		MsgLength:     uint32(len(payload)), //nolint:gosec // payload is bounded by MaxFrameSize at construction
 	}
 	if err := h.Validate(); err != nil {
 		return Frame{}, err
@@ -396,7 +396,7 @@ type Message struct {
 	Unknown                  *UnknownMessage
 }
 
-// UnknownMessage wraps a frame whose msg_type is not recognised.
+// UnknownMessage wraps a frame whose msg_type is not recognized.
 type UnknownMessage struct {
 	MsgType uint8
 	Payload []byte
