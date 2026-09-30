@@ -10,8 +10,10 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-visible.** `go test -bench` runs in CI and results are
+   uploaded as a workflow artifact (`benchmark-results`) on every run —
+   compare against the baseline artifact before merging a perf-sensitive
+   PR. (No automatic regression gate exists yet.)
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -73,9 +75,15 @@ deliver them. A slow decoder becomes a DoS vector.
 the figures above are targets, not measurements. `FuzzDecoder_ReadFrame`
 exists and passes under `go test -fuzz`, but no CI job runs it — see
 KNOWN_LIMITATIONS §13.)*
+*Numbers predate the committed benchmark set — no `BenchmarkDecoder_*`
+exists in the tree yet, so these figures are currently indicative rather
+than reproducible.*
 
 **Correctness:** the decoder is covered by `FuzzDecoder_ReadFrame`
 (run locally — no continuous CI fuzzing today).
+**Correctness:** `FuzzDecoder_ReadFrame` covers the decode boundary; run
+it locally (`go test -fuzz=FuzzDecoder_ReadFrame ./internal/stratum/`) —
+no fuzz job runs in CI yet.
 
 ## Economic comparison (2026-04-24 market data)
 
