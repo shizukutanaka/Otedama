@@ -156,7 +156,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
 - 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org`/`otedama.dev` 確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
 
-**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は本セッションで CONTRIBUTING.md に追加。SECURITY.md と LEGAL.md は v3.1.0 スコープ。
+**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は CONTRIBUTING.md に存在。SECURITY.md も作成済み（**訂正 session 490**: 従来「SECURITY.md と LEGAL.md は v3.1.0 スコープ」と記載）— v3.1.0 スコープに残るのは LEGAL.md のみ。
 
 ---
 
