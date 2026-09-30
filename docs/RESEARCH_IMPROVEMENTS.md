@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 554 — constant-time / timing-attack surface
+
+- `crypto/subtle` usages: zero — and none are needed. There are
+  NO application-level secret comparisons anywhere in the tree:
+  every authenticity check happens inside audited primitives
+  (AES-GCM tag verify for the wallet, scrypt KDF for the
+  passphrase, Noise AEAD for the pool channel), all of which are
+  constant-time inside the stdlib/x/crypto implementations.
+- The single `bytes.Equal` in non-test code (base58.go:81)
+  compares the *public* Base58Check checksum — a self-verifying
+  integrity field, not a secret; early-exit is correct there.
