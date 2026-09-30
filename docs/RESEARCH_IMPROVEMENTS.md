@@ -942,6 +942,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 465
+
+Corrected a false portability claim in GODEBUG_NOTES.md: it said the
+go/toolchain split "lets users with older toolchains still build" —
+but `toolchain go1.24.0` makes GOTOOLCHAIN=auto switch to 1.24, and
+under GOTOOLCHAIN=local the pinned `godebug tlsmlkem` fails to parse
+on older toolchains (the exact "unknown godebug" error seen on CI's 1.23.x
+legs). The note now states plainly that Go 1.24+ is required while
+the `go 1.22` line only governs language defaults. Audited clean:
+config.yaml.example covers every yaml field; docs/API.md's five
+missing OTEDAMA_ env vars are open PR #517's territory (not
+duplicated); ADR set has no other phantom references.
+
 ## Session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正
 
 **Sweep.** `skills/` 配下の全 markdown を機械照合（コマンド・パス・ビルドタグの実在性、CI ワークフローとの機能一致）し、6件の stale 記述を発見・訂正。open #513 が担当した領域（phantom テスト対象・v4.0 スコープ記述）との重複なし。

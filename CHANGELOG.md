@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 465)
+
+1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0`
+   （GOTOOLCHAIN=auto で 1.24 へ自動切替）と `godebug tlsmlkem`
+   （1.24 未満ではパース不能）により実質 Go 1.24+ が必要なため、実際の
+   最小ツールチェーン要件を明記。
+
 ### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
 
 * `skills/tdd.md`: 「CI上で継続的にファズ実行」→ CI にファズジョブ非存在（`make fuzz` ローカルのみ）、`//go:build integration` タグ → 宣言ファイルゼロ（実際は `testing.Short()` ゲート）、`make test-e2e`/`//go:build e2e` → 両方非実在（E2E スイート未実装、ターゲット削除済み）の3件を訂正。
