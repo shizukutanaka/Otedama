@@ -23,9 +23,11 @@ require (
 	// maintained by the Go team. ADR-003 budget: stdlib + x/crypto + yaml.
 	golang.org/x/crypto v0.23.0
 	// Rationale: stdlib has no YAML decoder; required for the layered
-	// config file (internal/config). MIT/Apache-2.0. Upstream repo is
-	// archived; the go.yaml.in/yaml/v3 migration is tracked separately.
-	gopkg.in/yaml.v3 v3.0.1
+	// config file (internal/config). MIT/Apache-2.0. yaml.v3 lives at
+	// go.yaml.in now: gopkg.in/yaml.v3 was archived in April 2025 and
+	// fails the maintained-dependency criterion; go.yaml.in/yaml/v3 is
+	// the Yaml project's maintained continuation.
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 // golang.org/x/sys is used by internal/tui to query the live terminal
