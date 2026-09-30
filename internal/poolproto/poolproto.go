@@ -65,6 +65,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // ----- Protocol identifiers -----
@@ -130,6 +131,26 @@ func StripScheme(url string) (host string, err error) {
 		}
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownProtocol, url)
+}
+
+// StripUserinfo removes any credentials embedded in a pool URL's authority
+// (scheme://user:pass@host → scheme://host) for display and logging.
+// Config pool URLs today may carry userinfo, and echoing them into logs,
+// doctor output, or the TUI would leak the pool password. Malformed URLs
+// are returned unchanged — redaction must never corrupt diagnostics.
+func StripUserinfo(url string) string {
+	i := strings.Index(url, "://")
+	if i < 0 {
+		return url
+	}
+	rest := url[i+3:]
+	// Redact only a '@' inside the authority (before the first '/').
+	if at := strings.LastIndexByte(rest, '@'); at >= 0 {
+		if slash := strings.IndexByte(rest, '/'); slash < 0 || at < slash {
+			return url[:i+3] + rest[at+1:]
+		}
+	}
+	return url
 }
 
 // ----- Core types -----
@@ -380,3 +401,28 @@ var (
 	// soft rejections that come back inside ShareResult).
 	ErrShareRejected = errors.New("poolproto: share rejected")
 )
+
+// maxPoolTextRunes caps sanitized pool-controlled text. Pool strings end
+// up in logs (and potentially the TUI); an unbounded string is a
+// log-flooding vector.
+const maxPoolTextRunes = 256
+
+// SanitizePoolText removes Unicode control characters (C0, DEL, C1 —
+// including ANSI escape introducers) from pool-controlled text and
+// truncates it to 256 runes. Callers use it before logging or rendering
+// any string the pool supplied (share-reject reasons, error objects,
+// job IDs), so escape sequences cannot manipulate the terminal or forge
+// log lines.
+func SanitizePoolText(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxPoolTextRunes {
+		clean = string(runes[:maxPoolTextRunes])
+	}
+	return clean
+}

@@ -164,6 +164,23 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 	}
 }
 
+func TestParseDifficulty_NonPositive(t *testing.T) {
+	// d <= 0 collapses the share target to "accept every hash" — a pool
+	// (or MitM on cleartext V1) setting it floods the submit path.
+	for _, raw := range []string{`[0]`, `[-1.5]`, `[-0.0]`, `[1e999]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) should be !ok", raw)
+		}
+	}
+	// Fractional and very small positive difficulties stay valid
+	// (ESP-Miner #1594/#1779 show real pools use them).
+	for _, raw := range []string{`[0.5]`, `[0.001]`, `[5e-324]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); !ok {
+			t.Errorf("parseDifficulty(%s) should be ok", raw)
+		}
+	}
+}
+
 // ============================================================================
 // parseSetExtranonce
 // ============================================================================
@@ -1947,5 +1964,85 @@ func TestCompleteV1Job_SkipsWithoutParts(t *testing.T) {
 	j := <-sess.jobsCh
 	if j.MerkleRoot != ([32]byte{}) {
 		t.Errorf("MerkleRoot = %x, want zero (no negotiated en1)", j.MerkleRoot)
+	}
+}
+
+// ============================================================================
+// extranonce2_size bounds — a hostile/MitM pool could request a huge
+// padding size that strings.Repeat would turn into gigabytes per submit.
+// ============================================================================
+
+func TestParseSetExtranonce_SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`["abc", 0]`, true},
+		{`["abc", 4]`, true},
+		{`["abc", 64]`, true},
+		{`["abc", 65]`, false},
+		{`["abc", -1]`, false},
+		{`["abc", 1073741824]`, false},
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
+			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
+		}
+	}
+}
+
+func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		sz   float64
+		want bool
+	}{
+		{0, true},
+		{8, true},
+		{64, true},
+		{65, false},
+		{-1, false},
+		{1e9, false},
+		// Fractional values must not pass via int() truncation.
+		{64.5, false},
+		{-0.5, false},
+		{4.5, false},
+	} {
+		result := []any{[]any{}, "abc", tc.sz}
+		_, _, err := parseSubscribeResult(result)
+		if (err == nil) != tc.want {
+			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
+		}
+	}
+}
+
+func TestSanitizeNotice_StripsControlChars(t *testing.T) {
+	// ANSI escape sequence + newline that would forge a log line.
+	got := sanitizeNotice("maintenance\x1b[2J\x1b[H\nforged log line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "maintenance") || !strings.Contains(got, "forged log line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizeNotice_PreservesUnicode(t *testing.T) {
+	got := sanitizeNotice("メンテナンス 10分後")
+	if got != "メンテナンス 10分後" {
+		t.Errorf("unicode text mangled: %q", got)
+	}
+}
+
+func TestSanitizeNotice_TruncatesLongNotices(t *testing.T) {
+	long := strings.Repeat("x", maxNoticeRunes*2)
+	got := sanitizeNotice(long)
+	if len([]rune(got)) != maxNoticeRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxNoticeRunes)
+	}
+}
+
+func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
+	got := sanitizeNotice("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }
