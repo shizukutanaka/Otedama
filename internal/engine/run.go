@@ -1232,8 +1232,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // workers must grind to: it is far easier than the block target, and a hash
 // meeting it is exactly what the pool credits. A zero target means the pool
 // did not assign one; the caller falls back to the block target.
+// handshakeTimeout bounds the SV2 SetupConnection + OpenMiningChannel
+// exchange. Var so tests can shrink it.
+var handshakeTimeout = 15 * time.Second
+
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	// Bound the entire handshake: a peer that accepts the connection but
+	// never answers SetupConnection would otherwise hold the failover
+	// loop forever. The deadline is cleared before returning so the
+	// session's steady-state reads are unbounded.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,

@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
 ### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
 
 `Negotiate`（subscribe/authorize/extranonce.subscribe）に
