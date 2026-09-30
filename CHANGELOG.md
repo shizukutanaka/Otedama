@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
+
+* §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
+* §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
+
 ### Fixed (session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記）
 
 * `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
