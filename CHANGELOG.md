@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 536 — extended vet)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `nilness` zero findings tree-wide;
+  `shadow`'s 13 hits are all the checked-immediately `if err :=`
+  idiom (verified benign, no dropped errors).
+
 ### Tests (session 537 — stdlib modernization)
 
 - `internal/i18n/messages/messages_test.go`: `sort.Strings` →
