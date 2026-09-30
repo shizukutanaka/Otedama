@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 共有ステップ `next-pow2(threads×workers)` を割当 — 各 (worker, thread) がジョブ全期間で
 互いに素な剰余類を所有。単一デバイス時の挙動は不変。
 
+### 修正 (session 462)
+
+1. TUI のカラム揃えずれを修正 — ANSI エスケープを含むフィールドを
+   `%-Ns` でパディングするとルーン数ベースのため不足し、後続カラムが
+   エスケープ長分左にずれていた。`padToVisibleWidth` で表示幅準拠の
+   パディングに統一（pool 状態・デバイス数・est. earned の3箇所）。
+
 ### Added (session 318 — client.reconnect の wait_seconds を尊重)
 
 **問題.** `client.reconnect`/`mining.reconnect` の `wait_seconds` は

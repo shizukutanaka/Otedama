@@ -958,6 +958,19 @@ job's whole lifetime — including through u32 wraparound — with zero
 allocation change on the hot loop. `TestWorker_NoncePartitionAcrossWorkers`
 proves the parity partition end-to-end; miner + engine suites race-clean.
 
+## Session 462
+
+TUI column-layout bug fixed: three line builders padded fields with
+fmt's %-Ns, which pads by rune count — but the padded values carry ANSI
+colour escapes (~9 bytes), so the padding never reached the intended
+visible column and the following column drifted left by the escape
+length (pool status, device-count field, earnings "est." column).
+Added padToVisibleWidth (pads to visibleLen) and switched the three
+escaped-field sites to it; tests pin the status column position. This
+is distinct from open #497 (which detects the real terminal width) —
+that PR tells the dashboard the width; this fix makes it lay out
+correctly at whatever width it has.
+
 ## Session 318 — honor pool-requested reconnect wait (re-delivers closed #388/#413)
 
 **Finding [OBSERVED — code-verified].** `client.reconnect`/
