@@ -953,6 +953,34 @@ message.
 
 **Tests [OBSERVED].** Engine suite green; batch-accept cases added.
 
+## Session 322 — classify canonical SV2 reject codes (re-delivers closed #387/#399/#409)
+
+**Finding [OBSERVED — code-verified].** `rejectClass` handled standard
+`SubmitSharesError` codes via substring heuristics only:
+`invalid-job-id`/`invalid-channel-id` landed in `hardware` when they are
+stale-class; `difficulty-too-low` fell to `other` instead of
+`difficulty`.
+
+**Fix [OBSERVED].** Canonical codes are now classified explicitly before
+substring heuristics.
+
+**Tests [OBSERVED].** `TestRejectClass` canonical 9-case table green.
+
+## Session 370 — nonce-space exhaustion (ntime roll)
+
+**[FIXED]** `miner.Worker.grind` wrapped `nonce` past 2^32 with no
+compensation: once a thread finished its stride slice it silently
+re-hashed identical (header, nonce) pairs for the rest of the job —
+wasted power plus *duplicate* shares the pool rejects. Now each wrap
+increments `ntimeRoll` and rolls `Header.Time` forward (standard stratum
+ntime roll; V1 submit and SV2 `SubmitSharesStandard.ntime` both carry
+`Share.NTime` so the rolled value is what the pool sees; forward rolls
+stay ≥ SV2 `min_ntime`). Verified by `TestWorker_NonceWrapRollsNTime`
+(`NonceStep=2^31` forces a wrap every other iteration).
+
+**Audited clean.** Share→submit ntime plumbing (`run.go` 934/1132,
+`stratumv1.go` `%08x`) propagates the rolled value on both protocols.
+
 ## Session 335 — transition-reject fix re-delivered (from closed #367)
 
 **Benign retarget rejects [PORTED].** `miner.Share.Target` carries the
