@@ -26,6 +26,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // DefaultChecks returns the built-in check set for a config.
@@ -329,9 +330,9 @@ func checkPoolReachability(cfg config.Config) Check {
 			results := make([]probe, len(urls))
 			var wg sync.WaitGroup
 			for i, u := range urls {
-				host := stripScheme(u)
+				host := stripScheme(poolproto.StripUserinfo(u))
 				if host == "" {
-					results[i].badURL = u
+					results[i].badURL = poolproto.StripUserinfo(u)
 					continue
 				}
 				results[i].host = host
@@ -421,7 +422,7 @@ func checkPoolDiversity(cfg config.Config) Check {
 			if n == 1 {
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", cfg.Pools[0].URL),
+					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", poolproto.StripUserinfo(cfg.Pools[0].URL)),
 					Fix:    "add a second pool under 'pools:' in config.yaml; mining stops if this pool goes down",
 				}
 			}
@@ -477,7 +478,7 @@ func checkPoolEndpointDiversity(cfg config.Config) Check {
 				}
 				resolved++
 				for _, ip := range ips {
-					ipToPools[ip] = appendUnique(ipToPools[ip], p.URL)
+					ipToPools[ip] = appendUnique(ipToPools[ip], poolproto.StripUserinfo(p.URL))
 				}
 			}
 			if resolved < 2 {
@@ -540,7 +541,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 			var plaintext []string
 			for _, p := range cfg.Pools {
 				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
+					plaintext = append(plaintext, stripScheme(poolproto.StripUserinfo(p.URL)))
 				}
 			}
 			if len(plaintext) > 0 {
@@ -581,7 +582,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
-							stripScheme(p.URL)),
+							stripScheme(poolproto.StripUserinfo(p.URL))),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
 				}
@@ -725,7 +726,7 @@ func checkPayoutScheme(cfg config.Config) Check {
 			for _, p := range cfg.Pools {
 				host := stripScheme(p.URL)
 				if host == "" {
-					host = p.URL
+					host = poolproto.StripUserinfo(p.URL)
 				}
 				switch p.PayoutScheme {
 				case "fpps":
@@ -823,8 +824,18 @@ func checkNetwork() Check {
 var clockSkewProbeURL = "https://api.coinbase.com/v2/time"
 
 // clockSkewHTTPClient is the HTTP client used by checkClockSkew. Nil means
-// use http.DefaultClient. Tests replace this with a fake-server client.
+// use clockSkewDefaultClient. Tests replace this with a fake-server client.
 var clockSkewHTTPClient *http.Client
+
+// clockSkewDefaultClient is used when clockSkewHTTPClient is nil. Like the
+// rate fetcher, it refuses to follow redirects: the probe target is a
+// hardcoded HTTPS endpoint, so a redirect can only be an https→http
+// downgrade leaking the request and feeding the check an attacker Date.
+var clockSkewDefaultClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return fmt.Errorf("doctor: redirects are not followed")
+	},
+}
 
 // clockSkewWarnSecs is the skew magnitude at which we warn; beyond this TLS
 // certificate validation windows, mining nTime fields, and rate-freshness
@@ -855,7 +866,7 @@ func checkClockSkew() Check {
 
 			client := clockSkewHTTPClient
 			if client == nil {
-				client = http.DefaultClient
+				client = clockSkewDefaultClient
 			}
 			resp, err := client.Do(req)
 			if err != nil {

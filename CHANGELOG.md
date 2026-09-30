@@ -15,6 +15,163 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
 - `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
 
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
+### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
+
+Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +
+OpenMiningChannel の応答読み取り）が deadline も ctx 観測もなく
+ブロッキング read で、`DialURL` が応答しないプールで無期限に
+ハングしエンジンの reconnect ループ全体を stall させていた問題を
+修正。ハンドシェイク全体を 15s にバウンドし、定常状態では
+従来どおり Close()/ctx で解除されるよう終了時にクリア。
+
+### Fixed (session 324 — SV2 書き込み deadline の追加)
+
+**問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
+いた——プールが TCP を開いたまま読み止めると、カーネル送信バッファ
+満杯時に `Write` が無期限ブロックし runSession 全体がサイレントに
+stall した。V1 には 10s の write deadline があり非対称だった。
+
+**修正.** `writeTimeout`（10s、V1 と同値）を全 V2 書き込みに適用。
+新テスト `TestSendMsg_WriteDeadline` が未読 net.Pipe で timeout
+を確認。
+
+### Fixed (session 333 — wallet.dat サイズ上限)
+
+`UnmarshalEncryptedSeed` が入力長を無制限に `make([]byte, len-29)`
+で確保していたため、破損・異常な wallet.dat が巨大アロケーションを
+強制できた問題を修正。v1 ペイロードは厳密 80 バイトのため、将来
+バージョン用の余裕を持たせた 4 KiB 上限を追加。
+
+### Fixed (session 305 — V1 シェアがコインベース/マークル再構築なしで検証不能だった問題を修正)
+
+**問題.** V1 ジョブのコインベース（coinb1‖en1‖en2‖coinb2）とマークル
+ブランチが保持されず、submit 前に share の二重 SHA-256d 検証が不可能
+だった（プール reject まで無効シェアの見分けが付かない）。closed #401
+の未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.Job` に `ExtraNonce`/`Coinb1`/`Coinb2`/`MerkleBranch`
+（V1 のみ）、`miner.Work`/`Share` に `ExtraNonce` を通線。`en2Counter`
+（BE カウンタ）+ `completeV1Job()` でジョブ毎にコインベースを畳み込み
+（`btccrypto.Hash256` + per-branch `Hash256(merkle‖branch)`）。
+
+### Security (session 349 — プール文字列サニタイズ)
+
+V1/V2 のシェア拒否理由（pool 制御文字列）をログ出力前に
+`poolproto.SanitizePoolText` でサニタイズ — 制御文字除去＋
+256 rune 上限。ANSI エスケープ注入・ログ偽造を防止。
+
+### 修正 (session 375)
+
+- `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は `--skip-verify` なしでは拒否（存在時の不一致も fatal）。裸バイナリは tar 展開をスキップして直接インストール。
+- ドキュメントのセキュリティ過大記載を訂正: THREAT_MODEL は「リリース成果物は cosign 署名済み」「`-trimpath` による再現ビルド」「GitHub Actions は全て SHA ピン留め」を主張していたが、いずれも実装なし（release.yml に cosign なし、`-trimpath` なし、ldflags がビルド時刻を含むため再現不可、全 workflow が `@vN` タグ参照）。実態を正確に記述し、SHA ピン留めと Sigstore 署名公開をハードニング項目として明記。AUDIT_CHECKLIST の item 11/13/17/22 も同様に修正（scrypt N=131072、wallet.dat の atomic write、cosign 未配線、SHA ピン未適用）。
+
+### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)
+
+**問題.** プール/MitM が難易度 0 を割当てると share-target が巨大化し、
+ワーカーが全 nonce で「シェア成立」→ submit 嵐（帯域・CPU DoS）になった。
+closed #402 の未マージ修正を master へ再デリバー。
+
+**修正.** 両 submit パスにトークンバケット（8/s + burst 32）を導入し、
+超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
+SPECIFICATION/API/THREAT_MODEL 同期済み。
+
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
+### Fixed (session 348 — プール通知サニタイズ)
+
+`client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
+ANSI エスケープ introducer を含む）を除去し 256 rune に切り詰める
+ように変更。通知はログ・将来的に TUI に流れるため、エスケープ
+シーケンスによる表示操作やログ偽造を防止。
+### セキュリティ (session 384)
+
+- プール URL の userinfo（`scheme://user:pass@host` 形式の認証情報）がログ・`doctor` 出力・TUI・`config show` に平文で出力されうる経路を遮断。表示境界に `poolproto.StripUserinfo` を適用し、authority 内の認証情報を除去（dial 経路の挙動は不変）。設定検証で userinfo を拒否する変更とは独立した多層防御。
+
+### Fixed (session 368 — v2tls サイレントダウングレード)
+
+`stratum+v2tls://` を処理する poolproto adapter が `useTLS` を無視して
+平文 TCP を張っていた問題を修正（engine のライブ経路は既に正しく
+TLS 化済みだったが、adapter 配線時にサイレント降格となる設計罠を排除）。
+非信頼証明書で検証エラーを確認するテストを追加。
+
+### Security (session 344 — 非正 difficulty の拒否)
+
+`mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に
+拒否するよう修正。従来は無検証で格納され、シェアターゲットが
+「全ハッシュ受理」に縮退して submit フラッドが可能だった
+（平文 V1 上の MitM/悪意プール）。
+
+### Security (session 316 — extranonce2_size の境界化（平文 V1 のメモリ DoS 対策）)
+
+**問題.** `mining.subscribe`/`mining.set_extranonce` の
+`extranonce2_size` はプール制御かつ未検証で `strings.Repeat("00", sz)`
+へ流れていた——平文 V1 の MitM/悪意プールが submit 毎に巨大アロケーション
+を強制できた。closed #384/#398/#411 の未マージ修正を master へ再デリバー。
+
+**修正.** 両入口で [0, 64] に境界化＋Submit で防御的クランプ。
+THREAT_MODEL に脅威記録済み。
+
+### Security (session 342 — サービス定義インジェクション防止)
+
+`--data-dir` 等の値に改行などの制御文字を含む場合、systemd unit
+の `ExecStart=`/`ReadWritePaths=` 行を抜け出して任意ディレクティブ
+（`ProtectHome=false` 等）を注入できた問題を `quoteToken` の
+制御文字クォートで防止。Windows sc.exe も同経路で修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
