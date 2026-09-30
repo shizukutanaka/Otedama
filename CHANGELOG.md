@@ -23,6 +23,116 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
   2026; 1.26.5–1.26.8 carried security fixes).
 
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
+### Documentation & audit (session 530 — sv2-spec cert version)
+
+- `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
+  `version` field is now normative (MUST be 0; reject unsupported).
+  Forward requirement for Otedama's future cert validation.
+
+### Documentation & audit (session 531 — coverage measured)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
+  results — all 24 packages green, median ~97%; only `cmd/otedama`
+  (88%) below the 90% intent, its uncovered residue being the
+  integration-only `cmdRun` live path already exercised by the
+  binary E2E smokes.
+
+### Documentation & audit (session 534 — escape analysis)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-gcflags=-m` sweep — every heap
+  escape is on a cold path (package init, invalid-input errors,
+  construction); the grind loop is allocation-free, matching the
+  benchmark's 0 allocs/op.
+
+### Documentation & audit (session 535 — flake sweep)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
+  `-race -count=2` on engine/stratum/poolproto, all green on
+  go1.27.1/arm64; no nondeterminism evidence anywhere in the suite.
+
+### Documentation & audit (session 536 — extended vet)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `nilness` zero findings tree-wide;
+  `shadow`'s 13 hits are all the checked-immediately `if err :=`
+  idiom (verified benign, no dropped errors).
+
+### Tests (session 537 — stdlib modernization)
+
+- `internal/i18n/messages/messages_test.go`: `sort.Strings` →
+  `slices.Sort` — the tree no longer imports `sort` or calls
+  `reflect.DeepEqual` anywhere (all other sorts were already on
+  `slices`/`cmp`/`maps`).
+
+### Documentation & audit (session 538 — checkptr)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-d=checkptr` instrumented full
+  suite — all 24 packages green, zero unsafe.Pointer violations;
+  the tree imports neither `unsafe` nor `syscall` directly.
+
+### Documentation & audit (session 539 — dependency boundaries)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `go mod verify` clean; external
+  deps = x/crypto + yaml.v3 only; import graph verified as a DAG
+  matching the architecture map (13 leaf packages, engine sole
+  aggregator, no upward imports).
+
+### Documentation & audit (session 540 — order dependence)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-shuffle=on` ×2 full-suite runs
+  all green — no order-dependent tests; suite is deterministic.
+
+### Documentation & audit (session 542 — ecosystem recheck)
+
+- `docs/adr/ADR-009`: sv2-spec #220 (Noise Act 2 = 234 bytes —
+  forward requirement for the §2 noise completion), #221/#224
+  (docs-only), #209 (job_id/SetNewPrevHash prohibitions — engine
+  conformance verified). SRI still v1.11.1.
+
+### Documentation & audit (session 541 — serialized scheduling)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-cpu=1` (GOMAXPROCS=1) full
+  suite ×2 all green — no test needs multi-CPU scheduling;
+  suite robust across every scheduler dimension.
+
+### Documentation & audit (session 544 — runtime integrity)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `checkptr=2` + `invalidptr=1`
+  clean on the raw-byte packages; `go version -m` confirms the
+  release path pins CGO_ENABLED=0 (fully static) per ADR-003.
+
+### Documentation & audit (session 545 — pprof)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: hot loop confirmed 0-alloc via
+  benchmem+pprof, 98.5% CPU inside FIPS SHA-256; midstate reuse
+  (~30% headroom) analyzed and rejected — stdlib has no midstate
+  API and custom compression violates the no-custom-crypto rule.
+
+### Documentation & audit (session 565 — atomic API)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all `sync/atomic` uses are the
+  typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
+  386-misalignment panic class is absent.
+
+### Documentation & audit (session 566 — JSON/YAML decode)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
+  pointer and checks its error; yaml config decode uses
+  `KnownFields(true)`; the only ignored results are documented
+  best-effort tolerations.
+
+### Documentation & audit (session 567 — init surface)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
+  canonical — BIP-39 wordlist integrity panic + plugin-registry
+  registration; no I/O or goroutines at init time.
+
 ### Documentation & audit (session 568 — recover/spawn)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
