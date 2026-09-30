@@ -181,6 +181,12 @@ func NewFetcher(fallback float64) *Fetcher {
 		fallback: fallback,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			// All sources are hardcoded HTTPS endpoints; a redirect can
+			// only be hostile (e.g. an https→http downgrade injecting a
+			// manipulated price), so refuse to follow any.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("rates: redirects are not followed")
+			},
 		},
 	}
 }
