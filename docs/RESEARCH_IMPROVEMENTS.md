@@ -953,6 +953,252 @@ with its current status instead of rewriting the dated list. hal GPU
 sysfs enumeration audited clean (bounded reads, identity validation,
 documented SHA256d:false caps).
 
+## Session 426 — .gitignore: strip vestigial v2 sections [HYGIENE]
+
+The ignore file still described the pre-reset repository, not this one —
+eight sections covered trees that do not exist and per CLAUDE.md cannot
+be created:
+
+- `web/` Node.js section (node_modules, .next, …) — `web/` is on the
+  forbidden-path list; advertising it here contradicts the architecture
+  map.
+- `scripts/` Python section — no scripts/ directory exists (the release
+  workflow's deb/rpm job already fails on exactly this).
+- Docs-site outputs (docs/.docusaurus, site/, .vuepress) — docs/ is plain
+  Markdown; no SSG is wired.
+- Lightning node files (channel.db, neutrino.db, lnd.conf, ldk-node/) —
+  Otedama's `internal/lightning` is a BIP-39 seed vault, not an LDK/LND
+  node; it writes none of these (wallet.dat is covered separately).
+- Bitcoin Core data dirs (blocks/, chainstate/, peers.dat) — the miner
+  talks to pools; no Core instance is embedded.
+- docker-compose overrides — no compose file exists.
+- "Legacy v2 cleanup artifacts" (fix_*.sh, remove_*.sh) — the reset
+  already happened.
+- Dead allowlist entries `!config.production.yaml` / `!SHA256SUMS.example`
+  — neither file exists; release checksums are named
+  `otedama_v*_checksums.txt`, so the SHA256SUMS glob was removed too.
+- Mining caches (work-cache/, share-cache/, benchmark-results/) — no code
+  writes these paths.
+
+Kept: everything the codebase can actually produce (wallet.dat,
+config.yaml, coverage, profiling output, release archives, the built
+binary) plus generic editor/OS shields.
+
+Sources for what does not exist: CLAUDE.md architecture map, the repo
+tree itself, and .goreleaser.yaml's nfpms/archives file lists.
+
+## Session 428 — audit-checklist/SUSTAINABILITY/BENCHMARKS verification claims [DOCS]
+
+While auditing the last unvisited docs, three "verified" claims turned out
+to describe controls that do not exist — the same verification-theatre
+class as VERIFY.md's cosign section (session 407):
+
+- `BENCHMARKS.md` asserted "a PR that regresses >5% fails automatically".
+  Reality: the benchmark jobs only run `go test -bench` and upload an
+  artifact; the "Performance Impact" job is a Node-only template whose
+  every step skips in this Go repo. Reworded as regression-*visible*.
+- Same file pointed reproduce instructions at `BenchmarkDecoder_ReadFrame`,
+  which was never committed, and claimed the decoder "is fuzzed
+  continuously in CI" — no fuzz job exists. `FuzzDecoder_ReadFrame` is
+  real; the doc now says to run it locally.
+- `AUDIT_CHECKLIST` item 11 recorded "Every `uses:` has @<40-char-sha>".
+  Reality: all workflow `uses:` are tag refs, including
+  `aquasecurity/trivy-action@master` — a moving branch ref, the exact
+  shape of the TeamPCP attack SUSTAINABILITY §5 itself cites. Item 13's
+  cosign verification was likewise aspirational. Both rows now show the
+  gap instead of a false pass.
+- `SUSTAINABILITY.md` 実装状況: §2 claimed SV1/SV2 implementation was
+  v3.2.0 scope — both dialers already exist under `internal/poolproto/`.
+  §5 claimed SHA pinning + cosign "実装済み" — neither is wired.
+
+Sources: `.github/workflows/*.yml`, `internal/stratum/*_test.go`,
+`internal/poolproto/`, go.mod.
+
+## Session 429 — Makefile ターゲットの監査 [HYGIENE]
+
+`Makefile` の残り未監査ターゲットを検証:
+
+- `migrate-from-v2` ターゲットが「otedama migrate-from-v2 を実行せよ」と
+  echo していた — そのサブコマンドは非実在（#513 が skills/、#523 が
+  SECURITY.md の同種幻影を修正済み）。docs/MIGRATING-FROM-V2.md への
+  誘導に置き換え。
+- `security` ターゲットが gosec・govulncheck をガードなしで呼んでおり、
+  未インストール環境では `make security` が即失敗。`audit` ターゲット
+  自身が govulncheck/golangci-lint に使う「未導入なら install 手順を
+  表示してスキップ」パターンに統一（`licenses` の go-licenses も同様）。
+- Devin Review 指摘を受理: release ジョブが `artifacts/*/SHA256SUMS` を
+  生成するため #426 の gitignore 整理で除去した `SHA256SUMS*` パターンは
+  dead ではなかった — 復元（`artifacts/` 自体は ignore 対象外のため
+  ローカル再現で trackable になる）。
+
+Clean-verdict: `audit`（8 ステップ・30-item 表記は master の実数と一致）、
+`fuzz`（Fuzz 関数を持つ pkg を動的列挙）、`docs`/`docs-serve`、
+`deps-graph`、docker 系、ISSUE_TEMPLATE 両 yml、PR テンプレートは
+全て実装と整合。
+
+Sources: `Makefile`, `.github/workflows/ci.yml` (release job),
+`.github/ISSUE_TEMPLATE/*.yml`, `git check-ignore`.
+
+## Session 430 — i18n キー整合 + .claude 設定ファイル [HYGIENE]
+
+- i18n 監査: 全10言語（en/ja/zh/ko/es/ru/ar/fr/de/pt）が同一15キーセット
+  を完全保持 — multi-language ファイル内の言語別 map も個別検証。clean。
+- `CODE_OF_CONDUCT.md`: 実在の Security Advisories URL を通報経路として
+  記載 — clean。
+- 実修正: 追跡されていた `.claude/settings.local.json` が v2 時代の
+  ~100件の許可リスト（`internal/mining`・`internal/pool`・`internal/crypto`・
+  `internal/database`・`internal/monitoring`・`internal/security`・
+  `cmd/demo`・`cmd/improvements*`・`otedama_*.exe`・幻影スクリプト群・
+  WSL `go.exe` パス・ethereum 依存取得コマンド — 全て非実在）を保持。
+  settings.local.json は規約上マシンローカルのため untrack + gitignore。
+- `skills/quality-pass-{opus,sonnet}.md`: 過去セッション修正の
+  元帳として正確（各 G 項目は Fixed 済みの記録）、タスクキューも
+  ブロック要因つきで正直 — clean。
+
+Sources: `internal/i18n/messages/*.go`, `.claude/settings.local.json`,
+`CODE_OF_CONDUCT.md`, `skills/quality-pass-*.md`.
+
+## Session 431 — Dockerfile + PR 間コンフリクトマップ [HYGIENE]
+
+- `Dockerfile` の `EXPOSE 0` を削除 — 0 は有効ポート宣言ではなく
+  （Podman は build 時に "cannot expose 0" で拒否、Docker でも無意味な
+  メタデータ）。`--http-addr` は静的に宣言できる固定ポートではないため
+  EXPOSE 自体不要。
+- `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
+  `config.yaml`・ビルド成果物を build context として daemon に
+  アップロードしていた（中間レイヤに秘密情報が残り得る + キャッシュ
+  無効化）。イメージが必要とするのは go.mod/go.sum/LICENSE/NOTICE/
+  cmd/internal のみ。
+- open PR コンフリクトマップ（git merge-tree --write-tree）: 全ペアが
+  CHANGELOG/RESEARCH_IMPROVEMENTS の EOF 追記で機械的衝突。実質衝突は
+  lint 三部作 #526↔#527（doctor/checks・miner/sha256d・stratum/handshake・
+  provider_test）、#527↔#528 と #526↔#528（arbitration/engine・
+  engine/arbitrate・engine/run）、#526↔#529（lightning/wallet.go）。
+  推奨マージ順: #526 → #527 → #528 → #529 → #530（後続ほど再基盤化が軽い）。
+- Clean-verdict: i18n 10言語キー完全パリティ、CODE_OF_CONDUCT 通報経路実在、
+  Dockerfile 残部（distroless nonroot・ldflags は正しい
+  internal/version パッケージ — release.yml の `-X main.Version` バグとは別）。
+
+Sources: `Dockerfile`, `.github/workflows/ci.yml` (release asset steps),
+`git merge-tree --write-tree` 全ペア, `internal/i18n/messages/*.go`.
+
+## Session 432 — ROADMAP のステータスドリフト [HYGIENE]
+
+- `internal/engine/run.go` のコメントが「V2 poolproto ダイアラの
+  Step 3b 完了待ち」を主張していたが、§3 は session 90–91 で RESOLVED・
+  Step 3b も完了済み — `poolproto/stratumv2` ダイアラは既に存在する。
+  実際の残件は「engine のセッションループへの V2 ダイアラ組込み」
+  という別ギャップ — コメントを実態に訂正。
+- `ROADMAP.md` v3.1.0/v3.2.0 のステータス欄を実装に整合:
+  - 「engine → poolproto 統合（現状 raw TCP 直結）」→ V1 は DialURL
+    経由で完了、V2 残件、と部分完了に訂正。
+  - 「Stratum V1 互換の追加」→ 実装済み（stratumv1 ダイアラ +
+    runSessionV1・TLS 対応）で完了マーク。
+  - 「poolproto 抽象化レイヤ完全分離」→ パッケージ分離・両ダイアラ
+    存在で部分完了、残件は V2 engine 配線 + DATUM。
+- 検証済み正確な残存項目: Akash は依然 simulated quotes、DATUM は
+  scheme 予約のみ（§14）、JDP 未実装、secp256k1 は P-256 スタブのまま
+  （noise.go L96「v3.1.0 で置換予定」— ROADMAP v3.1 項と整合）。
+
+Sources: `internal/engine/run.go`, `internal/poolproto/{,stratumv1,
+stratumv2}/`, `docs/KNOWN_LIMITATIONS.md` §3, `ROADMAP.md`.
+
+## Session 433 — CATEGORY_AUDIT バックログの再検証 [HYGIENE]
+
+`docs/CATEGORY_AUDIT.md`（608行・最後の未精読ドキュメント）の
+deferred/flagged 行を全件 master と再照合。3行が陳腐化:
+
+- Windows `Status()`「unsupported platform」→ `statusWindowsService`
+  が `sc.exe query Otedama` を parse して実装済み。
+- `sc.exe binPath=` quoting 脆弱性 → `serviceArgv` カノニカル argv
+  再設計で解消済み。
+- `OpenMiningChannel.MaxTargetNBits`「spec 確認待ち」→ spec 照合済み・
+  意図的非実装（プール割当 target を受理するため dead config）として
+  文書化・フィールド削除済み。
+- DATUM「現在形でサポートと誤記・未開示」→ poolproto/stratumv1 とも
+  "is planned" 表記に訂正済み + KNOWN_LIMITATIONS §14 で開示済み。
+
+検証済み引き続き正確な項目: secp256k1 は ErrSchemeNotImplemented
+スタブのまま、Noise 4フラグ（非 atomic n・exhaustion guard なし・
+x-only fallback・custom hmacSHA256）は全て CODEOWNERS 判断待ちのまま、
+hmacSHA256Pooled は設計どおり未配線、maskAddress/stripScheme 二重化・
+did-you-mean 未実装は現状のまま。
+
+これで docs/ 配下の全ファイル精読・実装照合が完結。
+
+## Session 435 — エコシステム追跡 + 監査残件の最終検証 [AUDIT]
+
+- CATEGORY_AUDIT `DispatchFrame` 行が陳腐: decode error は
+  `poolMsg.err` → `engine: pool read` でセッション死亡・再接続
+  （fail-fast — 提案 debug ログより厳格）。unknown 型のみ Unknown
+  へルーティングされ許容。行を解決済みに更新。
+- ESP-Miner v2.14.0b4 調査（SV2 submit 改善の上流参照元）:
+  `TCP_NODELAY` 設定は Go では `net.TCPConn` デフォルト true のため
+  Otedama では不要（lwIP/ESP32 固有の修正）。dial timeout 不在は
+  open の #457/#483 が担当済み、KeepAlive は Go デフォルト有効
+  （15s）。ESPM の SV2 実装マージ（Noise_NX + libsecp256k1）は
+  Otedama の Noise NX 方向を裏付け。per-share RTT 計測は候補として
+  記録（seq→時刻相関の配線が必要）。
+- SRI v1.12.0 (2026-09-17) 引き続き最新 — ChaChaPoly 整合維持。
+
+これで CATEGORY_AUDIT の actionable backlog はメンテナ判断待ち項目
+（CODEOWNERS Noise 4項・secp256k1 依存判断・依存追加を要する TUI
+width・Issue #2/#3 統合・workflow 群）のみ残存 — 一方的実装可能な
+項目は枯渇。
+
+## Session 436 — share-RTT 計測は実装済みと検証 [AUDIT]
+
+ESP-Miner v2.14.0b4 の "Measure SV2 share response time per-share"
+(#1720) を Otedama へ輸入する検討 → **実装済みと確認**: `submitTimes`
+(seq→送信時刻, submitTimesCap=1024 有界) が `SubmitSharesSuccess.
+LastSequenceNumber` でバッチ settle し `latency.Record`（256窓の
+quantile 追跡）→ `otedama_submit_latency_milliseconds` ゲージで
+公開。上流実装より厳密（未 ack map に上限 + in-flight 深度ゲージも
+別途存在）。検証のみ、コード変更なし。
+
+残る輸入候補は全て判断待ち or 非適用: TCP_NODELAY は Go デフォルト
+true（lwIP 固有の修正）、dial timeout は open #457/#483 が担当、
+hashtrate counter overflow は ESP32 ファームウェア固有。
+
+## Session 368/369 — wallet KDF + address-parser fuzz + dep freshness
+
+**Audited clean.** wallet.dat scrypt params are compile-time constants
+(N=1<<17, r=8, p=1) — a tampered wallet file cannot request a
+memory-exhausting KDF; decrypt path is bounded and checksum-gated.
+V1 TLS dialer verified: MinVersion TLS 1.2, no InsecureSkipVerify,
+extra-CA PEM merge preserves verification.
+
+**Coverage [FIXED].** `FuzzValidateAddress` + direct bech32/base58
+drives the payout-address parsers with operator-supplied strings
+(1.4M execs clean): no panic, and a nil error always implies a
+checksum-verified structure.
+
+**Observed [OBSERVED — deferred].** `golang.org/x/crypto` is pinned at
+v0.23.0 vs latest v0.57.0 and `x/sys`/`x/term`/`x/text` are similarly
+behind; `govulncheck` shows zero reachable vulns (s362), and a bump
+raises the go.mod `go` directive, colliding with CI's pinned Go —
+deferred until the toolchain pin is resolved. yaml.v3 migration is
+already tracked on #444.
+
+## Session 376 — audit-checklist row verification (continued)
+
+[AUDITED — clean] i18n completeness is test-enforced:
+`TestAllLanguages_CoverAllEnglishIDs` asserts `MissingTranslations()`
+is empty for the full built-in bundle, so a dropped catalog entry is a
+CI failure, not a silent fallback.
+
+[AUDITED — clean] Checklist rows verified true: #14 (go.mod contains
+only `x/crypto` + `yaml.v3` + stdlib), #7 (test:impl line ratio 1.74
+≥ 1.0), doctor count (17 checks = CLAUDE.md claim), ADR-001..011 all
+present, SECURITY.md + CODE_OF_CONDUCT.md present.
+
+[FIXED] `.goreleaser.yaml` release header referenced a nonexistent
+`docs/verify-release.md` (dead link in every future release note) and
+named the checksums file `checksums.txt` while the configured
+`checksum.name_template` emits `otedama_<ver>_checksums.txt`. Both
+corrected; the link is now an absolute URL to DEPLOYMENT.md (relative
+links in release bodies do not resolve to repo files).
+
 ## Session 418 — close KNOWN_LIMITATIONS §16: the `wallet` subcommand [FEATURE]
 
 The last open CLI-facing limitation: no way to verify a written-down
