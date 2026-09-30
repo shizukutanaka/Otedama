@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 566 — JSON/YAML decode)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
+  pointer and checks its error; yaml config decode uses
+  `KnownFields(true)`; the only ignored results are documented
+  best-effort tolerations.
+
 ### Documentation & audit (session 567 — init surface)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
