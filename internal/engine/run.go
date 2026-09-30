@@ -724,7 +724,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
 	const submitTimesCap = 1024
-	submits := newSubmitLimiter(ctx)
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -1028,7 +1030,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
-	submits := newSubmitLimiter(ctx)
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	for {
 		select {
