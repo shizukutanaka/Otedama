@@ -159,7 +159,10 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+CI runs benchmarks on every push to main and on every PR, uploading
+`benchmark.txt` as the `benchmark-results` workflow artifact. **Correction
+(session 484):** this item previously claimed CI posts a comparison
+to PRs — no comparison job or PR comment exists today.
 
 ## Hardware used for published numbers
 
@@ -169,6 +172,11 @@ Numbers above are measured on:
 - **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go 1.22
 - **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
 - **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
+
+**Note (session 484):** the published numbers were measured with Go
+1.22, but current master requires Go ≥1.24 (`godebug tlsmlkem` in
+`go.mod` fails to parse on older toolchains), so the reproduce
+commands above must be run with Go 1.24 or newer.
 
 Readers may see different numbers on different hardware; the relative
 rankings should remain stable.
