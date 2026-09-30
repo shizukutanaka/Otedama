@@ -18,6 +18,26 @@ ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
 整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
 （ライブラリ crate は stratum-mining/stratum に残留）。
 
+### 修正 (session 463)
+
+1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
+   していた問題を修正 — 既に実装済みの3項目（reject 分類+メトリクス、
+   submit レイテンシ、poolproto 配線 — V1 のみ）を残件と区別して状態注記。
+
+### 修正 (session 465)
+
+1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0`
+   （GOTOOLCHAIN=auto で 1.24 へ自動切替）と `godebug tlsmlkem`
+   （1.24 未満ではパース不能）により実質 Go 1.24+ が必要なため、実際の
+   最小ツールチェーン要件を明記。
+
+### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
+
+* `skills/tdd.md`: 「CI上で継続的にファズ実行」→ CI にファズジョブ非存在（`make fuzz` ローカルのみ）、`//go:build integration` タグ → 宣言ファイルゼロ（実際は `testing.Short()` ゲート）、`make test-e2e`/`//go:build e2e` → 両方非実在（E2E スイート未実装、ターゲット削除済み）の3件を訂正。
+* `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
+* `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
 ### Fixed (session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正)
 
 * 「>5% 回帰で自動失敗」→ CI はベンチマークを実行して artifact をアップロードするのみで回帰ゲートなし。
