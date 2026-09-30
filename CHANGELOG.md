@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
 の収益計算・信頼度・フォールバックは監査 clean。
 
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
 ### 修正 (session 411)
 
 GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
