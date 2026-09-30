@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 526 — in-tree fuzz targets smoke-verified
+
+CI has no fuzz job (recorded in KNOWN_LIMITATIONS §13), so the two
+in-tree fuzzers were run locally for 30s each under go1.27.1:
+
+- `FuzzDecoder_ReadFrame` (frame decoder, length-field arithmetic):
+  ~618K execs, 20 seeds → 21 corpus, **zero crashes**.
+- `FuzzDecodeHeader` (header parser): ~3.97M execs, 7 seeds → 8
+  corpus, **zero crashes**.
+
+The protocol-parse boundary holds against random input; the only gap
+remains that CI never exercises these (maintainer-owned workflow).
+
 ## Session 527 — first end-to-end binary smoke
 
 Built the real binary under go1.27.1 and exercised the user-facing

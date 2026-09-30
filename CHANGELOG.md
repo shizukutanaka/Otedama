@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
 ### Documentation & audit (session 527 — end-to-end binary smoke)
 
 - First real-binary smoke: `version`, `completion`, `doctor` (17
