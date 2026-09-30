@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 571 — ctx cancel)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all six WithTimeout/WithCancel
+  sites pair their cancel (defer or lifecycle-invoked) — zero
+  leaked contexts.
+
 ### Added (session 315 — SV2 submit インフライト深さゲージ)
 
 **追加.** `otedama_shares_submit_in_flight` ゲージを新設——`submitTimes`
