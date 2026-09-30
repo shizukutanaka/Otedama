@@ -19,6 +19,13 @@ migrate-from-v2` サブコマンドはいずれも存在しません。統合テ
 E2E スイートは意図的に未実装。LDK/regtest・ZKP の記述は v4.0
 スコープの将来指針として明記。
 
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
 ### 監査判定 (session 403)
 
 CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
