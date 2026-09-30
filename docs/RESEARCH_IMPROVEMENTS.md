@@ -962,6 +962,38 @@ the arXiv listing; all API endpoints against current vendor documentation.*
   に吸収済み（atomic gate + started chan）、prose-collision flake は
   open #425 が担当済み — 再デリバリー不要。
 
+## Session 492 — GOVERNANCE.md の誤記2件を訂正 + CODE_OF_CONDUCT・パス参照棚卸し clean
+
+**Sweep.** `GOVERNANCE.md`（159行）・`CODE_OF_CONDUCT.md`（117行）全文精読 + 全 markdown（433件のバッククォートパス参照）の非実在ファイル棚卸し。
+
+**発見（2件訂正）。**
+- 「Auto-mergeable if **Renovate** patch update」→ 実際の設定済み bot は Dependabot（`.github/dependabot.yml` — renovate 設定は一切非実在、サーバーサイド automerge は GH-actions bump 用に設定済み）。
+- Phase-1 の bus-factor 緩和に「**Sigstore 鍵なし署名**（長命シークレットなし）」→ session 480 検証済みの通り `.goreleaser.yaml` の cosign `signs:` は dead config（release.yml が goreleaser を一切呼ばない）— 署名される成果物は存在せず、緩和は succession plan のみ。
+
+**検証済み・変更なし。** CODE_OF_CONDUCT は標準 Contributor Covenant 2.1＋正しい Security Advisories 報告 URL で clean。CODEOWNERS（lightning/noise* カバー）・MAINTAINERS.md の succession plan・ADR append-only 方針は実体と一致。パス参照棚卸し: `config.yaml`/`test.yml` 言及は全て正当（非実在を論じる文脈 or 実在）— 新規 phantom パス参照なし。
+
+## Session 493 — README.md の phantom/陳腐クレーム4件を訂正
+
+**Sweep.** `README.md`（157行・バッジ〜フッター全節）を実コード・リモートブランチ・release.yml と照合。
+
+**発見（4件訂正）。**
+- **「`releases/latest/download/install.sh` でインストール」→ 404**: `release.yml` がアップロードするのは `otedama-<os>-<arch>.tar.gz` のみで install.sh はリリース資産として存在しない → `raw.githubusercontent.com` の実 URL に訂正。
+- **「v2.1.9 は `legacy-v2` ブランチに保全済み・2026-10 まで修正提供」→ phantom ブランチ**: `git ls-remote` で同ブランチ非実在 → 「保全が計画」に訂正（CLAUDE.md アーキテクチャマップ内の同趣旨記述も phantom — メンテナ自身のファイルのため帳簿記録のみ）。
+- **「Windows: Task Scheduler」×2箇所** → 実装は `sc.exe` SCM 登録（#568 が SPECIFICATION.md で直した phantom の README 残件）。
+- **バッジ「Go 1.22+」・要件「Go 1.22以上」** → `toolchain go1.24.0` + `godebug tlsmlkem` で実効 ≥1.24（#571 が AUDIT_CHECKLIST で直した同クレームの README 残件）。
+
+**検証済み・変更なし。** 機能一覧の「未実装」正直列挙（署名バイナリ・ASIC・ZKP等）・コマンド表（`completion` 行欠落は open #557 担当域）・market claims・i18n 部分は正確。
+
+## Session 494 — docs/API.md 前半（1–206行）照合、未記載フラグ2件を追記
+
+**Sweep.** `docs/API.md` の CLI 節（`run` フラグ表・exit codes・`version`/`config`/`service`/`doctor` シグネチャ）を `cmd/otedama` の実 FlagSet と機械照合。
+
+**発見（2件追記）。**
+- **`run` フラグ表に `--pprof` が欠落**: run.go:84 で実在（`/debug/pprof/` マウント・loopback/private 推奨）— API.md には未記載。「non-loopback で警告」の記述は未作成（open #453 の未マージ面のため）。
+- **`service install` のフラグ記述が不完全**: `--config`/`--data-dir` のみ記載だが実 FlagSet は `--bitcoin-address`（config 無し時必須）・`--log-level`・`--log-format`・`--language` も受理。また Windows サービスを「Windows service」とのみ記載 — `sc.exe` SCM に明記（README と同じ訂正）。
+
+**検証済み・変更なし。** `run` の他11フラグ・exit codes（0/1/64/78）・`version --json` フィールド・`config show --origin/--json`・`doctor` フラグ+exit 0/1/2+JSON シェイプ（duration_ms/exit_code/elapsed_ms）・YAML KnownFields 振る舞い・設定優先度・env var 表 — 全て正確（env 欠落5件は open #517 担当域）。
+
 ## Session 495 — .github/oss-fuzz-integration.md の陳腐化2件 + CONTRIBUTING.md Go 要件を訂正
 
 **Sweep.** `.github/oss-fuzz-integration.md`（未提出の統合文書）の全クレームを上流ソースと照合 + `CONTRIBUTING.md`（166行）精読。
