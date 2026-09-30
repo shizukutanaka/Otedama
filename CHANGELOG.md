@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 368 — v2tls サイレントダウングレード)
+
+`stratum+v2tls://` を処理する poolproto adapter が `useTLS` を無視して
+平文 TCP を張っていた問題を修正（engine のライブ経路は既に正しく
+TLS 化済みだったが、adapter 配線時にサイレント降格となる設計罠を排除）。
+非信頼証明書で検証エラーを確認するテストを追加。
+
 ### Security (session 344 — 非正 difficulty の拒否)
 
 `mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に

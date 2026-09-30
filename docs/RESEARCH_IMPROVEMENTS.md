@@ -940,6 +940,27 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 368 — v2tls silent-downgrade fix
+
+**Fixed [FIXED — real reachable bug].** `stratumv2.Dialer{useTLS: true}`
+(the registered handler for `stratum+v2tls://`) ignored `useTLS` in
+`Dial` — it always opened plaintext TCP while reporting the V2-TLS
+protocol ID. The engine's live path was already correct
+(`stratum.DialTLS` with verified certs + `tls_ca_file`), so the trap
+was dormant but armed: the first wiring of the poolproto V2 adapter
+(KNOWN_LIMITATIONS §3 Step 3b) would silently downgrade every v2tls
+pool to plaintext — under a scheme operators are explicitly told to
+use for encryption. `Dial` now routes `useTLS` through
+`stratum.DialTLS` (system roots, TLS 1.2+, ServerName from the
+address, no plaintext fallback).
+
+**Tests [FIXED].** `TestDialer_V2TLS_DialsTLS` drives the production
+dial path (no injected dialFn) against a TLS server with an untrusted
+cert and asserts a `*tls.CertificateVerificationError` — proof the
+handshake ran and verification is enforced.
+`TestDialer_V2TLS_ConnectsToTrustedServer` completes the positive path
+with a CA-trusted dialFn injection and asserts the conn is *tls.Conn.
+
 ## Session 344 — V1 set_difficulty value validation
 
 **Non-positive/non-finite difficulty [FIXED].** `parseDifficulty`
