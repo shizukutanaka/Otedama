@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 572 — deferred-Close error audit
+
+- Four `defer X.Close()` sites are all read-side or teardown
+  (response body, conn, session, config file): the error is
+  conventionally unactionable once the data has been read or the
+  resource torn down — and the write-side Close (wallet.go
+  temp-file) was verified checked after Sync in session 564.
+- The two `defer func()` bodies are the canonical forms:
+  doctor's bounded drain-then-close (io.Discard + LimitReader 8KB,
+  preventing an unbounded read on a hostile endpoint) and
+  run.go's `for _, w := range workers { w.Stop() }` sweep.
