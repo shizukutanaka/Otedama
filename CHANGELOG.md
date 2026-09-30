@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
 の収益計算・信頼度・フォールバックは監査 clean。
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### セキュリティ (session 407)
 
 VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
