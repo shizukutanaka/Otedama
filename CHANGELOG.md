@@ -19,6 +19,18 @@ Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
 config 数値パース（warn+skip）、provider quote チャネル（bounded）
 ——全て master 上で健全と確認し記録。
 
+### 監査判定 (session 362 — btccrypto/依存態勢)
+
+btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
+secp256k1 は正直な stub）を監査済みと記録。govulncheck で
+到達可能脆弱性ゼロを確認。
+
+### 監査判定 (session 363 — provider ライフサイクル)
+
+pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
+WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
+quoteCh 置換 caveat は未到達パスとして文書化。
+
 ### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
 
 V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
