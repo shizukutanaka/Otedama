@@ -133,7 +133,7 @@ func FuzzDecide(f *testing.F) {
 		r := rand.New(rand.NewSource(seed))
 		in, greedy := fuzzInput(r)
 
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			t.Fatalf("Decide rejected in-contract input: %v", err)
 		}
@@ -232,7 +232,7 @@ func FuzzDecide(f *testing.F) {
 		}
 
 		// Determinism: identical input reproduces an identical allocation.
-		again, err := Decide(in)
+		again, err := Decide(&in)
 		if err != nil {
 			t.Fatalf("second Decide rejected identical input: %v", err)
 		}
