@@ -24,6 +24,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/tui"
@@ -596,7 +597,7 @@ func TestUpdateWork_InvalidPrevNBitsNoShareTarget_IsNoOp(t *testing.T) {
 	// No share target (zero) forces the network-target fallback; an
 	// invalid prevNBits (0x00000000) makes TargetFromNBits error →
 	// early return. Must not panic; does nothing.
-	updateWork(nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
+	updateWork(nil, nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
 }
 
 // ============================================================================
@@ -2155,5 +2156,139 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// TestRunSession_UnimplementedSchemeFailsFast pins the datum:// dispatch
+// fix: datum:// is recognised by poolproto (ADR-009, OCEAN's SV1-transport
+// variant) but has no implementation, so runSession must reject it with a
+// clear error rather than dial an OCEAN-style pool and emit binary SV2
+// frames — which would only surface as a confusing handshake timeout.
+func TestRunSession_UnimplementedSchemeFailsFast(t *testing.T) {
+	err := runSession(context.Background(), sessionOpts{
+		poolURL:  "datum://ocean.example.com:3334",
+		log:      func(_, _ string) {},
+		interval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("runSession accepted an unimplemented datum:// URL")
+	}
+	if !strings.Contains(err.Error(), "unsupported protocol") {
+		t.Errorf("error should name the unimplemented protocol, got: %v", err)
+	}
+}
+
+// ============================================================================
+// arbitration pause persistence (session 382)
+// ============================================================================
+
+// TestUpdateWork_SkipsArbitrationPausedWorker: a device arbitration paused
+// (idle below the yield floor, or routed to a non-mining stream) must NOT be
+// re-armed by the next pool job — applyAllocation only pauses the worker
+// once, so without the shared pause set the pause was silently undone at the
+// next mining.notify/NewMiningJob.
+func TestUpdateWork_SkipsArbitrationPausedWorker(t *testing.T) {
+	wa := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	wb := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-b"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	var prevHash [32]byte
+	updateWork([]*miner.Worker{wa, wb}, paused, job, 1, prevHash, 0x1d00ffff, 0x60000000, miner.Hash{})
+
+	if wa.HasWork() {
+		t.Error("paused worker dev-a was re-armed by updateWork")
+	}
+	if !wb.HasWork() {
+		t.Error("unpaused worker dev-b did not receive work")
+	}
+}
+
+// TestApplyJob_SkipsArbitrationPausedWorker is the V1-path counterpart via
+// applyJob (poolproto.Job).
+func TestApplyJob_SkipsArbitrationPausedWorker(t *testing.T) {
+	wa := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	wb := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-b"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	job := poolproto.Job{JobID: "42", NTime: 0x60000000, NBits: 0x1d00ffff}
+	if err := applyJob([]*miner.Worker{wa, wb}, paused, job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if wa.HasWork() {
+		t.Error("paused worker dev-a was re-armed by applyJob")
+	}
+	if !wb.HasWork() {
+		t.Error("unpaused worker dev-b did not receive work")
+	}
+}
+
+// TestUpdateWork_ResumesAfterArbResume: once arbitration routes the device
+// back to a mining stream, reconcileArbPauses clears the set entry and the
+// next job re-arms the worker — the "hashing resumes on next job" path.
+func TestUpdateWork_ResumesAfterArbResume(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "dev-a", Stream: "mining.stratum"},
+	}}, paused)
+
+	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	var prevHash [32]byte
+	updateWork([]*miner.Worker{w}, paused, job, 1, prevHash, 0x1d00ffff, 0x60000000, miner.Hash{})
+	if !w.HasWork() {
+		t.Error("worker stayed paused after arbitration resumed it to a mining stream")
+	}
+}
+
+// TestReconcileArbPauses: membership follows the latest allocation —
+// idle (empty Stream) and ai.* assignments pause; mining resumes.
+func TestReconcileArbPauses(t *testing.T) {
+	paused := &pauseSet{}
+	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "dev-idle", Stream: ""},
+		{DeviceID: "dev-ai", Stream: "ai.akash"},
+		{DeviceID: "dev-min", Stream: "mining.stratum"},
+	}}, paused)
+	if !paused.Paused("dev-idle") {
+		t.Error("idle assignment did not pause dev-idle")
+	}
+	if !paused.Paused("dev-ai") {
+		t.Error("ai.* assignment did not pause dev-ai")
+	}
+	if paused.Paused("dev-min") {
+		t.Error("mining assignment left dev-min paused")
+	}
+
+	// A nil set must be a no-op (tests that never wire arbitration).
+	reconcileArbPauses(&arbitration.Allocation{}, nil)
+}
+
+// channelIDOf must report the channel_id on every channel-scoped SV2
+// message and ok=false on frames that carry none.
+func TestChannelIDOf(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  stratum.Message
+		want uint32
+		ok   bool
+	}{
+		{"NewMiningJob", stratum.Message{NewMiningJob: &stratum.NewMiningJob{ChannelID: 7}}, 7, true},
+		{"SetNewPrevHash", stratum.Message{SetNewPrevHash: &stratum.SetNewPrevHash{ChannelID: 9}}, 9, true},
+		{"SetTarget", stratum.Message{SetTarget: &stratum.SetTarget{ChannelID: 11}}, 11, true},
+		{"SubmitSharesSuccess", stratum.Message{SubmitSharesSuccess: &stratum.SubmitSharesSuccess{ChannelID: 13}}, 13, true},
+		{"SubmitSharesError", stratum.Message{SubmitSharesError: &stratum.SubmitSharesError{ChannelID: 15}}, 15, true},
+		{"Unknown", stratum.Message{Unknown: &stratum.UnknownMessage{MsgType: 0x99}}, 0, false},
+		{"Empty", stratum.Message{}, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := channelIDOf(c.msg)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%s: channelIDOf = (%d, %v), want (%d, %v)", c.name, got, ok, c.want, c.ok)
+		}
 	}
 }
