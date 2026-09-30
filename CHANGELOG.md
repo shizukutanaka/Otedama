@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
+
+* Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
+* リスク1 の「govulncheck は週次で自動実行済み」→ CI に非存在で Makefile ローカルのみ。
+
 ### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
 
 * 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
