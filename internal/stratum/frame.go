@@ -196,7 +196,7 @@ func EncodeFrame(f Frame) ([]byte, error) {
 		return nil, fmt.Errorf("stratum: payload length %d exceeds U24 maximum %d", len(f.Payload), MaxMessageLength)
 	}
 	h := f.Header
-	h.MsgLength = uint32(len(f.Payload))
+	h.MsgLength = uint32(len(f.Payload)) //nolint:gosec // payload is bounded by MaxFrameSize at construction
 	if err := h.Validate(); err != nil {
 		return nil, err
 	}
