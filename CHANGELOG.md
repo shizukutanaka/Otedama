@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 追加 (session 434 — サブコマンド did-you-mean 提案)
+
+- `otedama verson` 等の誤記時に stderr へ `did you mean "version"?` を
+  提案（Levenshtein 距離 ≤2 の最近接。exit 64 は不変、無関係入力には
+  提案なし、先頭ダッシュは無視）。新規依存なし。
+
 ### テスト (session 396)
 
 - `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。

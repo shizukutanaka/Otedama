@@ -43,6 +43,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Exit codes following sysexits.h conventions.
@@ -134,9 +135,57 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	default:
 		fmt.Fprintf(stderr, "otedama: unknown subcommand %q\n", args[0])
+		if s := suggestSubcommand(args[0]); s != "" {
+			fmt.Fprintf(stderr, "otedama: did you mean %q?\n", s)
+		}
 		printUsage(stderr)
 		return exitUsage
 	}
+}
+
+// knownSubcommands mirrors the dispatch switch in run(). Keep in sync —
+// it is only used to offer a "did you mean" hint on typos.
+var knownSubcommands = []string{
+	"run", "version", "config", "service", "doctor", "completion", "help",
+}
+
+// suggestSubcommand returns the closest known subcommand to what the user
+// typed, or "" when nothing is close enough to be a plausible typo.
+// Leading dashes are ignored so "--versio" still resolves. Two edits
+// covers transpositions ("rnu" → "run") and single dropped or mistyped
+// characters without suggesting on unrelated input.
+func suggestSubcommand(typed string) string {
+	t := strings.TrimLeft(typed, "-")
+	best, bestDist := "", 3 // suggest only at edit distance ≤ 2
+	for _, c := range knownSubcommands {
+		if d := levenshtein(t, c); d < bestDist {
+			best, bestDist = c, d
+		}
+	}
+	return best
+}
+
+// levenshtein returns the edit distance between a and b counting
+// insertions, deletions, and substitutions. A transposition is two edits.
+func levenshtein(a, b string) int {
+	ar, br := []rune(a), []rune(b)
+	prev := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i, ca := range ar {
+		cur := make([]int, len(br)+1)
+		cur[0] = i + 1
+		for j, cb := range br {
+			cost := 1
+			if ca == cb {
+				cost = 0
+			}
+			cur[j+1] = min(cur[j]+1, prev[j+1]+1, prev[j]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(br)]
 }
 
 func printUsage(w io.Writer) {
