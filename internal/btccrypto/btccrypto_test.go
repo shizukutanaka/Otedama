@@ -23,9 +23,11 @@ func (f *fakeScheme) Name() string { return f.name }
 func (f *fakeScheme) Verify(_ PublicKey, _ []byte, _ Signature) error {
 	return nil
 }
+
 func (f *fakeScheme) PublicKeyFromBytes(_ []byte) (PublicKey, error) {
 	return nil, ErrInvalidPublicKey
 }
+
 func (f *fakeScheme) SignatureFromBytes(_ []byte) (Signature, error) {
 	return nil, ErrInvalidSignature
 }
@@ -183,7 +185,8 @@ func TestSchemeForAddressType_LegacyAndV0SegWitShareScheme(t *testing.T) {
 // Test vector: empty input. SHA-256(SHA-256("")) is well-known.
 func TestHash256_EmptyInput(t *testing.T) {
 	want := mustHex(
-		"5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456")
+		"5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456",
+	)
 	got := Hash256([]byte{})
 	if got != want {
 		t.Errorf("Hash256(\"\") = %x, want %x", got, want)
@@ -193,7 +196,8 @@ func TestHash256_EmptyInput(t *testing.T) {
 // Test vector: "hello" → known double-SHA-256.
 func TestHash256_KnownString(t *testing.T) {
 	want := mustHex(
-		"9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50")
+		"9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50",
+	)
 	got := Hash256([]byte("hello"))
 	if got != want {
 		t.Errorf("Hash256(\"hello\") = %x, want %x", got, want)
@@ -233,7 +237,8 @@ func TestHash256_DifferentInputsDifferentOutputs(t *testing.T) {
 // any future refactor of TaggedHash.
 func TestTaggedHash_BIP340Construction(t *testing.T) {
 	want := mustHex(
-		"c216d352f5818b7b4beacd4ae0a26fe888080823d2a598856661bcd54f1b3713")
+		"c216d352f5818b7b4beacd4ae0a26fe888080823d2a598856661bcd54f1b3713",
+	)
 	got := TaggedHash("BIP0340/challenge", []byte{})
 	if got != want {
 		t.Errorf("TaggedHash(\"BIP0340/challenge\", []) =\n  %x\nwant\n  %x",
