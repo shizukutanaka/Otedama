@@ -120,13 +120,13 @@ type Stream struct {
 
 // Accepts reports whether this stream will accept work from a device of
 // the given family.
-func (s Stream) Accepts(f hal.Family) bool {
+func (s *Stream) Accepts(f hal.Family) bool {
 	return slices.Contains(s.AcceptsFamilies, f)
 }
 
 // YieldFor returns the yield this stream offers for the specified device.
 // If the device is not listed in YieldPerDevice, DefaultYield is returned.
-func (s Stream) YieldFor(id string) Yield {
+func (s *Stream) YieldFor(id string) Yield {
 	if y, ok := s.YieldPerDevice[id]; ok {
 		return y
 	}
@@ -218,7 +218,7 @@ type Assignment struct {
 }
 
 // Idle reports whether this assignment leaves the device idle.
-func (a Assignment) Idle() bool { return a.Stream == "" }
+func (a *Assignment) Idle() bool { return a.Stream == "" }
 
 // Allocation is the complete set of Assignments for a decision cycle.
 //
@@ -294,7 +294,10 @@ type DeviceRef struct {
 // impossible (all streams offline, no compatible streams for a device)
 // are handled by leaving the affected devices idle, not by returning
 // an error.
-func Decide(in Input) (*Allocation, error) {
+func Decide(in *Input) (*Allocation, error) {
+	if in == nil {
+		return nil, errors.New("arbitration: nil Input")
+	}
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
@@ -336,7 +339,8 @@ func Decide(in Input) (*Allocation, error) {
 	}
 
 	for _, dev := range devices {
-		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
+		p := prev[dev.Identity.ID]
+		a := chooseForDevice(dev, in.Streams, &p, in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
 		if a.Idle() {
 			alloc.SkippedDevice++
 		}
@@ -352,7 +356,7 @@ func Decide(in Input) (*Allocation, error) {
 func chooseForDevice(
 	dev DeviceRef,
 	streams []Stream,
-	previous Assignment,
+	previous *Assignment,
 	policy Policy,
 	hysteresis float64,
 	minYield float64,
@@ -406,8 +410,8 @@ func chooseForDevice(
 	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
 	slices.SortStableFunc(candidates, func(a, b candidate) int {
-		sa := policyScore(a.stream, a.yield, policy)
-		sb := policyScore(b.stream, b.yield, policy)
+		sa := policyScore(&a.stream, a.yield, policy)
+		sb := policyScore(&b.stream, b.yield, policy)
 		if sa != sb {
 			return cmp.Compare(sb, sa) // descending: higher score first
 		}
@@ -415,7 +419,7 @@ func chooseForDevice(
 	})
 
 	best := candidates[0]
-	bestScore := policyScore(best.stream, best.yield, policy)
+	bestScore := policyScore(&best.stream, best.yield, policy)
 
 	// Hysteresis: if we currently have a previous assignment on a still-
 	// available stream, keep it unless the best candidate beats it by the
@@ -430,7 +434,7 @@ func chooseForDevice(
 	if previous.Stream != "" {
 		for _, c := range candidates {
 			if c.stream.ID == previous.Stream {
-				incScore := policyScore(c.stream, c.yield, policy)
+				incScore := policyScore(&c.stream, c.yield, policy)
 				threshold := incScore * (1.0 + hysteresis)
 				if bestScore <= threshold {
 					// Held only counts when a *different*, higher-scoring stream
@@ -490,7 +494,7 @@ const (
 // policyScore assigns a comparison score that reflects the active policy.
 // Higher scores are preferred. When scores are equal, sort falls back to
 // yield, then StreamID.
-func policyScore(s Stream, yield float64, p Policy) float64 {
+func policyScore(s *Stream, yield float64, p Policy) float64 {
 	switch p {
 	case PolicyStackBTC:
 		if s.IsBitcoinMining {
