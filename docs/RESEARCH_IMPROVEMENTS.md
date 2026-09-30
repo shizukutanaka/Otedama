@@ -940,6 +940,27 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 349 — pool-text sanitization at the log boundary
+
+**Reject-reason escape injection [FIXED].** Session 348 sanitized
+`client.show_message` at the V1 parser; the same vector reached the log
+through the two share-reject paths: V2 `SubmitSharesError.Error`
+(STR0_255, bounded but raw) logged at `run.go`, and V1's
+`ShareResult.Reason` (`fmt.Sprintf("%v", errResult)` — the pool's whole
+JSON error object, potentially longer). New `poolproto.SanitizePoolText`
+strips all Unicode control characters (C0/DEL/C1, including ANSI escape
+introducers) and truncates to 256 runes; applied to `reason` at both
+engine log sites *before* classification (canonical reject codes are
+ASCII, so stripping cannot change the match).
+
+**Job-ID strings in errors [AUDITED — clean].** `applyJob` embeds the
+pool's JobID with `%q`, which escapes control bytes — no injection.
+
+**Escalation boundary [AUDITED — clean].** Shares rejected via the
+protocol error surface stay inside the loop; the engine only escalates
+to reconnect on transport errors, so a hostile reject reason cannot
+liveness-abort the session.
+
 ## Session 375 — release-supply-chain claims audit + install.sh fix
 
 [FETCHED] Ecosystem: SRI v1.12.0 (2026-09-17, freedom.tech release notes) —

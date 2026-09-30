@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 349 — プール文字列サニタイズ)
+
+V1/V2 のシェア拒否理由（pool 制御文字列）をログ出力前に
+`poolproto.SanitizePoolText` でサニタイズ — 制御文字除去＋
+256 rune 上限。ANSI エスケープ注入・ログ偽造を防止。
+
 ### 修正 (session 375)
 
 - `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は `--skip-verify` なしでは拒否（存在時の不一致も fatal）。裸バイナリは tar 展開をスキップして直接インストール。
