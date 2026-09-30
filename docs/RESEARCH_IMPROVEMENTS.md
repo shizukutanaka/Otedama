@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 580 — formatting-in-hot-path audit
+
+- `fmt.Sprintf` appears in `miner`/`stratum`/`arbitrate` only in
+  display helpers (`HashRateString`, arbitration log lines) — the
+  grind loop stays Sprintf-free (0-alloc, sessions 529/545).
+- `strings.Builder`/`bytes.Buffer` lives only on bounded-rate cold
+  paths: service-file generation, i18n message rendering, metrics
+  exposition (per scrape), and the TUI dashboard (per render
+  tick). No allocation churn inside the hash loop.
