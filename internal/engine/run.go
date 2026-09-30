@@ -1257,6 +1257,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Starvation tripwire: a pool-assigned difficulty so high that the
+	// expected share interval exceeds an hour starves income silently —
+	// no rejects, no disconnect, just nothing credited. Warn once per
+	// episode and re-arm when the interval recovers.
+	var starvedWarned bool
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
@@ -1326,6 +1331,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				if iv := opts.m.estimatedShareIntervalSeconds.Value(); iv > 3600 {
+					if !starvedWarned {
+						starvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: pool difficulty implies ~%.0f min between shares — income is effectively zero; the pool should lower difficulty or retarget",
+							iv/60))
+					}
+				} else {
+					starvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
