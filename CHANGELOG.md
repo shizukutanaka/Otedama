@@ -19,6 +19,51 @@ solo-operations.md の CODEOWNERS サンプルが非実在パス
 存在しないオプション — 自動マージは発動していなかった）を除去し
 実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
 
+### 修正 (session 415)
+
+**lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
+gosec・gocritic・misspell・gofumpt・prealloc・goconst・unparam・dogsled・
+bodyclose 等）に対する ~350 件の違反を解消し 65 件まで削減。主な実修正:
+`err ==` 等価比較を `errors.Is`/`errors.As` へ統一（ラップ済み fatalError が
+無限再試行されていた意味的バグを含む）、systemd/launchd サービス定義の
+パーミッションを 0644→0600 へ厳格化、未使用コード（remoteStatic・test
+parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチャ整理、
+テストの bodyclose・unnecessaryDefer 等。BIP-39 ワードリストと i18n
+カタログは正規データのため misspell 対象外として恒久的に除外。残りは
+hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
+案件として記録。
+
+### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
+
+**問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も
+切断もないまま収益が止まる——難易度飢餓と同型だが別経路。closed #396
+の未マージ修正を master へ再デリバー。
+
+**修正.** V1/V2 両経路で `jobStallWarnAfter`（10 分、テストでは縮小
+可能）を超えてジョブ未着が続くとエピソードごと一度だけ warn。カーテイル
+中は抑制。最初のジョブが一度も来ない場合も同じく検出（タイマーは
+セッション開始から起算）。
+
+### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
+
+**問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
+電気代割れの採掘を止める手段が `curtail_below_btc_usd` の手計算しか
+なかった。closed #373 の未マージ修正を master へ再デリバー。
+
+**修正.** `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐
+フロアを導出（powerWatts/1000 × price $/h → `SatsPerSecond` で sats/sec
+換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+`max(min_yield_sats_per_sec, floor)` を適用。新メトリクス
+`otedama_power_breakeven_floor_sats_per_second`（未設定時 0）。
+
+### 修正 (session 464)
+
+1. `internal/version` のデフォルト値が `v3.0.0-alpha.0-dev` で
+   VERSION ファイル（v3.0.0-alpha.1）とずれていた問題を修正 —
+   ldflags を介さない `go build`/`go install` ビルドが古い
+   バージョンを報告していた。Makefile の VERSION 欠損時
+   フォールバックも同値に揃えた。
+
 ### Fixed (session 523 — test-hygiene lint findings)
 
 - Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`

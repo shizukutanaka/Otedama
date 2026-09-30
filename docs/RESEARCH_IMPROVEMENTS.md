@@ -964,6 +964,110 @@ annotations); `runSessionV1` V1-via-poolproto vs V2-inline split
 matches §3's resolution wording; DEPLOYMENT.md command/flag/path
 references all exist; README badges/links valid.
 
+## Session 415 — Lint-debt cleanup: 350 → 65 findings [LINT]
+
+**動機.** `.golangci.yml` は errcheck・errorlint・gosec・gocritic・misspell
+(locale: US)・gofumpt・prealloc・goconst・unparam・dogsled・nilerr 等を必須と
+明記しているが、CI の Lint ジョブは setup 段階で常に失敗しており債務が不可視
+だった。手元で golangci-lint v1.64.8 を実行すると ~350 件。このセッションで
+機械的・意味的修正を一括適用した。
+
+**適用した修正（全てリポジトリ自身の lint 設定が要求する規則）.**
+
+- **gofumpt -extra（21ファイル）**: `0600`→`0o600` 8進リテラル、var グループ化、
+  composite literal の整形。
+- **misspell（locale US、~140件）**: コメント・godoc の英英式綴りを米式へ
+  （sanitises→sanitizes、recognises→recognizes、behaviour→behavior 等）。
+  i18n メッセージカタログと BIP-39 英語ワードリストは**除外** — カタログは
+  非英語文字列を破壊し、ワードリストの `artefact` は正規データ（SHA-256 の
+  init 時整合チェックが実際に検出した）。`english_wordlist.go` を misspell
+  対象から exclude-rules で恒久的に除外。
+- **errorlint**: `err == flag.ErrHelp` / `err == io.EOF` / `err != context.Canceled`
+  の等価比較を `errors.Is` へ（cmd/otedama ×4、configfile、coverage_test、
+  metrics_test、noise_test 群）。`isFatal` の型アサートを `errors.As` へ —
+  **これは意味変更を伴う**: ラップされた fatalError が従来「非 fatal＝無限再試行」
+  だったのを正しく fatal 判定へ（テストが将来の移行を明記していたため期待値を更新）。
+  `fmt.Errorf("%w: %v", a, b)` → 複数 `%w`。
+- **unparam**: `parseReconnect` の常に true の ok 戻り値を除去、`pruneStaleStreams`
+  の冗長 ttl パラメータを除去（呼び出し側・テスト3箇所を追従）。
+- **unused**: `remoteStatic` フィールド（noise.go）・テスト専用 `parseFloat` を削除。
+- **prealloc**: 8箇所のスライスに容量ヒント（arbitration candidates、setup workers、
+  metrics entries 等）。
+- **goconst**: 本番側の繰り返しリテラルを定数化（`helpFlag`/`displayDefault`、
+  `logLevelInfo`/`logFormatText`、daemon/doctor の `goosLinux` 等）。テスト内
+  リテラルは .golangci.yml 既存の除外方針どおり据え置き。
+- **gocritic（機械的なもの）**: 空の else/fallthrough 除去、unnecessaryDefer
+  （return 直前の defer → 直接呼出）、builtinShadow（`cap` パラメータ）、
+  stringXbytes、emptyStringTest（`len(name)==0`→`name==""`）、appendAssign、
+  ifElseChain→switch（wallet.go）、httpNoBody、emptyFallthrough。
+- **dogsled**: 3連ブランク代入を `_ = ferr` パターンへ。
+- **SA9003**: 空の許容ブランチを `t.Log`/コメントで明示。
+- **bodyclose**: テストの `http.Get` レスポンスボディを Close。
+- **gosec G306**: systemd unit / launchd plist の 0644 → 0600（serviceArgs を
+  埋め込むため厳格化が安全側）。
+- **gosec G115 ×18**: 全サイトを個別検証し、有界変換（5/8ビット群、BIP-39 チェック
+  サム bit、nBits 指数、maxNoiseFrame 検査済み ciphertext 長等）に根拠コメント付き
+  `//nolint:gosec` を付与。uintID は負値でも unmatched key 化するのみで安全。
+- **sprintfQuotedString**: `sc.exe` の `"%s"` と Prometheus ラベル `"%s"` は %q の
+  Go エスケープで意味が変わるため `//nolint:gocritic` と根拠を記録。
+
+**意図的に残した判定（65件）.**
+- **hugeParam ×53**: `Decide(in Input)` 等の値渡しは純粋関数の意図的設計で、
+  ポインタ化はシグネチャ・全呼出し・テストを巻き込む。単独 PR での判断が適切。
+- **gocyclo ×12**: chooseForDevice、ResolveWithOrigins、run 系等の分解は
+  振る舞いリスクを伴うリファクタ — 個別対応。
+
+**残課題.** CI の Lint ジョブ自体が setup（Go バージョン固定）で壊れており、
+債務の可視化には workflow 修正が別途必要。
+
+*検証: go build ./...、go test ./...（全24 pkg green）、go vet クリーン、
+golangci-lint 350→65 件（残りは hugeParam/gocyclo のみ）。*
+
+## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
+
+**Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
+while keeping the connection open starves revenue identically to extreme
+difficulty — but with no rejects, no disconnect, and no metric edge. The
+clock starts at session start so a pool that never sends a first job is
+equally covered.
+
+**Fix [OBSERVED].** `jobStallWarnAfter` (10 min, var for tests) — on each
+stats tick, if `time.Since(lastJobAt) > jobStallWarnAfter` and not
+curtailed, warn once per episode (`jobStarvedWarned`), re-arming when jobs
+resume. Wired on both V1 and V2 paths.
+
+**Tests [OBSERVED].** `TestRunSession_JobStallWarnsOnce` + V1 variant —
+silent fake pool past the threshold logs exactly one warn.
+
+## Session 304 — power-breakeven yield floor for arbitration (re-delivers closed #373)
+
+**Finding [OBSERVED — code-verified].** `power_watts` and
+`electricity_price_per_kwh` were metrics-only — below-breakeven mining could
+only be stopped via a hand-computed `curtail_below_btc_usd`. This is the
+constraint half of the bi-criteria bandit formulation (arXiv:2503.12285).
+
+**Fix [OBSERVED].** `arbitrationLoopOpts.powerFloor()` derives a per-device
+breakeven floor: powerWatts/1000 × price $/h → `provider.SatsPerSecond` →
+split evenly across managed devices. The arbitration loop applies
+`max(min_yield, floor)` each round — the constraint tracks BTC price moves
+automatically. New metric `otedama_power_breakeven_floor_sats_per_second`
+(0 when unconfigured). SPECIFICATION §3.1/§6 synced.
+
+**Tests [OBSERVED].** `TestArbitrationLoopOpts_PowerFloor` (six invalid-input
+cases + arithmetic + even-split) + `TestRunArbitrationLoop_PowerFloorIdlesDevice`.
+
+## Session 464
+
+Version-source drift fixed: the VERSION file reads
+v3.0.0-alpha.1 and `make build` injects it via ldflags, but the
+in-code default (used by plain `go build`/`go install`, which skip
+ldflags) still said v3.0.0-alpha.0-dev — a `go install`-built binary
+reported a stale version. Bumped the default to v3.0.0-alpha.1-dev
+(keeps the -dev marker distinguishing unblessed builds) and aligned
+the Makefile's missing-VERSION fallback the same way. Release
+builds via goreleaser inject {{.Version}} correctly and were
+unaffected.
+
 ## Session 523 — full linter sweep re-verified on master
 
 Re-ran the full golangci-lint suite under `GOTOOLCHAIN=go1.26.8`
