@@ -974,6 +974,41 @@ payload buffer — a malicious length header cannot force a large
 allocation. Already covered by the v1.12.0-alignment pass; re-verified
 on master this session.
 
+## Session 407 — release pipeline vs VERIFY.md: major drift [SURFACED]
+
+**The release pipeline does not produce what VERIFY.md documents
+[🔴 SURFACED — maintainer action needed on workflow].**
+`.github/workflows/release.yml` builds plain `otedama-<os>-<arch>.tar.gz`
+via `go build` + `upload-release-asset`: **no checksums.txt, no cosign
+signatures, no SBOMs** are ever generated — yet VERIFY.md instructs users
+to verify them, and `.goreleaser.yaml` (with the full cosign/SBOM config)
+is never invoked by any workflow. Users following VERIFY.md today find
+nothing to verify — verification theatre, a security-documentation bug.
+VERIFY.md now carries a status banner stating only the source-rebuild
+check works, and all asset names were corrected to goreleaser's real
+name templates (`otedama_<ver>_checksums.txt{,.sig,.pem,.bundle}`,
+`otedama_<ver>_<os>_<arch>.sbom.*.json`) for when the pipeline goes live.
+
+**Additional release.yml defects found while auditing [SURFACED]:**
+- `-X main.Version=...`/`main.BuildTime`/`main.GitCommit` inject into
+  `main` — the real vars live at `internal/version.{Version,BuildDate,
+  Commit}` (even the names differ). `-X` on a nonexistent symbol is a
+  silent no-op: **every tagged release binary reports dev defaults**
+  from `otedama version`.
+- Release body links `docs/DEPLOYMENT_GUIDE.md` — file does not exist
+  (the real guide is `docs/DEPLOYMENT.md`); dead link in every release.
+- `build-packages` (fpm deb/rpm) references `scripts/post-install.sh`,
+  `scripts/pre-remove.sh`, `scripts/otedama.service`, and `config.yaml`
+  — none exist, so the job fails on any tag push.
+- fpm metadata claims `--license MIT`; the project is Apache-2.0.
+- `update-homebrew` targets tap repo `otedama/homebrew-tap` — different
+  org than `shizukutanaka`; likely a stale placeholder.
+
+Not fixed: all defects are in `.github/workflows/` — CI files outside
+the safe-edit boundary; recorded here for the maintainer (the fix is
+either wiring goreleaser into release.yml or correcting the inline
+pipeline).
+
 ## Session 408 — migration guide drift vs code reality [FIXED]
 
 **MIGRATING-FROM-V2.md claims corrected [FIXED].**
