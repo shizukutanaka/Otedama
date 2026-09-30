@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 539 — dependency boundaries)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `go mod verify` clean; external
+  deps = x/crypto + yaml.v3 only; import graph verified as a DAG
+  matching the architecture map (13 leaf packages, engine sole
+  aggregator, no upward imports).
+
 ### Documentation & audit (session 540 — order dependence)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `-shuffle=on` ×2 full-suite runs
