@@ -17,6 +17,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
   が単一依存で完結する形に収束することを記録。
 
+### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
+
+V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
+文字列を `%q` でクォート（制御文字エスケープ）し、OpenMiningChannel
+拒否の理由を fatal としてログに明示。従来は理由が破棄されていた。
+
+### Fixed (session 295 — V2 経路でプール難易度がメトリクスに公開されず飢餓警告も出なかった問題を解消)
+
+**問題.** `publishDifficulty` は V1 の stats tick でのみ呼ばれ、V2 経路では
+`otedama_pool_difficulty` ゲージが更新されず、難易度飢餓の warn も発火
+しなかった（V1/V2 の非対称）。closed #395 の未マージ修正を master へ
+再デリバー。
+
+**修正.** V2 の share target（OpenMiningChannelSuccess/SetTarget の
+U256）を新 `miner.DifficultyFromTarget` で Stratum 難易度へ変換し、
+V2 stats tick で publish + 飢餓 warn（session-294 と同閾値）。ゼロ
+target は +Inf で「収益ゼロ」を表現。
+
 ### 修正 (session 390)
 
 - save() のクラッシュ/失敗で残った `.wallet-*.tmp` がデータディレクトリに永久蓄積していた問題を修正 — NewWalletManager 起動時に mtime が1分超の古い temp ファイルのみ掃除（インフライトの save() や他プロセスの新規 tmp は保全、best-effort で起動を阻害しない）。併せて `save()` の失敗経路（暗号化エラー・書き込み不可ディレクトリ・tmp 残留なし）のテストを追加。
