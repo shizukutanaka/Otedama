@@ -952,6 +952,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
