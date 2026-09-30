@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 542 — ecosystem recheck)
+
+- `docs/adr/ADR-009`: sv2-spec #220 (Noise Act 2 = 234 bytes —
+  forward requirement for the §2 noise completion), #221/#224
+  (docs-only), #209 (job_id/SetNewPrevHash prohibitions — engine
+  conformance verified). SRI still v1.11.1.
+
 ### Documentation & audit (session 541 — serialized scheduling)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `-cpu=1` (GOMAXPROCS=1) full
