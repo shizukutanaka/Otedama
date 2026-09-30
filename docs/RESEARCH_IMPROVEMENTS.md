@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 331 — non-finite arbitration parameters (real fix)
+
+**NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
+`strconv.ParseFloat` accepts `nan`/`inf`, and YAML accepts `.nan`/`.inf`
+literals, so `arbitration_hysteresis_pct` or `min_yield_sats_per_sec`
+could carry non-finite values into `Decide`. The `< 0` guards don't
+catch NaN: a NaN margin silently disables hysteresis (NaN threshold
+never satisfied → switch on any improvement), +Inf freezes the
+incumbent stream permanently, NaN floor silently disables the
+min-yield gate. `Decide` now rejects non-finite values outright — the
+engine logs a warn per cycle instead of silently misbehaving. Follow-up
+in the same class as the s325 `Yield.Effective()` NaN collapse.
+`TestDecide_RejectsNonFiniteMargins` covers all six cases.
+
 ## Session 378 — doctor check-suite audit
 
 [FIXED] `checkPoolReachability` probed only `Pools[0]`: a dead
