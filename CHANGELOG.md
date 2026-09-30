@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 388)
+
+- `internal/arbitration` に `FuzzDecide` プロパティテストを追加 — Decide の文書化済み不変条件（デバイス割当の全単射・ソート順、互換ストリーム限定、TotalYield の総和一致、ForegoneSatsPerSec 非負、決定性、MaximizeEarnings 無ヒステリシス時のグリーディ最適性）をランダム入力で検証。従来は「プロパティテストで検証済み」との記載のみで実物が存在しなかったギャップを解消（90秒・1350万 exec でクリーン）。
+
 ### Performance (session 543 — sync.Pool wiring)
 
 - `internal/stratum/noise.go`: hkdf2/hkdf3 now call the pooled
