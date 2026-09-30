@@ -384,7 +384,7 @@ func TestLoadConfigFile_NonExistent(t *testing.T) {
 func TestBuildLogger_TUIModeDiscardsOutput(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: false} // TUI active
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info"}, &out)
 	defer cleanup()
 
 	// In TUI mode, log output must be discarded so it does not corrupt
@@ -398,7 +398,7 @@ func TestBuildLogger_TUIModeDiscardsOutput(t *testing.T) {
 func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: true}
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info", LogFormat: "text"}, &out)
 	defer cleanup()
 
 	log.Adapter()("info", "hello-text-log")
@@ -410,7 +410,7 @@ func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 func TestBuildLogger_NoTUIWritesJSON(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: true}
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "json"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info", LogFormat: "json"}, &out)
 	defer cleanup()
 
 	log.Adapter()("info", "hello-json-log")
@@ -432,7 +432,7 @@ func TestBuildLogger_TUIWithLogFileWritesToFileNotStdout(t *testing.T) {
 	var out bytes.Buffer
 	path := filepath.Join(t.TempDir(), "audit.log")
 	f := runFlags{noTUI: false, logFile: path}
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info", LogFormat: "text"}, &out)
 
 	log.Adapter()("info", "tui-audit-entry")
 	cleanup() // close the file before reading
@@ -454,7 +454,7 @@ func TestBuildLogger_NoTUIWithLogFileWritesBoth(t *testing.T) {
 	var out bytes.Buffer
 	path := filepath.Join(t.TempDir(), "audit.log")
 	f := runFlags{noTUI: true, logFile: path}
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info", LogFormat: "text"}, &out)
 
 	log.Adapter()("info", "both-sinks-entry")
 	cleanup()
@@ -474,7 +474,7 @@ func TestBuildLogger_NoTUIWithLogFileWritesBoth(t *testing.T) {
 func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.log")
 	f := runFlags{noTUI: true, logFile: path}
-	_, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &bytes.Buffer{})
+	_, cleanup := buildLogger(&f, &config.Config{LogLevel: "info"}, &bytes.Buffer{})
 	cleanup()
 
 	info, err := os.Stat(path)
@@ -493,7 +493,7 @@ func TestBuildLogger_UnopenableLogFileDoesNotPanic(t *testing.T) {
 	var out bytes.Buffer
 	path := filepath.Join(t.TempDir(), "no-such-dir", "audit.log")
 	f := runFlags{noTUI: true, logFile: path}
-	log, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	log, cleanup := buildLogger(&f, &config.Config{LogLevel: "info"}, &out)
 	defer cleanup()
 
 	// Logging still works (falls back to stdout since the file failed to open).
