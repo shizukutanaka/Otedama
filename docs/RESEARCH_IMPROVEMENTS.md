@@ -965,6 +965,79 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 401 — seedstore.go audit; per-file sweep complete
+
+**`internal/lightning/seedstore.go` [AUDITED — clean]** — the last file
+in the repo not yet individually reviewed:
+
+- `EncryptSeed`: rejects empty passphrase (an empty scrypt input is
+  deterministic but provides no protection); salt+nonce from
+  crypto/rand (injectable reader for tests); key and passphrase copies
+  zeroed via `zeroBytes` on every path.
+- `DecryptSeed`: version gate before crypto work, empty-ciphertext
+  rejection, GCM tag failure mapped to the indistinguishable
+  `ErrWrongPassphrase` (no decryption oracle — a precise wrong-key vs
+  corruption split would leak information), 64-byte plaintext length
+  enforced, plaintext wiped on return paths.
+- `Marshal`/`UnmarshalEncryptedSeed`: fixed 29-byte header, min-length
+  bound before slicing, version checked in both directions.
+- scrypt N=2^17/r=8/p=1 matches the doc comment's ~1 s interactive
+  target and BIP-38 ballpark.
+
+**`stratum.Decoder.ReadFrame` [AUDITED — bounded].** Payload size is
+checked against `MaxFrameSize` (16 MiB default) *before* the
+allocation, so a hostile peer announcing a huge `MsgLength` cannot
+exhaust memory. `Header.Validate` also rejects channel frames under the
+4-byte minimum (channel_id prefix). The message-type byte itself is
+validated downstream by `DispatchFrame`.
+
+**`WalletManager` lifecycle [AUDITED — safe]** — constructed once in
+`engine/setup.go`, read (`Seed`/`Fingerprint`/`IsNew`/`Mnemonic`)
+during the same single-threaded setup phase, never touched from the
+run loop. No mutex needed because no concurrent access exists; noted
+so a future TUI/metrics reader doesn't add one silently.
+
+With this, every file under `internal/` and `cmd/` has been audited at
+least once across sessions 340–401.
+
+## Session 402 — skills/ drift fixed [FIXED]
+
+**`skills/tdd.md` described test infrastructure that never existed**
+[FIXED]. Three fabricated mechanisms corrected to match the real
+Makefile/test topology:
+
+- "integration tests gated by `//go:build integration`, run via
+  `make test-integration`" → reality: no build tag exists anywhere in
+  the repo; slower tests are gated by `testing.Short()` and live in
+  ordinary `_test.go` files; `make test-integration` runs the full
+  suite. The old text silently instructed contributors to add files
+  under a tag nothing consumes.
+- "E2E tests under `//go:build e2e` run via `make test-e2e`" → no E2E
+  suite or `test/e2e/` package has ever existed; the Makefile
+  documents the target's deliberate omission. Rewritten to state that
+  plainly and point at the engine fake-pool integration tests as the
+  current end-to-end coverage.
+- "LDK regtest harness / channel tests" and "zkSNARK circuit tests" →
+  Lightning payment channels and ZKP auth are v4.0 scope per CLAUDE.md
+  and do not exist in the codebase; the paragraphs now read as future
+  guidance rather than describing present infrastructure (the existing
+  BIP-39/AES-GCM wallet test surface is named instead).
+
+**`skills/release-procedure.md` [FIXED]** — the release checklist
+demanded a green run of `otedama migrate-from-v2`, a subcommand that
+has never existed. Replaced with a config-load-path verification and a
+note that `make test-e2e` does not exist (prevents a releaser failing
+the checklist on a phantom step).
+
+Note: the integration/E2E/`migrate-from-v2` corrections in `skills/tdd.md`
+and `skills/release-procedure.md` had already landed on master in
+session 483, so the duplicate paragraphs were dropped from this change;
+only the Lightning/ZKP v4.0-scope rewrite in `skills/tdd.md` remains.
+
+`skills/code-review.md`, `security-audit.md`, and both quality-pass
+files contain no phantom commands [AUDITED — clean]; the "24 package"
+count in the quality-pass files matches `go list ./...` = 24.
+
 ## Session 404 — docs/ flag sweep; phantom --worker-threads fixed [FIXED]
 
 **`docs/TROUBLESHOOTING.md` recommended a nonexistent flag [FIXED].**
