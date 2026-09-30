@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 538 — checkptr)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-d=checkptr` instrumented full
+  suite — all 24 packages green, zero unsafe.Pointer violations;
+  the tree imports neither `unsafe` nor `syscall` directly.
+
 ### Documentation & audit (session 539 — dependency boundaries)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `go mod verify` clean; external
