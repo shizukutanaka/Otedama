@@ -958,6 +958,39 @@ started once and stopped only at shutdown — the path is unreachable.
 Recorded rather than fixed: a proper fix needs an API-level decision
 (reconnectable quote source), not a drive-by change.
 
+## Session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正
+
+**Sweep.** `docs/AUDIT_CHECKLIST.md`（148行）全文精読 — 第三者監査人が「各行を検証せよ」と設計した文書ゆえに誤誘導の影響が大きい。全行を ci.yml/security.yml/.golangci.yml/go.mod/実装と照合。併せて `docs/API.md` 残節（HTTP エンドポイント・メトリクスカタログ・ウォレット形式・終了挙動・API 安定性）を照合 — 全 clean（env 変数表の欠落は open #517 の担当域）。
+
+**発見（4箇所訂正）。**
+- 行1「Go 1.22+ でビルド可」→ 虚偽: go.mod は実質 Go ≥1.24 必須（`godebug tlsmlkem` が旧ツールチェーンでパースエラー = CI の 1.22/1.23 マトリクス失敗の正体）。session 465 の GODEBUG_NOTES 訂正と同根拠。
+- 行11「GitHub Actions は SHA ピン留め」→ 虚偽: 全 `uses:` がタグ/ブランチ参照。行を「現状 fails・目標状態」と明記（#561 が solo-operations で直した虚偽と同クラス）。
+- 行13「リリース成果物は cosign 署名済み」→ 虚偽: `release.yml` は goreleaser/cosign を一切呼ばず `.goreleaser.yaml` の `signs:` は dead config（session 480 検証済み）。
+- 「CI gate summary」節を実態に書換: 独立 `go vet`/`staticcheck`/`govulncheck`/5-OS `go build` 行列は非存在（govet+staticcheck は `.golangci.yml` 経由で golangci-lint 内実行のみ）。実際のゲート: golangci-lint・gosec・gofmt・go mod tidy・test -race（Windows 除く）。「Nightly 30分ファズ + PR ベンチマーク比較(5%)」→ 両ジョブ非存在（ファズ関数名 FuzzDecodeHeader/FuzzDecoder_ReadFrame は実在するが `make fuzz` ローカルのみ、ベンチは artifact アップロードのみ — session 484 検証済み）。
+
+**検証済み・変更なし。** 行2-10/14-30 の残クレーム（vet/staticcheck クリーン・SPDX・go mod verify・Dependabot・wallet 0600・AES-256-GCM・Noise NX・ChaCha20-Poly1305・ADR/COC/SECURITY.md 存在）は実装と一致。行22 の scrypt 行（N=32768 記載・実際は N=2^17=131072・seedstore.go 所在）は虚偽だが closed #485 の担当域のため未修正として記録のみ。検証スクリプトは `|| true` で tolerant 設計、妥当。
+
+## Session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正
+
+**Sweep.** `docs/SUSTAINABILITY.md`（193行）全文精読 — 10年戦略書の「実装状況」欄を go.mod・`.goreleaser.yaml`・`internal/poolproto/`・`.github/workflows/`・ルートファイル群と照合。
+
+**発見（3件訂正、全て「実装済み」の過剰/陳腐申告）。**
+- §2「`internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ」→ 陳腐: `stratumv1/`・`stratumv2/` 両 dialer が実在し V1 セッションは engine で稼働中（session 482 の ROADMAP 訂正と同ドリフト）。
+- §5「SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み」→ 虚偽: Dependabot のみ実装済み。全 `uses:` はタグ/ブランチ参照で SHA pin ゼロ、`release.yml` は goreleaser/cosign 未呼出で `signs:` は dead config（session 479-480,488-489 と同クラス）。
+- §10「SECURITY.md と LEGAL.md は v3.1.0 スコープ」→ 半陳腐: SECURITY.md は作成済み（残る v3.1.0 項目は LEGAL.md のみ）。
+
+**検証済み・変更なし。** §1 godebug 3 knob・go.mod/toolchain 記述、§3 subsidy 式・witness dispatch、§4 btccrypto 抽象化済み、§6 MAINTAINERS/GOVERNANCE/Dependabot 存在、§7 metrics+http-addr 実装済み、§8 goreleaser matrix、§9 ファズ2件実在（FuzzDecodeHeader/FuzzDecoder_ReadFrame）、§10 Apache+DCO+AI clause 実在 — 全て一致。「CI で 60秒 fuzz」等は実装状況でなく判断（将来計画）欄のため保留。
+
+## Session 491 — docs/KNOWN_LIMITATIONS.md 再検証 clean + docs/TROUBLESHOOTING.md の phantom 2件を訂正
+
+**Sweep.** `docs/KNOWN_LIMITATIONS.md`（746行・帳簿本体）の未解決項目を全数再照合 + `docs/TROUBLESHOOTING.md`（228行）の非フラグ節を初全文精読。
+
+**発見（2件訂正、#558 が直した `--worker-threads` と同 phantom クラスの残件）。**
+- 「`service` オプションは Otedama を idle scheduling class に自動バインド」→ **phantom**: `internal/daemon/` 全実装を grep しても CPUSchedulingPolicy/IOSchedulingClass/Nice/Priority 等の設定は皆無 — systemd unit は NoNewPrivileges/ProtectHome/PrivateTmp/Restart のみ、launchd plist もスケジューリング未設定。
+- 「`otedama --log-level=debug doctor`」→ **実行不能**: dispatch は `args[0]` でサブコマンド判定するため `--log-level=debug` は `unknown subcommand`（exit 64）に落ち、さらに `doctor` の FlagSet は `--log-level` を定義していない（`run`・`service install` のみ）。
+
+**検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
+
 ## Session 492 — GOVERNANCE.md の誤記2件を訂正 + CODE_OF_CONDUCT・パス参照棚卸し clean
 
 **Sweep.** `GOVERNANCE.md`（159行）・`CODE_OF_CONDUCT.md`（117行）全文精読 + 全 markdown（433件のバッククォートパス参照）の非実在ファイル棚卸し。
