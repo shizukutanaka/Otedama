@@ -951,6 +951,16 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** §1 godebug 3 knob・go.mod/toolchain 記述、§3 subsidy 式・witness dispatch、§4 btccrypto 抽象化済み、§6 MAINTAINERS/GOVERNANCE/Dependabot 存在、§7 metrics+http-addr 実装済み、§8 goreleaser matrix、§9 ファズ2件実在（FuzzDecodeHeader/FuzzDecoder_ReadFrame）、§10 Apache+DCO+AI clause 実在 — 全て一致。「CI で 60秒 fuzz」等は実装状況でなく判断（将来計画）欄のため保留。
 
+## Session 491 — docs/KNOWN_LIMITATIONS.md 再検証 clean + docs/TROUBLESHOOTING.md の phantom 2件を訂正
+
+**Sweep.** `docs/KNOWN_LIMITATIONS.md`（746行・帳簿本体）の未解決項目を全数再照合 + `docs/TROUBLESHOOTING.md`（228行）の非フラグ節を初全文精読。
+
+**発見（2件訂正、#558 が直した `--worker-threads` と同 phantom クラスの残件）。**
+- 「`service` オプションは Otedama を idle scheduling class に自動バインド」→ **phantom**: `internal/daemon/` 全実装を grep しても CPUSchedulingPolicy/IOSchedulingClass/Nice/Priority 等の設定は皆無 — systemd unit は NoNewPrivileges/ProtectHome/PrivateTmp/Restart のみ、launchd plist もスケジューリング未設定。
+- 「`otedama --log-level=debug doctor`」→ **実行不能**: dispatch は `args[0]` でサブコマンド判定するため `--log-level=debug` は `unknown subcommand`（exit 64）に落ち、さらに `doctor` の FlagSet は `--log-level` を定義していない（`run`・`service install` のみ）。
+
+**検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
+
 ## Session 492 — GOVERNANCE.md の誤記2件を訂正 + CODE_OF_CONDUCT・パス参照棚卸し clean
 
 **Sweep.** `GOVERNANCE.md`（159行）・`CODE_OF_CONDUCT.md`（117行）全文精読 + 全 markdown（433件のバッククォートパス参照）の非実在ファイル棚卸し。

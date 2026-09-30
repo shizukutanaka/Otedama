@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * §5「SHA pinning + cosign signing は v3.0.0-alpha で実装済み」→ Dependabot のみ実装済み（SHA pin ゼロ、cosign は dead config）。
 * §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
 
+### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
+
+* 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
+* 「`otedama --log-level=debug doctor`」→ サブコマンド前のフラグは `unknown subcommand` で失敗し、`doctor` は `--log-level` を持たない。
+
 ### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
 
 - **`internal/engine` audit surface complete.** All six non-test files
