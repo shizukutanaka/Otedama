@@ -17,6 +17,16 @@ API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATI
 `OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
 修正 — config.yaml キー名と有効化されるメトリクスを明記。
 
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
 ### 修正 (session 408)
 
 MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
