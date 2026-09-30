@@ -377,7 +377,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
 
 	select {
 	case s := <-shares:
@@ -405,7 +405,7 @@ func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
 	var prevHash [32]byte
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, nil, job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,7 +457,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, nil, job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }
@@ -1216,7 +1216,7 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		updateWork(opts.workers, nil, job, 0, prevHash, 0x207fffff, 0x60000000, target)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -1267,6 +1267,42 @@ func TestUpdateLiveness_CurtailedReportsHealthyAndDoesNotStall(t *testing.T) {
 	}
 	if got := m.up.Value(); got != 1 {
 		t.Errorf("otedama_up = %v while curtailed, want 1 (healthy/paused)", got)
+	}
+}
+
+func TestUpdateLiveness_AllArbPausedReportsHealthyAndDoesNotStall(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	paused := &pauseSet{}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	paused.Pause("dev-a") // the only worker is arbitration-paused (yield floor)
+	opts := sessionOpts{m: m, arbPaused: paused, workers: []*miner.Worker{w}}
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	// The worker is intentionally idle, so hashrate is 0 every tick — this
+	// must not be read as a fault, same as curtailment.
+	for i := 0; i < 5; i++ {
+		if stalled := opts.updateLiveness(hashMon, 0); stalled {
+			t.Fatalf("sample %d: reported stalled while every worker is arbitration-paused", i)
+		}
+	}
+	if hashMon.Stalled() {
+		t.Error("stall monitor advanced to stalled while arbitration-paused (would emit a false warning)")
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Errorf("otedama_up = %v while arbitration-paused, want 1 (healthy/paused)", got)
+	}
+
+	// A partially-paused set is still a real stall: another device is
+	// nominally mining, so 0 total hashrate means fault.
+	paused.Resume("dev-a")
+	paused.Pause("dev-b") // not among workers
+	var stalled bool
+	for i := 0; i < 3; i++ {
+		stalled = opts.updateLiveness(hashMon, 0)
+	}
+	if !stalled {
+		t.Error("expected a fault stall once a worker is no longer arbitration-paused")
 	}
 }
 
@@ -2253,19 +2289,29 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// bogusReject makes serve() emit a SubmitSharesError for a
+	// SequenceNumber the client never used (future seq), right after
+	// activating the job — exercising the engine's bogus-seq guard.
+	bogusReject bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
+	t.Helper()
+	return newResponsivePoolOpt(t, false)
+}
+
+func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("responsivePool: listen: %v", err)
 	}
 	fp := &responsivePool{
-		t:       t,
-		ln:      ln,
-		addr:    ln.Addr().String(),
-		started: make(chan struct{}),
+		t:           t,
+		ln:          ln,
+		addr:        ln.Addr().String(),
+		started:     make(chan struct{}),
+		bogusReject: bogusReject,
 	}
 	go fp.serve()
 	return fp
@@ -2352,6 +2398,19 @@ func (fp *responsivePool) serve() {
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	if fp.bogusReject {
+		// Reject a SequenceNumber far beyond anything the client could
+		// have sent. A hostile pool can inject these freely; the engine
+		// must not count them.
+		resp := stratum.SubmitSharesError{
+			ChannelID:      1,
+			SequenceNumber: 9999,
+			Error:          "low-difficulty share",
+		}
+		payload, _ = resp.Encode()
+		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
 
 	// Read shares and respond accordingly
 	shareCount := 0
@@ -2585,6 +2644,198 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestRunSessionV2_FutureSeqRejectIgnored verifies that a SubmitSharesError
+// carrying a SequenceNumber beyond anything the client sent is dropped at
+// debug level and never reaches sharesRejected — SV2 assigns one response
+// per seq, so a future seq is unambiguously bogus, and counting it would
+// let a hostile pool inflate the reject rate and trip curtailment at will.
+func TestRunSessionV2_FutureSeqRejectIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolOpt(t, true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, level+" "+msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        logf,
+		})
+	}()
+
+	// The deterministic signals: the bogus frame produces a "future seq"
+	// debug line, and the pool's genuine reject of share 2 must still
+	// register exactly once (rejects aren't silently swallowed wholesale).
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawBogus, sawRealReject := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "future seq 9999") {
+					sawBogus = true
+				}
+			}
+			mu.Unlock()
+			if m.sharesRejected.Value() > 0 {
+				sawRealReject = true
+			}
+			if sawBogus && sawRealReject {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !sawBogus {
+		t.Error("bogus future-seq reject was not observed/dropped via debug log")
+	}
+	if !sawRealReject {
+		t.Error("genuine reject (share 2) was not counted — guard swallowed real errors")
+	}
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want exactly 1 (bogus seq 9999 must not count)", got)
+	}
+}
+
+// TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
+// the TCP connection but never answers SetupConnection makes handshake
+// return within handshakeTimeout instead of blocking forever.
+func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	client, server := net.Pipe()
+	defer server.Close()
+	// Drain reads but never respond — the peer is alive yet silent.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	dec := stratum.NewDecoder(client)
+	start := time.Now()
+	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	if err == nil {
+		t.Fatal("handshake should fail against a silent peer")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("handshake blocked %v, want <5s", elapsed)
+	}
+}
+
+// TestHandshake_DeadlineCleared verifies the handshake deadline is
+// removed on return so steady-state session reads stay unbounded.
+func TestHandshake_DeadlineCleared(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+
+	go func() {
+		// Answer SetupConnection and OpenMiningChannel minimally.
+		dec := stratum.NewDecoder(server)
+		_, _ = dec.ReadFrame()
+		payload, _ := (&stratum.SetupConnectionSuccess{UsedVersion: 2}).Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+		_, _ = dec.ReadFrame()
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 3}
+		payload, _ = omcSucc.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+	}()
+
+	dec := stratum.NewDecoder(client)
+	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 3 {
+		t.Errorf("chanID = %d, want 3", chanID)
+	}
+	// Post-handshake reads must not inherit the deadline: a blocking read
+	// with no incoming frame should still be blocked after ~150ms.
+	go func() {
+		_, _ = dec.ReadFrame()
+	}()
+	select {
+	case <-time.After(150 * time.Millisecond):
+		// success: read is still blocked (no deadline fired)
+	}
+	_ = client.Close()
+}
+
+// TestStoreBoundedJob_BoundsOutstandingJobs pins the jobsCap bound: flooding
+// distinct job IDs must evict oldest-first while keeping the newest.
+func TestStoreBoundedJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for i := uint32(1); i <= jobsCap+10; i++ {
+		order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(jobs) != jobsCap {
+		t.Fatalf("len(jobs) = %d, want cap %d", len(jobs), jobsCap)
+	}
+	// FIFO: the first 10 IDs were evicted; the newest survive.
+	for i := uint32(1); i <= 10; i++ {
+		if _, ok := jobs[i]; ok {
+			t.Errorf("job %d should have been evicted (FIFO)", i)
+		}
+	}
+	for i := uint32(jobsCap + 1); i <= jobsCap+10; i++ {
+		if _, ok := jobs[i]; !ok {
+			t.Errorf("newest job %d should have survived", i)
+		}
+	}
+	// Re-inserting an existing ID must not grow the order slice.
+	before := len(order)
+	order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: jobsCap + 10})
+	if len(order) != before {
+		t.Errorf("re-insert grew order to %d, want %d", len(order), before)
 	}
 }
 
