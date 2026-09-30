@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### セキュリティ (session 372 — argv パスフレーズ警告)
+
+`--wallet-passphrase` / `--wallet-mnemonic-passphrase` をフラグ経由で
+指定すると stderr に警告 — argv はプロセスリスト (ps) で全プロセス
+から可視。推奨経路の OTEDAMA_WALLET_*_PASSPHRASE 環境変数を案内。
+
 ### セキュリティ (session 393)
 
 - `--http-addr` が非ループバックアドレス（`0.0.0.0` 等）に bind される際、起動時に stderr 警告を発行 — metrics/health エンドポイントのネットワーク公開をオペレータに通知（`--pprof` 有効時はヒープ/ゴルーチンプロファイル公開についても明記）。ループバック bind は従来通り無警告。
