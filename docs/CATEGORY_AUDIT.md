@@ -615,6 +615,23 @@ All 24 packages build, vet, and test green.
 
 ---
 
+## Session 596 update — V1 write-path + handshake-response audit
+
+Continues the session-595 fail-closed pass over the V1 session pipeline
+(the dispatch/parse side itself was hardened in this branch's sibling
+fix). Verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `conn.Write`/`Fprintf` errors swallowed on the wire path — a dropped socket write is never detected. | ✅ Clean: V1 `call()` propagates write errors with pending-map cleanup and a 10s write deadline; V2 `sendMsg` propagates with `writeTimeout`; metrics exposition checks every `Fprintf`. |
+| S | Authorize response coercion — `result` asserted to bool without ok-check could accept a non-bool payload. | ✅ Clean: `accepted, _ := resp.result.(bool)` — non-bool degrades to `false` = reject (fail closed), plus `errResult` rejected first. |
+| S | Response-ID parsing — a non-numeric string id wrapping to a pending-map key. | ✅ Clean: `uintID()` returns 0 on unparseable ids; 0 matches no pending entry (ids start at 1) — the response is dropped. |
+| S | `SetWriteDeadline` error ignored (`_ =`). | ✅ Benign: deadline failure implies a broken conn — the subsequent `Write` surfaces the real error. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 597 update — V2 handshake strictness + service-definition audit
 
 | Cat | Finding | Disposition |

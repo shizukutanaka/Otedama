@@ -547,6 +547,17 @@ no-op":
   build Otedama," but the `tlsmlkem=1` godebug (a 1.24 knob) already
   makes `go.mod` unparseable by any toolchain < 1.24 — so that stated
   intent is not actually achievable as long as the godebug is pinned.
+- **golangci-lint is pinned at two different stale versions, both ≥1
+  major release behind upstream.** `ci.yml` curl-installs `v1.55.2`;
+  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3` (a v1.x-era
+  action); local tooling is v1.64.8. Upstream is at v2.13.x — v2.13.0
+  (2026-08-19) added go1.27 support, which is also what the local
+  go1.27.1 toolchain needs (v1.64.8's typecheck cannot decode go1.27
+  export data; run it under `GOTOOLCHAIN=go1.26.8`). v2 additionally
+  uses a new `version: "2"` config format, so upgrading the linter
+  implies migrating `.golangci.yml` and bumping both CI pin sites
+  together — a maintainer decision, since the workflow files are the
+  pin owners.
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
