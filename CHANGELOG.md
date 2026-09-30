@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 350 — V1 ジョブIDのログクォート)
+
+`mining.notify` の `job.JobID`（プール制御文字列）をログ出力する
+2箇所で `%s` → `%q` に変更。ANSI エスケープ・改行による
+ログ偽造を防止。
+
 ### 修正 (session 416 — lint 債務フォローアップ: hugeParam クラス全滅)
 
 - 内部 API の大きい構造体 (80–200B: `Config`, `Stats`, `Job`, `Input`,
