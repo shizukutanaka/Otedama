@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 409)
+
+SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
+チェックサムは config 読み込み時に実際に検証される（旧記述は
+「未検証」と誤記）、`tls_ca_file` は `stratum+v2tls://` にも適用。
+`validateBitcoinAddress`・`TLSCAFile` の古い godoc も同様に訂正。
+
 ### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
 
 **問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
