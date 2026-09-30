@@ -31,6 +31,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -1821,7 +1822,10 @@ func parseHost(url string) (string, error) {
 	return host, nil
 }
 
-func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
+func isFatal(err error) bool {
+	var fe *fatalError
+	return errors.As(err, &fe)
+}
 
 type fatalError struct{ msg string }
 
