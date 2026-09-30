@@ -67,6 +67,29 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobsCap bounds the outstanding SV2 job map: a hostile or buggy pool that
+// floods distinct job IDs without rotating the tip would otherwise grow
+// memory without limit. 64 is far above legitimate churn (pools rarely hold
+// more than a handful of pending jobs). storeBoundedJob keeps insertion
+// order so eviction is FIFO — the newest jobs, most likely to be named by the
+// next SetNewPrevHash, survive.
+const jobsCap = 64
+
+// storeBoundedJob inserts j into jobs bounded at jobsCap, evicting the
+// oldest-inserted job IDs first; order tracks insertion order and the
+// returned slice is the updated order.
+func storeBoundedJob(jobs map[uint32]*stratum.NewMiningJob, order []uint32, j *stratum.NewMiningJob) []uint32 {
+	if _, ok := jobs[j.JobID]; !ok {
+		order = append(order, j.JobID)
+	}
+	jobs[j.JobID] = j
+	for len(order) > jobsCap {
+		delete(jobs, order[0])
+		order = order[1:]
+	}
+	return order
+}
+
 // Options configures a Run session.
 type Options struct {
 	Config config.Config
@@ -735,6 +758,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobOrder []uint32            // insertion order for jobsCap FIFO eviction
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -833,7 +857,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				prevLen := len(jobs)
+				jobOrder = storeBoundedJob(jobs, jobOrder, j)
+				if len(jobs) < prevLen {
+					opts.log("debug", fmt.Sprintf("engine: evicted oldest pending job (cap %d)", jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -864,8 +892,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobOrder = jobOrder[:0]
 				if named != nil {
 					jobs[p.JobID] = named
+					jobOrder = append(jobOrder, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime

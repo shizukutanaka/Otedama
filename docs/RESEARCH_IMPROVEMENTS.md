@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 317 — bound outstanding V2 job maps (re-delivers closed #385/#397/#412)
+
+**Finding [OBSERVED — code-verified].** Two SV2 maps were unbounded: the
+engine's live-loop `jobs` map and the adapter's `pending` future-job set.
+A hostile/compromised pool flooding distinct `NewMiningJob` IDs without
+rotating the tip could grow memory without bound (Noise encrypts the
+wire, so the attacker IS the pool itself).
+
+**Fix [OBSERVED].** `jobsCap`/`pendingCap` = 64 with oldest-first FIFO
+eviction on both stores.
+
+**Tests [OBSERVED].** Engine store-bound test + dialer flood test over a
+real net.Pipe read loop.
+
 ## Session 355 — V1 RPC-call wait timeout
 
 **Goroutine/pending leak on a silent pool [FIXED].** `session.call`
