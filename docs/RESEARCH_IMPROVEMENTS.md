@@ -940,6 +940,22 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 305 — reconstruct coinbase/merkle per job so V1 shares are verifiable (re-delivers closed #401)
+
+**Finding [OBSERVED — code-verified].** V1 jobs dropped the coinbase parts
+(coinb1‖en1‖en2‖coinb2) and merkle branch after parsing — shares couldn't be
+verified locally before submit; an invalid share was only discoverable via
+pool reject.
+
+**Fix [OBSERVED].** `poolproto.Job` gains `ExtraNonce`/`Coinb1`/`Coinb2`/
+`MerkleBranch` (V1-only; empty for V2). `miner.Work`/`Share` gain
+`ExtraNonce`. A per-session `en2Counter` (big-endian counter at the field
+tail) plus `completeV1Job()` folds the coinbase (`btccrypto.Hash256`) and
+per-branch `Hash256(merkle‖branch)` at dispatch time.
+
+**Tests [OBSERVED].** stratumv1 en2-counter + coinbase-fold cases; engine
+dispatch threading.
+
 ## Session 349 — pool-text sanitization at the log boundary
 
 **Reject-reason escape injection [FIXED].** Session 348 sanitized

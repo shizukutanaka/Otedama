@@ -249,6 +249,25 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A malicious or compromised Stratum V1 pool negotiates an
+absurd `extranonce2_size` to force a large per-job allocation, or sends
+malformed coinbase hex to corrupt the merkle fold.
+
+**Mitigation:** `completeV1Job` folds the coinbase only when en1/en2size
+are negotiated and `extranonce2_size ≤ 64`; anything else falls back to
+the pre-fix behaviour (zero merkle, zero-padded en2 on the wire) rather
+than allocating a pool-dictated buffer. Coinbase hex that fails to
+decode leaves the field empty, which also triggers the fallback — no
+partial fold is ever emitted.
+
+**Residual risk:** Because en2 is fixed per job, a worker that exhausts
+the 32-bit nonce space inside one job can emit a duplicate share (same
+header, same en2). Pools treat duplicates as benign; the residual is a
+wasted hash, not a correctness failure. A per-job nonce-wrap en2 bump is
+the documented next step if this ever becomes measurable.
+
+---
+
 **Threat:** A hostile or misconfigured pool drives difficulty to ~0
 (`mining.set_difficulty` / `SetTarget`), so workers produce shares at
 hardware speed and every share becomes a wire submission — a submit
