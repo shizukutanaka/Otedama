@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
+
+`mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
+分割の disjoint 性、`TargetFromNBits`/`TargetFromDifficulty` の異常値
+拒否、`set_version_mask` の前方互換無視、notice キュー境界、
+TUI へのプール制御文字列不到達を全て確認・記録。ESP-Miner
+v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
+プール側機能）。stale な `otedama_build_info` backlog 行も訂正
+（session 54 で実装済み）。
+
 ### Docs (session 326 — 衛生スイープ結果の記録)
 
 `govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
