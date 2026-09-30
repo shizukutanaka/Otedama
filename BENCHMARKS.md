@@ -16,6 +16,10 @@ Every number here must satisfy three tests:
    regressing >5% fails automatically — no automated regression
    gate exists; the CI job only runs the benchmarks and uploads
    `benchmark-results.txt`.
+2. **Regression-visible.** `go test -bench` runs in CI and results are
+   uploaded as a workflow artifact (`benchmark-results`) on every run —
+   compare against the baseline artifact before merging a perf-sensitive
+   PR. (No automatic regression gate exists yet.)
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -81,6 +85,13 @@ rule and should be replaced once a decoder benchmark lands). The
 statement that the decoder "is fuzzed continuously in CI" was also
 incorrect — CI has no fuzz job (`make fuzz` is a local target);
 `FuzzDecoder_ReadFrame` exists but runs only on local invocations.
+*Numbers predate the committed benchmark set — no `BenchmarkDecoder_*`
+exists in the tree yet, so these figures are currently indicative rather
+than reproducible.*
+
+**Correctness:** `FuzzDecoder_ReadFrame` covers the decode boundary; run
+it locally (`go test -fuzz=FuzzDecoder_ReadFrame ./internal/stratum/`) —
+no fuzz job runs in CI yet.
 
 ## Economic comparison (2026-04-24 market data)
 
