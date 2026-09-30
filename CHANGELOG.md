@@ -19,6 +19,13 @@ SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
 根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
 当方クライアント側バウンドで既にミラー済み。
 
+### 監査判定 (session 356 — hal/V1 ディスパッチ)
+
+GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
+dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監査済みと
+記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
+文書化済み事項として再確認。
+
 ### 監査判定 (session 362 — btccrypto/依存態勢)
 
 btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
