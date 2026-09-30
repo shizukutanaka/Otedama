@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Tests (session 537 — stdlib modernization)
+
+- `internal/i18n/messages/messages_test.go`: `sort.Strings` →
+  `slices.Sort` — the tree no longer imports `sort` or calls
+  `reflect.DeepEqual` anywhere (all other sorts were already on
+  `slices`/`cmp`/`maps`).
+
 ### Documentation & audit (session 538 — checkptr)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `-d=checkptr` instrumented full
