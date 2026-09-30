@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 325 — non-finite yield collapse in the arbitration engine
+
+**Finding [OBSERVED — code-verified].** `Yield.Effective()`'s `<= 0`
+guards pass NaN through (NaN <= 0 is false): a provider division
+yielding 0/0 upstream produces a NaN candidate that enters the policy
+sort and contaminates `TotalYield` — silently corrupting every
+downstream sat/day figure.
+
+**Fix [OBSERVED].** `Effective` now collapses any non-finite product
+(NaN or ±Inf, from either field) to 0 — a bad quote can never win the
+sort or poison the total.
+
+**Tests [OBSERVED].** Five new table cases (NaN/±Inf on both fields).
+
 ## Session 338 — set_extranonce race fix + V1 method-surface audit
 
 **set_extranonce data race [FIXED].** `mining.set_extranonce` (read
