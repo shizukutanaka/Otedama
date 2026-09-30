@@ -957,6 +957,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **帰納。** 「CIで実行される」系の虚偽記述は本ラウンドで ROADMAP（#564）→ skills（#565）→ BENCHMARKS と4ドキュメント目 — CI ワークフローの記述照合は引き続き監査対象。
 
+## Session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正
+
+**Sweep.** `docs/DEPLOYMENT.md`（416行、初監査）の全コマンド・パス・サービス属性を `internal/daemon/service.go`・`Dockerfile`・`internal/metrics`・`.github/` と照合。
+
+**発見（4件訂正）。**
+- Windows ログ参照手順 `Get-EventLog -LogName Application -Source Otedama -Newest 50` → phantom: Otedama はイベントソースを登録しないため「Cannot find source」で失敗。加えて SCM 起動サービスの stdout は破棄（`serviceArgv` が `--log-file` を通さない）— Windows サービスの永続ログは存在しないことを明示し、`otedama run --log-file` を案内。
+- 「A reference Grafana dashboard lives at `contrib/grafana/otedama-dashboard.json`」→ `contrib/` 非実在。「(TODO for v3.1.0)」併記だが「lives at」の存在断言と矛盾 — v3.1.0 計画に訂正。
+- ハードニングチェック「Binary cosign signature verified」→ 今日の release.yml は署名・チェックサム・SBOM を一切生成しない（#562 記録済み）ため未達成不可能な項目 — 訂正。
+- 「Automatic updates via Dependabot for the Otedama container image tag」→ dependabot `docker` エコシステム（dependabot.yml:52）は Dockerfile のベースイメージ pin 更新のみで、運用中のデプロイ済みタグは更新しない — 訂正。
+
+**正しいと検証済みの記述（変更なし）。** `service install` の `--config`/`--data-dir` フラグ実在、systemd unit の hardening 項目（NoNewPrivileges/ProtectHome=read-only/PrivateTmp/Restart=on-failure/RestartSec=10s）・`~/.config/systemd/user/` パス・launchd `~/Library/LaunchAgents/com.otedama.daemon.plist`+KeepAlive+即時 load・Windows `DisplayName=Otedama Mining Service`+`start=auto`（+install 時 start 追加は #552）・全6メトリクス名（SPECIFICATION §6 と一致）・`--log-format=json`・ENTRYPOINT `/usr/local/bin/otedama`（healthcheck パス整合）・NOTICE の依存列挙（go.mod と完全一致）・dependabot docker エコシステム存在。
+
 ## Session 486 — docs/SPECIFICATION.md §2/§7 の stale 記述を訂正
 
 **Sweep.** `docs/SPECIFICATION.md`（252行）の非メトリクス節を `internal/config/config.go`・`internal/daemon/service.go`・`internal/engine/run.go`・`.github/ISSUE_TEMPLATE/` と照合。
