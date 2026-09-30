@@ -940,6 +940,39 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 514 — provider + daemon fully read; toolchain pin verified current
+
+**Audit milestones.** `internal/provider` (all 4 files — provider.go,
+polling.go, mining.go, ai_inference.go) and `internal/daemon`
+(service.go, 463 lines) read end-to-end.
+
+**provider verdicts.** `pollingProvider` guards double-start under mutex
+and runs `prepare` inside the lock, so a rejected second Start can't
+mutate the device set the running loop reads; `Stop` cancels, waits for
+the sole-writer goroutine, then recreates the quote channel — the order
+is documented and correct for sequential use. `sendQuote` drops the
+oldest buffered quote so the freshest estimate wins without blocking the
+loop. AkashProvider emits an explicit zero-confidence quote when no GPU
+is present (matching the contract: publish zero rather than go silent).
+MiningProvider's yield math (device/network hashrate × block reward /
+block time) is correct and honestly constants-marked; the unused BTC/USD
+rate is gated behind `_ = rate` with a note — cosmetic only. Clean.
+
+**daemon verdicts.** `quoteToken`/`xmlEscape` quoting is correct for all
+three managers (systemd ExecStart, launchd plist argv, sc.exe binPath);
+`statusWindowsService` parses `sc.exe query` output correctly ("RUNNING"
+only appears as the state token); the `ProtectHome=read-only` +
+`ReadWritePaths` carve-out mirrors `DefaultDataDir` resolution so the
+unit's exception matches the path `otedama run` actually uses. Master's
+`installWindowsService` registers `start= auto` without starting the
+service — that semantics change is owned by closed PR #552 (user's
+review decision), not re-delivered here.
+
+**Toolchain watch.** Go 1.26.8 (released Sep 1, 2026) is the latest
+patch — the repo's `GOTOOLCHAIN=go1.26.8` pin already tracks it. Minor
+revisions 1.26.5–1.26.8 shipped security fixes across crypto/tls, x509,
+net/http and the go command; no action beyond confirming the pin.
+
 ## Session 515 — metrics + clock + tui fully read
 
 **Audit milestones.** `internal/metrics` (both files), `internal/clock`,

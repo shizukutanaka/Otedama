@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 514 — provider/daemon read; toolchain current)
+
+- **`internal/provider` + `internal/daemon` read end-to-end.** Verdicts:
+  pollingProvider's double-start guard, Stop ordering (cancel → wait →
+  recreate channel), and drop-oldest sendQuote all correct;
+  AkashProvider honors the publish-zero-don't-go-silent contract;
+  daemon's quoting helpers, `sc.exe query` state parse, and
+  ProtectHome/ReadWritePaths carve-out all verified. The
+  install-but-don't-start semantics of `installWindowsService` is a
+  closed-PR-owned decision (#552) — recorded, not re-delivered.
+  Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
+  2026; 1.26.5–1.26.8 carried security fixes).
+
 ### Documentation & audit (session 515 — metrics/clock/tui read)
 
 - **`internal/metrics`, `internal/clock`, `internal/tui` read
