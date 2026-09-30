@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 316 — bound pool-controlled extranonce2_size (re-delivers closed #384/#398/#411)
+
+**Finding [OBSERVED — code-verified].** `extranonce2_size` is
+pool-controlled and flowed unbounded into `strings.Repeat` on every
+`mining.submit` — a hostile pool or MitM on cleartext V1 could force a
+~2 GiB allocation per share (memory-exhaustion DoS).
+
+**Fix [OBSERVED].** Bounded to [0, 64] at both negotiation entry points
+(`parseSubscribeResult`, `parseSetExtranonce`) plus a defensive clamp in
+`Submit`. THREAT_MODEL documents the threat and residual.
+
+**Tests [OBSERVED].** Boundary unit tests on both entry points.
+
 ## Session 342 — service-definition injection via control characters
 
 **Unit-file directive injection [FIXED].** `quoteToken` quoted values on

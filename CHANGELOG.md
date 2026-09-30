@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 316 — extranonce2_size の境界化（平文 V1 のメモリ DoS 対策）)
+
+**問題.** `mining.subscribe`/`mining.set_extranonce` の
+`extranonce2_size` はプール制御かつ未検証で `strings.Repeat("00", sz)`
+へ流れていた——平文 V1 の MitM/悪意プールが submit 毎に巨大アロケーション
+を強制できた。closed #384/#398/#411 の未マージ修正を master へ再デリバー。
+
+**修正.** 両入口で [0, 64] に境界化＋Submit で防御的クランプ。
+THREAT_MODEL に脅威記録済み。
+
 ### Security (session 342 — サービス定義インジェクション防止)
 
 `--data-dir` 等の値に改行などの制御文字を含む場合、systemd unit
