@@ -940,6 +940,12 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 387 — first-run wallet backup verification re-delivery
+
+[FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
+
+[AUDITED — clean] Re-check of remaining closed-unmerged queue for re-delivery eligibility: #372/#386/#400/#410 (batch accepts) → live as open #433; #374/#384/#398/#411 (extranonce2 bound) → live as open #428; #377/#385/#397/#412 (job-map bounds) → live as open #429; #387/#399/#409 (reject-code classification) → live as open #434; #388/#413 (reconnect wait) → live as open #430; #381/#414 (wallet mode audit) → live as open #431; #378/#415 (live hashrate feed) → live as open #432; #389/#393/#403/#404 (seq validation) → live as open #422/#423; #426 ntime roll → open #426; #427 in-flight gauge → open; #416/#418–#421/#425/#435–#446 → all open. #375 FIPS doctor still blocked (go1.26 module directive vs CI pin), #380 hashrate gauges blocked by #432, #271 halves blocked by #417. #371 both halves landed this stretch (mnemonic flake → #497; atomic.Bool → pushed to #447's branch). Docs-only closed #469/#471/#472 remain low-value. No eligible candidate left un-delivered.
+
 ## Session 311 — drop SubmitSharesError frames with unsent sequence numbers (re-delivers closed #404)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesError` was
