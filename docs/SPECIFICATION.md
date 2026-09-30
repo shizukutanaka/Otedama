@@ -30,7 +30,7 @@ otedama <command> [flags]
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
-| `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
+| `service install\|uninstall\|status` | Manage the background service (systemd user unit / launchd agent / Windows Service Control Manager via `sc.exe`). **Correction (session 486):** this table previously said "Task Scheduler" — nothing invokes `schtasks.exe`; the Windows service is an SCM registration. |
 | `doctor` | Run self-diagnostic checks. |
 | `wallet verify` | Verify a written-down recovery phrase against the stored wallet by public fingerprint — reads the phrase from stdin, never decrypts `wallet.dat`. |
 | `wallet change-passphrase` | Re-encrypt `wallet.dat` under a new passphrase; both passphrases come from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE`, never argv. |
@@ -223,8 +223,9 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 ## 7. Known limitations
 
 Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) engine does not yet
-route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
+simulated; (2) Noise NX uses P-256, not secp256k1; (3) **V2** sessions do not yet
+route through the `poolproto` abstraction — V1 sessions do
+(KNOWN_LIMITATIONS §3, resolved session 91); (4) GPU detection is Linux-only;
 (5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
 
 ---
