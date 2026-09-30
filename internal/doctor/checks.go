@@ -25,6 +25,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // DefaultChecks returns the built-in check set for a config.
@@ -305,7 +306,7 @@ func checkPoolReachability(cfg config.Config) Check {
 			if host == "" {
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot parse pool URL %q", url),
+					Detail: fmt.Sprintf("cannot parse pool URL %q", poolproto.StripUserinfo(url)),
 					Fix:    "check the pool URL in config.yaml",
 				}
 			}
@@ -350,7 +351,7 @@ func checkPoolDiversity(cfg config.Config) Check {
 			if n == 1 {
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", cfg.Pools[0].URL),
+					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", poolproto.StripUserinfo(cfg.Pools[0].URL)),
 					Fix:    "add a second pool under 'pools:' in config.yaml; mining stops if this pool goes down",
 				}
 			}
@@ -406,7 +407,7 @@ func checkPoolEndpointDiversity(cfg config.Config) Check {
 				}
 				resolved++
 				for _, ip := range ips {
-					ipToPools[ip] = appendUnique(ipToPools[ip], p.URL)
+					ipToPools[ip] = appendUnique(ipToPools[ip], poolproto.StripUserinfo(p.URL))
 				}
 			}
 			if resolved < 2 {
@@ -469,7 +470,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 			var plaintext []string
 			for _, p := range cfg.Pools {
 				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
+					plaintext = append(plaintext, stripScheme(poolproto.StripUserinfo(p.URL)))
 				}
 			}
 			if len(plaintext) > 0 {
@@ -510,7 +511,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
-							stripScheme(p.URL)),
+							stripScheme(poolproto.StripUserinfo(p.URL))),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
 				}
@@ -654,7 +655,7 @@ func checkPayoutScheme(cfg config.Config) Check {
 			for _, p := range cfg.Pools {
 				host := stripScheme(p.URL)
 				if host == "" {
-					host = p.URL
+					host = poolproto.StripUserinfo(p.URL)
 				}
 				switch p.PayoutScheme {
 				case "fpps":

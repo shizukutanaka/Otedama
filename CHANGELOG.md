@@ -16,6 +16,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
 https→http 降格（改ざん価格の注入）にしかなりえないため。
 
+### Fixed (session 348 — プール通知サニタイズ)
+
+`client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
+ANSI エスケープ introducer を含む）を除去し 256 rune に切り詰める
+ように変更。通知はログ・将来的に TUI に流れるため、エスケープ
+シーケンスによる表示操作やログ偽造を防止。
+### セキュリティ (session 384)
+
+- プール URL の userinfo（`scheme://user:pass@host` 形式の認証情報）がログ・`doctor` 出力・TUI・`config show` に平文で出力されうる経路を遮断。表示境界に `poolproto.StripUserinfo` を適用し、authority 内の認証情報を除去（dial 経路の挙動は不変）。設定検証で userinfo を拒否する変更とは独立した多層防御。
+
+### Fixed (session 368 — v2tls サイレントダウングレード)
+
+`stratum+v2tls://` を処理する poolproto adapter が `useTLS` を無視して
+平文 TCP を張っていた問題を修正（engine のライブ経路は既に正しく
+TLS 化済みだったが、adapter 配線時にサイレント降格となる設計罠を排除）。
+非信頼証明書で検証エラーを確認するテストを追加。
+
+### Security (session 344 — 非正 difficulty の拒否)
+
+`mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に
+拒否するよう修正。従来は無検証で格納され、シェアターゲットが
+「全ハッシュ受理」に縮退して submit フラッドが可能だった
+（平文 V1 上の MitM/悪意プール）。
+
+### Security (session 316 — extranonce2_size の境界化（平文 V1 のメモリ DoS 対策）)
+
+**問題.** `mining.subscribe`/`mining.set_extranonce` の
+`extranonce2_size` はプール制御かつ未検証で `strings.Repeat("00", sz)`
+へ流れていた——平文 V1 の MitM/悪意プールが submit 毎に巨大アロケーション
+を強制できた。closed #384/#398/#411 の未マージ修正を master へ再デリバー。
+
+**修正.** 両入口で [0, 64] に境界化＋Submit で防御的クランプ。
+THREAT_MODEL に脅威記録済み。
+
+### Security (session 342 — サービス定義インジェクション防止)
+
+`--data-dir` 等の値に改行などの制御文字を含む場合、systemd unit
+の `ExecStart=`/`ReadWritePaths=` 行を抜け出して任意ディレクティブ
+（`ProtectHome=false` 等）を注入できた問題を `quoteToken` の
+制御文字クォートで防止。Windows sc.exe も同経路で修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
