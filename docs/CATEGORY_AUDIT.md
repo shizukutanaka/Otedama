@@ -666,3 +666,15 @@ Two more mechanical axes verified by site inspection:
 | M,S | `err == sentinel` direct equality on the check side misses wrapped errors (a `fmt.Errorf("…: %w", sentinel)` passes by the guard) — the wrap-penetration bug class. | ✅ Clean: the only `==` sentinel comparison in the tree is `err == flag.ErrHelp`, which is the flag package's own documented idiom (flag.Parse returns it unwrapped). All other error checks are `err != nil` or `errors.Is`/`errors.As` (post-#526). |
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 599 update — extranonce-chain completeness audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | V1 `en2` rollover: `en2Counter` provides uniqueness only within the 2^(8·sz) space the pool assigns — a long-lived session on a small `extranonce2_size` (e.g. sz=1 → 256 jobs) could repeat a coinbase and draw "duplicate" rejects. | ✅ Bounded-benign: the field IS the nonce space — no client-side construction can extend it; the bound is pool-controlled, sessions cycle en1 on reconnect, and sv2-spec practice is sz≥4. Noted, not fixed. |
+| P | `Submit`'s en2 pad-zero branch is reachable only when extranonces were never negotiated — post-#677 the subscribe boundary requires valid en1 + en2_size>0 or the session fails. | ✅ Benign dead fallback: kept as defensive padding; unreachable through the negotiated path. |
+| P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
+
+All packages build, vet, and test green.
