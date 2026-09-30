@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
 * `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
