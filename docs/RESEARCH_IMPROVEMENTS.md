@@ -950,6 +950,14 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
 
+## Session 383 — SV2 nominal_hashrate seeding
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.
+
+[FIXED] **engine `handshake` declared `nominal_hashrate ≈ 0`** (`internal/engine/run.go`, `setup.go`): the value was summed from `w.Stats().HashRate`, which is always ~0 at handshake time because no job has been hashed yet. Pools use `nominal_hashrate` to seed variable difficulty, so a 0 declaration mis-seeds vardiff for real hardware. Fix: compute a capability-based nominal estimate in `Run` (per-worker sum of `provider.DefaultHashrates` over each worker's device family, via `nominalMiningHashrate`), thread it through `reconnectOpts`/`sessionOpts`, and declare it whenever the live rate is non-positive. On reconnect the live rate wins, reflecting sustained throughput. Tests: `TestHandshake_DeclaresNominalHashrateWhenWorkersCold` (net.Pipe server asserts the declared float) and `TestNominalMiningHashrate`.
+
+[AUDITED — clean] SV2 `DispatchFrame` (messages.go:406-483): every known msg type decodes or errors (error → session drop → reconnect); unknown types become `UnknownMessage` and are ignored; the 16 MiB frame cap is enforced in `ReadFrame` before allocation.
+
 ## Session 374 — config-layer pool URL validation hardening
 
 [AUDITED — clean] `config show`/`config validate` output: passphrases are
