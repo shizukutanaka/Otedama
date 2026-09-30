@@ -18,6 +18,20 @@ ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
 を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
 go.mod と完全整合を確認済み。
 
+### 修正 (session 414)
+
+competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
+ウォレット生成・プール自動選択を「実装済み」風の記述から v4.0 構想/
+ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
+`config.DefaultPoolURL` 単一フォールバック）を明記。
+
+### Docs (session 437 — ADR-011 依存先の上流進展を Erratum 2 として記録)
+
+- `docs/adr/ADR-011`: Erratum 2 追記 — `btcsuite/btcd/btcec/v2@v2.5.0`
+  が `ellswift`（BIP-324 公式ベクタ・`V2Ecdh` 含む）を上流同梱。
+  前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
+  が単一依存で完結する形に収束することを記録。
+
 ### 修正 (session 463)
 
 1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
