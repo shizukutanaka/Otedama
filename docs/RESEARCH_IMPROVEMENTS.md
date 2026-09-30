@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 566 — JSON/YAML decode boundary
+
+- Every `json.Unmarshal` takes a `&`-pointer and checks its error;
+  every `json.Marshal` checks `err`. The only two ignored results
+  are the documented best-effort tolerations in parse.go:164/176
+  ("tolerate non-string" — deliberate lenient parsing for pool
+  quirks), each carrying an inline justification comment.
+- yaml: one `yaml.Unmarshal` site (config-file decode), error
+  checked — the fuzz target for this boundary exists (session 391).
