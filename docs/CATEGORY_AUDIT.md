@@ -74,11 +74,12 @@ finding was re-verified against the code before any change.
   args. Introduced a canonical `serviceArgv() []string` consumed directly by
   launchd (one `<string>` per element), with XML-escaping of values; `serviceArgs`
   (systemd/Windows) now joins it with selective quoting. (tests added.)
-- ⏸ Windows `Status()` returns "unsupported platform" though install/uninstall
-  work on Windows — incomplete. Deferred (needs `sc.exe query` parsing; can't be
-  exercised from the Linux CI).
-- ⏸ Windows `sc.exe binPath=` quoting of values with spaces is fragile —
-  deferred with the Windows-status work.
+- ✅ Windows `Status()` — resolved: `statusWindowsService` now parses
+  `sc.exe query Otedama` (Installed/Running/Details). (Verified session 432.)
+- ✅ Windows `sc.exe binPath=` quoting — resolved by the `serviceArgv`
+  redesign: the canonical argv slice is the single source and each platform
+  emits it in its own quoting discipline (launchd per-element `<string>`,
+  systemd/sc.exe joined with selective quoting). (Verified session 432.)
 
 ### O — Metrics
 - ✅ **HELP text not escaped (Prometheus spec violation).** A help string with a
@@ -146,14 +147,19 @@ and flagged, not changed this session:
   than `n` bytes remain. Malformed input is rejected, not over-read.
 - ❎ Frame `MsgLength` int conversion overflow — safe on the 64-bit platform
   minimum; the existing bounds check guards allocation.
-- ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
-  V2 read loop `continue`s silently — adding a debug log would aid attack
-  triage. Deferred (forward-compat behaviour is intentional).
-- ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
-  suggested a missing field, but the exact SV2 field set must be confirmed
-  against the spec before touching the working round-trip — not changed (the
-  project forbids acting on an unverified spec claim). Tracked for the secp256k1
-  work which revisits the channel messages.
+- ✅ `DispatchFrame` decode errors — re-verified (session 435): the
+  description was stale. A malformed *known* message's decode error reaches
+  the session loop as `poolMsg.err` and is returned fatally
+  (`engine: pool read: %w`, run.go) — the session dies with the error
+  logged and reconnects, which is stricter than the proposed debug log,
+  not silently continued. Only *unknown* message types are tolerated
+  (routed to `Message.Unknown`). No fix needed.
+- ✅ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding — resolved:
+  investigated against the spec; `max_target` (U256) is intentionally not
+  implemented because Otedama accepts the pool-assigned target
+  (`OpenMiningChannelSuccess.Target`, later `SetTarget`), so advertising a
+  preference would be dead configuration. The dead field was removed and the
+  rationale documented on `OpenMiningChannel`. (Verified session 432.)
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active
@@ -539,7 +545,7 @@ code, or requires a product/infra decision before code can be written.**
 |---|---|---|---|
 | I | 🚩 `internal/btccrypto` secp256k1 Verify/PublicKeyFromBytes/SignatureFromBytes are namespace-reserving stubs returning `ErrSchemeNotImplemented`; ADR-006 ("Accepted") describes them as "concrete implementations" — doc contradicts code. Real dependency (`decred/dcrd/dcrec/secp256k1`) not yet in `go.mod` (ADR-011, Accepted-but-pending). | **High** — core Bitcoin signing is unimplemented | KNOWN_LIMITATIONS §5 |
 | C | 🚩 Noise NX not wired into any live connection except `stratum+v2tls://`; default `stratum+v2://` is plaintext. | **High** — funds/privacy adjacent | KNOWN_LIMITATIONS §2 |
-| D | ⏸ `poolproto` package doc and `stratumv1.go` describe DATUM as a present-tense supported protocol ("Otedama can speak... DATUM"); reality: `ProtocolDATUM` is a URL-scheme constant only, no `Dialer` registered, no `internal/poolproto/datum` package exists. Not yet disclosed in KNOWN_LIMITATIONS. | Medium | found session 246, unfixed |
+| D | ✅ `poolproto` doc + `stratumv1.go` — resolved: both now state DATUM "is planned" (ADR-009, Proposed), not present-tense supported; disclosed as KNOWN_LIMITATIONS §14 ("reserved URL scheme, not an implemented protocol"). | — | verified session 432 |
 | V | ⏸ `.github/workflows/deploy.yml` — non-Go npm/Helm pipeline fails on every push/PR; references forbidden/nonexistent `kubernetes/helm/`. | High (false-negative CI signal on every push) | KNOWN_LIMITATIONS §13 |
 | V | ⏸ `.github/workflows/ci-cd.yml` — near-duplicate of `ci.yml`, Go version matrix (1.20/1.21) below `go.mod`'s `go 1.22` minimum, references forbidden `k8s/`. | Medium (likely just delete) | KNOWN_LIMITATIONS §13 |
 | V | ⏸ `.github/workflows/ci.yml` `docker-verify*` jobs reference nonexistent `scripts/`, poll `/health` (real path is `/healthz`), never pass `--bitcoin-address`/`--http-addr` so the container just prints help and exits regardless of path fix; `docker-verify-cgo0-postgres` tests a nonexistent Postgres/database layer; deploy jobs apply forbidden `k8s/*.yaml`. | High (819-line file, multiple broken jobs) | KNOWN_LIMITATIONS §13 |
