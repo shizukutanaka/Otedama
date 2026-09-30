@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 571 — context cancel-function audit
+
+- Six `context.WithTimeout/WithCancel` sites; every cancel is
+  paired: three use immediate `defer cancel()` (checks.go:772,
+  httpserver:138, doctor.go:36) and three store the func into a
+  lifecycle field that is unconditionally invoked — `p.cancel`
+  called at polling.go:87 with nil-reset under lock, `s.ctxCancel`
+  inside `closeOnce.Do` (stratumv1:377), `w.cancel` retrieved by
+  worker Stop (worker.go:158).
+- Zero leaked contexts; no `WithCancel` whose cancel is dropped.
