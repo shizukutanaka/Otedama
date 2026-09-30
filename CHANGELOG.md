@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。
 
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
 ### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
 
 **問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
