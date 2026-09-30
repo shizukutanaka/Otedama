@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 568 — recover/spawn)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
+  code (no panic-swallowing surface); 20 spawn sites match the
+  session-553 leak-coverage map.
+
 ### Documentation & audit (session 569 — any usage)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `any` appears only in V1
