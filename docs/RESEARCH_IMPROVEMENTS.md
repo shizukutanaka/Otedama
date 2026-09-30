@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 462
+
+TUI column-layout bug fixed: three line builders padded fields with
+fmt's %-Ns, which pads by rune count — but the padded values carry ANSI
+colour escapes (~9 bytes), so the padding never reached the intended
+visible column and the following column drifted left by the escape
+length (pool status, device-count field, earnings "est." column).
+Added padToVisibleWidth (pads to visibleLen) and switched the three
+escaped-field sites to it; tests pin the status column position. This
+is distinct from open #497 (which detects the real terminal width) —
+that PR tells the dashboard the width; this fix makes it lay out
+correctly at whatever width it has.
+
 ## Session 318 — honor pool-requested reconnect wait (re-delivers closed #388/#413)
 
 **Finding [OBSERVED — code-verified].** `client.reconnect`/
