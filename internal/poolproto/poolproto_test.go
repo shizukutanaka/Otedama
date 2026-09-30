@@ -508,3 +508,27 @@ func TestSanitizePoolText_StripsC1AndDEL(t *testing.T) {
 		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }
+
+// StripUserinfo must remove credentials from the authority section of a
+// pool URL for display, while leaving well-formed URLs untouched.
+func TestStripUserinfo(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"stratum+tcp://worker:secret@pool.example.com:3333", "stratum+tcp://pool.example.com:3333"},
+		{"stratum+v2://u@pool.example.com:34254", "stratum+v2://pool.example.com:34254"},
+		{"stratum+tcp://pool.example.com:3333", "stratum+tcp://pool.example.com:3333"},
+		{"stratum+tls://pool.example.com", "stratum+tls://pool.example.com"},
+		// No scheme: nothing recognized as userinfo — pass through.
+		{"pool.example.com:3333", "pool.example.com:3333"},
+		{"worker@example.com", "worker@example.com"},
+		// '@' after the first '/' is path content, not authority — leave it.
+		{"stratum+tcp://host:3333/a@b", "stratum+tcp://host:3333/a@b"},
+		// Multiple '@' — LastIndexByte removes everything up to the last one.
+		{"stratum+tcp://a@b@c:3333", "stratum+tcp://c:3333"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := StripUserinfo(c.in); got != c.want {
+			t.Errorf("StripUserinfo(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
