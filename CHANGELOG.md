@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `KnownFields(true)`; the only ignored results are documented
   best-effort tolerations.
 
+### Documentation & audit (session 567 — init surface)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
+  canonical — BIP-39 wordlist integrity panic + plugin-registry
+  registration; no I/O or goroutines at init time.
+
 ### Documentation & audit (session 568 — recover/spawn)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test

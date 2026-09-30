@@ -952,6 +952,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
   error, and treats io.EOF as "use defaults" — the fuzz target for
   this boundary exists (session 391).
 
+## Session 567 — package-init surface
+
+- `func init()` exists in exactly four files:
+  - `lightning/english_wordlist.go` — splits the embedded BIP-39
+    wordlist and **panics at startup** if the count is not 2048 or
+    the SHA-256 doesn't match — fail-fast integrity self-check.
+  - `btccrypto/secp256k1.go`, `stratumv1` and `stratumv2` dialer
+    registration — the canonical `init()` plugin-registry pattern,
+    each paired with compile-time `var _ Interface =` assertions.
+- No init performs I/O, spawns goroutines, or mutates shared state
+  beyond registration — all are idempotent and order-independent.
+
 ## Session 568 — recover() + goroutine-spawn audit
 
 - Zero `recover()` calls in non-test code: no panic-swallowing
