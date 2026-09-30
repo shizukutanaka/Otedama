@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 535 — flake sweep: timing-sensitive packages clean
+
+Repeat-run sweep of the packages whose tests touch timers,
+goroutines, or the network: `go test -count=3 ./internal/engine`
+and `-race -count=2` on `internal/engine`, `internal/stratum`,
+`internal/poolproto` — all green, zero flakes observed on
+go1.27.1/arm64. Combined with the `-race` full-tree run in session
+517, no nondeterminism evidence remains anywhere in the suite.
+No action needed; recorded as an audit verdict.
