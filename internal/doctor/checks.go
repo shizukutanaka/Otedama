@@ -140,7 +140,7 @@ func addressKind(addr string) string {
 	case btccrypto.AddressP2TR:
 		return "P2TR Taproot"
 	default:
-		return "unrecognised type"
+		return "unrecognized type"
 	}
 }
 

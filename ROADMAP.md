@@ -18,7 +18,7 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 - ~~**engine → poolproto 統合**~~ ✅ **部分完了**: V1 (`stratum+tcp://`・`stratum+tls://`) は `poolproto.DialURL` 経由（KNOWN_LIMITATIONS §3 resolved）。残件は V2 — `poolproto/stratumv2` ダイアラは存在するが engine のセッションループへの組込みは未実施（`stratum.NewDecoder` 直結のまま）。
 - **Akash Network API** 実装。現在 simulated quotes を返している `internal/provider/ai_inference.go` を実APIに接続。**注記 (session 251, 検証済み)**: `akash-network/akash-api` は 2026-01-05 に deprecated/archived。後継の `akash-network/chain-sdk`（protobuf 定義、Go 参照クライアントあり）をターゲットとすること。また入札は provider daemon の on-chain "Bidengine" が行うため、REST 一発の bid submission ではなく bid-price policy を on-chain 設定へ渡すモデルになる（ADR-010 A4 参照）。ADR-003 の zero-dependency 方針との兼ね合いで、SDK 全体の vendoring ではなく必要な market/provider protobuf のみ生成する選択肢を評価する。
 - ~~**完全な BIP-39 English wordlist**~~ ✅ **完了 (session 32)**: 公式2048語リストを SHA-256 検証付きで埋め込み済み。Ledger/Trezor/Electrum と互換。
-- **govulncheck + osv-scanner** を CI ゲートに昇格（現在 informational）。
+- **govulncheck + osv-scanner** を CI ゲートに昇格。**訂正 (session 482, 検証済み)**: 「現在 informational」は不正確 — 両者とも CI ワークフローに一切存在しない（`.github/workflows/` に govulncheck/osv-scanner の参照ゼロ）。現状は Makefile `security`/`audit`/`setup` ターゲットのローカル実行のみ（govulncheck、best-effort）。osv-scanner はリポジトリ全体に未導入。
 - **Sigstore keyless signing** を release.yml に統合（cosign v3.x、Rekor v2 互換）。
 
 ### v3.2.0 — Stratum V2 maturity (target: 2026 Q4)
