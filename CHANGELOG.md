@@ -20,6 +20,13 @@ v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
 プール側機能）。stale な `otedama_build_info` backlog 行も訂正
 （session 54 で実装済み）。
 
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
 ### 監査判定 (session 403)
 
 CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
