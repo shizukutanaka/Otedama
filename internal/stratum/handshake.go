@@ -43,7 +43,7 @@ type SetupConnection struct {
 }
 
 // Encode serialises the message into a payload byte slice.
-func (m SetupConnection) Encode() ([]byte, error) {
+func (m *SetupConnection) Encode() ([]byte, error) {
 	b := make([]byte, 0, 32)
 	b = append(b, byte(m.Protocol))
 	b = appendU16LE(b, m.MinVersion)
