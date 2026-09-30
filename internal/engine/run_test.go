@@ -541,6 +541,66 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
+// ----- transitionReject / v1ShareTarget: benign retarget rejects (ESP-Miner #212) -----
+
+func TestV1ShareTarget(t *testing.T) {
+	// difficulty 0 means no mining.set_difficulty has been seen yet — the
+	// pool's current target epoch cannot be established.
+	if _, ok := v1ShareTarget(0); ok {
+		t.Error("v1ShareTarget(0): ok = true, want false")
+	}
+	if _, ok := v1ShareTarget(-1); ok {
+		t.Error("v1ShareTarget(-1): ok = true, want false")
+	}
+	const d = 0.001
+	got, ok := v1ShareTarget(d)
+	if !ok {
+		t.Fatalf("v1ShareTarget(%v): ok = false, want true", d)
+	}
+	want, err := miner.TargetFromDifficulty(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("v1ShareTarget(%v) = %x, want %x", d, got, want)
+	}
+}
+
+func TestTransitionReject(t *testing.T) {
+	oldT, err := miner.TargetFromDifficulty(0.001) // easy epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	newT, err := miner.TargetFromDifficulty(1000) // harder epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldT == newT {
+		t.Fatal("test targets unexpectedly equal")
+	}
+	tests := []struct {
+		name     string
+		category string
+		issued   miner.Hash
+		current  miner.Hash
+		want     bool
+	}{
+		{"retarget while in flight", "difficulty", oldT, newT, true},
+		{"same epoch is a real reject", "difficulty", oldT, oldT, false},
+		{"stale is never a transition", "stale", oldT, newT, false},
+		{"duplicate is never a transition", "duplicate", oldT, newT, false},
+		{"hardware is never a transition", "hardware", oldT, newT, false},
+		{"other is never a transition", "other", oldT, newT, false},
+		{"zero issued target ineligible", "difficulty", miner.Hash{}, newT, false},
+	}
+	for _, tt := range tests {
+		if got := transitionReject(tt.category, tt.issued, tt.current); got != tt.want {
+			t.Errorf("%s: transitionReject(%q, ...) = %v, want %v",
+				tt.name, tt.category, got, tt.want)
+		}
+	}
+}
+
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
 	urls := poolURLs(config.Config{})
 	if len(urls) != 1 {
@@ -769,6 +829,12 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// Canonical SV2 SubmitSharesError codes (sv2-spec MiningProtocol):
+		// "invalid-job-id"/"invalid-channel-id" are stale-class, NOT hardware.
+		{"stale-share", "stale", "stale"},
+		{"invalid-job-id", "stale", "stale"},
+		{"invalid-channel-id", "stale", "stale"},
+		{"difficulty-too-low", "difficulty", "difficulty"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)
@@ -2316,6 +2382,15 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// retargetRejects changes the share policy to the ESP-Miner #212
+	// scenario: the first submitted share gets a SetTarget (new, still
+	// easy epoch) followed by SubmitSharesError("Above target") — a
+	// mid-flight retarget reject; every later share is accepted.
+	//
+	// The flag is atomic: tests arm it after construction while serve()
+	// is already running on its own goroutine, so a plain bool write
+	// would race that read.
+	retargetRejects atomic.Bool
 	// bogusAccept emits a SubmitSharesSuccess with a never-sent
 	// LastSequenceNumber right after activation — a forged accept frame.
 	bogusAccept bool
@@ -2475,6 +2550,39 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
+		if fp.retargetRejects.Load() {
+			if shareCount == 1 {
+				// ESP-Miner #212: retarget mid-flight, then reject the
+				// share that was ground under the superseded target. The
+				// new epoch stays nearly-max so workers keep producing
+				// shares under it.
+				st := stratum.SetTarget{ChannelID: share.ChannelID}
+				for i := range st.MaxTarget {
+					st.MaxTarget[i] = 0xFE
+				}
+				payload, _ = st.Encode()
+				fp.emit(conn, stratum.MsgSetTarget, true, payload)
+
+				resp := stratum.SubmitSharesError{
+					ChannelID:      share.ChannelID,
+					SequenceNumber: share.SequenceNumber,
+					Error:          "Above target",
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			} else {
+				// Every share after the retarget reject is accepted, so
+				// the only reject in the whole session is the benign one.
+				resp := stratum.SubmitSharesSuccess{
+					ChannelID:          share.ChannelID,
+					LastSequenceNumber: share.SequenceNumber,
+					NewSubmitsAccepted: 1,
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+			}
+			continue
+		}
 		switch shareCount {
 		case 1:
 			// First share: acknowledge. Exercises SubmitSharesSuccess handler
@@ -2607,6 +2715,88 @@ waitLoop:
 	}
 }
 
+// TestRunSession_RetargetRejectExcludedFromRejectRate exercises the
+// ESP-Miner #212 benign-reject path end to end over a real SV2 session:
+// the pool retargets the channel while a share is in flight, then rejects
+// it as "Above target". The reject must appear only in the per-reason
+// breakdown as "difficulty-transition" and never in the reject-rate
+// counters, while every later share (ground under the new epoch) is
+// accepted — so sharesRejected stays exactly 0 for the whole session.
+func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	fp.retargetRejects.Store(true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Poll for the deterministic signals: the transition counter becoming
+	// nonzero proves the #212 path ran, and a subsequent accepted share
+	// proves the session kept mining under the new epoch.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	transitionObserved, acceptedObserved := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.rejectReason("difficulty-transition").Value() > 0 {
+				transitionObserved = true
+			}
+			if m.sharesAccepted.Value() > 0 {
+				acceptedObserved = true
+			}
+			if transitionObserved && acceptedObserved {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !transitionObserved {
+		t.Error("difficulty-transition counter stayed 0; mid-flight retarget path not exercised")
+	}
+	if !acceptedObserved {
+		t.Error("sharesAccepted stayed 0; session did not keep mining under the new epoch")
+	}
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — benign retarget rejects must not enter the reject-rate counters", got)
+	}
+	if got := m.rejectReason("difficulty").Value(); got != 0 {
+		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
+	}
+}
+
 // TestRunSession_CurtailmentSilencesJob verifies that when the curtailment
 // gate is raised a received pool job is not forwarded to workers: the session
 // loop logs a debug "ignored (curtailed)" message instead of calling updateWork.
@@ -2691,6 +2881,153 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestRunSession_BatchAcceptCreditsPoolCount verifies the fix that credits
+// SubmitSharesSuccess.NewSubmitsAccepted (the pool-reported batch count)
+// instead of +1 per message: a pool that batch-acknowledges 3 shares in one
+// message must move sharesAccepted by 3.
+func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	poolDone := make(chan struct{})
+	go func() {
+		defer close(poolDone)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+		emit := func(msgType uint8, isChannel bool, payload []byte) {
+			f, err := stratum.WrapMessage(msgType, isChannel, payload)
+			if err != nil {
+				return
+			}
+			data, err := stratum.EncodeFrame(f)
+			if err != nil {
+				return
+			}
+			conn.Write(data) //nolint:errcheck
+		}
+
+		if _, err = dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		emit(stratum.MsgSetupConnectionSuccess, false, payload)
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+		if err != nil {
+			return
+		}
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range omcSucc.Target {
+			omcSucc.Target[i] = 0xFF
+		}
+		payload, _ = omcSucc.Encode()
+		emit(stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+		payload, _ = job.Encode()
+		emit(stratum.MsgNewMiningJob, true, payload)
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		payload, _ = prev.Encode()
+		emit(stratum.MsgSetNewPrevHash, true, payload)
+
+		// Third submit: batch-acknowledge all THREE shares in one message
+		// — the counter must credit 3 even though only one ack arrives.
+		// Keep reading afterwards: closing the conn right after the ack
+		// races the client's delivery of that frame.
+		acked := false
+		submits := 0
+		for {
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+			f, err = dec.ReadFrame()
+			if err != nil {
+				return
+			}
+			if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+				continue
+			}
+			share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+			if err != nil || acked {
+				continue
+			}
+			if submits++; submits < 3 {
+				continue
+			}
+			acked = true
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 3,
+			}
+			payload, _ = resp.Encode()
+			emit(stratum.MsgSubmitSharesSuccess, true, payload)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  "stratum+v2://" + addr,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			if v := m.sharesAccepted.Value(); v >= 3 {
+				cancel()
+				<-runDone
+				if v != 3 {
+					t.Fatalf("sharesAccepted = %v, want exactly 3 (one batch-ack of 3)", v)
+				}
+				return
+			}
+		case <-deadline:
+			cancel()
+			<-runDone
+			t.Fatalf("timed out; sharesAccepted=%v sharesSubmitted=%v",
+				m.sharesAccepted.Value(), m.sharesSubmitted.Value())
+		}
 	}
 }
 
@@ -2878,7 +3215,7 @@ func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
 
 	dec := stratum.NewDecoder(client)
 	start := time.Now()
-	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err == nil {
 		t.Fatal("handshake should fail against a silent peer")
 	}
@@ -2910,7 +3247,7 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(client)
-	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}

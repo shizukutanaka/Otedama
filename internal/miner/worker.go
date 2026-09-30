@@ -42,6 +42,11 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the share target the hash was produced under, copied from
+	// the Work active at issue time. The engine compares it against the
+	// pool's current target to distinguish a mid-flight retarget reject
+	// (ESP-Miner #212) from a genuine bad share.
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -227,6 +232,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		localWork    *Work
 		localWorkVer uint64
 		nonce        = threadID
+		// ntimeRoll counts how many times this thread has exhausted the
+		// nonce space for localWork and rolled the timestamp forward.
+		// Without a roll the wrap would re-hash identical headers —
+		// duplicate shares the pool rejects — for the rest of the job.
+		ntimeRoll uint32
 	)
 
 	for {
@@ -242,6 +252,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			localWork = w.work
 			localWorkVer = w.workVer
 			nonce = threadID // restart nonce from thread offset on new job
+			ntimeRoll = 0
 		}
 		w.mu.Unlock()
 
@@ -257,6 +268,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		h.Time += ntimeRoll
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
@@ -270,6 +282,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					NTime:      h.Time,
 					Version:    h.Version,
 					Hash:       hash,
+					Target:     localWork.Target,
 					DeviceID:   w.cfg.DeviceID,
 					ExtraNonce: localWork.ExtraNonce,
 				}
@@ -286,7 +299,16 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
+			prev := nonce
 			nonce += w.cfg.NonceStep
+			if nonce < prev {
+				// Nonce space wrapped: roll ntime forward so the next
+				// sweep hashes distinct headers (standard ntime roll —
+				// pools accept forward-rolled ntime within the job's
+				// validity window).
+				ntimeRoll++
+				h.Time = localWork.Header.Time + ntimeRoll
+			}
 		}
 	}
 }

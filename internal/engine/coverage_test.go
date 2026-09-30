@@ -735,7 +735,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -755,7 +755,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -779,7 +779,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -803,7 +803,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -836,7 +836,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -860,7 +860,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -885,7 +885,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -914,7 +914,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -942,7 +942,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -1445,6 +1445,91 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 
 	if got := m.sharesRejected.Value(); got != 1 {
 		t.Errorf("sharesRejected = %d, want 1", got)
+	}
+}
+
+func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
+	// ESP-Miner #212 over V1: the pool raises difficulty while the share
+	// is in flight, then rejects it as "Above target". The reject is a
+	// retarget artifact — the share was valid under the difficulty epoch
+	// it was issued in — so it must be counted only in the per-reason
+	// breakdown as "difficulty-transition", never in the reject-rate
+	// counters. Ordering is deterministic: set_difficulty is dispatched
+	// synchronously in the session's read loop, so the new epoch is
+	// applied before the submit response below it unblocks the call.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submitResponseSent := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Epoch A: the share injected below carries target(0.001).
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[0.001]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=4)
+		// The pool moves to epoch B before answering — an above-target
+		// reject for an epoch-A share is the classic #212 benign reject.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1000]}`+"\n")
+		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["21","Above target",null]}`+"\n")
+		close(submitResponseSent)
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	issued, err := miner.TargetFromDifficulty(0.001)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var watcherDone sync.WaitGroup
+	watcherDone.Add(1)
+	go func() {
+		defer watcherDone.Done()
+		select {
+		case <-submitResponseSent:
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		case <-time.After(3 * time.Second):
+			cancel()
+		}
+	}()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 10 * time.Second,
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+	watcherDone.Wait()
+
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — benign retarget rejects must not enter the reject-rate counters", got)
+	}
+	if got := m.rejectReason("difficulty-transition").Value(); got != 1 {
+		t.Errorf("rejectReason(difficulty-transition) = %d, want 1", got)
+	}
+	if got := m.rejectReason("difficulty").Value(); got != 0 {
+		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
 	}
 }
 
@@ -2289,6 +2374,98 @@ func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
 	}
 	if reconnects < 2 {
 		t.Fatalf("expected >=2 reconnect logs in window, got %d: %v", reconnects, logs)
+	}
+}
+
+// ============================================================================
+// handshake — nominal_hashrate declaration (session 383)
+// ============================================================================
+
+// handshakeCaptureNominal drives the server side of an SV2 handshake over
+// net.Pipe and returns the NominalHashrate the client declared in
+// OpenMiningChannel.
+func handshakeCaptureNominal(t *testing.T, serverConn net.Conn) <-chan float32 {
+	t.Helper()
+	got := make(chan float32, 1)
+	go func() {
+		defer serverConn.Close()
+		dec := stratum.NewDecoder(serverConn)
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		scs := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := scs.Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		if _, err := serverConn.Write(encoded); err != nil {
+			return
+		}
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		msg, err := stratum.DispatchFrame(f)
+		if err != nil || msg.OpenMiningChannel == nil {
+			return
+		}
+		got <- msg.OpenMiningChannel.NominalHashrate
+
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		payload, _ = omcs.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		serverConn.Write(encoded) //nolint:errcheck
+	}()
+	return got
+}
+
+// TestHandshake_DeclaresNominalHashrateWhenWorkersCold: on a fresh session
+// every worker reports ~0 H/s (nothing hashed yet), so OpenMiningChannel
+// must declare the capability-derived nominal estimate instead of 0 — pools
+// seed vardiff from it.
+func TestHandshake_DeclaresNominalHashrateWhenWorkersCold(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	got := handshakeCaptureNominal(t, serverConn)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"}) // never started: HashRate == 0
+
+	dec := stratum.NewDecoder(clientConn)
+	chanID, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 1 {
+		t.Errorf("channel id = %d, want 1", chanID)
+	}
+	select {
+	case declared := <-got:
+		if declared != float32(10e6) {
+			t.Errorf("nominal_hashrate = %v, want %v (capability estimate, not live 0)", declared, 10e6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never received OpenMiningChannel")
+	}
+}
+
+// TestNominalMiningHashrate: per-worker capability lookup — SHA256d-capable
+// devices' families map to the default estimates; unknown families → 0.
+func TestNominalMiningHashrate(t *testing.T) {
+	devices := []hal.Device{
+		&cpuDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+		&cpuDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{SHA256d: false, GeneralCompute: true}},
+	}
+	wCPU := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	wGhost := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "no-such-device"})
+
+	got := nominalMiningHashrate(devices, []*miner.Worker{wCPU, wGhost})
+	if want := provider.DefaultHashrates[hal.FamilyCPU]; got != want {
+		t.Errorf("nominalMiningHashrate = %v, want %v (only cpu-0; ghost device contributes 0)", got, want)
+	}
+	if got := nominalMiningHashrate(devices, nil); got != 0 {
+		t.Errorf("nominalMiningHashrate(no workers) = %v, want 0", got)
 	}
 }
 
