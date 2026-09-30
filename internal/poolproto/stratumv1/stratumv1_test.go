@@ -1953,3 +1953,36 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeNotice_StripsControlChars(t *testing.T) {
+	// ANSI escape sequence + newline that would forge a log line.
+	got := sanitizeNotice("maintenance\x1b[2J\x1b[H\nforged log line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "maintenance") || !strings.Contains(got, "forged log line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizeNotice_PreservesUnicode(t *testing.T) {
+	got := sanitizeNotice("メンテナンス 10分後")
+	if got != "メンテナンス 10分後" {
+		t.Errorf("unicode text mangled: %q", got)
+	}
+}
+
+func TestSanitizeNotice_TruncatesLongNotices(t *testing.T) {
+	long := strings.Repeat("x", maxNoticeRunes*2)
+	got := sanitizeNotice(long)
+	if len([]rune(got)) != maxNoticeRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxNoticeRunes)
+	}
+}
+
+func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
+	got := sanitizeNotice("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
+	}
+}

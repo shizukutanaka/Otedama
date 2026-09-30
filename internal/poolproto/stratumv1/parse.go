@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -139,6 +140,30 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	return en1, sz, true
 }
 
+// maxNoticeRunes caps the length of a pool-sent notice. Notices end up
+// in the log (and potentially the TUI), so an unbounded pool string is a
+// log-flooding vector.
+const maxNoticeRunes = 256
+
+// sanitizeNotice removes control characters (C0, DEL, C1 — including
+// ANSI escape introducers) and truncates to maxNoticeRunes runes. The
+// text is pool-controlled; consumers write it to terminals and log
+// files, where escape sequences could manipulate the display or forge
+// log lines.
+func sanitizeNotice(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxNoticeRunes {
+		clean = string(runes[:maxNoticeRunes])
+	}
+	return clean
+}
+
 // parseShowMessage decodes a client.show_message notification.
 // Params format: ["human-readable message text"].
 // Returns the message and true on success; empty string and false on any parse error.
@@ -147,7 +172,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return "", false
 	}
-	return p[0], true
+	return sanitizeNotice(p[0]), true
 }
 
 // reconnectDirective is a parsed client.reconnect notification.

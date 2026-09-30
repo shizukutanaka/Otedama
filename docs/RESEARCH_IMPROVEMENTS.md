@@ -940,6 +940,23 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 348 — pool-notice sanitization + config-write audit
+
+**Terminal-escape injection via client.show_message [FIXED].**
+`parseShowMessage` forwarded the pool's string verbatim into
+`noticeCh`; every downstream consumer (the log wiring on PR #448, or a
+future TUI notice line) would write raw text to a terminal or log file.
+A hostile pool could embed ANSI escape sequences (screen clear, cursor
+moves, OSC window-title / hyperlink payloads) or newlines that forge
+log entries. `sanitizeNotice` now strips all Unicode control characters
+(C0, DEL, C1) and truncates to 256 runes at parse time, so every
+consumer gets safe text regardless of how it renders.
+
+**Config-file write path [AUDITED — clean].** `otedama` never writes
+the YAML config — `loadConfigFile` is read-only with
+`KnownFields(true)` (rejects typo'd keys), so there is no
+config-write permission path to audit. The wallet passphrase flag
+documented in `--help` is consumed in-process only.
 ## Session 384 — pool-URL credential redaction
 
 [FIXED] **Userinfo in pool URLs could leak into logs and status surfaces** (`internal/poolproto/poolproto.go` + call sites): a `scheme://user:pass@host` pool URL was echoed verbatim by the connect log (`connecting to %s`), the bad-URL error, the V1 connected log, the TUI `PoolURL` field, `config show` (text + JSON), and four doctor `Detail` strings. `poolproto.StripUserinfo` removes the authority-section userinfo at every display boundary (dial-path parsing unchanged — `StripScheme` semantics untouched). Malformed URLs pass through so redaction cannot corrupt diagnostics. Defense-in-depth regardless of upstream userinfo validation. Test: `TestStripUserinfo` (9 cases incl. path-`@`, multi-`@`, no-scheme edge cases).

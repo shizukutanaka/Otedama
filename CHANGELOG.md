@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 348 — プール通知サニタイズ)
+
+`client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
+ANSI エスケープ introducer を含む）を除去し 256 rune に切り詰める
+ように変更。通知はログ・将来的に TUI に流れるため、エスケープ
+シーケンスによる表示操作やログ偽造を防止。
 ### セキュリティ (session 384)
 
 - プール URL の userinfo（`scheme://user:pass@host` 形式の認証情報）がログ・`doctor` 出力・TUI・`config show` に平文で出力されうる経路を遮断。表示境界に `poolproto.StripUserinfo` を適用し、authority 内の認証情報を除去（dial 経路の挙動は不変）。設定検証で userinfo を拒否する変更とは独立した多層防御。
