@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 335 — retarget 起因の良性 reject を分類)
+
+プールが難易度/ターゲットを変更した直後、旧ターゲットで掘られて
+いた in-flight share が "above target" reject として本物の不良
+share 扱いされ reject 率を水増ししていた問題を修正（ESP-Miner
+#212 系）。発行時ターゲットと現在ターゲットを比較する
+`transitionReject` で difficulty 系 reject のみ良性
+`difficulty-transition` として分離 — V1/V2 両対応。#367 由来の
+再デリバー。
+
 ### Fixed (session 361 — config 非有限値拒否)
 
 5 つの float 設定項目で NaN/±Inf がバリデーションを通過する
