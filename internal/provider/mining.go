@@ -38,6 +38,12 @@ type MiningProvider struct {
 	// has not yet produced a hashrate measurement (e.g. first few seconds).
 	// Setting this field after Start is called is not safe.
 	HashrateFunc func(deviceID string) float64
+
+	// NetworkHashrateFunc, when set, returns the live network-hashrate
+	// estimate (H/s) and a freshness flag (rates.HashrateFetcher).
+	// publish() prefers a fresh reading over the compile-time constant;
+	// nil or stale readings fall back to it (KNOWN_LIMITATIONS §7).
+	NetworkHashrateFunc func() (hps float64, fresh bool)
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
@@ -69,18 +75,24 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 //   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
 func (p *MiningProvider) publish(ctx context.Context) {
-	rate, fresh := p.rates.BTCUSDRate()
-	if rate <= 0 {
-		rate = 95000 // fallback estimate
-	}
+	// Mining yield is BTC-native (sats/sec from hashrate share × block
+	// reward) — the USD rate itself is unused; only its freshness feeds
+	// the quote's confidence.
+	_, fresh := p.rates.BTCUSDRate()
 	confidence := 0.7
 	if fresh {
 		confidence = 0.95
 	}
 
-	// Network hashrate estimate: ~1000 EH/s in 2026. This is a compile-time
-	// constant, not yet driven by config or a live difficulty feed.
-	const networkHashrate = 1e21 // H/s
+	// Network hashrate: prefer the live feed (rates.HashrateFetcher via
+	// NetworkHashrateFunc); fall back to the compile-time ~1000 EH/s
+	// constant when the feed is unwired or stale.
+	networkHashrate := 1e21 // H/s
+	if p.NetworkHashrateFunc != nil {
+		if h, fresh := p.NetworkHashrateFunc(); fresh && h > 0 {
+			networkHashrate = h
+		}
+	}
 	const blockRewardBTC = 3.125
 	const blockTimeSec = 600.0
 
@@ -126,8 +138,7 @@ func (p *MiningProvider) publish(ctx context.Context) {
 				Confidence:       confidence,
 			},
 		}
-		_ = rate // used for future USD display
-		if !p.sendQuote(ctx, q) {
+		if !p.sendQuote(ctx, &q) {
 			return
 		}
 	}

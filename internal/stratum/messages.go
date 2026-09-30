@@ -494,7 +494,7 @@ func DispatchFrame(f Frame) (Message, error) {
 // ------------------------------------------------------------------
 
 // ValidateSetupConnection checks semantic constraints beyond byte format.
-func ValidateSetupConnection(m SetupConnection) error {
+func ValidateSetupConnection(m *SetupConnection) error {
 	if m.Protocol != MiningProtocol {
 		return fmt.Errorf("stratum: unsupported protocol %d (only MiningProtocol=0 supported)", m.Protocol)
 	}

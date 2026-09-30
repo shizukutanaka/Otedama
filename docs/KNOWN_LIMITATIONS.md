@@ -264,9 +264,13 @@ branch of the static estimate is therefore unreachable today and exists only
 as forward-compatible scaffolding for a future GPU SHA256d driver.
 
 The remaining static input — the compile-time network-hashrate constant (≈ 1000 EH/s) —
-is addressed by a live difficulty feed, which remains a v3.1.0 item. That does not affect
-the relative arbitration accuracy on a given machine; it affects only the absolute
-satoshi/second numbers (which move primarily with BTC price anyway).
+was addressed by a live feed in session 266: `internal/rates.HashrateFetcher` polls
+mempool.space (`/api/v1/mining/hashrate/1d`, `currentHashrate`) and blockchain.info
+(`/q/hashrate`, GH/s), takes the median of in-band readings, and feeds
+`MiningProvider.NetworkHashrateFunc`. A fresh reading replaces the constant in the yield
+estimate; stale/absent readings fall back to it, so the compile-time constant remains as
+the offline path. That still leaves absolute satoshi/second numbers approximate — they
+move primarily with BTC price and pool-side difficulty anyway.
 
 ---
 
@@ -647,7 +651,23 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 385)
+
+**Resolution:** `internal/tui.Dashboard` now queries the kernel for the
+live terminal width on every render tick — `TIOCGWINSZ` via
+`golang.org/x/sys/unix` on Unix builds and `GetConsoleScreenBufferInfo`
+via `golang.org/x/sys/windows` on Windows — when the output writer is a
+real terminal file (`os.Stdout` in production). A failed or non-terminal
+query leaves the previous width standing (80 by default), so pipes,
+redirects, and test buffers behave exactly as before; `SetWidth` still
+pins a fixed width and disables detection for tests and embedders.
+`golang.org/x/sys` was promoted from indirect to direct dependency for
+this — BSD-licensed, Go-team maintained, already in the module graph
+via `golang.org/x/crypto`, so no new module entered the tree. The
+per-tick query also picks up terminal resizes mid-session without a
+SIGWINCH handler.
+
+<details><summary>Original entry</summary>
 
 **What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
 real terminal width, but no production call site ever calls it —
@@ -670,68 +690,34 @@ both lines now size their variable-length fields from the actual
 `cols` value, so this specific failure mode is closed regardless of
 whether width detection itself is ever wired in.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
-
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+</details>
 
 ---
 
-## 16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI
+## ~~16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI~~ ✅ RESOLVED (session 418)
 
-**What:** The CLI dispatches only `run`, `version`, `config`, `service`,
-`doctor`, `completion`, and `help` (`cmd/otedama/main.go`). There is no
-`otedama wallet ...` command. Two consequences:
+**Resolution:** `otedama wallet` is a new subcommand with two verbs
+(`cmd/otedama/wallet.go`, dispatched from `cmd/otedama/main.go`):
 
-- **No way to verify a backup.** After writing down the 24-word recovery
-  phrase printed on first run (implemented session 253 — see
-  `engine.printRecoveryPhrase`), a user has no way to check that what
-  they wrote down is correct. The standard practice for a non-custodial
-  wallet is a verify step — re-enter the phrase, derive the seed, and
-  confirm the fingerprint matches the stored wallet — precisely because
-  a transcription error is silent and is only discovered during a
-  recovery attempt, when it is too late. `doctor` reports whether
-  `wallet.dat` exists and prints its fingerprint, but never accepts a
-  mnemonic to compare against.
-- **`ChangePassphrase` is implemented but unreachable.**
-  `lightning.WalletManager.ChangePassphrase` (internal/lightning/wallet.go)
-  correctly verifies the old passphrase and atomically re-encrypts the
-  seed, and is covered by tests — but no production code calls it, so a
-  user whose passphrase may have been exposed cannot rotate it without
-  writing their own Go program against the internal package.
+- `otedama wallet verify` reads a recovery phrase from **stdin** (never
+  argv — process lists leak it), validates the BIP-39 checksum, derives the
+  seed, and compares its public fingerprint with the stored
+  `wallet.fingerprint` — `wallet.dat` is never decrypted, so no passphrase
+  is needed. When the fingerprint file is absent it falls back to unlocking
+  `wallet.dat` with `OTEDAMA_WALLET_PASSPHRASE`. A mnemonic-phrase wallet
+  created with a "25th word" is verified by setting
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`.
+- `otedama wallet change-passphrase` wires the previously unreachable,
+  already-tested `WalletManager.ChangePassphrase` to the CLI. Both
+  passphrases come from environment variables
+  (`OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE`), matching
+  the documented argv-leak guidance.
 
-**Impact:** A user can follow every documented instruction and still hold
-an unusable backup, discovering it only when their disk has already
-failed. Because BIP-39 derivation is one-way, Otedama cannot re-derive
-the phrase to check it later — verification must happen while the user
-still has both the phrase and the working wallet. This is a gap in the
-*usability* of the non-custodial guarantee rather than in its
-cryptography: the seed never leaves the device (that part holds), but
-the user's ability to prove they can recover it is missing.
-
-**Workaround:** Immediately after first run, confirm that the printed
-fingerprint matches what `otedama doctor` reports, and store the phrase
-and a copy of `wallet.dat` separately. There is no in-product way to
-confirm the transcription itself. To rotate a passphrase, create a new
-wallet in a fresh `--data-dir` and mine to it instead.
-
-**Target:** No committed target. Adding a subcommand touches the CLI
-architecture map in CLAUDE.md, so it needs a maintainer decision rather
-than a mechanical fix. A minimal `otedama wallet verify` (read a mnemonic
-from stdin — never argv, which leaks via process lists — derive the seed,
-compare fingerprints, print match/mismatch) and `otedama wallet
-change-passphrase` (wiring the existing, already-tested
-`ChangePassphrase`) would close both halves without new dependencies.
-
----
+Both verbs stat `wallet.dat` before calling `NewWalletManager` (whose
+contract is "create when absent"), so neither can silently mint an empty
+wallet under a mistyped `--data-dir`. New exported helpers
+`lightning.WalletFilePath` / `FingerprintFilePath` expose the on-disk names.
+`internal/lightning` is a funds-adjacent area — CODEOWNERS review applies.
 
 ## How to verify the real vs. simulated boundary yourself
 
