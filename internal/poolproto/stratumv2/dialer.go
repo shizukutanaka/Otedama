@@ -191,6 +191,13 @@ func (c *connection) Close() error {
 
 // ----- session -----
 
+// pendingCap bounds the read loop's outstanding-job map: a hostile or buggy
+// pool flooding distinct job IDs without rotating the tip would otherwise
+// grow memory without limit. 64 is far above legitimate churn; eviction is
+// FIFO so the newest jobs — most likely named by the next SetNewPrevHash —
+// survive.
+const pendingCap = 64
+
 type session struct {
 	conn   *connection
 	dec    *stratum.Decoder
@@ -218,6 +225,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
+	var pendingOrder []uint32 // insertion order for pendingCap FIFO eviction
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
@@ -255,7 +263,14 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
+			if _, ok := pending[j.JobID]; !ok {
+				pendingOrder = append(pendingOrder, j.JobID)
+			}
 			pending[j.JobID] = j
+			for len(pendingOrder) > pendingCap {
+				delete(pending, pendingOrder[0])
+				pendingOrder = pendingOrder[1:]
+			}
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -270,8 +285,10 @@ func (s *session) readLoop(ctx context.Context) {
 			havePrev = true
 			named := pending[p.JobID]
 			pending = map[uint32]*stratum.NewMiningJob{}
+			pendingOrder = pendingOrder[:0]
 			if named != nil {
 				pending[p.JobID] = named
+				pendingOrder = append(pendingOrder, p.JobID)
 				ntime := p.MinNtime
 				if named.HasMinNtime && named.MinNtime > ntime {
 					ntime = named.MinNtime
