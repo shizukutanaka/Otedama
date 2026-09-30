@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 333 — wallet.dat サイズ上限)
+
+`UnmarshalEncryptedSeed` が入力長を無制限に `make([]byte, len-29)`
+で確保していたため、破損・異常な wallet.dat が巨大アロケーションを
+強制できた問題を修正。v1 ペイロードは厳密 80 バイトのため、将来
+バージョン用の余裕を持たせた 4 KiB 上限を追加。
+
 ### Fixed (session 305 — V1 シェアがコインベース/マークル再構築なしで検証不能だった問題を修正)
 
 **問題.** V1 ジョブのコインベース（coinb1‖en1‖en2‖coinb2）とマークル
