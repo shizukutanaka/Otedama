@@ -429,12 +429,17 @@ func (m *Manager) serviceArgs() string {
 
 // quoteToken wraps s in Go-style double quotes (which both systemd ExecStart=
 // and Windows sc.exe binPath= accept, with C-style escapes) when it contains
-// whitespace or a quote; otherwise it returns s unchanged. This is what lets a
-// binary path or flag value containing a space — e.g. an executable under
-// "/home/John Doe/bin/otedama" — survive as a single argument instead of being
-// split by the service manager's own command-line parser.
+// whitespace, a quote, or a control character; otherwise it returns s
+// unchanged. This is what lets a binary path or flag value containing a space
+// — e.g. an executable under "/home/John Doe/bin/otedama" — survive as a
+// single argument instead of being split by the service manager's own
+// command-line parser. Control characters matter most: a value containing a
+// literal newline would otherwise land in the unit file raw, breaking out of
+// the ExecStart= line into a new directive (e.g. injecting a weaker
+// ProtectHome=); %q escapes it into a quoted token instead.
 func quoteToken(s string) string {
-	if strings.ContainsAny(s, " \t\"") {
+	if strings.ContainsAny(s, " \t\"") ||
+		strings.IndexFunc(s, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
 		return fmt.Sprintf("%q", s)
 	}
 	return s
