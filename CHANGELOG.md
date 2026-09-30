@@ -16,6 +16,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
 * `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
 
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
+### Documentation & audit (session 527 — end-to-end binary smoke)
+
+- First real-binary smoke: `version`, `completion`, `doctor` (17
+  checks, documented 0/1/2 exit contract), `config show`, and `config
+  validate` (exit 78 per §2.1) all verified against their documented
+  contracts on the go1.27.1-built artifact.
+
+### Documentation & audit (session 528 — non-custodial E2E)
+
+- Verified the core non-custodial path on the real binary: first run
+  creates the wallet and shows the 24-word phrase exactly once
+  (`wallet.dat` at 0600); second run loads the same fingerprint and
+  never re-shows the phrase; connect loop backs off gracefully and
+  shuts down clean on SIGTERM.
+
 ### Documentation & audit (session 529 — benchmarks re-verified)
 
 - `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
