@@ -21,6 +21,13 @@ AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安
 Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
 報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
 
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
 ### 監査判定 (session 356 — hal/V1 ディスパッチ)
 
 GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
