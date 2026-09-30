@@ -16,6 +16,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    していた問題を修正 — 既に実装済みの3項目（reject 分類+メトリクス、
    submit レイテンシ、poolproto 配線）を残件2項目と区別して状態注記。
 
+### 修正 (session 409)
+
+SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
+チェックサムは config 読み込み時に実際に検証される（旧記述は
+「未検証」と誤記）、`tls_ca_file` は `stratum+v2tls://` にも適用。
+`validateBitcoinAddress`・`TLSCAFile` の古い godoc も同様に訂正。
+
+### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
+
+**問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
+超える場合、reject も切断もないまま収益が実質ゼロになる——オペレータに
+気づかれない飢餓。closed #394 の未マージ修正を master へ再デリバー。
+
+**修正.** V1 統計ティックで `estimatedShareIntervalSeconds` > 3600 のとき
+エピソードごと一度だけ warn を出し、間隔が回復したら再アームする。
+
+### 修正 (session 377)
+
+- `make fuzz` が機能していなかった問題を修正 — `go list` の出力はインポートパスであり `{}/*.go` グロブがファイルシステム上のディレクトリに一致せずループが常に空回りしていた。ファイルシステムから fuzz テストを発見し、ターゲット毎に `-fuzz=^Name$` で30秒実行するよう変更（1パッケージ複数 fuzz 関数での "matches more than one" 失敗も解消）。
+
 ### 修正 (session 426 — .gitignore の v2 遺構除去)
 
 - 存在しないツリーを対象とする8セクションを削除: `web/`（Node.js 系 —
