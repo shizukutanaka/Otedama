@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 579 — clock-abstraction audit
+
+- `internal/clock.Clock` is injected at engine/run.go:73 and used
+  for the one decision needing determinism (`opts.Clock.Now()` at
+  :151 — the startTime/uptime base). The other `time.Now()` sites
+  are all observation points feeding the metrics accumulators —
+  and each accumulator API already takes `now` as a parameter
+  (`observe(totalHashes, now)`, `observe(now, rate, active)`), so
+  tests inject fake times directly at the parameter boundary.
+  `clock.go`'s `time.Now()` calls are the real-clock impl itself.
+- Verdict: the mixed pattern is intentional and testable — no
+  timing decision hides behind a raw `time.Now()`.
