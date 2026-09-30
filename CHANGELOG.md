@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 389)
+
+- `internal/miner` に `FuzzTargetFromNBits`/`FuzzTargetFromDifficulty`/`FuzzTargetFromDifficultyMonotonic` を追加 — プール供給の nBits/難易度変換の不変条件（受理値は正ターゲット・再エンコード往復・ゼロハッシュ恒真・単調性、不正値はエラー）をランダム検証。
+- `internal/config` に `FuzzResolveNumericEnv` を追加 — 数値系 OTEDAMA_* 環境変数の「パース成功時は値適用+env origin、失敗時は警告1件+値不変」の契約を任意文字列で検証。
+
 ### Fixed (session 482 — ROADMAP.md の陳腐化エントリ4件を実装状況と照合して訂正)
 
 * `engine → poolproto 統合` 項: 「SV1 transport が使えない」という前提は陳腐化 — V1 は `poolproto.DialURL` 経由で動作済み。残ギャップは V2 側の native `stratum.NewDecoder` パスと、engine から未参照の `poolproto/stratumv2` dialer のみと注記。

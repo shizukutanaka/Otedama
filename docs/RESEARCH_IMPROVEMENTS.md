@@ -940,6 +940,12 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 389 — fuzz coverage for target bitmath + numeric env resolution
+
+[FIXED — session 389] **Target-math fuzzers** (`internal/miner/fuzz_test.go`): `TargetFromNBits` and `TargetFromDifficulty` convert pool-supplied wire values into the 256-bit targets shares are compared against — until now covered only by fixed vectors. `FuzzTargetFromNBits` asserts: never panic; accepted inputs produce a positive target; `TargetFromNBits(NBitsFromTarget(t))` reproduces the identical target (value round-trip, since re-encoding may pick a non-canonical nBits); the all-zero hash meets every valid target. `FuzzTargetFromDifficulty` asserts invalid difficulties (NaN/±Inf/≤0) always error and accepted ones produce positive targets. `FuzzTargetFromDifficultyMonotonic` asserts d1<d2 ⟹ target1≥target2 (weak monotonicity under float truncation). ~41M execs total, zero violations.
+
+[FIXED — session 389] **Numeric env-resolution fuzz** (`internal/config/fuzz_test.go`): `FuzzResolveNumericEnv` drives `EnvWarnings` + `ResolveWithOrigins` with arbitrary strings on each `OTEDAMA_*` float key, asserting the documented contract both ways — a parseable value lands on its field bit-exact with `OriginEnv`, while an unparseable non-empty value yields exactly one warning naming the key and leaves the field untouched (no env origin). Covers typo classes the unit tests missed (comma decimals, overflow exponents, "NaN" literals). ~7M execs, zero violations.
+
 ## Session 481
 
 **Ecosystem drift check (SRI 1.11.1, 2026-07-22).** The reference
