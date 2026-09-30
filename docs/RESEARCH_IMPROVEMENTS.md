@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 538 — checkptr sweep: pointer safety clean
+
+`go test -gcflags=all=-d=checkptr ./...` ran the whole suite with
+checkptr instrumentation (unsafe.Pointer arithmetic validation):
+all 24 packages green, zero violations. The tree uses almost no
+`unsafe` (only the syscall-free design), and what little pointer
+manipulation exists in the wire codecs is spec-conformant.
+No action needed; recorded as an audit verdict.
