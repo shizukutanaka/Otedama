@@ -97,7 +97,7 @@ type Gauge struct {
 // Every name in Otedama is a compile-time constant, so an invalid name is a
 // developer error that surfaces immediately in tests.
 func isValidMetricName(name string) bool {
-	if len(name) == 0 {
+	if name == "" {
 		return false
 	}
 	for i, r := range name {
@@ -122,7 +122,7 @@ func isValidMetricName(name string) bool {
 // /metrics response — so one bad label would silently break all metrics, not
 // just its own series.
 func isValidLabelName(name string) bool {
-	if len(name) == 0 {
+	if name == "" {
 		return false
 	}
 	for i, r := range name {
@@ -245,7 +245,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 		// interval. Classic decorate-sort-undecorate.
 		key string
 	}
-	var entries []entry
+	entries := make([]entry, 0, len(r.counters))
 
 	for _, c := range r.counters {
 		entries = append(entries, entry{
