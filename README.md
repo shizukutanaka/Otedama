@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Alpha](https://img.shields.io/badge/Status-Alpha-orange)](CHANGELOG.md)
 
 **遊休計算資源を、非カストディで最大収益化する自律型ソフトウェア層。**
@@ -40,7 +40,7 @@ Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通り�
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
+Go 1.24以上（go.mod の `go 1.22` 宣言に加え、`toolchain go1.24.0` と `godebug tlsmlkem` が実効的に Go ≥1.24 を要求——訂正 session 493）、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 
@@ -51,7 +51,11 @@ cd Otedama
 make build
 
 # または、リリースバイナリをダウンロード
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
+# （訂正 session 493: `install.sh` はリリース資産としてアップロードされていない——
+# release.yml が上げるのは otedama-<os>-<arch>.tar.gz のみなので、
+# releases/latest/download/install.sh は 404 でした。スクリプト自体は
+# GitHub Releases から該当 tar.gz をダウンロードします）
 ```
 
 ### 最小設定での起動 / Running with Minimal Configuration
@@ -80,7 +84,7 @@ otedama <command> [flags]
 | `version` | バージョン情報を表示 / Print version information |
 | `config show` | 有効な設定を表示 / Print the effective configuration |
 | `config validate` | 設定ファイルを検証 / Validate a configuration file |
-| `service install` | バックグラウンドサービスとして登録 / Install as a background service (launchd/systemd/Task Scheduler) |
+| `service install` | バックグラウンドサービスとして登録 / Install as a background service (launchd/systemd/Windows Service Control Manager via `sc.exe`) |
 | `service uninstall` | サービス登録を解除 / Uninstall the background service |
 | `service status` | サービス状態を表示 / Show background service status |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
@@ -99,7 +103,7 @@ otedama doctor
 # 有効な設定を確認 / Inspect effective configuration
 otedama config show
 
-# 常駐サービスとして登録 (Linux: systemd, macOS: launchd, Windows: Task Scheduler)
+# 常駐サービスとして登録 (Linux: systemd, macOS: launchd, Windows: Service Control Manager via sc.exe)
 otedama service install --bitcoin-address bc1q...
 ```
 
@@ -125,9 +129,9 @@ v2ユーザーへの完全な移行ガイドは `docs/MIGRATING-FROM-V2.md` に�
 
 The complete migration guide for v2 users is at `docs/MIGRATING-FROM-V2.md`. It covers a decision framework (should you migrate?), a step-by-step procedure, and a field-by-field configuration diff.
 
-v2.1.9 のコードベースは `legacy-v2` ブランチに保全され、2026年10月までの6ヶ月間は重大セキュリティ修正のみ継続提供します。
+v2.1.9 のコードベースは `legacy-v2` ブランチへの保全が計画されています（**訂正 session 493**: 同ブランチは現時点でリモートに存在しません——以前の記述は保全済みと主張していました）。
 
-The v2.1.9 codebase is preserved on the `legacy-v2` branch and receives security fixes only for six months (until 2026-10-24).
+The v2.1.9 codebase is intended to be preserved on a `legacy-v2` branch (**Correction (session 493):** that branch does not currently exist on the remote — the previous text claimed it was already preserved and receiving security fixes until 2026-10-24).
 
 ## プロジェクトの状態 / Project Status
 
