@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 584 — range-order determinism audit
+
+- Map iteration reaches output only through the two sorted key
+  paths verified in session 561 (`slices.Sort(keys)` at
+  metrics.go:339/:359).
+- All other `range` sites are order-independent: accumulation
+  (rates medians, hash windows), validation (`validateLabelNames`
+  panics on ANY invalid key — map order cannot change the
+  outcome), seed/word loops, and channel drains.
+- Zero map-iteration nondeterminism leaks into output.
