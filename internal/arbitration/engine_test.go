@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -55,6 +56,14 @@ func TestYield_Effective(t *testing.T) {
 		{"zero confidence", Yield{100, 0}, 0},
 		{"negative sats treated as zero", Yield{-50, 1.0}, 0},
 		{"negative confidence treated as zero", Yield{100, -0.5}, 0},
+		// A provider computing 0/0 upstream can hand back NaN; it must
+		// not win the sort or poison TotalYield — collapse to zero yield.
+		{"NaN sats treated as zero", Yield{math.NaN(), 1.0}, 0},
+		{"NaN confidence treated as zero", Yield{100, math.NaN()}, 0},
+		{"+Inf sats treated as zero", Yield{math.Inf(1), 1.0}, 0},
+		{"+Inf confidence treated as zero", Yield{100, math.Inf(1)}, 0},
+		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
+		{"negative sats and confidence treated as zero", Yield{-50, -0.5}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,6 +87,25 @@ func TestDecide_RejectsNegativeHysteresis(t *testing.T) {
 	_, err := Decide(Input{HysteresisMargin: -0.1})
 	if err == nil {
 		t.Fatal("Decide must reject negative HysteresisMargin")
+	}
+}
+
+// Non-finite hysteresis/min-yield values must be rejected: NaN slips past
+// a bare `< 0` check (NaN < 0 is false) and would silently disable
+// hysteresis (NaN threshold is never met); +Inf would freeze the incumbent
+// forever; NaN min-yield silently disables the floor (y < NaN is false).
+func TestDecide_RejectsNonFiniteMargins(t *testing.T) {
+	for name, in := range map[string]Input{
+		"nan-hysteresis":  {HysteresisMargin: math.NaN()},
+		"inf-hysteresis":  {HysteresisMargin: math.Inf(1)},
+		"-inf-hysteresis": {HysteresisMargin: math.Inf(-1)},
+		"nan-minyield":    {MinYieldSatsPerSec: math.NaN()},
+		"inf-minyield":    {MinYieldSatsPerSec: math.Inf(1)},
+		"-inf-minyield":   {MinYieldSatsPerSec: math.Inf(-1)},
+	} {
+		if _, err := Decide(in); err == nil {
+			t.Errorf("%s: Decide must reject non-finite margins", name)
+		}
 	}
 }
 
