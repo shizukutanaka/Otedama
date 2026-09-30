@@ -17,6 +17,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 全てテスト専用/将来向けのエクスポート API 面であり実質デッド
 コードなし——削除対象とせず判定を記録。
 
+### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
+
+- **`internal/engine` audit surface complete.** All six non-test files
+  (run.go, arbitrate.go, metrics.go, stats.go, setup.go, fanin.go) have
+  now been read end-to-end across sessions 509–511: every goroutine
+  spawn site audited for shared-state access; the only findings were the
+  `rejectByReason` map race (fixed session 509, PR #591) and the
+  arbitration-pause flap (fixed session 510, PR #592). `miner.Worker`'s
+  SetWork↔grind path verified race-free (mutex + workVer generation
+  counter); `LatencyTracker`, `HashrateMonitor`, the V1/V2 session-loop
+  state maps, `fanIn`, and `arbitration.Decide`'s full-device assignment
+  coverage all verified correct.
+- **ADR-009 ecosystem update:** recorded the first known production
+  Stratum V2 Job-Declaration block — mainnet block 955,318, mined by
+  DMND for GoMining on June 25–26, 2026 (verified against DMND's
+  announcement and Bitcoin Magazine). Miner-declared templates are now
+  proven in production, strengthening the ADR's "Why now" premise.
+
+### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
+
+- **Core-path audit surface complete.** `internal/arbitration`,
+  `internal/logger`, and `internal/version` read end-to-end, finishing
+  the non-test sweep of the core packages (engine, miner, hal,
+  arbitration, logger, version) started in session 509. Verdicts:
+  arbitration `Decide` is deterministic (sorted device order, duplicate-
+  ID rejection, policy-space hysteresis, full-device assignment
+  coverage); logger's default singleton is race-free via
+  `atomic.Pointer` with nil-safe `IntoContext`/`SetDefault`; version's
+  ldflags layout matches the documented defaults. The only residual
+  class — non-finite arbitration inputs — is already owned by open PRs
+  #437 and #443.
+
+### Documentation & audit (session 514 — provider/daemon read; toolchain current)
+
+- **`internal/provider` + `internal/daemon` read end-to-end.** Verdicts:
+  pollingProvider's double-start guard, Stop ordering (cancel → wait →
+  recreate channel), and drop-oldest sendQuote all correct;
+  AkashProvider honors the publish-zero-don't-go-silent contract;
+  daemon's quoting helpers, `sc.exe query` state parse, and
+  ProtectHome/ReadWritePaths carve-out all verified. The
+  install-but-don't-start semantics of `installWindowsService` is a
+  closed-PR-owned decision (#552) — recorded, not re-delivered.
+  Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
+  2026; 1.26.5–1.26.8 carried security fixes).
+
+### Documentation & audit (session 515 — metrics/clock/tui read)
+
+- **`internal/metrics`, `internal/clock`, `internal/tui` read
+  end-to-end.** Verdicts: metric cross-type collisions panic at
+  registration (one bad name would silently kill the whole scrape);
+  exposition escaping, NaN/±Inf rendering, and deterministic ordering
+  correct; Fake clock's non-monotonic contract documented; Dashboard
+  Start/Stop atomics + WaitGroup ordering close the writer race they
+  describe; `truncateVisible` correctly preserves ANSI state. Two
+  residuals recorded without code change: `metricKey`'s unescaped
+  label-value serialization (needs a `,`/`=` in a device ID — today's
+  producers can't emit one) and a `truncateToBudget`/`shortenURL`
+  duplication candidate for the Issue ledger.
+
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
 ### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
 
 - **`go test -race ./...` green on all 23 packages** (go1.26.8);
