@@ -65,8 +65,20 @@ privileges. No user-space software resists that threat.
 
 **Mitigation:** Stratum V2 Noise NX handshake authenticates the pool
 to the miner via a static public key. `internal/stratum/noise.go`
-implements the handshake. Falling back to V1 is not supported, so
-downgrade attacks are structurally impossible.
+implements the handshake. V1 is also supported (ADR-006): the protocol
+is selected by the URL scheme the operator configures —
+`stratum+v2://` / `stratum+v2tls://` get Noise/PKI authentication,
+while `stratum://` (V1) is plaintext with no MITM protection at all
+and `stratum+tls://` (V1) is protected only by the PKI. An attacker
+cannot downgrade a configured `stratum+v2*` pool — there is no
+auto-negotiation — but nothing stops an operator from configuring a
+plaintext V1 pool; that is a configuration choice, and the residual
+risk below applies.
+
+**Residual risk (V1):** on a `stratum://` pool, an on-path attacker
+can hijack shares and inject jobs with no authentication barrier —
+the classic threat V2 was designed to close. Operators should prefer
+`stratum+v2tls://` or at minimum `stratum+tls://` pools.
 
 **Residual risk:** In v3.0.0-alpha, the Noise DH uses P-256 instead of
 the spec-mandated secp256k1. This does not weaken authentication but
@@ -108,9 +120,12 @@ weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 **Threat:** A malicious pool sends a crafted frame that causes buffer
 overflow, panic, or memory exhaustion.
 
-**Mitigation:** `MaxFrameSize` caps any single frame. The fuzz tests
-`FuzzDecodeHeader` and `FuzzDecoder_ReadFrame` run nightly with
-automatic crasher reporting.
+**Mitigation:** `MaxFrameSize` caps any single frame. Fuzz tests
+cover every untrusted-input parser — V1 wire messages and
+notifications, SV2 frame/header/message/handshake decoders and
+primitives, address validators, target bitmath, env-var parsing,
+config-file decode, arbitration inputs, and BIP-39 restore — via
+`make fuzz` (a scheduled CI fuzz job is not yet wired).
 
 **Residual risk:** Go panic safety provides strong guarantees, but
 a panic in the decode path still terminates the miner (DoS, below).
@@ -144,6 +159,10 @@ periodically — both are operator choices, not code.
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
+**Mitigation:** Only two third-party runtime dependencies:
+`golang.org/x/crypto` and `gopkg.in/yaml.v3` (plus the Go standard
+library). All GitHub Actions pinned by SHA. Dependabot auto-updates
+with review. govulncheck runs in CI. See ADR-003.
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
 `gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
 with review. govulncheck runs in CI. See ADR-003.
@@ -395,6 +414,22 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
+**Mitigation (planned, not yet live):** the signed-release pipeline
+described in `VERIFY.md` (checksums + cosign keyless signatures +
+SBOMs, via `.goreleaser.yaml`) exists as configuration but is not
+wired into `release.yml` — current releases ship plain tarballs. The
+only available verification today is rebuilding from source per
+VERIFY.md. `install.sh` fetches the release asset matching the
+platform name.
+
+**Residual risk:** until signed releases ship, downloaded artifacts
+cannot be cryptographically verified — users with strict supply-chain
+requirements should build from source.
+
+**Residual risk (once live):** the signing key can be stolen.
+GitHub's OIDC-based keyless signing via Sigstore reduces this to
+"compromise of the GitHub Actions runtime," which is actively
+monitored.
 **Mitigation:** Release artifacts ship a `checksums.txt` file that
 `install.sh` verifies with SHA-256 before installing. `install.sh`
 also supports optional cosign `verify-blob` against
@@ -449,7 +484,8 @@ The minimum review interval is once per major version.
 ## References
 
 - ADR-001 — Non-custodial wallet model
-- ADR-002 — Stratum V2 as the exclusive pool protocol
+- ADR-002 — Stratum V2 as the exclusive pool protocol (partially
+  superseded by ADR-006: V1 support shipped)
 - ADR-003 — Zero runtime dependencies
 - `SECURITY.md` — Vulnerability reporting
 - [Stratum V2 specification](https://stratumprotocol.org/)
