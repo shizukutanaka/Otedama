@@ -975,6 +975,34 @@ self-consistent across frames since truncation uses the same count, so
 the residual is at most a one-column flicker on narrow terminals, not
 repaint corruption.
 
+## Session 516 — doctor + config read; full-tree audit complete
+
+**Audit milestone — full coverage.** With `internal/doctor`
+(doctor.go + checks.go) and `internal/config` (config.go) read
+end-to-end this session, every non-test `.go` file in the repository has
+now been read line-by-line across sessions 509–516 (plus the earlier
+CODEOWNERS-area sweeps): engine, miner, hal, arbitration, logger,
+version, provider, daemon, metrics, clock, tui, doctor, config, stratum,
+poolproto (V1+V2), lightning, btccrypto, rates, httpserver, i18n, cmd.
+
+**doctor verdicts.** All 17 checks (matching the architecture map's
+"17 並行ヘルスチェック") verified: concurrent runner preserves curated
+result order by index; exit codes 0/1/2 mirror correctly into JSON;
+clock-skew check drains a bounded 8 KB body so keep-alive reuse cannot
+become an unbounded read; `maskAddress`, charset helpers, tls_ca_file
+scheme-scoping, endpoint-diversity DNS check all sound. Per-pool probing
+remains open-PR-owned (#490).
+
+**config verdicts.** Four-layer resolution and Origins tracking are
+complete and consistent (all 14 fields); `numericEnvVars` is the single
+source the applier and warner share so they cannot drift;
+`DefaultDataDir` platform paths match the doc comment; `Validate`
+aggregates issues in one pass. Two residual items already owned by open
+PRs, recorded not re-delivered: non-finite env values parse as floats
+and pass Validate's `< 0`/`>= 1` guards (open #492 re-delivery), and
+pool-URL validation stops at scheme+non-empty host (open #486's
+host:port/userinfo tightening).
+
 ## Session 517 — test-code audit pass + ecosystem recheck
 
 **Test-suite mechanical audit.** All 33 K lines of `*_test.go` swept:

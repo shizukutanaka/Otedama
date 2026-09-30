@@ -24,6 +24,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   producers can't emit one) and a `truncateToBudget`/`shortenURL`
   duplication candidate for the Issue ledger.
 
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
 ### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
 
 - **`go test -race ./...` green on all 23 packages** (go1.26.8);
