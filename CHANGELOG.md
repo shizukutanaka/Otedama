@@ -17,6 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 全てテスト専用/将来向けのエクスポート API 面であり実質デッド
 コードなし——削除対象とせず判定を記録。
 
+### Docs (session 328 — 残存監査面の判定記録)
+
+`mining.set_version_mask`（BIP320 未実装・無害に drop）、Worker
+Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
+（10s timeout + 64KiB 上限 + 中央値3ソース）、daemon ユニット権限
+（0644/0755 = 正規）、i18n フォールバック（base-tag → English）、
+config 数値パース（warn+skip）、provider quote チャネル（bounded）
+——全て master 上で健全と確認し記録。
+
 ### Docs (session 329 — SRI 1.12.0 暗号整合確認)
 
 SRI 1.12.0 が noise_sv2 から AES-256-GCM を削除し
