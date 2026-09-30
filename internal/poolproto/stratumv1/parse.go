@@ -41,8 +41,9 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		merkleBranchHexs                                                         []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
@@ -50,9 +51,19 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — the session folds
+	// these into the job's MerkleRoot (see completeV1Job). Malformed hex
+	// degrades to empty parts, which completeV1Job treats as "pool-side
+	// merkle" (legacy pools that precompute it).
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[4], &merkleBranchHexs); err != nil {
+		return poolproto.Job{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -77,6 +88,17 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
+	if b, err := hex.DecodeString(coinb1Hex); err == nil {
+		job.Coinb1 = b
+	}
+	if b, err := hex.DecodeString(coinb2Hex); err == nil {
+		job.Coinb2 = b
+	}
+	for _, h := range merkleBranchHexs {
+		if b, err := hex.DecodeString(h); err == nil && len(b) == 32 {
+			job.MerkleBranch = append(job.MerkleBranch, b)
+		}
+	}
 	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
 		job.Version = uint32(v)
 	}
@@ -89,7 +111,8 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
 	}
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	// MerkleRoot is completed by the session (completeV1Job) once the
+	// negotiated extranonce1/2 are folded into the coinbase.
 	return job, nil
 }
 
