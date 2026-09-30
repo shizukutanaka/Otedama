@@ -5,7 +5,6 @@ package stratumv2
 
 import (
 	"context"
-	"errors"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
