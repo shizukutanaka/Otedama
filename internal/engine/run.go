@@ -409,7 +409,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if len(addrs) > 1 {
 			loc += fmt.Sprintf(", address %d/%d", addrIdx+1, len(addrs))
 		}
-		r.log("info", fmt.Sprintf("engine: connecting to %s (%s)", poolURL, loc))
+		r.log("info", fmt.Sprintf("engine: connecting to %s (%s)", poolproto.StripUserinfo(poolURL), loc))
 
 		r.metrics.poolConnectAttempts.Inc()
 		r.metrics.poolActiveIndex.Set(float64(poolIdx))
@@ -634,7 +634,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 	host, err := parseHost(opts.poolURL)
 	if err != nil {
-		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
+		return fmt.Errorf("engine: bad pool URL %q: %w", poolproto.StripUserinfo(opts.poolURL), err)
 	}
 
 	var conn net.Conn
@@ -1020,7 +1020,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
-	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", opts.poolURL))
+	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", poolproto.StripUserinfo(opts.poolURL)))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)
 	}
