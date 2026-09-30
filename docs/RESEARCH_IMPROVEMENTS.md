@@ -940,6 +940,15 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 498 — config.yaml.example の虚偽クレーム訂正 + コメント文言再検証
+
+**Sweep.** `config.yaml.example`（~190行の説明コメント全部）を `internal/config`・`internal/engine`・`internal/i18n` と再照合（field 網羅性は session 465 で clean 確認済み、本ラウンドは「コメントの挙動記述」）。
+
+**発見（1件訂正）。**
+- **「pools が空なら built-in recommended pool list（V2 優先・0% fee）を使用」→ 虚偽**: `config.go` の PoolConfig コメントが明示する通りキュレーション済みリストは**存在せず**、単一 `DefaultPoolURL`（slushpool V2）へのフォールバックのみ — failover したいユーザーは明示列挙が必要と訂正（ドキュメント側が「ある」と言い、コード側が「ない」と書いている典型的二重記述乖離）。
+
+**検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
+
 ## Session 501 — .golangci.yml 非推奨キー移行 + run.go バージョン訂正 + govulncheck clean
 
 **Sweep.** (a) ルート直下の未精読ファイル（.editorconfig・CODEOWNERS・LICENSE 著作権行・NOTICE）→ 全て正確。(b) `golangci-lint config verify` で schema 検証 → 3件の不整合を発見。(c) `govulncheck -mode=source ./...` → **0 reachable vulns**（依存内22件は未到達 — yaml.v3/x/crypto とも import 経路が脆弱コードに触れない）。
