@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * ハードニングチェック「Binary cosign signature verified」→ 署名リリース非実在（#562 で記録済みの release.yml 欠陥）と訂正。
 * 「Dependabot for the Otedama container image tag」→ dependabot docker エコシステムは Dockerfile のベースイメージ pin を更新するのみでデプロイ済みタグは更新しない、と訂正。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
