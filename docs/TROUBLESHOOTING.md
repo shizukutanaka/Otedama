@@ -79,6 +79,11 @@ seed is unrecoverable. This is by design: the seed is encrypted with
 scrypt + AES-GCM, and the passphrase is the only decryption key.
 See `docs/adr/ADR-001-non-custodial-wallet.md` for why.
 
+Related CLI tools: `otedama wallet verify` confirms a written-down
+recovery phrase derives to the stored wallet without decrypting
+`wallet.dat`; `otedama wallet change-passphrase` rotates the passphrase
+once you are able to unlock it. See `docs/API.md#otedama-wallet`.
+
 ---
 
 ## Otedama uses 100% CPU and the system becomes unresponsive
