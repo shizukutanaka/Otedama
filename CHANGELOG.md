@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * 行11「SHA pinning」・行13「cosign 署名済み」→ 両方現状 fails と明記（uses: は全てタグ参照、release.yml は goreleaser 未呼出）。
 * CI gate 節を実態に書換 — 独立した `go vet`/`staticcheck`/`govulncheck`/5-OS ビルド行列は非存在（govet+staticcheck は golangci-lint 内で実行）、nightly ファズ・ベンチマーク比較ジョブも非存在。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
