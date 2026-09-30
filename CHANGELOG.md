@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 342 — サービス定義インジェクション防止)
+
+`--data-dir` 等の値に改行などの制御文字を含む場合、systemd unit
+の `ExecStart=`/`ReadWritePaths=` 行を抜け出して任意ディレクティブ
+（`ProtectHome=false` 等）を注入できた問題を `quoteToken` の
+制御文字クォートで防止。Windows sc.exe も同経路で修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
