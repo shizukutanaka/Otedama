@@ -950,6 +950,86 @@ the handshake forever. Negotiate now wraps all three calls in
 mirroring the V2 `Negotiate` read deadline from session 327. The 30 s
 budget is shared across subscribe+authorize+extranonce.subscribe.
 
+## Session 337 — SV2 channel_id validation + protocol-surface audit
+
+**Foreign-channel frames [FIXED].** The live V2 loop processed
+channel-scoped frames without checking `channel_id` against the
+channel opened in handshake. A confused or hostile pool could mutate
+`jobs`/prevHash/`shareTarget` via frames for a channel Otedama never
+opened. `channelIDOf` extracts the id from the five channel-scoped
+types; mismatches drop with a warn. Non-channel frames pass through.
+**Message surface [AUDITED — clean].** Standard-channel message set is
+complete (SetupConnection*/OpenMiningChannel*/NewMiningJob/
+SetNewPrevHash/SetTarget/SubmitShares*); extended-channel and unknown
+types land in `Message.Unknown` without error. `Decoder.MaxFrameSize`
+bounds every frame at 16 MiB — matching SRI — so a peer announcing a
+max-U24 payload cannot force an oversized allocation. The
+`internal/poolproto/stratumv2` adapter's `channel_id`/pending-map gaps
+are moot: it is not the live V2 path (its own comment + KNOWN_LIMITATIONS
+§3), and pending-map bounding ships separately in #429.
+
+## Session 317 — bound outstanding V2 job maps (re-delivers closed #385/#397/#412)
+
+**Finding [OBSERVED — code-verified].** Two SV2 maps were unbounded: the
+engine's live-loop `jobs` map and the adapter's `pending` future-job set.
+A hostile/compromised pool flooding distinct `NewMiningJob` IDs without
+rotating the tip could grow memory without bound (Noise encrypts the
+wire, so the attacker IS the pool itself).
+
+**Fix [OBSERVED].** `jobsCap`/`pendingCap` = 64 with oldest-first FIFO
+eviction on both stores.
+
+**Tests [OBSERVED].** Engine store-bound test + dialer flood test over a
+real net.Pipe read loop.
+
+## Session 355 — V1 RPC-call wait timeout
+
+**Goroutine/pending leak on a silent pool [FIXED].** `session.call`
+waited on `respCh` or `ctx.Done()` only. A pool that keeps TCP alive
+but stops answering (wedged server, silent failure) left the waiting
+goroutine and its `pending[id]` entry forever — V1 submits run one
+goroutine per share, so the leak compounded at the share rate for the
+session's whole life. `callTimeout = 60s` (var, test-overridable) now
+bounds the wait: on expiry the pending entry is deleted and the caller
+gets a "timed out" error, which the submit goroutine logs and exits.
+
+**Remaining in-flight state [AUDITED — bounded].** `submitTimes`
+(1024-cap oldest-evict) and the `jobsCh`/`noticeCh` buffers (8 each,
+drop-oldest) are bounded on master; the V2 engine `jobs` map remains
+bounded only on open PR #397/#429 — not re-implemented here.
+
+## Session 340 — BIP-39 intermediate-buffer zeroization
+
+**Secret-material wipe [FIXED].** `EntropyToMnemonic` and
+`MnemonicToEntropy` built the mnemonic/entropy through a `bits` slice
+holding the full secret bitstream (one byte per bit) that was left for
+the GC; `MnemonicToSeed` left the mnemonic-derived `password` and raw
+PBKDF2 `seed` buffers likewise. All are wiped via the package's
+existing `zeroBytes` on every return path (defer). Residual: the
+`m.String()` mnemonic string itself and `salt` are Go strings —
+immutable, unzeroable — an accepted language limitation now recorded.
+Touched `internal/lightning` — CODEOWNERS maintainer review applies.
+
+## Session 327 — V2 handshake read deadline (real fix)
+
+**Negotiate reads unbounded [OBSERVED + FIXED].** The dialer's two
+handshake `ReadFrame` calls ran with no deadline and no ctx wiring —
+unlike `sendMsg` (write deadline, s324) and the steady-state read loop
+(unblocked by Close/ctx). A pool that accepts TCP then goes silent hung
+`DialURL` inside the engine's synchronous reconnect loop: no backoff, no
+failover, and shutdown could not cancel it. `handshakeTimeout` = 15 s now
+bounds the phase (cleared on return — steady state stays
+Close/ctx-governed). Test: `TestNegotiate_HandshakeTimeout` (net.Pipe,
+draining-but-silent peer) fails Negotiate in 50 ms.
+
+## Session 509 — V1 reject メトリクスのデータレース修正（実害）
+
+**Sweep.** `internal/engine/metrics.go`（581行・未精読）の排他制御監査: lazy 作成 map 4件全て専用 mutex（`lastRejectByReasonMu`・`sharesFoundPerDeviceMu`・`payoutInfoMu`・`submitTimes` ローカル）保有なのに **`rejectByReason` のみロック欠落**を発見。
+
+**実害**: `runSessionV1` はシェア毎に `go func()` で submit を非同期化し、reject 時に `rejectReason(category)` を呼ぶ → 2件の拒否が同時解決すると map への同時書き込み。さらに stats ループの `updateShareRates` が `m.rejectByReason["stale"]` をロックなしで読む → goroutine 書き込みとの同時 read/write。両経路とも `fatal error: concurrent map read/write`（recover 不可・プロセス強制終了）。Counter/Gauge 自体は atomic/RWMutex で安全 — map へのポインタ格納だけが問題だった。
+
+**対応**: `rejectByReasonMu sync.Mutex` を追加し両アクセスを保護（兄弟の既存パターンと同一形状）。回帰テスト `TestRejectByReasonConcurrent`: 8 goroutine が rejectReason を競合呼出 + 4 goroutine が updateShareRates を競合読取 → mutex 除去で `-race` が DATA RACE を検出することを確認済み（付けると緑）。engine パッケージ全テスト緑。
+
 ## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
 
 **Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
