@@ -709,8 +709,10 @@ type poolMsg struct {
 //
 // Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
 // poolproto.DialURL so the protocol abstraction is load-bearing for V1.
-// The Stratum V2 path uses the existing inline framing code until the
-// V2 poolproto dialer completes Step 3b (docs/KNOWN_LIMITATIONS.md §3).
+// The Stratum V2 path keeps the existing inline framing: the
+// poolproto/stratumv2 dialer exists (KNOWN_LIMITATIONS §3, resolved), but
+// bridging it into the engine's session loop is a separate piece of work
+// still pending.
 func runSession(ctx context.Context, opts sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
 	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
