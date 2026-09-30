@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 544 — runtime integrity)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `checkptr=2` + `invalidptr=1`
+  clean on the raw-byte packages; `go version -m` confirms the
+  release path pins CGO_ENABLED=0 (fully static) per ADR-003.
+
 ### Documentation & audit (session 545 — pprof)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: hot loop confirmed 0-alloc via

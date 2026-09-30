@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 544 — runtime integrity: checkptr=2, invalidptr, binary audit
+
+- `checkptr=2` (stricter: also checks unsafe.Pointer→uintptr
+  conversions) on miner+stratum — green; `GODEBUG=invalidptr=1`
+  on the same — green. With s538's tree-wide checkptr=1, every
+  pointer-safety level now verifies clean.
+- `go version -m` on a local build: dep closure = x/crypto +
+  yaml.v3 only (matches s539). Local builds link CGO
+  (libSystem/CoreFoundation/Security via darwin resolver — default
+  platform behavior), but the shipped path pins `CGO_ENABLED=0`
+  in both .goreleaser.yaml and the Dockerfile, so release artifacts
+  are fully static per ADR-003. Verified, no drift.
+
 ## Session 545 — pprof: hot loop is ~100% FIPS SHA-256
 
 `go test -bench=BenchmarkHashHeader -benchmem -memprofile
