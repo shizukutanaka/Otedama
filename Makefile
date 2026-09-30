@@ -167,21 +167,27 @@ vet: ## Run go vet
 .PHONY: security
 security: ## Run security scanners
 	@echo "Running gosec..."
-	@command -v gosec >/dev/null 2>&1 \
-		&& gosec -severity medium ./... \
-		|| echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@latest')"
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec -severity medium ./...; \
+	else \
+		echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@latest')"; \
+	fi
 	@echo "Running govulncheck..."
-	@command -v govulncheck >/dev/null 2>&1 \
-		&& govulncheck ./... \
-		|| echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"
+	@if command -v govulncheck >/dev/null 2>&1; then \
+		govulncheck ./...; \
+	else \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+	fi
 	@echo "Security scan complete."
 
 .PHONY: licenses
 licenses: ## Check dependency licenses
-	@command -v go-licenses >/dev/null 2>&1 \
-		&& go-licenses check ./... \
-			--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0 \
-		|| echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses@latest')"
+	@if command -v go-licenses >/dev/null 2>&1; then \
+		go-licenses check ./... \
+			--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0; \
+	else \
+		echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses@latest')"; \
+	fi
 
 .PHONY: validate
 validate: fmt vet lint security test coverage ## Run all validation checks
@@ -196,9 +202,11 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	@echo "==> [3/8] go vet ./..."
 	@$(GO) vet ./...
 	@echo "==> [4/8] govulncheck ./..."
-	@command -v govulncheck >/dev/null 2>&1 \
-		&& govulncheck ./... \
-		|| echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"
+	@if command -v govulncheck >/dev/null 2>&1; then \
+		govulncheck ./...; \
+	else \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+	fi
 	@echo "==> [5/8] golangci-lint run"
 	@command -v golangci-lint >/dev/null 2>&1 \
 		&& golangci-lint run \
