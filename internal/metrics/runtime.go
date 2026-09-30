@@ -59,7 +59,7 @@ func RuntimeCollector() CollectFunc {
 				name:   "go_info",
 				help:   "Information about the Go environment.",
 				kind:   "gauge",
-				labels: fmt.Sprintf(`{version="%s"}`, escapeLabel(goVer)),
+				labels: fmt.Sprintf(`{version="%s"}`, escapeLabel(goVer)), //nolint:gocritic // %q Go-escapes; Prometheus label quoting is escapeLabel's job
 				value:  "1",
 			},
 			{
