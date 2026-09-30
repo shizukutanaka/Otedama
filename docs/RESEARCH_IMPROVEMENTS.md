@@ -951,15 +951,15 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 **MIGRATING-FROM-V2.md claims corrected [FIXED].**
 The guide told v2 users "v3 has no V1 fallback" / "v3 is V2-only" /
 "[stratum_v1] — no V1 support" — all false: v3 has full Stratum V1
-support (`internal/poolproto/stratumv1`, `stratum://`+`stratum+tls://`
+support (`internal/poolproto/stratumv1`, `stratum+tcp://`+`stratum+tls://`
 schemes, `v1PoolWorker` in engine). Corrected to describe dual-protocol
 support and the per-pool URL-scheme selection. Also corrected the CI
 boast: "nightly fuzz, cosign signing" — no workflow runs fuzzers (they
 exist + `make fuzz` works, but no scheduled job) and cosign is not
 wired into release.yml (session 407). "verify the signature" in the
 install step → pointed at VERIFY.md's current-reality flow.
-DEPLOYMENT.md's hardening checklist now marks the checksum/cosign items
-as pending signed releases instead of implying they exist.
+DEPLOYMENT.md's hardening checklist already carries master's session-485
+notes on the checksum/cosign items, so it is not re-edited here.
 
 **Also found [SURFACED]:** CLAUDE.md's architecture map itself lists
 `test.yml (fuzz+benchmark)` — test.yml has benchmarks but no fuzz job.

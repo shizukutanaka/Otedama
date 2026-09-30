@@ -475,10 +475,6 @@ otedama wallet verify
 
 For production deployments:
 
-- [ ] Binary SHA-256 verified against published checksums (once signed
-      releases ship — checksums are not yet published; see VERIFY.md).
-- [ ] Binary cosign signature verified (once signed releases ship —
-      see VERIFY.md).
 - [ ] Binary SHA-256 verified against published checksums.
   (Note, session 485: today's `release.yml` does not produce
   checksums, signatures, or SBOMs — see KNOWN_LIMITATIONS. Until

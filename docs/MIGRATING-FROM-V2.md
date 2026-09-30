@@ -35,7 +35,7 @@ If any of those is a hard requirement, **stay on v2.x**. The
   a client that routes earnings directly to the user's address.
 - **Algorithms:** v2 supported Scrypt, Ethash, RandomX, and others;
   v3 is SHA-256d only.
-- **Protocol:** v2 spoke Stratum V1; v3 speaks both V1 (`stratum://`,
+- **Protocol:** v2 spoke Stratum V1; v3 speaks both V1 (`stratum+tcp://`,
   `stratum+tls://`) and V2 (`stratum+v2://`, `stratum+v2tls://`).
 
 ### Operational
@@ -48,7 +48,7 @@ If any of those is a hard requirement, **stay on v2.x**. The
 ### Security
 - **Noise encryption:** Stratum V2 handshake on every pool connection.
 - **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
-- **CI:** SHA-pinned GitHub Actions, Dependabot, scheduled gosec/
+- **CI:** Dependabot, scheduled gosec/
   CodeQL/Trivy/TruffleHog/Semgrep scans. Fuzzers ship in-repo
   (`make fuzz`); cosign release signing is planned (ROADMAP v3.1.0)
   but not yet wired — see `VERIFY.md`.
