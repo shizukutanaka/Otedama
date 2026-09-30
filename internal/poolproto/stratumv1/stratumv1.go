@@ -6,7 +6,7 @@
 // # Why V1 still matters in 2026
 //
 // Stratum V1 is a 14-year-old plaintext JSON-RPC-over-TCP protocol with
-// no standardisation document, no encryption, and no authentication of
+// no standardization document, no encryption, and no authentication of
 // the pool to the miner. It is also what >99% of Bitcoin mining pools
 // speak in 2026, and it will remain operational well beyond Otedama's
 // 10-year horizon because pool translation proxies make every SV2 pool
@@ -121,7 +121,7 @@ type session struct {
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
 
-	// ctx controls the read-loop lifetime; cancelled on Close.
+	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
 }
@@ -155,7 +155,7 @@ func (s *session) start(ctx context.Context) {
 }
 
 // readLoop is the single goroutine that reads and dispatches V1 messages.
-// It runs until the connection closes or the context is cancelled.
+// It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
 	defer close(s.noticeCh)
@@ -286,9 +286,8 @@ func (s *session) dispatch(line []byte) {
 		// reconnect machinery uses to re-dial the configured pool list.
 		// We deliberately do NOT follow the pool-supplied Host:Port — see
 		// reconnectDirective for the rationale.
-		if d, ok := parseReconnect(msg.Params); ok {
-			s.lastReconnect.Store(&d)
-		}
+		d := parseReconnect(msg.Params)
+		s.lastReconnect.Store(&d)
 		go s.Close()
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
@@ -478,9 +477,9 @@ func (m *rpcMessage) uintID() uint64 {
 	case float64:
 		return uint64(v)
 	case int:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case int64:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case string:
 		n, _ := strconv.ParseUint(v, 10, 64)
 		return n
