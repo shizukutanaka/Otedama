@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 535 — flake sweep)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
+  `-race -count=2` on engine/stratum/poolproto, all green on
+  go1.27.1/arm64; no nondeterminism evidence anywhere in the suite.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
