@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 512 — hal.Identity.Validate whitespace coverage)
+
+- **`Identity.Validate` now rejects all Unicode whitespace, matching its
+  documented contract.** The check covered only `' '`, `'\t'`, and
+  `'\n'`, so IDs containing `'\r'`, `'\v'`, `'\f'`, or non-ASCII
+  whitespace (e.g. U+00A0) passed validation despite the doc stating IDs
+  "must not contain whitespace". Replaced the explicit character list
+  with `unicode.IsSpace`. Driver-supplied IDs with such characters (a
+  sysfs entry name, say) would previously flow into log lines and metrics
+  labels where control/space characters corrupt output or split label
+  values. Also recorded the `internal/miner` + `internal/hal`
+  audit-complete verdicts (all files read; only residual is the
+  open-PR-owned nonce-wrap item).
+
 ### 修正 (session 394)
 
 - `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
