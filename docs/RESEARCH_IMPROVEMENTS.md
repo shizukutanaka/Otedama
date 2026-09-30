@@ -965,6 +965,18 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 306 — consolidate research backlog into ADRs/THREAT_MODEL/KNOWN_LIMITATIONS (re-delivers closed #376)
+
+**Change [OBSERVED].** Landed the session-264 docs consolidation on master:
+sv2-spec repo pinned as the canonical SV2 source (messages.go + ADR-009);
+KNOWN_LIMITATIONS Akash shape corrected (chain-sdk + on-chain Bidengine +
+AEP-64 JWT); THREAT_MODEL gained the undetectable-selfish-mining threat
+(honest "no mitigation — cheap defection") + LN HTLC timing linkage;
+ADR-010 gained SCaLE learned-switch-cost (A2), the three drift-type
+non-stationarity grounding + Sliding-Window TS (A8), and ROSS in refs.
+Cat-4 #9 left open on purpose — pools never report credited blocks, so the
+written action is infeasible; recorded as such.
+
 ## Session 323 — server→client input audit verdicts, round 3
 
 Re-audit of pool-controlled inputs left uncovered by sessions 271/309
