@@ -139,7 +139,7 @@ func (o *arbitrationLoopOpts) powerFloor() float64 {
 }
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is cancelled or
+// or whenever a fresh quote arrives. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
@@ -164,7 +164,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now()) {
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
 					key, streamStaleTimeout,
@@ -247,14 +247,14 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
-// older than ttl, returning the pruned keys. Only entries that have a recorded
+// older than streamStaleTimeout, returning the pruned keys. Only entries that have a recorded
 // quote time are considered: a stream present in m but absent from seen (e.g.
 // pre-seeded directly, never quoted) is never pruned. now is passed in so the
 // logic is deterministically testable.
-func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time, ttl time.Duration) []string {
+func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time) []string {
 	var pruned []string
 	for key, ts := range seen {
-		if now.Sub(ts) > ttl {
+		if now.Sub(ts) > streamStaleTimeout {
 			delete(m, key)
 			delete(seen, key)
 			pruned = append(pruned, key)
