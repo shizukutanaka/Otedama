@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 520 — Go 1.27 verification + upstream sv2-ui orchestrator
+
+- **Go 1.27 released Aug 2026** — environment toolchain auto-upgraded to
+  go1.27.1; `go test ./...` green on all 23 packages; no >`go 1.22`
+  stdlib symbols → 1.27's new `stdversion` vet is clean; godebug block
+  parses under the new removed-setting acceptance rule. Toolchain bump
+  remains closed-PR-owned (#369).
+- **`stratum-mining/sv2-ui`** — upstream Docker orchestrator (translator
+  + JDC + Core IPC 30.x/31.x) for JDP stacks; recorded in ADR-009 as the
+  deployment target a future Otedama JDC would compose with.
+- ESP-Miner still at v2.15.3 (AxeOS UI now embedded in the main
+  firmware binary + mDNS since 2.15.0); DATUM gateway v0.4.1beta, no
+  protocol drift.
+
 ## Session 521 — ecosystem recheck: SV2 trajectory, repo landscape
 
 - SV2 transport ~15–20% of hashrate early 2026 (estimate); SRI WG

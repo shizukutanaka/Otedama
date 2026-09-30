@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
+
+- Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
+  block parses under 1.27's removed-setting acceptance rule; no >1.22
+  stdlib symbols so `stdversion` vet is clean). Recorded upstream's
+  `stratum-mining/sv2-ui` orchestrated JDP stack in ADR-009; ESP-Miner
+  2.15.3 / DATUM v0.4.1beta unchanged.
+
 ### Documentation & audit (session 521 — ecosystem recheck)
 
 - ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
