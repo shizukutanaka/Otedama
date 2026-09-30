@@ -381,6 +381,18 @@ item; when enabled, `install.sh` picks it up automatically and
 `--certificate-identity-regexp` pins the signer identity to this
 repository's workflows.
 
+## Posture notes
+
+- **FIPS 140-3:** Otedama is not FIPS-compliant by design. The
+  Stratum V2 Noise NX transport (`internal/stratum/noise.go`, not yet
+  wired into live connections — KNOWN_LIMITATIONS §2) uses
+  ChaCha20-Poly1305 from `golang.org/x/crypto`, which is not in the
+  FIPS-approved algorithm list and is outside the Go FIPS module, so
+  enabling `fips140=on` does not make that transport FIPS-validated. (Wallet-at-rest encryption —
+  AES-256-GCM — *is* a FIPS-validated construction; the gap is the
+  transport.) Environments with a hard FIPS requirement should not
+  deploy Otedama. See `GODEBUG_NOTES.md`.
+
 ## Assumptions
 
 - The user's operating system and filesystem are trustworthy.
