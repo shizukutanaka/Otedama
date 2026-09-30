@@ -232,7 +232,7 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 			Confidence:       0.95,
 		},
 	}
-	updateStream(&mu, m, q)
+	updateStream(&mu, m, &q)
 
 	if len(m) != 1 {
 		t.Fatalf("map size = %d, want 1", len(m))
@@ -260,7 +260,7 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 func TestUpdateStream_AIAkashIsNotBitcoinMining(t *testing.T) {
 	var mu sync.Mutex
 	m := make(map[string]arbitration.Stream)
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: "ai.akash",
 		DeviceID:   "gpu-0",
 	})
@@ -277,11 +277,11 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 	id := "mining.stratum"
 	dev := "cpu-0"
 
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
 		Yield: provider.Yield{SatsPerSecond: 0.1, Confidence: 0.9},
 	})
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
 		Yield: provider.Yield{SatsPerSecond: 0.2, Confidence: 0.95}, // updated
 	})
@@ -481,7 +481,7 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 			provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000}),
 		},
 	}
-	stats := buildStats(opts, 1234.5, 42, nil, false)
+	stats := buildStats(&opts, 1234.5, 42, nil, false)
 
 	if stats.HashRate != 1234.5 {
 		t.Errorf("HashRate = %v, want 1234.5", stats.HashRate)
@@ -521,7 +521,7 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 
 	// No latency samples: PoolLatency must be zero (unknown).
 	lt := NewLatencyTracker(16)
-	stats := buildStats(opts, 0, 0, lt, false)
+	stats := buildStats(&opts, 0, 0, lt, false)
 	if stats.PoolLatency != 0 {
 		t.Errorf("PoolLatency with no samples = %v, want 0", stats.PoolLatency)
 	}
@@ -530,7 +530,7 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 	for range 8 {
 		lt.Record(50.0)
 	}
-	stats = buildStats(opts, 0, 0, lt, false)
+	stats = buildStats(&opts, 0, 0, lt, false)
 	want := 50 * time.Millisecond
 	if stats.PoolLatency != want {
 		t.Errorf("PoolLatency = %v, want %v", stats.PoolLatency, want)
@@ -544,12 +544,12 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 func TestBuildStats_StalledPropagated(t *testing.T) {
 	opts := sessionOpts{startTime: time.Now()}
 
-	notStalled := buildStats(opts, 100.0, 0, nil, false)
+	notStalled := buildStats(&opts, 100.0, 0, nil, false)
 	if notStalled.Stalled {
 		t.Error("buildStats(stalled=false): Stats.Stalled should be false")
 	}
 
-	stalled := buildStats(opts, 0, 0, nil, true)
+	stalled := buildStats(&opts, 0, 0, nil, true)
 	if !stalled.Stalled {
 		t.Error("buildStats(stalled=true): Stats.Stalled should be true")
 	}

@@ -953,6 +953,84 @@ config.yaml.example covers every yaml field; docs/API.md's five
 missing OTEDAMA_ env vars are open PR #517's territory (not
 duplicated); ADR set has no other phantom references.
 
+## Session 523 — full linter sweep re-verified on master
+
+Re-ran the full golangci-lint suite under `GOTOOLCHAIN=go1.26.8`
+(go1.27.1's export data format is newer than golangci-lint v1.64.8's
+typecheck can decode — run it with the pinned toolchain):
+
+- **Bulk of findings = known lint backlog** already delivered by the
+  open #526–#528 refactor family (misspell, hugeParam, gocyclo,
+  errorlint, gofumpt, goconst, prealloc, unparam, dogsled).
+- **`daemon/service.go:375` nilerr** — false positive on a documented
+  contract: `statusWindowsService` treats sc.exe's non-zero exit as
+  "not installed" by design (comment lines 367–371; matches
+  statusLaunchd). No change.
+- **`stratum/noise.go` `remoteStatic` unused** — already recorded as
+  the CODEOWNERS-level noise*.go erratum; no change.
+- **Two actionable test-hygiene items fixed**: dead `parseFloat`
+  helper in `internal/rates/fetcher_test.go` and an unclosed response
+  body in `internal/httpserver/server_test.go` (bodyclose).
+- `govulncheck ./...` re-verified under go1.26.8: zero reachable
+  vulnerabilities.
+
+## Session 350 — remaining pool-text log sites
+
+**V1 job ID in log lines [FIXED].** `job.JobID` (pool-controlled
+`mining.notify` string) was logged with `%s` on both the curtailed-debug
+and job-active lines — a pool could embed ANSI escapes or newlines to
+forge log entries. Both sites now use `%q`, which escapes control
+bytes and makes unusual content visible. The `applyJob` error paths
+already used `%q` and were verified safe.
+
+**Remaining pool-text audit [AUDITED — clean].** `engine: V1 submit:
+%v` logs only transport/call errors (the pool's reject text travels in
+`ShareResult.Reason`, covered by PR #461's sanitizer); `loc`/`host`/
+`poolURL` log operands come from the operator's own pool configuration,
+not the wire; V2 job lines log numeric JobID. No other unquoted
+pool-derived strings reach the log.
+
+## Session 416 — lint backlog follow-up: eliminate the entire hugeParam class [PERF]
+
+Session 415 (PR #526) cleared ~350 lint findings down to 65 and deferred two
+classes: 53 `hugeParam` (large structs passed by value, ≥80 bytes each copied
+per call) and 12 `gocyclo` (functions needing real decomposition, not cosmetic
+fixes). This session converts **all 53 hugeParam sites** — zero remain.
+
+What changed (value → pointer params/receivers):
+
+- `internal/arbitration`: `Stream.Accepts/YieldFor`, `Assignment.Idle`,
+  `Decide(in *Input)`, `chooseForDevice`, `policyScore` — the arbitration hot
+  path ran once per Decide tick copying 80–120-byte structs per call.
+- `internal/miner`: `Header.Bytes`, `ParseHeader`, `HashHeader` — `HashHeader`
+  is called once **per nonce** in the grind loop; the 80-byte Header copy per
+  hash is eliminated (BenchmarkHashHeader: ~107ns/op, 0 allocs — unchanged
+  correctness, the copy was the only overhead above SHA-256d itself).
+- `internal/poolproto`: `DialURL` and the `Dialer` interface now take
+  `*Credentials`; `sendJob` takes `*Job`; `rpcMessage.uintID` pointer receiver.
+- `internal/doctor`: `DefaultChecks` + all 10 check funcs take `*config.Config`
+  (200 bytes → 8 per call).
+- `internal/config`: `Resolve(fromFile *Config, env, flags *FlagValues)`.
+- `internal/engine`: `sessionOpts` receivers, `applyJob`, `setupWallet`,
+  `startProviders`, `poolURLs`, `payoutAddresses`, `buildStats`,
+  `disconnectedStats` (returns `*tui.Stats`).
+- `internal/provider`, `internal/stratum` (`SetupConnection.Encode`,
+  `ValidateSetupConnection`), `internal/tui` (`Stats` through the whole
+  render pipeline).
+
+Channel types (`jobsCh chan Job`, `updateCh chan Stats`, `quoteCh chan Quote`)
+intentionally keep value semantics — pointers are taken at send/apply
+boundaries only, avoiding aliasing across the producer/consumer handoff.
+
+`Decide` also gained a nil-`Input` guard (a pointer API must not panic on nil).
+
+Remaining deferred debt: the 12 `gocyclo` findings (cyclomatic complexity) —
+those need decomposition refactors, not signature changes, and stay parked as
+a separate judgement call.
+
+*Evidence: `golangci-lint run` hugeParam count 53 → 0; `go vet` clean;
+`go test ./...` all 24 packages green including `-race` on the engine suite.*
+
 ## Session 409 — SPECIFICATION validation-section drift [FIXED]
 
 **Understated validation claims corrected [FIXED].**
@@ -2275,3 +2353,23 @@ LaunchAgent log path moved off world-readable `/tmp` to
 `~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
 `NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
 `binPath=` quoting.
+
+## Session 367 — SV2 message-decoder fuzz coverage
+
+**Coverage [FIXED — CLAUDE.md parity].** The SV2 frame fuzzers covered
+header + stream decode, but the six typed payload decoders
+(`DecodeNewMiningJob`, `DecodeSetNewPrevHash`, `DecodeSetTarget`,
+`DecodeSubmitSharesStandard`, `DecodeSubmitSharesSuccess`,
+`DecodeSubmitSharesError`) and the STR0_255/B0_255/U16/U32 wire
+primitives had none — all run on pool-controlled post-handshake bytes.
+`FuzzMessageDecoders` now drives every one of them with arbitrary
+payloads plus shape-targeted seeds (OPTION-present NewMiningJob,
+over-claimed STR0_255 length prefixes, 255-byte strings): 2.7M execs,
+no panic or hang. `TestMessageDecoderBounds` pins the short-payload
+contract as a plain unit test so the invariant holds even outside
+fuzzing.
+
+**Audit [AUDITED — clean].** The decoders were already bounds-safe —
+every field read is preceded by a `len < need` guard, every
+length-prefixed read goes through `io.ReadFull`, and the
+`byteSliceReader` cannot over-read. The fuzzer confirms empirically.
