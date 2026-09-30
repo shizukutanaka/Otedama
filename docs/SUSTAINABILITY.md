@@ -44,6 +44,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
 **実装状況:** `internal/poolproto/` はインターフェース層に加え `stratumv1/`・`stratumv2/` 両 dialer が実装済み — V1 セッションは engine で稼働中（**訂正 session 490**: 従来「インターフェース層のみ・SV1/SV2 implementation は v3.2.0 スコープ」と記載していたが実装済み）。
+**実装状況:** `internal/poolproto/` 抽象化に加え、`poolproto/stratumv1`・`poolproto/stratumv2` の両 dialer が v3.0.0-alpha で実装済み（本判断記述時より前倒しで着地 — JDP 延期方針は継続）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -85,6 +86,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
 **実装状況:** Dependabot は配置済み。**訂正 (session 490)**: 従来「SHA pinning + cosign signing は v3.0.0-alpha で実装済み」と記載していたが両方未実施 — `.github/workflows/` の全 `uses:` はタグ/ブランチ参照で SHA pin ゼロ、`release.yml` は goreleaser/cosign を一切呼ばず `.goreleaser.yaml` の `signs:` は dead config。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況:** Dependabot は配置済み。SHA pinning と cosign signing は**両方とも未実施** — 全 `uses:` がタグ参照（`@v4` 等、`aquasecurity/trivy-action@master` はブランチ追尾 — 本書 §5 が引用する TeamPCP 型攻撃そのものの形態）で、`release.yml` は署名を生成しない（VERIFY.md が現状を記載）。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
