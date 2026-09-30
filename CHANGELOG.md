@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 541 — serialized scheduling)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-cpu=1` (GOMAXPROCS=1) full
+  suite ×2 all green — no test needs multi-CPU scheduling;
+  suite robust across every scheduler dimension.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
