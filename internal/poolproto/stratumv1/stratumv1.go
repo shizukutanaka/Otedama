@@ -59,6 +59,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
+
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -115,6 +117,9 @@ type session struct {
 	// on the read goroutine while Submit reads them on the caller's.
 	extranonce1     atomic.Pointer[string]
 	extranonce2Size atomic.Int64
+	// en2Counter rolls extranonce2 per job so every job's coinbase (and
+	// hence merkle root) is unique even when the nonce space wraps.
+	en2Counter atomic.Uint64
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -238,6 +243,7 @@ func (s *session) dispatch(line []byte) {
 		if err != nil {
 			return
 		}
+		s.completeV1Job(&job)
 		s.sendJob(job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
@@ -292,6 +298,54 @@ func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 // Implements poolproto.PoolNoticeReceiver.
 func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 
+// completeV1Job folds the negotiated extranonce1 + a fresh extranonce2
+// into the notify's coinbase parts and stores the resulting merkle root
+// on the job. Skipped (leaving MerkleRoot as received — the pool-side
+// merkle assumption) when the notify carried no coinbase parts or the
+// session never negotiated extranonces.
+//
+// extranonce2 rolls per job via en2Counter placed big-endian at the tail
+// of the en2 field, so every job's coinbase is unique. Shares echo the
+// same en2 back via Job.ExtraNonce → Work.ExtraNonce → Share.ExtraNonce
+// → ShareSubmission.ExtraNonce; the pool rebuilds the identical coinbase
+// and can actually verify the share (previously MerkleRoot stayed zero,
+// so no V1 share could ever validate).
+func (s *session) completeV1Job(j *poolproto.Job) {
+	// extranonce2Size is pool-controlled; anything above the observed
+	// maximum (8–12 bytes) falls back to the old behaviour instead of
+	// allocating a pool-dictated buffer per job.
+	en1s := s.extranonce1.Load()
+	sz := int(s.extranonce2Size.Load())
+	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
+		en1s == nil || *en1s == "" || sz <= 0 ||
+		sz > 64 {
+		return
+	}
+	en1, err := hex.DecodeString(*en1s)
+	if err != nil {
+		return
+	}
+	n := s.en2Counter.Add(1)
+	en2 := make([]byte, sz)
+	// Big-endian counter in the tail bytes of en2: sizes < 8 keep the
+	// counter's low bytes (still rolling); sizes > 8 stay zero-padded
+	// at the head.
+	for i := 0; i < len(en2) && i < 8; i++ {
+		en2[len(en2)-1-i] = byte(n >> (8 * i))
+	}
+	coinbase := make([]byte, 0, len(j.Coinb1)+len(en1)+len(en2)+len(j.Coinb2))
+	coinbase = append(coinbase, j.Coinb1...)
+	coinbase = append(coinbase, en1...)
+	coinbase = append(coinbase, en2...)
+	coinbase = append(coinbase, j.Coinb2...)
+	root := btccrypto.Hash256(coinbase)
+	for _, branch := range j.MerkleBranch {
+		root = btccrypto.Hash256(append(root[:], branch...))
+	}
+	j.MerkleRoot = root
+	j.ExtraNonce = en2
+}
+
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would
@@ -338,7 +392,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
+		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1

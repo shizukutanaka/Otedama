@@ -957,3 +957,232 @@ client.reconnect/mining.reconnect. mining.set_version_mask and other
 extensions are deliberately ignored (forward-compatible). Requests
 with an id are never sent pool→client by conforming pools; unknown
 methods are dropped without reply.
+
+## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
+
+**Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
+socket with no `SetWriteDeadline`. A pool that keeps the TCP connection
+open but stops reading leaves a blocked `Write` once the kernel send
+buffer fills — the whole V2 runSession stalls silently: no jobs
+processed, no shares out. V1 already bounds writes at 10 s; the V2 path
+had no equivalent.
+
+**Fix [OBSERVED].** `writeTimeout` (10 s, matching V1) applied via
+`SetWriteDeadline` inside `sendMsg`, covering SetupConnection,
+OpenMiningChannel, and every SubmitSharesStandard write.
+
+**Tests [OBSERVED].** `TestSendMsg_WriteDeadline` writes to an unread
+net.Pipe with a shortened timeout and asserts a prompt i/o timeout.
+
+## Session 333 — wallet.dat size bound (real fix)
+
+**UnmarshalEncryptedSeed unbounded alloc [OBSERVED + FIXED].** The
+parser `make([]byte, len(b)-29)`'d whatever `os.ReadFile` returned —
+a corrupt or oversized wallet.dat forced a matching allocation. The
+v1 payload is exactly 80 bytes (64-byte seed + 16-byte tag); added a
+4 KiB cap (generous headroom for future versions) at the single parse
+choke point both loadExisting and ChangePassphrase flow through.
+Test: `TestUnmarshalEncryptedSeed_RejectsOversizedInput`. Touches
+internal/lightning — fund-adjacent, CODEOWNERS review applies.
+
+## Session 305 — reconstruct coinbase/merkle per job so V1 shares are verifiable (re-delivers closed #401)
+
+**Finding [OBSERVED — code-verified].** V1 jobs dropped the coinbase parts
+(coinb1‖en1‖en2‖coinb2) and merkle branch after parsing — shares couldn't be
+verified locally before submit; an invalid share was only discoverable via
+pool reject.
+
+**Fix [OBSERVED].** `poolproto.Job` gains `ExtraNonce`/`Coinb1`/`Coinb2`/
+`MerkleBranch` (V1-only; empty for V2). `miner.Work`/`Share` gain
+`ExtraNonce`. A per-session `en2Counter` (big-endian counter at the field
+tail) plus `completeV1Job()` folds the coinbase (`btccrypto.Hash256`) and
+per-branch `Hash256(merkle‖branch)` at dispatch time.
+
+**Tests [OBSERVED].** stratumv1 en2-counter + coinbase-fold cases; engine
+dispatch threading.
+
+## Session 349 — pool-text sanitization at the log boundary
+
+**Reject-reason escape injection [FIXED].** Session 348 sanitized
+`client.show_message` at the V1 parser; the same vector reached the log
+through the two share-reject paths: V2 `SubmitSharesError.Error`
+(STR0_255, bounded but raw) logged at `run.go`, and V1's
+`ShareResult.Reason` (`fmt.Sprintf("%v", errResult)` — the pool's whole
+JSON error object, potentially longer). New `poolproto.SanitizePoolText`
+strips all Unicode control characters (C0/DEL/C1, including ANSI escape
+introducers) and truncates to 256 runes; applied to `reason` at both
+engine log sites *before* classification (canonical reject codes are
+ASCII, so stripping cannot change the match).
+
+**Job-ID strings in errors [AUDITED — clean].** `applyJob` embeds the
+pool's JobID with `%q`, which escapes control bytes — no injection.
+
+**Escalation boundary [AUDITED — clean].** Shares rejected via the
+protocol error surface stay inside the loop; the engine only escalates
+to reconnect on transport errors, so a hostile reject reason cannot
+liveness-abort the session.
+
+## Session 375 — release-supply-chain claims audit + install.sh fix
+
+[FETCHED] Ecosystem: SRI v1.12.0 (2026-09-17, freedom.tech release notes) —
+deep hardening pass on channels_sv2, codec/framing refactor, **bounded job
+storage** (same class as Otedama's open PR #429), consensus-defect coinbase
+fixes, BIP323 adaptations, AES-256-GCM removed from noise_sv2 leaving
+ChaCha20-Poly1305 the sole cipher. ESP-Miner v2.15.3 (2026-09-20 prerelease;
+v2.15.2 added BM1372/BM1373). No Otedama action — the coinbase defects live
+in the pool-side reconstruction Otedama deliberately does not perform (V1
+coinbase handling is the open #391/#417 thread).
+
+[FIXED] `install.sh` could not download any release the repo actually
+produces: it hardcoded the goreleaser asset name
+(`otedama_<ver>_<os>_<arch>.tar.gz`) while release.yml emits
+`otedama-<os>-<arch>.tar.gz` and ci-cd.yml emits a bare binary. The
+checksums download was a hard `die`, yet release.yml never publishes
+checksums. Now tries all three asset names, accepts either checksum file
+name, still refuses (dies) when none is published unless
+--skip-verify is given, and installs bare binaries
+without tar extraction. `bash -n` clean.
+
+[FIXED] Documentation overclaimed supply-chain mitigations that do not
+exist on master: THREAT_MODEL asserted cosign-signed release artifacts,
+`-trimpath` reproducible builds, and SHA-pinned Actions — release.yml has
+no cosign step, no `-trimpath`, embeds `BuildTime` (inherently
+non-reproducible), and all 8 workflows use `@vN` tags (0/168 `uses:`
+SHA-pinned). AUDIT_CHECKLIST rows 11/13/17/22 corrected to match reality
+(including the session-373 scrypt N=2^17 and seedstore.go fixes, which
+returned to master when PR #485 was closed unmerged). The checklist's own
+rule — a failing row means "open a security advisory" — is served better
+by marking rows as gaps than by claiming mitigations that are absent.
+
+## Session 307 — per-session submit rate cap stops difficulty→0 share floods (re-delivers closed #402)
+
+**Finding [OBSERVED — code-verified].** A pool (or MitM on cleartext V1)
+assigning difficulty≈0 makes every nonce a "valid share" — the workers flood
+submit, a bandwidth/CPU DoS the capped share channel alone doesn't bound at
+the *protocol* layer.
+
+**Fix [OBSERVED].** A token bucket (8/s refill, burst 32) on both submit
+paths; excess shares drop and count into `otedama_shares_submit_dropped_total`.
+SPECIFICATION §6 catalogue + API.md row + THREAT_MODEL entry synced.
+
+**Tests [OBSERVED].** `TestSubmitLimiter_BurstThenRefill` — burst exhausts
+the bucket, drops count, refill resumes submits.
+
+## Session 343 — HTTP client redirect refusal
+
+**Redirect downgrade [FIXED].** The rate fetcher's `http.Client` and the
+doctor clock-skew probe (which used `http.DefaultClient`) followed
+redirects by default — including https→http downgrades. All rate sources
+and the clock probe are hardcoded HTTPS endpoints, so a redirect can only
+be hostile: a network attacker 302-ing a price source to a cleartext
+endpoint could inject a manipulated BTC/USD into the arbitration median.
+`CheckRedirect` now refuses all redirects on both clients. (A legitimately
+moved API would fail loudly and the median falls back to the remaining
+sources — the correct degradation.)
+
+**Rates surface audit [AUDITED — clean].** Verified bounded before this
+round: 10s client timeout, 64KiB `LimitReader`, implausible-reading
+exclusion from the median, per-source health accounting, skew measured
+from the `Date` header, body drained for keep-alive reuse.
+
+## Session 348 — pool-notice sanitization + config-write audit
+
+**Terminal-escape injection via client.show_message [FIXED].**
+`parseShowMessage` forwarded the pool's string verbatim into
+`noticeCh`; every downstream consumer (the log wiring on PR #448, or a
+future TUI notice line) would write raw text to a terminal or log file.
+A hostile pool could embed ANSI escape sequences (screen clear, cursor
+moves, OSC window-title / hyperlink payloads) or newlines that forge
+log entries. `sanitizeNotice` now strips all Unicode control characters
+(C0, DEL, C1) and truncates to 256 runes at parse time, so every
+consumer gets safe text regardless of how it renders.
+
+**Config-file write path [AUDITED — clean].** `otedama` never writes
+the YAML config — `loadConfigFile` is read-only with
+`KnownFields(true)` (rejects typo'd keys), so there is no
+config-write permission path to audit. The wallet passphrase flag
+documented in `--help` is consumed in-process only.
+## Session 384 — pool-URL credential redaction
+
+[FIXED] **Userinfo in pool URLs could leak into logs and status surfaces** (`internal/poolproto/poolproto.go` + call sites): a `scheme://user:pass@host` pool URL was echoed verbatim by the connect log (`connecting to %s`), the bad-URL error, the V1 connected log, the TUI `PoolURL` field, `config show` (text + JSON), and four doctor `Detail` strings. `poolproto.StripUserinfo` removes the authority-section userinfo at every display boundary (dial-path parsing unchanged — `StripScheme` semantics untouched). Malformed URLs pass through so redaction cannot corrupt diagnostics. Defense-in-depth regardless of upstream userinfo validation. Test: `TestStripUserinfo` (9 cases incl. path-`@`, multi-`@`, no-scheme edge cases).
+
+[AUDITED — clean] V2 handshake `OpenMiningChannelSuccess` consumption: `ExtraNonce2Size` is legitimately unused — Otedama uses standard channels where the pool supplies the merkle root and the miner varies only nonce/ntime, so extranonce2 never participates. `ReqID` echo unchecked (cosmetic; ChannelID is authoritative). V1 `mining.authorize` is a mandatory handshake step — rejection is `ErrHandshakeFailed`, not silent. `internal/daemon` `launchdLogPath`/`systemdUnitName` take literals only — no name-traversal surface.
+
+## Session 368 — v2tls silent-downgrade fix
+
+**Fixed [FIXED — real reachable bug].** `stratumv2.Dialer{useTLS: true}`
+(the registered handler for `stratum+v2tls://`) ignored `useTLS` in
+`Dial` — it always opened plaintext TCP while reporting the V2-TLS
+protocol ID. The engine's live path was already correct
+(`stratum.DialTLS` with verified certs + `tls_ca_file`), so the trap
+was dormant but armed: the first wiring of the poolproto V2 adapter
+(KNOWN_LIMITATIONS §3 Step 3b) would silently downgrade every v2tls
+pool to plaintext — under a scheme operators are explicitly told to
+use for encryption. `Dial` now routes `useTLS` through
+`stratum.DialTLS` (system roots, TLS 1.2+, ServerName from the
+address, no plaintext fallback).
+
+**Tests [FIXED].** `TestDialer_V2TLS_DialsTLS` drives the production
+dial path (no injected dialFn) against a TLS server with an untrusted
+cert and asserts a `*tls.CertificateVerificationError` — proof the
+handshake ran and verification is enforced.
+`TestDialer_V2TLS_ConnectsToTrustedServer` completes the positive path
+with a CA-trusted dialFn injection and asserts the conn is *tls.Conn.
+
+## Session 344 — V1 set_difficulty value validation
+
+**Non-positive/non-finite difficulty [FIXED].** `parseDifficulty`
+stored `params[0]` unchecked: `d <= 0` collapses the share target to
+accept-every-hash (a share flood from a hostile pool or MitM on
+cleartext V1), and non-finite values poisoned the target math
+downstream (same class as the s325 `Yield.Effective` and s331 hysteresis
+non-finite fixes). NaN/±Inf cannot arrive via JSON literals but
+`1e999` decodes to +Inf without error — all now rejected. Fractional
+and subnormal difficulties stay valid (ESP-Miner #1594/#1779 show real
+pools use them).
+
+**Ecosystem re-check [FETCHED].** SRI v1.12.0 (Sep 17) unchanged since
+s329. ESP-Miner v2.15.3 (Sep 20) is a UI-only patch; the v2.15.x stratum
+changes (fractional SV2 difficulty, duplicate-jobId drop,
+submit-response-only share counting, TCP_NODELAY) are all behaviours
+Otedama already matches — recorded. Go advisory batch (Sep 2) — the
+reachable classes (crypto/tls KeyUpdate DoS CVE-2026-56862,
+net/url quadratic CVE-2026-56860) are fixed in go1.26.8 which the
+toolchain already requires; encoding/xml recursion and unencrypted-HTTP/2
+do not apply (no xml decode, no h2c listener).
+
+## Session 316 — bound pool-controlled extranonce2_size (re-delivers closed #384/#398/#411)
+
+**Finding [OBSERVED — code-verified].** `extranonce2_size` is
+pool-controlled and flowed unbounded into `strings.Repeat` on every
+`mining.submit` — a hostile pool or MitM on cleartext V1 could force a
+~2 GiB allocation per share (memory-exhaustion DoS).
+
+**Fix [OBSERVED].** Bounded to [0, 64] at both negotiation entry points
+(`parseSubscribeResult`, `parseSetExtranonce`) plus a defensive clamp in
+`Submit`. THREAT_MODEL documents the threat and residual.
+
+**Tests [OBSERVED].** Boundary unit tests on both entry points.
+
+## Session 342 — service-definition injection via control characters
+
+**Unit-file directive injection [FIXED].** `quoteToken` quoted values on
+whitespace/quotes but passed control characters raw: a flag value
+containing a literal newline (`--data-dir`, `--config`, payout flags —
+reachable from CLI, env, or a poisoned config file) broke out of the
+systemd `ExecStart=`/`ReadWritePaths=` lines into a new unit directive —
+e.g. `\nProtectHome=false` silently removed the sandbox, or
+`ExecStartPost=` ran an arbitrary command. Now any rune < 0x20 or 0x7f
+triggers `%q` quoting, which escapes it to `\\n` inside the token.
+launchd was already safe (argv slice + XML escape); Windows sc.exe
+binPath= shares `serviceArgs` so it inherits the fix. Same for the
+`%q`-inside-quotes caveat: systemd does not unescape Go `\uXXXX`, so a
+path mixing spaces with non-printable bytes quotes correctly for the
+file but resolves differently — recorded, not exploitable.
+
+**Daemon surface audit [AUDITED — hardened].** Verified already-clean:
+launchd XML escaping (`xmlEscape` covers the five specials),
+LaunchAgent log path moved off world-readable `/tmp` to
+`~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
+`NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
+`binPath=` quoting.
