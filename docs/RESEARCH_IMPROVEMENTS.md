@@ -965,6 +965,25 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 334 — metrics exposition verdict (final surface)
+
+**internal/metrics [OBSERVED — clean].** Label names are validated at
+registration (panic on malformed — a bad name would corrupt the whole
+scrape); label values escape `\`, `"`, `\n` per exposition spec; HELP
+escapes `\` and `\n`. Dynamic label values are all bounded-cardinality:
+status/quantile/reason are fixed enums, device IDs come from hal
+Identity.Validate(), address is the masked user payout address.
+No pool-controlled string can mint new label series or inject into the
+exposition format.
+
+**Audit coverage is now complete on master.** Every package's externally
+-influenced input path has been audited in sessions 262–334: pool
+V1/V2 (en2, job maps, seq numbers, reconnect, deadlines), provider
+quotes, rates fetchers, config/env/YAML, wallet.dat, sysfs, i18n,
+daemon, metrics labels, arbitration params. Remaining backlog items are
+all blocked on unmerged PRs (#417 coinbase rebuild, #432 hashrate feed,
+go1.26 module bump) — not on missing analysis.
+
 ## Session 346 — ecosystem re-check + wallet/metrics audit verdicts
 
 **Ecosystem [FETCHED].** No drift since session 344: SRI v1.12.0 remains

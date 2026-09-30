@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
 判定記録。closed #383 の未マージ変更を master へ再デリバー。
 
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
 ### 監査判定 (session 356 — hal/V1 ディスパッチ)
 
 GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
