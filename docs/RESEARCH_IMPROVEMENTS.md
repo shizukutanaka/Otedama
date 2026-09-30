@@ -949,6 +949,26 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
 
+## Session 379 — reconnect-loop + docs/config-surface audit
+
+[FIXED] `runReconnectLoop` never reset its exponential backoff after a
+successful session: `backoff` doubled on every failure and was capped at
+64s, but a session that connected, mined for hours, then dropped still
+waited out whatever the backoff had grown to from earlier failed hops.
+`connectedThisAttempt` (set from `onConnected`) now resets it to
+`reconnectBackoffInitial`, placed before the failover branches and log
+lines so both the immediate-retry path and the "reconnecting in %v"
+message report the post-reset delay. New `dropAfterHandshakePool` fake +
+`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` verify the
+delay stays at 1s across repeated established-then-dropped sessions.
+
+[AUDITED — clean] `config.yaml.example` documents every Config field
+(all 17 yaml keys incl. pool sub-fields `tls_ca_file`, `payout_scheme`);
+Dockerfile is minimal (distroless nonroot, CGO_ENABLED=0, -trimpath,
+ldflags version injection, /LICENSE + /NOTICE copied, VOLUME /var/lib/
+otedama matching docs/DEPLOYMENT.md, EXPOSE 0); cmd wrappers
+(version/completion/doctor/main/service) are thin and correct.
+
 ## Session 399 — cross-worker nonce-space partition
 
 **Duplicate grinding across devices [FIXED].** Every `miner.Worker`
