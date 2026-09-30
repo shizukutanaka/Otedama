@@ -952,6 +952,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** 行2-10/14-30 の残クレーム（vet/staticcheck クリーン・SPDX・go mod verify・Dependabot・wallet 0600・AES-256-GCM・Noise NX・ChaCha20-Poly1305・ADR/COC/SECURITY.md 存在）は実装と一致。行22 の scrypt 行（N=32768 記載・実際は N=2^17=131072・seedstore.go 所在）は虚偽だが closed #485 の担当域のため未修正として記録のみ。検証スクリプトは `|| true` で tolerant 設計、妥当。
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
