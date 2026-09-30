@@ -112,9 +112,11 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// may be replaced by a mid-session mining.set_extranonce, which runs
+	// on the read goroutine while Submit reads them on the caller's.
+	extranonce1     atomic.Pointer[string]
+	extranonce2Size atomic.Int64
 	// en2Counter rolls extranonce2 per job so every job's coinbase (and
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
@@ -129,6 +131,11 @@ var (
 	_ poolproto.Session            = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
 )
+
+// callTimeout bounds how long call waits for a pool response before
+// releasing the pending entry and the waiting goroutine. Var so tests
+// can shorten it.
+var callTimeout = 60 * time.Second
 
 func newSession(conn *connection) *session {
 	return &session{
@@ -250,8 +257,8 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce1.Store(&en1)
+			s.extranonce2Size.Store(int64(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -312,17 +319,19 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	// extranonce2Size is pool-controlled; anything above the observed
 	// maximum (8–12 bytes) falls back to the old behaviour instead of
 	// allocating a pool-dictated buffer per job.
+	en1s := s.extranonce1.Load()
+	sz := int(s.extranonce2Size.Load())
 	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
-		s.extranonce1 == "" || s.extranonce2Size <= 0 ||
-		s.extranonce2Size > 64 {
+		en1s == nil || *en1s == "" || sz <= 0 ||
+		sz > 64 {
 		return
 	}
-	en1, err := hex.DecodeString(s.extranonce1)
+	en1, err := hex.DecodeString(*en1s)
 	if err != nil {
 		return
 	}
 	n := s.en2Counter.Add(1)
-	en2 := make([]byte, s.extranonce2Size)
+	en2 := make([]byte, sz)
 	// Big-endian counter in the tail bytes of en2: sizes < 8 keep the
 	// counter's low bytes (still rolling); sizes > 8 stay zero-padded
 	// at the head.
@@ -388,7 +397,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", min(max(s.extranonce2Size, 0), maxExtranonce2Size))
+		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
@@ -495,6 +504,12 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		return rpcResponse{}, fmt.Errorf("stratumv1: write: %w", err)
 	}
 
+	// Bound the wait itself: a pool that keeps the TCP connection alive
+	// but stops answering would otherwise leak this goroutine and the
+	// pending[id] entry for the whole session. 60 s is far beyond any
+	// legitimate submit latency while still releasing the goroutine.
+	timer := time.NewTimer(callTimeout)
+	defer timer.Stop()
 	select {
 	case r, ok := <-respCh:
 		if !ok {
@@ -506,6 +521,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
 		return rpcResponse{}, ctx.Err()
+	case <-timer.C:
+		s.pendingMu.Lock()
+		delete(s.pending, id)
+		s.pendingMu.Unlock()
+		return rpcResponse{}, fmt.Errorf("stratumv1: %s timed out after %s", method, callTimeout)
 	}
 }
 

@@ -14,6 +14,228 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `--http-addr` が非ループバックアドレス（`0.0.0.0` 等）に bind される際、起動時に stderr 警告を発行 — metrics/health エンドポイントのネットワーク公開をオペレータに通知（`--pprof` 有効時はヒープ/ゴルーチンプロファイル公開についても明記）。ループバック bind は従来通り無警告。
 
+### 修正 (session 394)
+
+- `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
+
+### Fixed (session 321 — SV2 バッチ受理数の正しい計上)
+
+**問題.** `SubmitSharesSuccess` の受理を常に +1 で数えていた——
+プールが `NewSubmitsAccepted`（バッチ受理数）を報告しても無視し、
+受理率が実際より低くドリフトした。closed #386/#400/#410 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `shares_accepted` が `NewSubmitsAccepted` を計上。
+
+### Fixed (session 322 — SV2 canonical reject コードの明示分類)
+
+**問題.** `rejectClass` が標準 `SubmitSharesError` コードを部分一致
+ヒューリスティックのみで処理し、`invalid-job-id`/`invalid-channel-id`
+が `hardware` に誤分類されていた（本来は stale 系）。closed
+#387/#399/#409 の未マージ修正を master へ再デリバー。
+
+**修正.** 標準コードを部分一致の前に明示分類: invalid-* → stale 系、
+`difficulty-too-low` → difficulty（従来の other から改善、
+benign-retarget 経路にも乗る）。
+
+### 修正 (session 370 — ntime roll)
+
+nonce 空間枯渇時にヘッダ時刻をロール前進 — 同一 (header, nonce) の
+再ハッシュと重複シェア拒否を防止（ntime roll、V1/V2 両経路で
+ロール値が送信されることを確認済み）。
+
+### Fixed (session 335 — retarget 起因の良性 reject を分類)
+
+プールが難易度/ターゲットを変更した直後、旧ターゲットで掘られて
+いた in-flight share が "above target" reject として本物の不良
+share 扱いされ reject 率を水増ししていた問題を修正（ESP-Miner
+#212 系）。発行時ターゲットと現在ターゲットを比較する
+`transitionReject` で difficulty 系 reject のみ良性
+`difficulty-transition` として分離 — V1/V2 両対応。#367 由来の
+再デリバー。
+
+### Fixed (session 361 — config 非有限値拒否)
+
+5 つの float 設定項目で NaN/±Inf がバリデーションを通過する
+問題を修正（`x < 0` は NaN で偽）。`.nan`/env "NaN" が裁定計算を
+汚染する経路を遮断。
+
+### Fixed (session 325 — 裁定エンジンの非有限 yield を collapse)
+
+**問題.** `Yield.Effective()` の `<= 0` ガードは NaN を通す——
+上流プロバイダの 0/0 除算等で NaN が来ると `y <= 0` が false となり
+NaN 候補がソートへ混入、`TotalYield` を NaN 汚染しうる。
+
+**修正.** 積が非有限（NaN/±Inf）なら 0 に collapse——壊れたクォートは
+ソートに勝てず集計も汚さない。`TestYield_Effective` に NaN/±Inf
+の5ケース追加。
+
+### Fixed (session 338 — set_extranonce のデータレース修正)
+
+`mining.set_extranonce`（リードゴルーチン）が `extranonce1`/
+`extranonce2Size` を書き換え、`Submit`（呼び出し元ゴルーチン）が
+同フィールドを読む — 素のフィールドでデータレースが発生していた
+問題を `atomic.Pointer[string]`/`atomic.Int64` 化で修正。
+
+### 修正 (session 383)
+
+- Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
+
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
+### Fixed (session 331 — 非有限な裁定パラメータの拒否)
+
+`arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
+±Inf を設定できてしまい（YAML `.nan`、env `nan`/`inf` は
+ParseFloat を通過）、`< 0` チェックをすり抜けてヒステリシスが
+無効化・ incumbent 固定・フロア無効化が静かに起きていた問題を
+修正。`Decide` が非有限値を明示的にエラー拒否するようになり
+設定ミスが警告として可視化される。
+
+### 修正 (session 378)
+
+- `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
+- `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
+
+### 修正 (session 371 — scheme dispatch + dial bound)
+
+`datum://`（ADR-009 で認識されるが未実装）を fail-fast で拒否 —
+従来は平文 SV2 経路へフォールスルーし DATUM プールへバイナリ V2
+フレームを送出していた。フェイルオーバー経路のライブ V2 ダイアルに
+15 秒の接続タイムアウトを追加（TCP 接続＋TLS ハンドシェイク）。
+
+### Fixed (session 345 — プール接続タイムアウト)
+
+V1/V2 ダイアラが 1 回の接続試行を 15 秒で打ち切るよう変更（TCP
+コネクト + TLS ハンドシェイク）。呼び出し側 ctx に期限がない場合、
+ブラックホール端点が OS の SYN 再送既定（Linux 約2分）まで
+フェイルオーバー全体を停滞させていた。
+
+### Fixed (session 314 — stale ntime を現在時刻へロール（SRI 1.12.0 nTime 境界対応）)
+
+**問題.** V1 `mining.notify` の ntime・V2 の min_ntime/SetNewPrevHash ntime が
+検証なしにブロックヘッダへ直行し、ジョブが古くなるほど提出シェアの
+タイムスタンプが陳腐化。SRI 1.12.0（2026-09-17）が min_ntime/nTime
+境界のシェア検証を全チャネル型で強制したため、stale ntime のシェアは
+サーバーで一律拒否＝ハッシュレートの空費。
+
+**修正.** `rollNTime()` で stale な宣言 ntime をローカル時刻へ前倒し
+（ntime rolling は標準的マイナー挙動で実効 nonce 空間の一部）。
+未来 ntime は min_ntime 下限として原文のまま保持——現在時刻への
+丸め込みは逆に reject になるため。
+
+### 新機能 (session 387)
+
+- 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)
+
+### Fixed (session 311 — SubmitSharesError の未送信シーケンス棄却)
+
+**問題.** SV2 の SubmitSharesError がシーケンス未検証で受理され、
+未送信 seq の偽 reject フレームが reject 率を水増しできた
+（curtailment 悪用）。closed #404 の未マージ修正を master へ再デリバー。
+
+**修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
+受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
+
+### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
+
+価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、
+`strconv.ParseFloat` が受理し sanity band を通過して BTC/USD に NaN が
+混入する経路を遮断（extractor 層の `parseRate` で非有限値を拒否 +
+band を否定形 in-range 判定に変更し将来のソースでも fail-closed）。
+`parseSubscribeResult` が空 extranonce1 を受理する問題を修正
+（fuzzer が発見）。V1 JSON-RPC dispatcher と subscribe 応答に
+fuzz カバレッジを追加（350万+ exec クリーン）。
+
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
+### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
+
+**問題.** `wallet.dat` の権限監査はディレクトリのみで、
+scp/rsync 復元や tarball 展開で 0700 ディレクトリ内に 0644 で
+置かれた暗号化シードファイルを見逃していた。closed #381/#414 の
+未マージ修正を master へ再デリバー。
+
+**修正.** doctor が wallet.dat 自身のモードを監査し、`chmod 0600` の
+修正手順とともに警告（Unix のみ）。
+
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
+### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
+
+Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +
+OpenMiningChannel の応答読み取り）が deadline も ctx 観測もなく
+ブロッキング read で、`DialURL` が応答しないプールで無期限に
+ハングしエンジンの reconnect ループ全体を stall させていた問題を
+修正。ハンドシェイク全体を 15s にバウンドし、定常状態では
+従来どおり Close()/ctx で解除されるよう終了時にクリア。
+
 ### Fixed (session 324 — SV2 書き込み deadline の追加)
 
 **問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
