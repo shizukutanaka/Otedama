@@ -940,6 +940,47 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 416 — lint backlog follow-up: eliminate the entire hugeParam class [PERF]
+
+Session 415 (PR #526) cleared ~350 lint findings down to 65 and deferred two
+classes: 53 `hugeParam` (large structs passed by value, ≥80 bytes each copied
+per call) and 12 `gocyclo` (functions needing real decomposition, not cosmetic
+fixes). This session converts **all 53 hugeParam sites** — zero remain.
+
+What changed (value → pointer params/receivers):
+
+- `internal/arbitration`: `Stream.Accepts/YieldFor`, `Assignment.Idle`,
+  `Decide(in *Input)`, `chooseForDevice`, `policyScore` — the arbitration hot
+  path ran once per Decide tick copying 80–120-byte structs per call.
+- `internal/miner`: `Header.Bytes`, `ParseHeader`, `HashHeader` — `HashHeader`
+  is called once **per nonce** in the grind loop; the 80-byte Header copy per
+  hash is eliminated (BenchmarkHashHeader: ~107ns/op, 0 allocs — unchanged
+  correctness, the copy was the only overhead above SHA-256d itself).
+- `internal/poolproto`: `DialURL` and the `Dialer` interface now take
+  `*Credentials`; `sendJob` takes `*Job`; `rpcMessage.uintID` pointer receiver.
+- `internal/doctor`: `DefaultChecks` + all 10 check funcs take `*config.Config`
+  (200 bytes → 8 per call).
+- `internal/config`: `Resolve(fromFile *Config, env, flags *FlagValues)`.
+- `internal/engine`: `sessionOpts` receivers, `applyJob`, `setupWallet`,
+  `startProviders`, `poolURLs`, `payoutAddresses`, `buildStats`,
+  `disconnectedStats` (returns `*tui.Stats`).
+- `internal/provider`, `internal/stratum` (`SetupConnection.Encode`,
+  `ValidateSetupConnection`), `internal/tui` (`Stats` through the whole
+  render pipeline).
+
+Channel types (`jobsCh chan Job`, `updateCh chan Stats`, `quoteCh chan Quote`)
+intentionally keep value semantics — pointers are taken at send/apply
+boundaries only, avoiding aliasing across the producer/consumer handoff.
+
+`Decide` also gained a nil-`Input` guard (a pointer API must not panic on nil).
+
+Remaining deferred debt: the 12 `gocyclo` findings (cyclomatic complexity) —
+those need decomposition refactors, not signature changes, and stay parked as
+a separate judgement call.
+
+*Evidence: `golangci-lint run` hugeParam count 53 → 0; `go vet` clean;
+`go test ./...` all 24 packages green including `-race` on the engine suite.*
+
 ## Session 409 — SPECIFICATION validation-section drift [FIXED]
 
 **Understated validation claims corrected [FIXED].**
