@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 482 — ROADMAP.md の陳腐化エントリ4件を実装状況と照合して訂正)
+
+* `engine → poolproto 統合` 項: 「SV1 transport が使えない」という前提は陳腐化 — V1 は `poolproto.DialURL` 経由で動作済み。残ギャップは V2 側の native `stratum.NewDecoder` パスと、engine から未参照の `poolproto/stratumv2` dialer のみと注記。
+* `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` 項: 「informational」は不正確 — CI ワークフローに両者とも存在せず（Makefile ローカルのみ・osv-scanner は未導入）と訂正。
+* `internal/poolproto/ 抽象化レイヤ` 項: SV1 切替のみ部分完了と注記（SV2 native・DATUM 未実装）。
+* `Stratum V1 互換の追加` 項: 接続層は完了（stratum+tcp://・stratum+tls:// 動作）とマークし、coinbase 未再構成のため V1 シェアは pool 受理されない残ギャップを併記。
+
+### Fixed (session 481 — コミット済み `.claude/settings.local.json`（古いコードベース構成の死んだパスを指す130超の許可エントリ）を削除し、`.gitignore` でローカル設定の再混入を防止)
+
+* SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
+* 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
+
 ### テスト (session 395)
 
 - `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。

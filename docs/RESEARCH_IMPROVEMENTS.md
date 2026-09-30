@@ -940,6 +940,71 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 481
+
+**Ecosystem drift check (SRI 1.11.1, 2026-07-22).** The reference
+implementation's translation proxy rounded *up* Stratum V1 difficulty
+values during V1→V2 conversion (stratum-mining/stratum#2227), making the
+effective share target stricter than the pool assigned. Otedama's
+`miner.TargetFromDifficulty` performs full-precision division
+(`target = diff1Target / difficulty` at 256-bit `big.Float` precision,
+truncation error <1 ULP) — the same defect class is not present. The
+V1 notification parsers (`parseNotify`, `parseDifficulty`,
+`parseSetExtranonce`, `parseShowMessage`, `client.reconnect`) were
+re-audited: all bounded, and the zero-fill fallbacks are on the
+pool-side-invalid V1 share path (KNOWN_LIMITATIONS §17), so they cannot
+produce misleading mining behaviour beyond what is already documented.
+
+**Repo hygiene sweep — one real fix.** `Makefile` targets were all
+inventoried: every referenced binary, path, and subcommand exists; the
+only remaining stale reference is `docs-serve`'s
+`golang.org/x/tools/cmd/godoc@latest`, which resolves to
+`v0.1.0-deprecated` (godoc was split out of x/tools and abandoned — it
+still runs today but upstream is dead and a future `@latest`
+resolution can fail outright; left as-is since `setup:` uses the same
+`@latest` convention and the correct replacement choice — pkgsite vs.
+`go doc` static output — is a maintainer call).
+
+The committed `.claude/settings.local.json` was deleted and added to
+`.gitignore`. It is a per-developer Claude Code permissions file that
+must not be versioned (upstream convention: `settings.local.json` is
+local-only; the shared file is `settings.json`). The committed copy
+accumulated 130+ stale `Bash(...)` allow-entries for a pre-rewrite
+project shape that no longer exists — `internal/mining`,
+`internal/crypto`, `internal/monitoring`, `internal/database`,
+`cmd/improvements`, `cmd/demo`, `cmd/test-runner`, WSL paths
+(`/mnt/c/...`, `"C:\Program Files\Go"`), and phantom helper scripts
+(`./fix_imports.sh`, `./cleanup_tests.sh`, `dos2unix`) — plus
+broad `Bash(rm:*)`/`Bash(git push:*)` grants. Removing it cannot break
+the tool: Claude Code regenerates the file locally on first use.
+
+## Session 482
+
+**ROADMAP.md reconciliation against shipped code — four stale entries
+corrected.** The v3.1.0/v3.2.0 milestone lists still described the
+pre-integration state:
+
+- `engine → poolproto 統合` claimed `engine.Run` was still on
+  `stratum.NewDecoder` + raw TCP and that "SV1 transport 等が使えない" —
+  false since the `runSessionV1` dispatch shipped: V1 connections go
+  through `poolproto.DialURL` and the `poolproto.Session` interface
+  (`Jobs()`/`Submit()`). The remaining gap is narrower: the V2 loop is
+  still on the native decoder path, and `internal/poolproto/stratumv2`
+  (registered dialer) has no engine caller — the open decision is
+  "migrate the V2 loop onto poolproto" vs "drop the unused dialer".
+- `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` —
+  "informational" was inaccurate: neither tool runs in any CI workflow;
+  govulncheck exists only in the local `security`/`audit`/`setup`
+  Makefile targets and osv-scanner is absent from the repo entirely.
+- `internal/poolproto/ 抽象化レイヤ` — marked partially complete: only
+  the SV1 switch actually dispatches through the abstraction.
+- `Stratum V1 互換の追加` — marked connection-complete: the dialer,
+  handshake, extranonce/difficulty notifications, and submit path all
+  ship, but V1 jobs hash a zero MerkleRoot (coinbase is never
+  reconstructed — `stratumv1/parse.go`), so pools cannot accept the
+  shares; V1 remains a connectivity/diagnostic path, SV2 is required
+  for real revenue.
+
 ## Session 395 — fuzz for the V1 notification parsers
 
 [FIXED — session 395] **V1 notification-parser fuzz** (`internal/poolproto/stratumv1/notify_fuzz_test.go`): `parseNotify`, `parseReconnect`, `parseSetExtranonce`, `parseShowMessage` — pool-controlled params decoders reachable on every read-loop tick. The dispatch-level fuzzer (#478) reaches them only after producing a well-formed method string; direct seeds drive the parsers past their length guards into per-field unmarshal and hex/dec paths. ~15M execs clean; `client.reconnect` verified to always yield a directive (its host/port remain advisory-only and are never dialed — documented anti-redirection design).
