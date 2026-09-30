@@ -17,6 +17,10 @@ competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LD
 ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
 `config.DefaultPoolURL` 単一フォールバック）を明記。
 
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
 ### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
 
 **問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
