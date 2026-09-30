@@ -940,6 +940,22 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 320 — live network-hashrate feed (re-delivers closed #378/#415)
+
+**Finding [OBSERVED — fetched live].** The mining-yield estimate consumed
+a compile-time network-hashrate constant (1e21 H/s). mempool.space and
+blockchain.info both expose live difficulty/hashrate endpoints — fetched
+and shape-verified live, the two agree (~930 EH/s vs the stale 1e21
+constant). Closes KNOWN_LIMITATIONS §7's deferred "live difficulty
+feed".
+
+**Fix [OBSERVED].** `rates.HashrateFetcher` polls both endpoints, takes
+the median inside a plausibility band, and replaces the constant via
+`MiningProvider.NetworkHashrateFunc`. Stale/unwired falls back to the
+constant, so offline start is unaffected.
+
+**Tests [OBSERVED].** rates + provider + engine suites green.
+
 ## Session 379 — reconnect-loop + docs/config-surface audit
 
 [FIXED] `runReconnectLoop` never reset its exponential backoff after a
