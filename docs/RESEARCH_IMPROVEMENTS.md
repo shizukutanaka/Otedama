@@ -949,6 +949,30 @@ the arXiv listing; all API endpoints against current vendor documentation.*
   unaligned fields) is structurally absent; the typed API
   guarantees alignment internally.
 
+## Session 566 — JSON/YAML decode boundary
+
+- Every `json.Unmarshal` takes a `&`-pointer and checks its error;
+  every `json.Marshal` checks `err`. The only two ignored results
+  are the documented best-effort tolerations in parse.go:164/176
+  ("tolerate non-string" — deliberate lenient parsing for pool
+  quirks), each carrying an inline justification comment.
+- yaml: the config-file decode uses `yaml.NewDecoder` with
+  `KnownFields(true)` (unknown keys rejected), checks `Decode`'s
+  error, and treats io.EOF as "use defaults" — the fuzz target for
+  this boundary exists (session 391).
+
+## Session 567 — package-init surface
+
+- `func init()` exists in exactly four files:
+  - `lightning/english_wordlist.go` — splits the embedded BIP-39
+    wordlist and **panics at startup** if the count is not 2048 or
+    the SHA-256 doesn't match — fail-fast integrity self-check.
+  - `btccrypto/secp256k1.go`, `stratumv1` and `stratumv2` dialer
+    registration — the canonical `init()` plugin-registry pattern,
+    each paired with compile-time `var _ Interface =` assertions.
+- No init performs I/O, spawns goroutines, or mutates shared state
+  beyond registration — all are idempotent and order-independent.
+
 ## Session 568 — recover() + goroutine-spawn audit
 
 - Zero `recover()` calls in non-test code: no panic-swallowing
