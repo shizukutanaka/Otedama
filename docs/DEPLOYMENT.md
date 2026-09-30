@@ -296,6 +296,44 @@ stringData:
   wallet-passphrase: your-strong-passphrase-here
 ```
 
+### PersistentVolumeClaim
+
+The Deployment above mounts `otedama-data` — it must exist:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+### Service
+
+The `ServiceMonitor` below selects `app: otedama`, so a `Service` fronting
+the pod is required for scraping to work (previously missing from this
+example — a ServiceMonitor selects Services, not pods):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama
+  labels:
+    app: otedama
+spec:
+  selector:
+    app: otedama
+  ports:
+  - name: metrics   # must match ServiceMonitor.endpoints[].port
+    port: 9090
+    targetPort: metrics
+```
+
 ### ServiceMonitor (Prometheus Operator)
 
 ```yaml
