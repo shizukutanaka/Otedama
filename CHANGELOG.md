@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 応答停止の wedged プールでゴルーチン + pending エントリが
 シェア毎にリークする問題を修正。
 
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
 ### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
 
 Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +

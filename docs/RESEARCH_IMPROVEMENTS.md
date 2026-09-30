@@ -956,6 +956,18 @@ gets a "timed out" error, which the submit goroutine logs and exits.
 drop-oldest) are bounded on master; the V2 engine `jobs` map remains
 bounded only on open PR #397/#429 — not re-implemented here.
 
+## Session 340 — BIP-39 intermediate-buffer zeroization
+
+**Secret-material wipe [FIXED].** `EntropyToMnemonic` and
+`MnemonicToEntropy` built the mnemonic/entropy through a `bits` slice
+holding the full secret bitstream (one byte per bit) that was left for
+the GC; `MnemonicToSeed` left the mnemonic-derived `password` and raw
+PBKDF2 `seed` buffers likewise. All are wiped via the package's
+existing `zeroBytes` on every return path (defer). Residual: the
+`m.String()` mnemonic string itself and `salt` are Go strings —
+immutable, unzeroable — an accepted language limitation now recorded.
+Touched `internal/lightning` — CODEOWNERS maintainer review applies.
+
 ## Session 327 — V2 handshake read deadline (real fix)
 
 **Negotiate reads unbounded [OBSERVED + FIXED].** The dialer's two
