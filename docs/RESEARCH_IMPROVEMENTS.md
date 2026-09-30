@@ -950,6 +950,22 @@ go1.27.1/arm64. Combined with the `-race` full-tree run in session
 517, no nondeterminism evidence remains anywhere in the suite.
 No action needed; recorded as an audit verdict.
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
