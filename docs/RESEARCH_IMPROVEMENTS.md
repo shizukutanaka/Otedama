@@ -947,6 +947,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 **対応（1件 — ADR-009 エビデンス更新）。**
 - ADR-009 の「production-viable」エビデンスに NexusPool を追記。特に価値があるのは同社ポストモーテムの教訓: **単体テストが通っても SRI 参照 JDC との実接続テストでしか見つからなかった欠陥が4件**（allocation メッセージの field-count 不一致・未配線 payout フィールド・JD 専用接続を殺す reaper）— これは ADR-009 のコスト見積が unit test だけでなく reference-implementation interop テスト工数を含むべき根拠として記録。
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
