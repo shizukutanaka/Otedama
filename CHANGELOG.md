@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 378)
+
+- `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
+- `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
+
 ### 修正 (session 371 — scheme dispatch + dial bound)
 
 `datum://`（ADR-009 で認識されるが未実装）を fail-fast で拒否 —
