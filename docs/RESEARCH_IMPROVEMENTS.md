@@ -950,6 +950,26 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
 
+## Session 379 — reconnect-loop + docs/config-surface audit
+
+[FIXED] `runReconnectLoop` never reset its exponential backoff after a
+successful session: `backoff` doubled on every failure and was capped at
+64s, but a session that connected, mined for hours, then dropped still
+waited out whatever the backoff had grown to from earlier failed hops.
+`connectedThisAttempt` (set from `onConnected`) now resets it to
+`reconnectBackoffInitial`, placed before the failover branches and log
+lines so both the immediate-retry path and the "reconnecting in %v"
+message report the post-reset delay. New `dropAfterHandshakePool` fake +
+`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` verify the
+delay stays at 1s across repeated established-then-dropped sessions.
+
+[AUDITED — clean] `config.yaml.example` documents every Config field
+(all 17 yaml keys incl. pool sub-fields `tls_ca_file`, `payout_scheme`);
+Dockerfile is minimal (distroless nonroot, CGO_ENABLED=0, -trimpath,
+ldflags version injection, /LICENSE + /NOTICE copied, VOLUME /var/lib/
+otedama matching docs/DEPLOYMENT.md, EXPOSE 0); cmd wrappers
+(version/completion/doctor/main/service) are thin and correct.
+
 ## Session 399 — cross-worker nonce-space partition
 
 **Duplicate grinding across devices [FIXED].** Every `miner.Worker`
