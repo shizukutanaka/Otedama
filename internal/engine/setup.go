@@ -103,6 +103,25 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 	return workers, mergeShares(ctx, shareChans), nil
 }
 
+// nominalMiningHashrate estimates the workers' combined nominal hashrate
+// from their devices' capability families. The SV2 OpenMiningChannel
+// handshake must declare a nominal_hashrate before any work has run, so a
+// live-stats readout (always ~0 at handshake time) is useless there — pools
+// seed vardiff from the declared value. The estimate is per *worker*, not
+// per device, so it counts exactly the SHA256d-capable devices that will
+// actually hash. Unknown families contribute 0.
+func nominalMiningHashrate(devices []hal.Device, workers []*miner.Worker) float64 {
+	family := make(map[string]hal.Family, len(devices))
+	for _, d := range devices {
+		family[d.Identity().ID] = d.Identity().Family
+	}
+	var h float64
+	for _, w := range workers {
+		h += provider.DefaultHashrates[family[w.DeviceID()]]
+	}
+	return h
+}
+
 // startProviders constructs and starts the mining and Akash providers.
 // Start errors are logged (not fatal): the engine can run with a degraded
 // provider set. The caller owns provider shutdown.
