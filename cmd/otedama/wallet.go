@@ -106,8 +106,9 @@ func parseWalletFlags(verb string, args []string, stdout, stderr io.Writer) (wal
 // default), so a user who configured a custom location does not need to
 // repeat it — and one who never did still lands in the right place.
 func walletDataDir(f walletFlags, stderr io.Writer) string {
-	cfg := config.Resolve(loadConfigFile(f.configFile, stderr), nil,
-		config.FlagValues{DataDir: f.dataDir})
+	fromFile := loadConfigFile(f.configFile, stderr)
+	cfg := config.Resolve(&fromFile, nil,
+		&config.FlagValues{DataDir: f.dataDir})
 	return cfg.DataDir
 }
 
