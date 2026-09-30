@@ -1147,6 +1147,45 @@ quantile 追跡）→ `otedama_submit_latency_milliseconds` ゲージで
 true（lwIP 固有の修正）、dial timeout は open #457/#483 が担当、
 hashtrate counter overflow は ESP32 ファームウェア固有。
 
+## Session 368/369 — wallet KDF + address-parser fuzz + dep freshness
+
+**Audited clean.** wallet.dat scrypt params are compile-time constants
+(N=1<<17, r=8, p=1) — a tampered wallet file cannot request a
+memory-exhausting KDF; decrypt path is bounded and checksum-gated.
+V1 TLS dialer verified: MinVersion TLS 1.2, no InsecureSkipVerify,
+extra-CA PEM merge preserves verification.
+
+**Coverage [FIXED].** `FuzzValidateAddress` + direct bech32/base58
+drives the payout-address parsers with operator-supplied strings
+(1.4M execs clean): no panic, and a nil error always implies a
+checksum-verified structure.
+
+**Observed [OBSERVED — deferred].** `golang.org/x/crypto` is pinned at
+v0.23.0 vs latest v0.57.0 and `x/sys`/`x/term`/`x/text` are similarly
+behind; `govulncheck` shows zero reachable vulns (s362), and a bump
+raises the go.mod `go` directive, colliding with CI's pinned Go —
+deferred until the toolchain pin is resolved. yaml.v3 migration is
+already tracked on #444.
+
+## Session 376 — audit-checklist row verification (continued)
+
+[AUDITED — clean] i18n completeness is test-enforced:
+`TestAllLanguages_CoverAllEnglishIDs` asserts `MissingTranslations()`
+is empty for the full built-in bundle, so a dropped catalog entry is a
+CI failure, not a silent fallback.
+
+[AUDITED — clean] Checklist rows verified true: #14 (go.mod contains
+only `x/crypto` + `yaml.v3` + stdlib), #7 (test:impl line ratio 1.74
+≥ 1.0), doctor count (17 checks = CLAUDE.md claim), ADR-001..011 all
+present, SECURITY.md + CODE_OF_CONDUCT.md present.
+
+[FIXED] `.goreleaser.yaml` release header referenced a nonexistent
+`docs/verify-release.md` (dead link in every future release note) and
+named the checksums file `checksums.txt` while the configured
+`checksum.name_template` emits `otedama_<ver>_checksums.txt`. Both
+corrected; the link is now an absolute URL to DEPLOYMENT.md (relative
+links in release bodies do not resolve to repo files).
+
 ## Session 418 — close KNOWN_LIMITATIONS §16: the `wallet` subcommand [FEATURE]
 
 The last open CLI-facing limitation: no way to verify a written-down

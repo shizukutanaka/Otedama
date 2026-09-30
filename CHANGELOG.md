@@ -80,6 +80,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   と訂正 — 実際は `engine: pool read` でセッション死亡する fail-fast
   （提案の debug ログより厳格）。
 
+### テスト (session 369 — btccrypto fuzz)
+
+payout アドレスの bech32/bech32m + Base58Check バリデータに fuzz 追加
+（140万 exec クリーン）。wallet.dat scrypt パラメータがコンパイル時
+定数であること（ファイル経由の KDF DoS 不可）を監査済みと記録。
+
+### 修正 (session 376)
+
+- `.goreleaser.yaml` のリリースノート本文が存在しない `docs/verify-release.md` を参照し、チェックサムファイル名も `checksums.txt`（実際の生成名は `otedama_<ver>_checksums.txt`）と不一致だった点を修正 — リンクは絶対 URL で `docs/DEPLOYMENT.md` へ。
+
 ### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
 
 - `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
