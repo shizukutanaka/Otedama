@@ -16,6 +16,20 @@ btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
 secp256k1 は正直な stub）を監査済みと記録。govulncheck で
 到達可能脆弱性ゼロを確認。
 
+### 修正 (session 411)
+
+GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
+しなかった問題を修正 — FIPS 140-3 の非対応理由（Noise NX の
+ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
+を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
+go.mod と完全整合を確認済み。
+
+### 修正 (session 412)
+
+SECURITY.md の非実在コマンド `otedama migrate-from-v2` への言及を
+`docs/MIGRATING-FROM-V2.md` への誘導に訂正。ADR-006/010/011・
+SECURITY.md のスコープ節は実装と整合を確認済み。
+
 ### 修正 (session 414)
 
 competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
