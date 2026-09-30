@@ -216,7 +216,8 @@ func TestConfigValidate_MissingAddress(t *testing.T) {
 
 func TestConfigValidate_ValidAddress(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{"config", "validate",
+	code := run([]string{
+		"config", "validate",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}, &out, &err)
 	if code != exitOK {
@@ -477,7 +478,7 @@ func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 		t.Fatalf("stat log file: %v", err)
 	}
 	// The log file may contain pool URLs / worker names — keep it owner-only.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("log file perms = %04o, want 0600", perm)
 	}
 }
@@ -647,6 +648,74 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	}
 }
 
+func TestIsLoopbackAddr(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"127.0.0.1:8080":   true,
+		"127.4.5.6:1":      true,
+		"localhost:8080":   true,
+		"LOCALHOST:8080":   true,
+		"[::1]:9090":       true,
+		"127.0.0.1":        true, // bare host
+		"0.0.0.0:8080":     false,
+		"[::]:8080":        false,
+		"10.0.0.5:8080":    false,
+		"example.com:8080": false,
+		"":                 false,
+	} {
+		if got := isLoopbackAddr(addr); got != want {
+			t.Errorf("isLoopbackAddr(%q) = %v, want %v", addr, got, want)
+		}
+	}
+}
+
+func TestStartHTTPServer_NonLoopbackWarns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	reg, srv := startHTTPServer(ctx, "0.0.0.0:0", false, &out, &errb)
+	if srv == nil {
+		t.Fatal("startHTTPServer: srv should not be nil")
+	}
+	defer srv.Stop()
+	if reg == nil {
+		t.Fatal("startHTTPServer: reg should not be nil")
+	}
+	if !strings.Contains(errb.String(), "non-loopback") {
+		t.Errorf("expected non-loopback warning on stderr; got %q", errb.String())
+	}
+	if strings.Contains(errb.String(), "pprof") {
+		t.Error("pprof should not be mentioned when --pprof is off")
+	}
+}
+
+func TestStartHTTPServer_NonLoopbackPprofWarns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	_, srv := startHTTPServer(ctx, "0.0.0.0:0", true, &out, &errb)
+	if srv == nil {
+		t.Fatal("startHTTPServer: srv should not be nil")
+	}
+	defer srv.Stop()
+	if !strings.Contains(errb.String(), "pprof") {
+		t.Errorf("expected pprof mention in non-loopback warning; got %q", errb.String())
+	}
+}
+
+func TestStartHTTPServer_LoopbackSilent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	_, srv := startHTTPServer(ctx, "127.0.0.1:0", true, &out, &errb)
+	if srv == nil {
+		t.Fatal("startHTTPServer: srv should not be nil")
+	}
+	defer srv.Stop()
+	if errb.Len() != 0 {
+		t.Errorf("loopback bind should not warn; got %q", errb.String())
+	}
+}
+
 // ============================================================================
 // cmdService install — flag parsing path (fails at OS level, not flag level)
 // ============================================================================
@@ -660,5 +729,42 @@ func TestService_Install_DoesNotCrash(t *testing.T) {
 		// "cannot install service" on an unconfigured/CI environment.
 	default:
 		t.Errorf("service install: unexpected exit code %d (out=%s err=%s)", code, out.String(), errb.String())
+	}
+}
+
+// ----- argv-passphrase warning -----
+
+// A passphrase on the command line is visible in process lists; run must
+// warn (docs prefer the OTEDAMA_WALLET_PASSPHRASE env var).
+func TestRun_WalletPassphraseFlag_WarnsProcessListExposure(t *testing.T) {
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--wallet-passphrase", "test-passphrase",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Fatalf("code=%d err=%s", code, err.String())
+	}
+	if !strings.Contains(err.String(), "process lists") {
+		t.Errorf("expected argv-exposure warning on stderr, got %q", err.String())
+	}
+}
+
+// The env var path is the recommended one — it must NOT warn.
+func TestRun_WalletPassphraseEnv_NoWarning(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "env-passphrase")
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Fatalf("code=%d err=%s", code, err.String())
+	}
+	if strings.Contains(err.String(), "process lists") {
+		t.Errorf("env-supplied passphrase must not warn, got %q", err.String())
 	}
 }
