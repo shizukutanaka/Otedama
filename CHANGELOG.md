@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    `godebug tlsmlkem` の両方が Go 1.24+ を必須にするため、実際の
    最小ツールチェーン要件を明記。
 
+### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
+
+* `skills/tdd.md`: 「CI上で継続的にファズ実行」→ CI にファズジョブ非存在（`make fuzz` ローカルのみ）、`//go:build integration` タグ → 宣言ファイルゼロ（実際は `testing.Short()` ゲート）、`make test-e2e`/`//go:build e2e` → 両方非実在（E2E スイート未実装、ターゲット削除済み）の3件を訂正。
+* `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
+* `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
 ### Fixed (session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正)
 
 * 「>5% 回帰で自動失敗」→ CI はベンチマークを実行して artifact をアップロードするのみで回帰ゲートなし。
