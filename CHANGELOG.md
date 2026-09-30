@@ -16,6 +16,13 @@ btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
 secp256k1 は正直な stub）を監査済みと記録。govulncheck で
 到達可能脆弱性ゼロを確認。
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### セキュリティ (session 407)
 
 VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
