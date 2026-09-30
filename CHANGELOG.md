@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 518 — sv2-spec tracking)
+
+- **ADR-009 ecosystem update:** sv2-spec #194 merged — error codes may
+  now drive automated actions (upstream blessing for our reject-code
+  classification); #202/#203 compete on a non-custodial JDP payout
+  extension (miner-declared payout outputs — on Otedama's sovereignty
+  axis, tracked for future JDC work).
+
 ### Documentation & audit (session 519 — rule-3 duplication ledger)
 
 - Recorded two candidates in `docs/CATEGORY_AUDIT.md` (not fixed —

@@ -614,6 +614,33 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 518, September 2026)
+
+Two specification-level developments since the production-JDP evidence
+recorded in this ADR:
+
+- **sv2-spec PR #194 merged (2026-06-16): "allow implementations to use
+  error codes for automated actions."** The Mining Protocol spec now
+  explicitly blesses acting on `SubmitSharesError`/`OpenMiningChannelError`
+  error codes programmatically — the upstream justification for Otedama's
+  canonical reject-code classification (mapping standardized codes to
+  reject families before substring heuristics, in flight since session
+  257's open PRs). Error-code-driven behaviour is now spec-sanctioned,
+  not an implementation liberty.
+- **sv2-spec PRs #202 and #203 (open): a non-custodial pool-payouts
+  extension for JDP.** Two competing designs — #202's request/response
+  payout-set flow vs #203's push-based approach that avoids the
+  declaration RTT — are converging on letting a miner declare its own
+  payout outputs inside a Job Declaration, closing the last custody gap
+  in the SV2 stack (today even a JDP pool assembles the coinbase). This
+  is directly on Otedama's sovereignty axis: when it lands, a
+  miner-declared template can carry the miner's own payout outputs, so
+  `payout_scheme: tides` ceases to be the only non-custodial payout
+  option. Track both PRs; whichever merges defines the wire format a
+  future `internal/btcnode` JDC would need.
+
+---
+
 ## Ecosystem update (session 520, September 2026)
 
 - **Upstream now ships an orchestrated JDP stack (`stratum-mining/sv2-ui`).**

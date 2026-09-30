@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 518 — sv2-spec: error-code automation + non-custodial payouts
+
+Two verified specification developments recorded in ADR-009:
+
+- **sv2-spec #194 merged (2026-06-16)**: the spec now explicitly permits
+  implementations to take automated actions on protocol error codes —
+  upstream validation of Otedama's canonical reject-code classification
+  (open-PR lineage since session 257).
+- **sv2-spec #202/#203 (open)**: competing designs for a non-custodial
+  pool-payouts extension to JDP (request/response vs push-based) —
+  miner-declared payout outputs inside the declared template, directly
+  on Otedama's sovereignty axis; worth tracking for any future JDC work.
+
 ## Session 519 — duplication candidates recorded as ledger entries
 
 Recorded (not fixed, per CLAUDE.md rule 3 — consolidation is a contract
