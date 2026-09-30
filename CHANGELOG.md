@@ -19,6 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 の単一スレッドライフサイクルを文書化。これで `internal/` + `cmd/` 配下の
 全ファイル監査網羅が完了。
 
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist は master 側（session 485）で注記済みのため変更なし。
+
 ### セキュリティ (session 410)
 
 THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
