@@ -960,6 +960,69 @@ section correctly notes `web/` and plugin system don't exist;
 reporting paths (Private Vulnerability Reporting → MAINTAINERS.md
 fallback) are real.
 
+## Session 492 — GOVERNANCE.md の誤記2件を訂正 + CODE_OF_CONDUCT・パス参照棚卸し clean
+
+**Sweep.** `GOVERNANCE.md`（159行）・`CODE_OF_CONDUCT.md`（117行）全文精読 + 全 markdown（433件のバッククォートパス参照）の非実在ファイル棚卸し。
+
+**発見（2件訂正）。**
+- 「Auto-mergeable if **Renovate** patch update」→ 実際の設定済み bot は Dependabot（`.github/dependabot.yml` — renovate 設定は一切非実在、サーバーサイド automerge は GH-actions bump 用に設定済み）。
+- Phase-1 の bus-factor 緩和に「**Sigstore 鍵なし署名**（長命シークレットなし）」→ session 480 検証済みの通り `.goreleaser.yaml` の cosign `signs:` は dead config（release.yml が goreleaser を一切呼ばない）— 署名される成果物は存在せず、緩和は succession plan のみ。
+
+**検証済み・変更なし。** CODE_OF_CONDUCT は標準 Contributor Covenant 2.1＋正しい Security Advisories 報告 URL で clean。CODEOWNERS（lightning/noise* カバー）・MAINTAINERS.md の succession plan・ADR append-only 方針は実体と一致。パス参照棚卸し: `config.yaml`/`test.yml` 言及は全て正当（非実在を論じる文脈 or 実在）— 新規 phantom パス参照なし。
+
+## Session 493 — README.md の phantom/陳腐クレーム4件を訂正
+
+**Sweep.** `README.md`（157行・バッジ〜フッター全節）を実コード・リモートブランチ・release.yml と照合。
+
+**発見（4件訂正）。**
+- **「`releases/latest/download/install.sh` でインストール」→ 404**: `release.yml` がアップロードするのは `otedama-<os>-<arch>.tar.gz` のみで install.sh はリリース資産として存在しない → `raw.githubusercontent.com` の実 URL に訂正。
+- **「v2.1.9 は `legacy-v2` ブランチに保全済み・2026-10 まで修正提供」→ phantom ブランチ**: `git ls-remote` で同ブランチ非実在 → 「保全が計画」に訂正（CLAUDE.md アーキテクチャマップ内の同趣旨記述も phantom — メンテナ自身のファイルのため帳簿記録のみ）。
+- **「Windows: Task Scheduler」×2箇所** → 実装は `sc.exe` SCM 登録（#568 が SPECIFICATION.md で直した phantom の README 残件）。
+- **バッジ「Go 1.22+」・要件「Go 1.22以上」** → `toolchain go1.24.0` + `godebug tlsmlkem` で実効 ≥1.24（#571 が AUDIT_CHECKLIST で直した同クレームの README 残件）。
+
+**検証済み・変更なし。** 機能一覧の「未実装」正直列挙（署名バイナリ・ASIC・ZKP等）・コマンド表（`completion` 行欠落は open #557 担当域）・market claims・i18n 部分は正確。
+
+## Session 494 — docs/API.md 前半（1–206行）照合、未記載フラグ2件を追記
+
+**Sweep.** `docs/API.md` の CLI 節（`run` フラグ表・exit codes・`version`/`config`/`service`/`doctor` シグネチャ）を `cmd/otedama` の実 FlagSet と機械照合。
+
+**発見（2件追記）。**
+- **`run` フラグ表に `--pprof` が欠落**: run.go:84 で実在（`/debug/pprof/` マウント・loopback/private 推奨）— API.md には未記載。「non-loopback で警告」の記述は未作成（open #453 の未マージ面のため）。
+- **`service install` のフラグ記述が不完全**: `--config`/`--data-dir` のみ記載だが実 FlagSet は `--bitcoin-address`（config 無し時必須）・`--log-level`・`--log-format`・`--language` も受理。また Windows サービスを「Windows service」とのみ記載 — `sc.exe` SCM に明記（README と同じ訂正）。
+
+**検証済み・変更なし。** `run` の他11フラグ・exit codes（0/1/64/78）・`version --json` フィールド・`config show --origin/--json`・`doctor` フラグ+exit 0/1/2+JSON シェイプ（duration_ms/exit_code/elapsed_ms）・YAML KnownFields 振る舞い・設定優先度・env var 表 — 全て正確（env 欠落5件は open #517 担当域）。
+
+## Session 495 — .github/oss-fuzz-integration.md の陳腐化2件 + CONTRIBUTING.md Go 要件を訂正
+
+**Sweep.** `.github/oss-fuzz-integration.md`（未提出の統合文書）の全クレームを上流ソースと照合 + `CONTRIBUTING.md`（166行）精読。
+
+**発見（3件訂正）。**
+- **「Bug bounties (~$500–$5000 per accepted vulnerability)」→ 陳腐化**: OSS-Fuzz reward program は sunset（google/oss-fuzz#15478 で確認）。24/7 ファズ・issue filing・coverage reports は無料継続 — bounty 行を取消線＋訂正。
+- **準備済み `build.sh` が obsolete interface**: `go-118-fuzz-build -o x.a -func F pkg` + 手動 `$CXX $LIB_FUZZING_ENGINE` リンクは旧式 — 現行 OSS-Fuzz Go ガイドの `compile_native_go_fuzzer <pkg> <func> <name>` ヘルパーに置換（base-builder-go 同梱・go-118-fuzz-build を内部駆動）。
+- **CONTRIBUTING.md「Go 1.22以上」** → 実効 ≥1.24（README/AUDIT_CHECKLIST に続く同クレーム5箇所目）。
+
+**検証済み・変更なし。** Fuzz* 関数2件の記述（FuzzDecodeHeader/FuzzDecoder_ReadFrame）・提出手順・メンテナ工数見積・`primary_contact` は提出時差し替えのテンプレートとして妥当。CONTRIBUTING の make ターゲット・DCO・二重レビュー方針（Phase-1 単独メンテ下での意図的ポリシー）・Braiins/DEMAND 手検証クレームは正確。
+
+## Session 496 — MAINTAINERS.md の虚偽引用訂正 + Dockerfile/.dockerignore 監査
+
+**Sweep.** `MAINTAINERS.md`（192行）全文精読 + `Dockerfile`（70行）を ci.yml の docker-verify クレーム・API.md・内部実装と照合。
+
+**発見（1件訂正 — 外部引用の捏造系）。**
+- 冒頭の動機付け「Kubernetes Ingress NGINX, **External Secrets Operator** have been declared end-of-life in 2025–2026」→ Ingress NGINX の 2026 EOL 宣言は実在だが **ESO は活発に開発中**（external-secrets.io のサポート表: 2026-08 時点で v2.10 までリリース）— 虚偽引用を訂正（CLAUDE.md「存在しない URL・API の生成禁止」と同クラスの事実捏造）。
+- MAINTAINERS の cosign「default path」記述（line ~101, 148）は未修正のまま残存 — **closed #562 の担当域**（同 PR で訂正済みだったが未マージで閉鎖）のため再提出せず帳簿記録のみ。
+
+**検証済み・変更なし。** Dockerfile: `golang:1.24-alpine`（実効要件と一致）・ldflags が正しい `internal/version.{Version,Commit,BuildDate}` シンボル（release.yml の間違った `main.*` と対照的）・NOTICE+LICENSE 同梱・nonroot uid 65532・`VOLUME /var/lib/otedama`・`EXPOSE 0`・`CMD ["run","--help"]` — 全て正確（ci.yml docker-verify の失敗は §13 記録済みのジョブ側欠陥で Dockerfile 側の問題ではない）。`.dockerignore` 非実在（COPY . . が .git 等を context に含めるが動作上無害 — open #530 担当域）。
+
+## Session 497 — ADR-009 にエラッタ2件（残 Proposed ADR 007–010 の現在形検証）
+
+**Sweep.** Accepted ADR（001–006, 011）は session 473 で全照合済みのため、残る Proposed ADR 007–010 の「今日の実装」現在形クレームを検証（Proposed 自体は未来設計で正当 — 陳腐な現在形のみ対象）。
+
+**発見（2件、ADR-009 にエラッタ追加）。**
+- **「Otedama's positioning today: hard-coded as a Stratum V2 client only (ADR-002)」→ 陳腐**: `internal/poolproto/stratumv1` + `DialURL` が alpha.1 から稼働 — ADR-002 エラッタ（session 472）と同クラスの決定記録 vs 実装乖離。V2-preference に訂正。
+- **「`internal/stratum/noise*.go` を Noise NX に再利用（already production-ready since alpha.1）」→ 虚偽**: KNOWN_LIMITATIONS §2 が証明する通り未配線・P-256（spec 必須は secp256k1+ElligatorSwift）・`mixKey` の HKDF 出力破棄・responder 認証なし。「production-ready」は帳簿と直接矛盾 — 再利用はギャップ継承＋コスト見積に Noise 手直し or ADR-011 依存を明記。
+
+**検証済み・変更なし。** ADR-007（passive receive endpoint・BOLT12 未署名）・ADR-008（orchestration gap 主張）・ADR-010（renumbering note）は現在形も正確。
+
 ## Session 499 — go.mod 依存選定理由コメント（CLAUDE.md ルール遵守）+ skills/docs 最終棚卸し
 
 **Sweep.** `docs/` 全ファイルの精読が本ラウンドで完結（adr/README 索引は11件・status 一致で clean）。残軸として (a) TODO/FIXME/XXX/HACK マーカー掃討 → **実コード 0件**（clean）、(b) skills/ 未精読3ファイル（code-review・quality-pass×2）→ 過去セッション記録で status は依然正確、(c) CLAUDE.md「go.mod コメントに追加理由と選定基準」遵守状況。
