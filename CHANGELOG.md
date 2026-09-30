@@ -22,6 +22,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### 修正 (session 394)
+
+- `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
+
+### Fixed (session 321 — SV2 バッチ受理数の正しい計上)
+
+**問題.** `SubmitSharesSuccess` の受理を常に +1 で数えていた——
+プールが `NewSubmitsAccepted`（バッチ受理数）を報告しても無視し、
+受理率が実際より低くドリフトした。closed #386/#400/#410 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `shares_accepted` が `NewSubmitsAccepted` を計上。
+
+### Fixed (session 322 — SV2 canonical reject コードの明示分類)
+
+**問題.** `rejectClass` が標準 `SubmitSharesError` コードを部分一致
+ヒューリスティックのみで処理し、`invalid-job-id`/`invalid-channel-id`
+が `hardware` に誤分類されていた（本来は stale 系）。closed
+#387/#399/#409 の未マージ修正を master へ再デリバー。
+
+**修正.** 標準コードを部分一致の前に明示分類: invalid-* → stale 系、
+`difficulty-too-low` → difficulty（従来の other から改善、
+benign-retarget 経路にも乗る）。
+
+### 修正 (session 370 — ntime roll)
+
+nonce 空間枯渇時にヘッダ時刻をロール前進 — 同一 (header, nonce) の
+再ハッシュと重複シェア拒否を防止（ntime roll、V1/V2 両経路で
+ロール値が送信されることを確認済み）。
+
 ### Fixed (session 335 — retarget 起因の良性 reject を分類)
 
 プールが難易度/ターゲットを変更した直後、旧ターゲットで掘られて
