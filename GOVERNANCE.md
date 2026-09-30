@@ -22,8 +22,10 @@ Different decisions follow different processes.
 ### 1. Code changes (PRs)
 
 - **Trivial fixes** (typos, doc cleanups, dependency bumps): one
-  approval from any committer or higher. Auto-mergeable if Renovate
-  patch update.
+  approval from any committer or higher. Auto-mergeable if a
+  Dependabot patch update (the repo's configured bot is Dependabot
+  via `.github/dependabot.yml`; **Correction (session 492):** this
+  line previously said "Renovate", which is not configured here).
 - **Bug fixes**: one approval from any committer or higher.
 - **Features**: open an issue first, get a thumbs-up from a
   maintainer that the direction makes sense, then PR. PR requires
@@ -106,8 +108,14 @@ Otedama's governance is expected to evolve through three phases.
 
 - One maintainer (BDFL).
 - Decisions are fast and cheap because there is one decider.
-- Bus factor = 1; mitigated by `MAINTAINERS.md` succession plan
-  and Sigstore keyless signing (no long-lived secrets).
+- Bus factor = 1; mitigated today by `MAINTAINERS.md` succession
+  plan alone. (**Correction (session 492):** this line previously
+  also listed "Sigstore keyless signing (no long-lived secrets)" as
+  a current mitigation — the `.goreleaser.yaml` cosign `signs:`
+  block is dead configuration because `release.yml` never invokes
+  goreleaser, so no release artifact is signed today; keyless
+  signing is the intended path once the release pipeline is wired
+  to goreleaser.)
 - Phase ends when a second co-maintainer is promoted.
 
 ### Phase 2: Multi-maintainer (target 18 months – 5 years)
