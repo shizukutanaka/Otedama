@@ -940,6 +940,15 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 501 — .golangci.yml 非推奨キー移行 + run.go バージョン訂正 + govulncheck clean
+
+**Sweep.** (a) ルート直下の未精読ファイル（.editorconfig・CODEOWNERS・LICENSE 著作権行・NOTICE）→ 全て正確。(b) `golangci-lint config verify` で schema 検証 → 3件の不整合を発見。(c) `govulncheck -mode=source ./...` → **0 reachable vulns**（依存内22件は未到達 — yaml.v3/x/crypto とも import 経路が脆弱コードに触れない）。
+
+**発見（1件修正 — 設定ファイルの陳腐化）。**
+- **`run.skip-dirs` / `output.format` が deprecated**（v1.64 系で警告＋`config verify` が schema 拒否）→ `issues.exclude-dirs` / `output.formats`（array form）へ移行。併せて `run.go: "1.22"` を実効要件の `"1.24"` に訂正 — 「Go 1.22 記述」クラスの6箇所目（AUDIT_CHECKLIST・README・CONTRIBUTING・GODEBUG_NOTES・BENCHMARKS に続く）。検証: `config verify` exit 0・`run` で警告ゼロ。
+
+**検証済み・変更なし。** LICENSE 著作権行（Monu (shizukutanaka) 記入済み）・CODEOWNERS の全パターン（noise* 2ルール含め実パス解決）・.editorconfig・service.go/version.go の CLI 実装。
+
 ## Session 392 — fuzz for the BIP-39 restore boundary
 
 [FIXED — session 392] **BIP-39 mnemonic parse fuzz** (`internal/lightning/fuzz_test.go`): `MnemonicToEntropy` consumes operator-typed word sequences on the wallet-restore path — the last untrusted-input parser without fuzz coverage. Two fuzzers: `FuzzMnemonicToEntropy` (1.5M execs) asserts arbitrary word slices — wrong counts, unknown words, case-mismatch, empty strings — always error rather than panic, and any accepted mnemonic re-encodes identically; `FuzzMnemonicRoundtrip` (3.0M execs) asserts `EntropyToMnemonic` → `MnemonicToEntropy` is bit-exact across all five legal entropy sizes, pinning the checksum math.
