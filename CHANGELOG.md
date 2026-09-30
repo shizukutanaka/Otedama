@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
 ### Documentation & audit (session 530 — sv2-spec cert version)
 
 - `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
