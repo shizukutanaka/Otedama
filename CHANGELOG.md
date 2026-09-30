@@ -18,6 +18,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `BenchmarkDecoder_ReadFrame` の再現コマンド → 関数非実在のため、その throughput 表は未検証の推定値と明示。
 * 「Go 1.22 で計測」の表記に、現 master は Go ≥1.24 必須（`godebug tlsmlkem`）の注意書きを追加。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や

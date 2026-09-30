@@ -955,6 +955,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **帰納。** 「CIで実行される」系の虚偽記述は本ラウンドで ROADMAP（#564）→ skills（#565）→ BENCHMARKS と4ドキュメント目 — CI ワークフローの記述照合は引き続き監査対象。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
