@@ -953,6 +953,51 @@ Two verified specification developments recorded in ADR-009:
   miner-declared payout outputs inside the declared template, directly
   on Otedama's sovereignty axis; worth tracking for any future JDC work.
 
+## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
+
+**Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
+while keeping the connection open starves revenue identically to extreme
+difficulty — but with no rejects, no disconnect, and no metric edge. The
+clock starts at session start so a pool that never sends a first job is
+equally covered.
+
+**Fix [OBSERVED].** `jobStallWarnAfter` (10 min, var for tests) — on each
+stats tick, if `time.Since(lastJobAt) > jobStallWarnAfter` and not
+curtailed, warn once per episode (`jobStarvedWarned`), re-arming when jobs
+resume. Wired on both V1 and V2 paths.
+
+**Tests [OBSERVED].** `TestRunSession_JobStallWarnsOnce` + V1 variant —
+silent fake pool past the threshold logs exactly one warn.
+
+## Session 304 — power-breakeven yield floor for arbitration (re-delivers closed #373)
+
+**Finding [OBSERVED — code-verified].** `power_watts` and
+`electricity_price_per_kwh` were metrics-only — below-breakeven mining could
+only be stopped via a hand-computed `curtail_below_btc_usd`. This is the
+constraint half of the bi-criteria bandit formulation (arXiv:2503.12285).
+
+**Fix [OBSERVED].** `arbitrationLoopOpts.powerFloor()` derives a per-device
+breakeven floor: powerWatts/1000 × price $/h → `provider.SatsPerSecond` →
+split evenly across managed devices. The arbitration loop applies
+`max(min_yield, floor)` each round — the constraint tracks BTC price moves
+automatically. New metric `otedama_power_breakeven_floor_sats_per_second`
+(0 when unconfigured). SPECIFICATION §3.1/§6 synced.
+
+**Tests [OBSERVED].** `TestArbitrationLoopOpts_PowerFloor` (six invalid-input
+cases + arithmetic + even-split) + `TestRunArbitrationLoop_PowerFloorIdlesDevice`.
+
+## Session 464
+
+Version-source drift fixed: the VERSION file reads
+v3.0.0-alpha.1 and `make build` injects it via ldflags, but the
+in-code default (used by plain `go build`/`go install`, which skip
+ldflags) still said v3.0.0-alpha.0-dev — a `go install`-built binary
+reported a stale version. Bumped the default to v3.0.0-alpha.1-dev
+(keeps the -dev marker distinguishing unblessed builds) and aligned
+the Makefile's missing-VERSION fallback the same way. Release
+builds via goreleaser inject {{.Version}} correctly and were
+unaffected.
+
 ## Session 523 — full linter sweep re-verified on master
 
 Re-ran the full golangci-lint suite under `GOTOOLCHAIN=go1.26.8`
