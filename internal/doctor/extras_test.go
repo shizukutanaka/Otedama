@@ -55,7 +55,7 @@ func TestStatus_SymbolsAreDistinct(t *testing.T) {
 
 func TestStatus_SymbolUnknownValue(t *testing.T) {
 	// Unknown Status values must not panic and should return a
-	// recognisable fallback.
+	// recognizable fallback.
 	s := Status(99)
 	if sym := s.symbol(); sym == "" {
 		t.Error("unknown Status returned empty symbol")
@@ -580,16 +580,16 @@ func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
 }
 
 // ============================================================================
-// checkNetwork — fail path via pre-cancelled context
+// checkNetwork — fail path via pre-canceled context
 // ============================================================================
 
 func TestCheckNetwork_CancelledContext_Fails(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancelled before the check even starts
+	cancel() // canceled before the check even starts
 	c := checkNetwork()
 	r := c.Run(ctx)
 	if r.Status != StatusFail {
-		t.Errorf("cancelled-context network check: status = %v, want Fail", r.Status)
+		t.Errorf("canceled-context network check: status = %v, want Fail", r.Status)
 	}
 	if r.Fix == "" {
 		t.Error("Fail result must provide a Fix hint")
@@ -1591,20 +1591,20 @@ func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
 }
 
 // ============================================================================
-// addressKind — default ("unrecognised type") branch (session 162)
+// addressKind — default ("unrecognized type") branch (session 162)
 // ============================================================================
 
 // TestAddressKind_UnknownAddress covers the default branch of addressKind:
-// any address that ClassifyAddress does not recognise (not starting with
-// "bc1p", "bc1q", "1", or "3") returns "unrecognised type".
+// any address that ClassifyAddress does not recognize (not starting with
+// "bc1p", "bc1q", "1", or "3") returns "unrecognized type".
 func TestAddressKind_UnknownAddress(t *testing.T) {
 	got := addressKind("garbage-address-format")
-	if got != "unrecognised type" {
-		t.Errorf("addressKind(garbage) = %q, want \"unrecognised type\"", got)
+	if got != "unrecognized type" {
+		t.Errorf("addressKind(garbage) = %q, want \"unrecognized type\"", got)
 	}
 }
 
-// TestAddressKind_KnownP2WPKH verifies the P2WPKH branch is correctly labelled
+// TestAddressKind_KnownP2WPKH verifies the P2WPKH branch is correctly labeled
 // (regression: ensures the switch-case isn't accidentally removed).
 func TestAddressKind_KnownP2WPKH(t *testing.T) {
 	got := addressKind("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
@@ -1727,7 +1727,7 @@ func TestCheckWallet_NoHome_Skips(t *testing.T) {
 }
 
 // TestCheckPoolEndpointDiversity_EmptyHostSkipped covers checks.go:397-398 —
-// a pool URL with no recognised scheme yields an empty host from stripScheme,
+// a pool URL with no recognized scheme yields an empty host from stripScheme,
 // which is skipped (continue). With only one resolvable host, the check
 // returns Skip ("could not resolve enough pool endpoints").
 func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
@@ -1739,7 +1739,7 @@ func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{
 			{URL: "stratum+tcp://good.example.com:3333"},
-			{URL: "http://bad.example.com"}, // unrecognised scheme → host "" → skipped
+			{URL: "http://bad.example.com"}, // unrecognized scheme → host "" → skipped
 		},
 	}
 	r := checkPoolEndpointDiversity(&cfg).Run(context.Background())
@@ -1749,7 +1749,7 @@ func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
 }
 
 // TestCheckPayoutScheme_EmptyHostUsesURL covers checks.go:620-622 —
-// a pool URL with no recognised scheme makes stripScheme return "", so the
+// a pool URL with no recognized scheme makes stripScheme return "", so the
 // check falls back to using the raw URL string as the host label.
 func TestCheckPayoutScheme_EmptyHostUsesURL(t *testing.T) {
 	const rawURL = "noscheme-host:3333"

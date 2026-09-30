@@ -14,6 +14,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `cmd/otedama` に `FuzzLoadConfigFile` を追加 — 任意バイト列の YAML 設定ファイルがロード経路で panic/ハングせず、デコード失敗は常に「警告 + 空 Config」へ縮退することを検証（非UTF8・深いネスト・alias・バイナリ・未知フィールドを含む入力、98K exec でクリーン）。これで非信頼入力を受ける全パーサ/境界に fuzz または property カバレッジが揃った。
 
+### テスト (session 392)
+
+- `internal/lightning` に BIP-39 パース境界の fuzz を追加 — `FuzzMnemonicToEntropy` は任意の語列（不正な語数・未知語・大文字・空文字・チェックサム破損）で panic せず常にエラー、受理した語列は再エンコードが一致することを検証（150万 exec クリーン）。`FuzzMnemonicRoundtrip` は全合法エントロピー長（16–32B）でエンコード→デコードが bit-exact に往復することを検証（300万 exec クリーン）。ウォレット復元の入力境界をカバー。
+
+### 追加 (session 434 — サブコマンド did-you-mean 提案)
+
+- `otedama verson` 等の誤記時に stderr へ `did you mean "version"?` を
+  提案（Levenshtein 距離 ≤2 の最近接。exit 64 は不変、無関係入力には
+  提案なし、先頭ダッシュは無視）。新規依存なし。
+
+### テスト (session 396)
+
+- `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。
+
+### 修正 (session 413)
+
+solo-operations.md の CODEOWNERS サンプルが非実在パス
+（`/internal/security/`・`/internal/auth/` — CLAUDE.md の作成禁止
+パス）を参照していた問題を実ファイルと同じ構成に訂正。
+`.github/dependabot.yml` の無効な `automerge` キー（Dependabot に
+存在しないオプション — 自動マージは発動していなかった）を除去し
+実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
+
+### 修正 (session 415)
+
+**lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
+gosec・gocritic・misspell・gofumpt・prealloc・goconst・unparam・dogsled・
+bodyclose 等）に対する ~350 件の違反を解消し 65 件まで削減。主な実修正:
+`err ==` 等価比較を `errors.Is`/`errors.As` へ統一（ラップ済み fatalError が
+無限再試行されていた意味的バグを含む）、systemd/launchd サービス定義の
+パーミッションを 0644→0600 へ厳格化、未使用コード（remoteStatic・test
+parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチャ整理、
+テストの bodyclose・unnecessaryDefer 等。BIP-39 ワードリストと i18n
+カタログは正規データのため misspell 対象外として恒久的に除外。残りは
+hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
+案件として記録。
+
 ### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
 
 **問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も
