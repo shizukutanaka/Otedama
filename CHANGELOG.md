@@ -15,6 +15,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### Fixed (session 335 — retarget 起因の良性 reject を分類)
+
+プールが難易度/ターゲットを変更した直後、旧ターゲットで掘られて
+いた in-flight share が "above target" reject として本物の不良
+share 扱いされ reject 率を水増ししていた問題を修正（ESP-Miner
+#212 系）。発行時ターゲットと現在ターゲットを比較する
+`transitionReject` で difficulty 系 reject のみ良性
+`difficulty-transition` として分離 — V1/V2 両対応。#367 由来の
+再デリバー。
+
+### Fixed (session 361 — config 非有限値拒否)
+
+5 つの float 設定項目で NaN/±Inf がバリデーションを通過する
+問題を修正（`x < 0` は NaN で偽）。`.nan`/env "NaN" が裁定計算を
+汚染する経路を遮断。
+
+### Fixed (session 325 — 裁定エンジンの非有限 yield を collapse)
+
+**問題.** `Yield.Effective()` の `<= 0` ガードは NaN を通す——
+上流プロバイダの 0/0 除算等で NaN が来ると `y <= 0` が false となり
+NaN 候補がソートへ混入、`TotalYield` を NaN 汚染しうる。
+
+**修正.** 積が非有限（NaN/±Inf）なら 0 に collapse——壊れたクォートは
+ソートに勝てず集計も汚さない。`TestYield_Effective` に NaN/±Inf
+の5ケース追加。
+
+### Fixed (session 338 — set_extranonce のデータレース修正)
+
+`mining.set_extranonce`（リードゴルーチン）が `extranonce1`/
+`extranonce2Size` を書き換え、`Submit`（呼び出し元ゴルーチン）が
+同フィールドを読む — 素のフィールドでデータレースが発生していた
+問題を `atomic.Pointer[string]`/`atomic.Int64` 化で修正。
+
 ### 修正 (session 383)
 
 - Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
