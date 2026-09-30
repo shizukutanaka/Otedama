@@ -946,6 +946,42 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 [AUDITED — clean] Ecosystem re-check: SRI v1.12.0 (2026-09-17) remains latest — AES-256-GCM drop, codec refactor, BIP323 adaptations confirmed unchanged since session 388; sv2-apps v0.4.0. Coverage sweep of low spots: `config.DefaultDataDir` (platform branches), `miner.HasWork` (trivial exported getter), `doctor.checkHardware` (sysfs/darwin-limited) — all verified benign or already covered by open PRs (#501 for `lightning save()`).
 
+## Session 385 — TUI terminal-width auto-detection
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 (2026-09-17) and ESP-Miner v2.15.3 (2026-09-20) remain latest — no drift since session 383. ESP-Miner 2.15.2/3 changes are firmware UX (AxeOS embedding, BM1372/73 support, WiFi reconnect storms) — nothing touching the stratum protocol surface Otedama speaks.
+
+[FIXED] **TUI rendered at a fixed 80 columns; the real terminal width was never detected** (`internal/tui`, `docs/KNOWN_LIMITATIONS.md` §15 → RESOLVED). `Dashboard.SetWidth` existed as an injection seam but no production caller used it, so every real run rendered 80 columns regardless of terminal size — on a narrower terminal each frame wrapped a row and broke the overwrite-in-place repaint model. The render loop now queries the kernel each tick: `unix.IoctlGetWinsize(fd, TIOCGWINSZ)` on Unix builds, `windows.GetConsoleScreenBufferInfo` on Windows, stub on other platforms. Per-tick querying also picks up resizes without a SIGWINCH handler. Non-terminal writers (pipes, test buffers), failed queries, and degenerate widths (<40) keep the previous value; `SetWidth` pins a width and disables detection. `golang.org/x/sys` promoted indirect→direct with rationale comment in go.mod (per CLAUDE.md dependency policy: BSD license, Go-team maintained, already in the graph via x/crypto — zero new modules).
+
+[AUDITED — clean] Closing the loop on the remaining unaudited leaf packages: `internal/logger` (atomic default pointer, nil-safe SetDefault, conservative ParseLevel), `internal/clock` (Fake/System trivial), `internal/version` (ldflags vars only), `internal/i18n` `DetectLang`/`DetectLangFromEnv` (fail-safe English fallback, POSIX precedence order), `cmd/otedama` flag parsing (help-vs-error routing, `--` handling), env-var binding (`EnvWarnings` for malformed numerics + enum validation), engine failover ordering (pool-first, address rotation only while never-connected, capped backoff, masked addresses in logs), `maskAddr` short-string safety. Every package under `internal/` + `cmd/` now has at least one recorded audit verdict across sessions.
+
+[FIXED — session 385, second commit] **Probabilistic flake in `TestSetupWallet_MnemonicNeverReachesLogger`** (`internal/engine/run_test.go`): the whole-word leak scan ran against every captured log line including the two constant wallet-setup messages that already contain BIP-39 vocabulary ("recovery phrase", "wallet", "created") — a random 24-word draw colliding with that prose false-positived. The scan now strips the known-static lines and checks only dynamic log content; a real leak still trips it. Re-delivers the applicable half of closed #371 (its `atomic.Bool` half targeted `responsivePool` fields that exist only on the in-flight #447 branch — applied there directly as a follow-up commit instead).
+
+## Session 351 — handshake-error sanitization + surfaced channel rejections
+
+**SetupConnectionError injection [FIXED].** The pool's error string was
+concatenated raw into `fatalError` and logged via `session ended: %v` —
+the same escape/newline injection class as the reject reasons. Now
+`%q`-quoted, which escapes control bytes. The same treatment was
+applied to `OpenMiningChannelError`: its reason string was previously
+dropped entirely ("channel open failed" with no detail) — it now
+surfaces the pool's reason, quoted, and classifies the rejection as
+fatal (consistent with a refused setup — failover to the next pool
+rather than a same-pool retry).
+
+## Session 295 — publish V2 share-target difficulty + starvation warn (re-delivers closed #395)
+
+**Finding [OBSERVED — code-verified].** `publishDifficulty` ran only in the
+V1 stats tick: V2 sessions never updated `otedama_pool_difficulty` and never
+emitted the starvation warn — the V1/V2 observability paths were asymmetric.
+
+**Fix [OBSERVED].** `miner.DifficultyFromTarget` converts the V2 share target
+(a raw U256 from OpenMiningChannelSuccess/SetTarget) into a Stratum
+difficulty (diff1Target / target; zero target → +Inf). The V2 stats tick
+publishes it and runs the same >3600s starvation tripwire as V1.
+
+**Tests [OBSERVED].** `DifficultyFromTarget` unit table (diff1 → 1.0,
+halving, zero → +Inf); V2 stats tick publishes; warn fires once per episode.
+
 ## Session 390 — wallet temp-file sweep + save() failure-path tests
 
 [FIXED — session 390] **Stale wallet temp files swept at startup** (`internal/lightning/wallet.go`): `save()`'s atomic write (CreateTemp → write → fsync → chmod → rename) leaves a `.wallet-*.tmp` file behind if the process is killed mid-write or a late step fails. Nothing ever removed them, so every failed save accumulated a permanent ciphertext fragment in the data dir — confusing operators and backup tooling. `sweepStaleTempFiles` runs once in `NewWalletManager` after `MkdirAll` and removes only files older than `staleTempMaxAge` (1 min): a live save holds its tmp for milliseconds, so the age gate both guarantees the file is abandoned and prevents unlinking a temp file mid-write in a second process sharing the data dir. Best-effort — a sweep error never blocks startup. Changes in `internal/lightning` are CODEOWNERS-reviewed per repo policy.
