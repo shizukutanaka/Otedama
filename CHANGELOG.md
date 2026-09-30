@@ -17,6 +17,14 @@ TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨し�
 `GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
 フラグ参照は実装と整合（監査 clean）。
 
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
 ### 修正 (session 411)
 
 GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
