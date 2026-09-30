@@ -20,6 +20,14 @@ BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 
 decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
 エコシステム不変（SRI v1.12.0）。
 
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
 ### 修正 (session 406)
 
 API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
