@@ -663,8 +663,8 @@ endpoint against current vendor documentation. Tags as before
     (`go_goroutines`, `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only
     stdlib `runtime` — no new dependency (ADR-003/005 preserved). Names match
     `prometheus/client_golang` so existing Grafana dashboards work unmodified.
-    `otedama_build_info` (commit/goversion labels) deferred to next session.
-    (session 107)
+    `otedama_build_info` (commit/goversion labels) shipped in session 54;
+    SPECIFICATION §6 has the catalogue row. (session 107)
 22. 🔵 **SLSA Build L3 provenance + Sigstore keyless signing for releases.**
     `actions/attest-build-provenance` + cosign keyless (Fulcio OIDC, Rekor)
     is the current bar for a non-custodial money-handling binary users must
@@ -925,6 +925,25 @@ items are 1, 4, and the V2 half of 2.
 
 ---
 
+## September 2026 research pass — session 271 increment
+
+1. ✅ **Server→client input audit — V1 notifications & V2 frame dispatch,
+   all bounded:** `client.reconnect`/`mining.reconnect` is honored but the
+   pool-supplied host:port is deliberately not followed (redirect-attack
+   defense) and the exponential reconnect backoff bounds a reconnect
+   flood; `client.show_message` is a drop-oldest bounded channel;
+   `set_extranonce` carries the session-262 size bound; `set_version_mask`
+   (BIP310) is ignored — correct, rolling is opt-in and never required.
+   V2 `DispatchFrame` maps unknown/newer message types to `Unknown`
+   (forward-compatible skip), so a pool sending e.g. `SetExtranoncePrefix`
+   cannot fatal the session; only malformed *known* frames end it. Both
+   V2 job stores are bounded (live loop `jobsCap`, adapter `pendingCap`).
+   No code change needed — verdicts recorded, plus a pre-existing gofumpt
+   nit in `integration_test.go` cleaned.
+2. ✅ **[FETCHED] Ecosystem steady:** unchanged since session 270.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
@@ -957,6 +976,57 @@ ADR-010 gained SCaLE learned-switch-cost (A2), the three drift-type
 non-stationarity grounding + Sliding-Window TS (A8), and ROSS in refs.
 Cat-4 #9 left open on purpose — pools never report credited blocks, so the
 written action is infeasible; recorded as such.
+
+## Session 323 — server→client input audit verdicts, round 3
+
+Re-audit of pool-controlled inputs left uncovered by sessions 271/309
+plus this stretch's upstream drift check (SRI 1.12.0 still latest;
+ESP-Miner v2.15.1/v2.15.2rc0 reviewed — the only mining-relevant fix,
+"prevent reconnect storms from slow clients" #1913, is pool-server-side
+machinery Otedama doesn't run; the client-side equivalent — exponential
+reconnect backoff 1s→64s + address failover — already exists in
+runReconnectLoop).
+
+**Verdicts [OBSERVED — code-verified this session].**
+
+- `mining.notify` coinb1/coinb2/merkle_branch: never unmarshalled on
+  master (coinbase reconstruction is #417's scope, still open); the raw
+  frame is bounded by the 64 KiB line limit — no unbounded input.
+- CPU worker nonce space: `NonceStep` defaults to `Threads` so threads
+  interleave disjoint nonce sequences — no duplicate-work partition bug.
+- `TargetFromNBits`: rejects negative-mantissa bit, exponent < 3, zero
+  mantissa, and >256-bit targets. `TargetFromDifficulty` rejects d<=0,
+  NaN, ±Inf, and overflowing targets. Both bounded.
+- `mining.set_version_mask` / unknown notifications: forward-compatibly
+  ignored — no state touched.
+- `client.show_message` notice channel: bounded drop-oldest queue.
+- Terminal/log injection: no pool-controlled string reaches the TUI
+  (pool URL + provider names are operator config; wallet fingerprint is
+  hex-only). Pool notices go to slog (session-278/#424) — slog text
+  output passes control bytes through for string values containing
+  newlines, so a hostile pool could forge log lines; recorded as a
+  residual in THREAT_MODEL terms, cosmetic severity.
+- `otedama_build_info`: backlog line claiming "deferred" was stale — the
+  gauge shipped in session 54 and is catalogued in SPECIFICATION §6;
+  corrected.
+
+## Session 326 — hygiene sweep verdicts (govulncheck + deadcode)
+
+**govulncheck (go1.26.8) [OBSERVED — ran live].** 0 reachable
+vulnerabilities; 22 module-level advisories in the require graph, all
+in code paths Otedama does not call (same pattern as prior sessions).
+
+**deadcode ./... [OBSERVED — ran live].** Every hit is intentional
+public-ish API surface on internal packages (btccrypto helpers,
+clock.Fake test utilities, i18n catalogue helpers, lightning
+WordList/MnemonicToEntropy, httpserver.Addr/ServeError) — used by tests
+or reserved for in-flight v4.0 scope. Judged not-deletable; recorded so
+the sweep doesn't re-flag them as findings.
+
+**Coverage sweep [OBSERVED].** Server→client input surface, worker nonce
+partitioning, provider quotes (stale-pruned at 3 min), metrics label
+cardinality (fixed enums), config/env parsing, wallet KDF constants,
+HTTP server timeouts — all verified bounded/safe on master.
 
 ## Session 328 — remaining surface verdicts
 
