@@ -950,6 +950,16 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** Dockerfile: `golang:1.24-alpine`（実効要件と一致）・ldflags が正しい `internal/version.{Version,Commit,BuildDate}` シンボル（release.yml の間違った `main.*` と対照的）・NOTICE+LICENSE 同梱・nonroot uid 65532・`VOLUME /var/lib/otedama`・`EXPOSE 0`・`CMD ["run","--help"]` — 全て正確（ci.yml docker-verify の失敗は §13 記録済みのジョブ側欠陥で Dockerfile 側の問題ではない）。`.dockerignore` 非実在（COPY . . が .git 等を context に含めるが動作上無害 — open #530 担当域）。
 
+## Session 497 — ADR-009 にエラッタ2件（残 Proposed ADR 007–010 の現在形検証）
+
+**Sweep.** Accepted ADR（001–006, 011）は session 473 で全照合済みのため、残る Proposed ADR 007–010 の「今日の実装」現在形クレームを検証（Proposed 自体は未来設計で正当 — 陳腐な現在形のみ対象）。
+
+**発見（2件、ADR-009 にエラッタ追加）。**
+- **「Otedama's positioning today: hard-coded as a Stratum V2 client only (ADR-002)」→ 陳腐**: `internal/poolproto/stratumv1` + `DialURL` が alpha.1 から稼働 — ADR-002 エラッタ（session 472）と同クラスの決定記録 vs 実装乖離。V2-preference に訂正。
+- **「`internal/stratum/noise*.go` を Noise NX に再利用（already production-ready since alpha.1）」→ 虚偽**: KNOWN_LIMITATIONS §2 が証明する通り未配線・P-256（spec 必須は secp256k1+ElligatorSwift）・`mixKey` の HKDF 出力破棄・responder 認証なし。「production-ready」は帳簿と直接矛盾 — 再利用はギャップ継承＋コスト見積に Noise 手直し or ADR-011 依存を明記。
+
+**検証済み・変更なし。** ADR-007（passive receive endpoint・BOLT12 未署名）・ADR-008（orchestration gap 主張）・ADR-010（renumbering note）は現在形も正確。
+
 ## Session 499 — go.mod 依存選定理由コメント（CLAUDE.md ルール遵守）+ skills/docs 最終棚卸し
 
 **Sweep.** `docs/` 全ファイルの精読が本ラウンドで完結（adr/README 索引は11件・status 一致で clean）。残軸として (a) TODO/FIXME/XXX/HACK マーカー掃討 → **実コード 0件**（clean）、(b) skills/ 未精読3ファイル（code-review・quality-pass×2）→ 過去セッション記録で status は依然正確、(c) CLAUDE.md「go.mod コメントに追加理由と選定基準」遵守状況。
