@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 568 — recover() + goroutine-spawn audit
+
+- Zero `recover()` calls in non-test code: no panic-swallowing
+  surface anywhere — every error propagates as a returned error,
+  matching the library-kill audit (session 562).
+- 20 `go` spawn sites across 10 packages — the exact set mapped in
+  session 553's leak-coverage table. Each is ctx-scoped
+  (readLoop/renderLoop/arbitration), wg-tracked (fan-in
+  collectors closing via `wg.Wait(); close`), or a one-shot
+  trigger (`go s.Close()`). NumGoroutine shutdown evidence from
+  session 553 covers all of them.
