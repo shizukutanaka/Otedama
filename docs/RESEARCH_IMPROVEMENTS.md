@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 558 — division / index-underflow panic surface
+
+- **Integer div-by-zero:** zero reachable sites. Every division in
+  non-test code is either `float64` (NaN/Inf, owned by the open
+  non-finite-collapse PRs) or a literal denominator — no dynamic
+  integer denominator exists, so no `integer divide by zero` panic
+  path exists.
+- **Modulo `%`:** zero dynamic-denominator sites.
+- **`len(...)-1`-family indexing:** 4 sites, all guarded —
+  `ID.Valid` checks `s == ""` before `s[0]` (message.go:74);
+  `maskAddress`/`maskAddr` return early for len≤10/12 before the
+  `[:6]`+`[-4:]` slices (checks.go:900, setup.go:266);
+  `parse.go:223` guards `len(b)>0` in the loop condition.
