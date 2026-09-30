@@ -84,6 +84,9 @@ otedama <command> [flags]
 | `service uninstall` | サービス登録を解除 / Uninstall the background service |
 | `service status` | サービス状態を表示 / Show background service status |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
+| `wallet verify` | リカバリフレーズを検証（stdinから読取り、wallet.dat は復号しない） / Verify a recovery phrase (read from stdin; wallet.dat is never decrypted) |
+| `wallet change-passphrase` | ウォレットのパスフレーズを変更 / Change the wallet passphrase |
+| `completion` | シェル補完スクリプトを生成 / Generate a shell-completion script |
 | `help` | ヘルプを表示 / Print help |
 
 各コマンドの詳細フラグは `otedama <command> --help` で確認できます。
