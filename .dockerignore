@@ -1,0 +1,39 @@
+# Docker build context — keep the daemon upload minimal and free of
+# secrets. The Dockerfile only needs: go.mod, go.sum, LICENSE, NOTICE,
+# and the Go sources under cmd/ + internal/.
+
+# VCS metadata (largest part of the context; never needed for the build)
+.git/
+
+# Local state that must never reach a build context
+wallet.dat
+wallet.fingerprint
+config.yaml
+*.prof
+*.trace
+coverage*
+
+# Build outputs
+/bin/
+/build/
+/dist/
+/out/
+otedama
+otedama.exe
+*.tar.gz
+*.zip
+
+# Machine-local agent/dev files
+.claude/
+.DS_Store
+
+# CI and documentation sources — not part of the compiled binary
+.github/
+docs/
+skills/
+*.md
+!LICENSE
+!NOTICE
+
+# Install helper is a host-side script, not an image asset
+install.sh
