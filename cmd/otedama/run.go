@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -36,9 +38,10 @@ type runFlags struct {
 	walletPassphrase         string
 	walletMnemonicPassphrase string
 	pprofEnabled             bool
-	logFile                  string // --log-file: audit-trail path, written even under the TUI
-	showOrigin               bool   // --origin: annotate config show output with value sources
-	jsonOut                  bool   // --json: emit config show output as JSON
+	logFile                  string          // --log-file: audit-trail path, written even under the TUI
+	showOrigin               bool            // --origin: annotate config show output with value sources
+	jsonOut                  bool            // --json: emit config show output as JSON
+	setFlags                 map[string]bool // flag names explicitly given on argv (fs.Visit)
 }
 
 // parseRunFlags builds the flag set shared by `run`, `config show`, and
@@ -90,6 +93,8 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 	if err := fs.Parse(args); err != nil {
 		return runFlags{}, err
 	}
+	f.setFlags = make(map[string]bool)
+	fs.Visit(func(fl *flag.Flag) { f.setFlags[fl.Name] = true })
 	return f, nil
 }
 
@@ -128,6 +133,15 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	applyRunEnvFallbacks(&f)
+
+	// A passphrase passed on argv is visible to every process on the host
+	// via /proc/<pid>/cmdline (ps aux). Docs prefer the env vars; warn at
+	// runtime for operators who never read that guidance.
+	if f.setFlags["wallet-passphrase"] || f.setFlags["wallet-mnemonic-passphrase"] {
+		fmt.Fprintln(stderr, "warning: a wallet passphrase given on the command line is visible in "+
+			"process lists; prefer the OTEDAMA_WALLET_PASSPHRASE / OTEDAMA_WALLET_MNEMONIC_PASSPHRASE "+
+			"environment variables")
+	}
 
 	// Auto-disable the TUI when stdout is not an interactive terminal
 	// (redirected to a file/pipe, or captured by a service manager like
@@ -314,6 +328,13 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	if !isLoopbackAddr(httpAddr) {
+		detail := "metrics/health endpoints"
+		if pprofEnabled {
+			detail += " and pprof heap/goroutine profiles"
+		}
+		fmt.Fprintf(stderr, "warning: --http-addr %s exposes %s to non-loopback clients\n", httpAddr, detail)
+	}
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
@@ -321,4 +342,19 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 	}
 	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
+}
+
+// isLoopbackAddr reports whether addr ("host:port" or a bare host)
+// names a loopback interface — 127.0.0.0/8, ::1, or "localhost".
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
