@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 569 — `any` usage audit
+
+- The only `any` values in non-test code are: V1 JSON-RPC wire
+  struct fields (`ID`, `Result`, `Error`, `result`, `errResult`)
+  — spec-mandated untyped payloads at the wire boundary, parsed
+  into typed values by the parsers; `sync.Pool.New`'s required
+  `func() any` signature; and `fanIn[T any]` — a generic
+  constraint, the correct modern form.
+- Zero loose-typing escapes at internal package boundaries; every
+  internal API is concretely typed.
