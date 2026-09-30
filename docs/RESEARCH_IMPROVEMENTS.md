@@ -960,6 +960,70 @@ service-install flags (`--config`, `--data-dir`) and Docker/compose
 `--http-addr` usage all real; i18n claims ~10 languages — actual
 catalogue has ar/de/en/es/fi/fr/ja/ko/pt/ru/zh (claim accurate).
 
+## Session 418 — close KNOWN_LIMITATIONS §16: the `wallet` subcommand [FEATURE]
+
+The last open CLI-facing limitation: no way to verify a written-down
+recovery phrase or rotate the wallet passphrase without starting the engine.
+The limitation entry itself prescribed the minimal fix — this session
+implements exactly it.
+
+New `otedama wallet` subcommand (`cmd/otedama/wallet.go`):
+
+- `otedama wallet verify` — reads a recovery phrase from **stdin** (never
+  argv: `ps aux` exposes it to every local process), validates the BIP-39
+  checksum via `MnemonicToEntropy`, derives the seed with
+  `MnemonicToSeed`, and compares its public `Fingerprint` against the
+  stored `wallet.fingerprint` file. `wallet.dat` is never decrypted, so a
+  wallet passphrase is not required; the `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`
+  env var covers wallets created with a BIP-39 "25th word". When the
+  fingerprint file is absent (older builds), verify falls back to unlocking
+  `wallet.dat` with `OTEDAMA_WALLET_PASSPHRASE`.
+- `otedama wallet change-passphrase` — wires the already-implemented,
+  already-tested `WalletManager.ChangePassphrase` to the CLI. Both
+  passphrases come from env vars (`OTEDAMA_WALLET_PASSPHRASE` /
+  `OTEDAMA_WALLET_NEW_PASSPHRASE`), matching the argv-leak guidance added
+  in session 372.
+
+Safety details: both verbs stat `wallet.dat` before calling
+`NewWalletManager` (whose contract is "create when absent"), so a mistyped
+`--data-dir` can never silently mint an empty wallet. The wallet directory
+resolves through the same four-layer precedence as `run`
+(`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
+New minimal exports `lightning.WalletFilePath` / `FingerprintFilePath`
+expose the on-disk names without leaking internals. `internal/lightning`
+is funds-adjacent — CODEOWNERS review applies (disclosed in the PR).
+
+*Evidence: 9 new cmd tests cover match/mismatch/invalid-phrase/no-wallet/
+no-create/fallback-decrypt/env-required paths; `go test ./...` all 24
+packages green; lint introduces zero new findings.*
+
+## Session 335 — transition-reject fix re-delivered (from closed #367)
+
+**Benign retarget rejects [PORTED].** `miner.Share.Target` carries the
+issue-time share target; `transitionReject` classifies a difficulty
+reject as `difficulty-transition` only when the share was issued under
+a different, since-replaced target. V1 compares captured vs current
+suggested difficulty; V2 tracks `submitTargets` (SequenceNumber →
+issue target, same 1024 cap/reap as submitTimes). Benign rejects skip
+reject_rate/sharesRejected/last_reject_seconds and log at info; the
+rejectByReason map race fix (rejectByReasonMu + rejectReasonValue)
+came along. Verified `-race` clean on the ported tests.
+
+## Session 336 — pool show_message delivery re-delivered (from closed #405/#424)
+
+**client.show_message [PORTED].** The V1 session parsed operator
+notices into `PoolNotices()` (buffered 8, drop-oldest) but master had
+no consumer. `runSessionV1` now type-asserts `poolproto.PoolNoticeReceiver`
+and forwards each notice to `opts.log("info", …)`. slog's TextHandler
+writes values verbatim, so a hostile/MitM pool could inject ANSI
+sequences or newlines into a terminal — noted as accepted residual
+(also true of every other logged field); escapes are not stripped
+because slog output is already conventionally machine-consumed.
+**TUI injection surface [AUDITED — clean].** Dashboard renders only
+user-configured `PoolURL` (scheme-validated), engine-computed
+fingerprints, and internal provider names — no pool-supplied string
+reaches `internal/tui`.
+
 ## Session 353 — poolproto V2 dialer handshake-error quoting
 
 **Handshake-error injection on the dialer path [FIXED].** The engine's
