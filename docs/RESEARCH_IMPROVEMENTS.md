@@ -955,6 +955,56 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 1. **本番セットの拡充**: stratumprotocol.org 公式表で production プールが Blitzpool/MKPool/NexusPool/Public Pool/PyBlock（solo）+ Braiins/DMND（DMND は miner-selected templates）に拡大、Auradine FluxOS・Bitaxe・BraiinsOS の SV2 ネイティブファームウェアも稼働。
 2. **BIP-110 = 初のライブ template-signaling 展開**: Reduced Data Temporary Softfork が Knots ベース activation client で listening node の ~10% に到達。OCEAN は BIP110/非シグナルの2専用 endpoint を追加し split 時は「2つのプール」として運用すると発表（7月）。テンプレート所有が**どの consensus chain に着陸するか**を左右する初の実例 — ADR-009 の solo/JDP 提案が「プールではなく自ノードの consensus rule で検証」を要する根拠として記録。
 
+## Session 351 — handshake-error sanitization + surfaced channel rejections
+
+**SetupConnectionError injection [FIXED].** The pool's error string was
+concatenated raw into `fatalError` and logged via `session ended: %v` —
+the same escape/newline injection class as the reject reasons. Now
+`%q`-quoted, which escapes control bytes. The same treatment was
+applied to `OpenMiningChannelError`: its reason string was previously
+dropped entirely ("channel open failed" with no detail) — it now
+surfaces the pool's reason, quoted, and classifies the rejection as
+fatal (consistent with a refused setup — failover to the next pool
+rather than a same-pool retry).
+
+## Session 295 — publish V2 share-target difficulty + starvation warn (re-delivers closed #395)
+
+**Finding [OBSERVED — code-verified].** `publishDifficulty` ran only in the
+V1 stats tick: V2 sessions never updated `otedama_pool_difficulty` and never
+emitted the starvation warn — the V1/V2 observability paths were asymmetric.
+
+**Fix [OBSERVED].** `miner.DifficultyFromTarget` converts the V2 share target
+(a raw U256 from OpenMiningChannelSuccess/SetTarget) into a Stratum
+difficulty (diff1Target / target; zero target → +Inf). The V2 stats tick
+publishes it and runs the same >3600s starvation tripwire as V1.
+
+**Tests [OBSERVED].** `DifficultyFromTarget` unit table (diff1 → 1.0,
+halving, zero → +Inf); V2 stats tick publishes; warn fires once per episode.
+
+## Session 390 — wallet temp-file sweep + save() failure-path tests
+
+[FIXED — session 390] **Stale wallet temp files swept at startup** (`internal/lightning/wallet.go`): `save()`'s atomic write (CreateTemp → write → fsync → chmod → rename) leaves a `.wallet-*.tmp` file behind if the process is killed mid-write or a late step fails. Nothing ever removed them, so every failed save accumulated a permanent ciphertext fragment in the data dir — confusing operators and backup tooling. `sweepStaleTempFiles` runs once in `NewWalletManager` after `MkdirAll` and removes only files older than `staleTempMaxAge` (1 min): a live save holds its tmp for milliseconds, so the age gate both guarantees the file is abandoned and prevents unlinking a temp file mid-write in a second process sharing the data dir. Best-effort — a sweep error never blocks startup. Changes in `internal/lightning` are CODEOWNERS-reviewed per repo policy.
+
+[FIXED — session 390] **save() failure-path coverage**: three tests — stale/fresh/decoy sweep behavior, encrypt-failure leaves zero temp files (`failAfterNReader` exhausting after the 32-byte entropy read), read-only data dir propagates a wrapped CreateTemp error. Lightning package coverage improves at the lowest-covered function (save 62%).
+
+[AUDITED — clean] Coverage sweep: every package sits at 92–99% (above the 90% bar); zero TODO/FIXME/XXX/`unsafe` in non-test code; benchmarks exist on all hot paths (miner grind, sha256d, metrics write, noise HMAC, clock, version). Japanese-source scan this week: no new Qiita/Zenn mining-ops posts relevant to Otedama's stratum layer.
+
+## Session 320 — live network-hashrate feed (re-delivers closed #378/#415)
+
+**Finding [OBSERVED — fetched live].** The mining-yield estimate consumed
+a compile-time network-hashrate constant (1e21 H/s). mempool.space and
+blockchain.info both expose live difficulty/hashrate endpoints — fetched
+and shape-verified live, the two agree (~930 EH/s vs the stale 1e21
+constant). Closes KNOWN_LIMITATIONS §7's deferred "live difficulty
+feed".
+
+**Fix [OBSERVED].** `rates.HashrateFetcher` polls both endpoints, takes
+the median inside a plausibility band, and replaces the constant via
+`MiningProvider.NetworkHashrateFunc`. Stale/unwired falls back to the
+constant, so offline start is unaffected.
+
+**Tests [OBSERVED].** rates + provider + engine suites green.
+
 ## Session 379 — reconnect-loop + docs/config-surface audit
 
 [FIXED] `runReconnectLoop` never reset its exponential backoff after a
