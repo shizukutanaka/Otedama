@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
 * 「SRI の Go バインディングを統合利用」/「自前実装ではなく SRI を選択」の理由付けが実態と逆であることを追記 — SRI は Rust のみで Go バインディング非存在、`internal/stratum` は自前実装。LDK のメンテ済み Go バインディングも非存在。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や

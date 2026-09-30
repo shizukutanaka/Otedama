@@ -950,6 +950,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし（免責が既にカバー）。** providers 複数形、収益源4系統の内2系統未実装、asic/cuda/rocm ドライバ非実在、LDK 統合・チャネル管理・自動決済・LSP 未実装、observability パッケージ非実在、API 層非実在 — 全て session 243 免責済み。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
