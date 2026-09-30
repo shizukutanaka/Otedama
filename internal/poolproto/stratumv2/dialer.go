@@ -57,6 +57,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	dialFn := d.dialFn
 	if dialFn == nil {
 		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+			if d.useTLS {
+				// A stratum+v2tls:// scheme must produce a certificate-verified
+				// TLS transport — never a silent plaintext downgrade. nil config
+				// = system roots, TLS 1.2+, ServerName from the dial address
+				// (stratum.DialTLS never falls back to plaintext).
+				return stratum.DialTLS(ctx, address, nil)
+			}
 			var dialer net.Dialer
 			return dialer.DialContext(ctx, "tcp", address)
 		}

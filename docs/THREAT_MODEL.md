@@ -99,7 +99,7 @@ The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 
 **Residual risk:** Root can delete the file (no Otedama-side
-mitigation). The encryption's key derivation uses scrypt (N=32768);
+mitigation). The encryption's key derivation uses scrypt (N=2^17 = 131072);
 a determined offline attacker with a modern GPU cluster can brute-force
 weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 
@@ -121,9 +121,13 @@ a panic in the decode path still terminates the miner (DoS, below).
 version.
 
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+`gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
+with review. govulncheck runs in CI. See ADR-003.
+
+**Residual risk (CI supply chain):** GitHub Actions are referenced by
+release tags (`@v4`, `@v5`, …), not commit SHAs, so a compromised or
+re-tagged upstream action could execute in CI. Pinning `uses:` entries
+to full-length SHAs is a tracked hardening item.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
 one of the two direct dependencies remains possible. We have no
@@ -265,6 +269,64 @@ always retained when present, so activation still proceeds.
 
 ---
 
+**Threat:** A malicious or compromised Stratum V1 pool negotiates an
+absurd `extranonce2_size` to force a large per-job allocation, or sends
+malformed coinbase hex to corrupt the merkle fold.
+
+**Mitigation:** `completeV1Job` folds the coinbase only when en1/en2size
+are negotiated and `extranonce2_size ≤ 64`; anything else falls back to
+the pre-fix behaviour (zero merkle, zero-padded en2 on the wire) rather
+than allocating a pool-dictated buffer. Coinbase hex that fails to
+decode leaves the field empty, which also triggers the fallback — no
+partial fold is ever emitted.
+
+**Residual risk:** Because en2 is fixed per job, a worker that exhausts
+the 32-bit nonce space inside one job can emit a duplicate share (same
+header, same en2). Pools treat duplicates as benign; the residual is a
+wasted hash, not a correctness failure. A per-job nonce-wrap en2 bump is
+the documented next step if this ever becomes measurable.
+
+---
+
+**Threat:** A hostile or misconfigured pool drives difficulty to ~0
+(`mining.set_difficulty` / `SetTarget`), so workers produce shares at
+hardware speed and every share becomes a wire submission — a submit
+flood that wastes this host's CPU/network and can get the account
+rate-limited or banned pool-side.
+
+**Mitigation:** A per-session token bucket (`submitLimiter`) admits at
+most 8 submits/s with a burst of 32; excess shares are dropped before
+they reach the wire and counted on `otedama_shares_submit_dropped_total`.
+The cap is set far above any honest pool's credit rate, and shares that
+would pass it are stale by the time they could send, so the drop loses
+nothing real.
+
+**Residual risk:** The cap bounds the wire rate but not the wasted
+hashing itself — workers still burn cycles producing un-creditable
+shares at difficulty ~0. The session-270 starvation tripwire (warn when
+expected share interval > 1 h) covers the opposite pole; a
+difficulty-floor disconnect is the documented next step.
+
+---
+
+**Threat:** A hostile pool or a MitM on cleartext Stratum V1 sets
+`extranonce2_size` to a huge value at `mining.subscribe` or via a
+mid-session `mining.set_extranonce`. The field flows into
+`strings.Repeat` on every `mining.submit`, so one negotiation value
+turns each share into a multi-gigabyte allocation — memory exhaustion.
+
+**Mitigation:** `maxExtranonce2Size = 64` (real pools use 4–8) enforced
+at both entry points: out-of-range subscribe results abort the dial;
+out-of-range `set_extranonce` notifications are dropped. `Submit` also
+clamps the padding to `[0, 64]` so no future entry point can re-open
+the vector.
+
+**Residual risk:** A legitimate pool requiring >64 bytes of
+extranonce2 space cannot be served — no such scheme exists in
+practice; known pools stay within 8.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.
@@ -281,13 +343,21 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
-**Mitigation:** Release artifacts are cosign-signed. The `install.sh`
-script verifies SHA-256 and, when cosign is installed, verifies the
-signature. Reproducible builds via `-trimpath` and fixed `-ldflags`.
+**Mitigation:** Release artifacts ship a `checksums.txt` file that
+`install.sh` verifies with SHA-256 before installing. `install.sh`
+also supports optional cosign `verify-blob` against
+`checksums.txt.sig`/`.pem` when a signature is published, and is
+written to skip that step cleanly when none exists. Reproducible
+builds via `-trimpath` and fixed `-ldflags`.
 
-**Residual risk:** The signing key can be stolen. GitHub's OIDC-based
-keyless signing via Sigstore reduces this to "compromise of the
-GitHub Actions runtime," which is actively monitored.
+**Residual risk:** As of this writing the release workflow does not
+yet publish cosign signatures, so checksum verification is the only
+binary-integrity check — a compromised release pipeline could ship
+tampered archives. Publishing keyless Sigstore signatures (OIDC
+identity bound to the release workflow) remains a release-hardening
+item; when enabled, `install.sh` picks it up automatically and
+`--certificate-identity-regexp` pins the signer identity to this
+repository's workflows.
 
 ## Assumptions
 

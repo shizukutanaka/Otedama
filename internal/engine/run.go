@@ -426,7 +426,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if len(addrs) > 1 {
 			loc += fmt.Sprintf(", address %d/%d", addrIdx+1, len(addrs))
 		}
-		r.log("info", fmt.Sprintf("engine: connecting to %s (%s)", poolURL, loc))
+		r.log("info", fmt.Sprintf("engine: connecting to %s (%s)", poolproto.StripUserinfo(poolURL), loc))
 
 		r.metrics.poolConnectAttempts.Inc()
 		r.metrics.poolActiveIndex.Set(float64(poolIdx))
@@ -639,7 +639,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 	host, err := parseHost(opts.poolURL)
 	if err != nil {
-		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
+		return fmt.Errorf("engine: bad pool URL %q: %w", poolproto.StripUserinfo(opts.poolURL), err)
 	}
 
 	var conn net.Conn
@@ -747,6 +747,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
 	const submitTimesCap = 1024
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -936,7 +939,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
+				reason := poolproto.SanitizePoolText(pm.msg.SubmitSharesError.Error)
 				category, diagnosis := rejectClass(reason)
 				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
 					reason, diagnosis))
@@ -955,6 +958,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
+			}
+			if !submits.take() {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", "engine: share dropped by submit rate cap")
+				continue
 			}
 			sub := stratum.SubmitSharesStandard{
 				ChannelID:      chanID,
@@ -1026,7 +1036,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
-	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", opts.poolURL))
+	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", poolproto.StripUserinfo(opts.poolURL)))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)
 	}
@@ -1050,6 +1060,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	for {
 		select {
@@ -1143,6 +1156,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.
+			if !submits.take() {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", "engine: share dropped by submit rate cap")
+				continue
+			}
 			capturedShare := share
 			capturedSess := sess
 			if opts.m != nil {
@@ -1157,9 +1177,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
-					Nonce: capturedShare.Nonce,
-					NTime: capturedShare.NTime,
+					JobID:      fmt.Sprintf("%d", capturedShare.JobID),
+					Nonce:      capturedShare.Nonce,
+					NTime:      capturedShare.NTime,
+					ExtraNonce: capturedShare.ExtraNonce,
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
@@ -1178,9 +1199,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						opts.m.sharesAccepted.Inc()
 					}
 				} else {
-					category, diagnosis := rejectClass(result.Reason)
+					reason := poolproto.SanitizePoolText(result.Reason)
+					category, diagnosis := rejectClass(reason)
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
-						result.Reason, diagnosis))
+						reason, diagnosis))
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()
@@ -1385,8 +1407,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 			Time:       job.NTime,
 			Bits:       job.NBits,
 		},
-		NBits:  job.NBits,
-		Target: target,
+		NBits:      job.NBits,
+		Target:     target,
+		ExtraNonce: job.ExtraNonce,
 	}
 	for _, wr := range workers {
 		wr.SetWork(w)
@@ -1405,5 +1428,56 @@ func parseHost(url string) (string, error) {
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
 
 type fatalError struct{ msg string }
+
+// submitRateInterval / submitBurst bound the rate of share submissions
+// reaching the wire per pool session. Workers can find shares arbitrarily
+// fast when the pool's difficulty collapses (a hostile or misconfigured
+// mining.set_difficulty → 0); without a cap, every found share spawns a
+// Submit goroutine and a wire frame, flooding the pool and this process.
+// The cap is deliberately far above any honest pool's credit rate —
+// shares past it are stale by the time they would send anyway.
+const (
+	submitRateInterval = 125 * time.Millisecond // one token per tick: 8/s
+	submitBurst        = 32
+)
+
+// submitLimiter is a token bucket that refills at submitRateInterval up to
+// submitBurst. take() never blocks: no token means the share is dropped.
+type submitLimiter struct {
+	tokens chan struct{}
+}
+
+func newSubmitLimiter(ctx context.Context) *submitLimiter {
+	l := &submitLimiter{tokens: make(chan struct{}, submitBurst)}
+	// Start full: a normal trickle of shares must never wait for a tick.
+	for i := 0; i < submitBurst; i++ {
+		l.tokens <- struct{}{}
+	}
+	go func() {
+		t := time.NewTicker(submitRateInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				select {
+				case l.tokens <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return l
+}
+
+func (l *submitLimiter) take() bool {
+	select {
+	case <-l.tokens:
+		return true
+	default:
+		return false
+	}
+}
 
 func (e *fatalError) Error() string { return e.msg }
