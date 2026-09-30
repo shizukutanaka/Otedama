@@ -946,6 +946,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 [AUDITED — clean] `parseReconnect` Wait field is stored but unconsumed on master (no sleep path); `parseSubscribeResult` fuzz lives in open #478; `extranonce2_size` bounds are open in #428/#450. The dormant Noise handshake stub (x-only fallback completes without DH) is documented as unwired alpha in KNOWN_LIMITATIONS §2 — targeted for spec-compliant replacement in v3.1.0, deliberately not hardened in place.
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**

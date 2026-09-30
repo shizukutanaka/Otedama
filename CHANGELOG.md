@@ -14,6 +14,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
