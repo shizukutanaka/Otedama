@@ -21,6 +21,63 @@ AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安
 Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
 報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
 
+### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
+
+- **`go test -race ./...` green on all 23 packages** (go1.26.8);
+  33 K lines of test code mechanically audited — skips environmental,
+  error-swallows fixture-scoped, no tautological assertions. Ecosystem
+  recheck: SRI still at v1.12.0, go1.26.8 confirmed current; toolchain
+  bump remains closed-PR-owned (#369).
+
+### Documentation & audit (session 518 — sv2-spec tracking)
+
+- **ADR-009 ecosystem update:** sv2-spec #194 merged — error codes may
+  now drive automated actions (upstream blessing for our reject-code
+  classification); #202/#203 compete on a non-custodial JDP payout
+  extension (miner-declared payout outputs — on Otedama's sovereignty
+  axis, tracked for future JDC work).
+
+### Documentation & audit (session 519 — rule-3 duplication ledger)
+
+- Recorded two candidates in `docs/CATEGORY_AUDIT.md` (not fixed —
+  consolidation is a contract decision): `tui` truncator family
+  (`truncateToBudget` hard-cuts vs `shortenURL` returns over-limit
+  intact at budget <4, Issue #3 class) and `metrics.metricKey`
+  label-value `,`/`=` collision (latent; unreachable from today's
+  producers but live on the API surface).
+
+### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
+
+- Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
+  block parses under 1.27's removed-setting acceptance rule; no >1.22
+  stdlib symbols so `stdversion` vet is clean). Recorded upstream's
+  `stratum-mining/sv2-ui` orchestrated JDP stack in ADR-009; ESP-Miner
+  2.15.3 / DATUM v0.4.1beta unchanged.
+
+### Documentation & audit (session 521 — ecosystem recheck)
+
+- ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
+  40–60% by end-2026), `stratum` vs `sv2-apps` repo landscape
+  clarified, single-port SV1/SV2 auto-detection pattern noted.
+  Japanese-source recheck: no drift.
+
+### Documentation & audit (session 522 — EROSION threat modeled)
+
+- `docs/THREAT_MODEL.md`: added the missing network-adversary DoS
+  class — the EROSION single-packet Noise-nonce-desync attack (S&P'24),
+  with Otedama's verified posture (frame/decrypt error → reconnect →
+  fresh handshake; no silent degradation) and its residual (bounded
+  reconnect loop, inherent).
+
+### Documentation & audit (session 524 — golangci-lint pin divergence)
+
+- `docs/KNOWN_LIMITATIONS.md` §13: recorded that golangci-lint is
+  pinned at three different versions (ci.yml `v1.55.2` curl-install,
+  `golangci-lint-action@v3`, local `v1.64.8`) while upstream is at
+  `v2.13.x`; v2.13.0 adds the go1.27 support the local toolchain
+  already needs. Upgrade implies a `.golangci.yml` v2-config migration
+  — maintainer-owned.
+
 ### Documentation & audit (session 526 — fuzz smoke verification)
 
 - Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
