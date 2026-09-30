@@ -612,3 +612,16 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 593 update — signed-arithmetic + TLS-configuration sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Signed `%` on a possibly-negative dividend yields a negative remainder (index/stride wrap bugs); integer division in yield/price math truncates silently. | ✅ Clean: every `%` site operates on provably non-negative operands — `int(d.Minutes())%60`/`Seconds` on uptime durations, `(idx+1) % len(...)` ring indices. Every division in the yield/rate paths is `float64` (medians, rates, J/TH, latency ms); no integer truncation sits on a monetary or difficulty quantity. |
+| S | TLS configuration — `InsecureSkipVerify`, weak `MinVersion`, SNI not derived from the dial address — on the `stratum+tls://` and `stratum+v2tls://` paths. | ✅ Clean: `InsecureSkipVerify` appears nowhere; both dialers pin `MinVersion: TLS1.2`, leave `ServerName` empty so crypto/tls fills it from the actual dial address, use `tls.Dialer` so the handshake completes (and verification failures surface) before first write with no plaintext fallback. `TLSConfigWithExtraCAs`/`tlsConfigWithExtraCAs` add a private-CA bundle *on top of* system roots — verification stays enabled; a nil/empty bundle yields the secure default. `doctor` pre-validates the PEM with the same `AppendCertsFromPEM` path. |
+
+All 24 packages build, vet, and test green.
