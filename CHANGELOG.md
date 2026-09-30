@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 326 — 衛生スイープ結果の記録)
+
+`govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
+（module-level advisory 22件は全て非到達）。`deadcode` の指摘は
+全てテスト専用/将来向けのエクスポート API 面であり実質デッド
+コードなし——削除対象とせず判定を記録。
+
 ### Docs (session 328 — 残存監査面の判定記録)
 
 `mining.set_version_mask`（BIP320 未実装・無害に drop）、Worker
