@@ -28,4 +28,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require golang.org/x/sys v0.20.0 // indirect
+// golang.org/x/sys is used by internal/tui to query the live terminal
+// width (TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows) —
+// the frozen syscall package cannot express either portably. BSD
+// licensed, maintained by the Go team, already in the module graph as
+// an x/crypto dependency (no new modules added).
+require golang.org/x/sys v0.20.0
