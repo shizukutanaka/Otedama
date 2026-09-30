@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -534,6 +535,104 @@ func TestRunArbitrationLoop_HysteresisPctIsUsed(t *testing.T) {
 	if len(gotErrs) > 0 {
 		t.Errorf("unexpected arbitration errors with hysteresisPct=0.20: %v", gotErrs)
 	}
+}
+
+// TestArbitrationLoopOpts_PowerFloor covers the derived per-device
+// power-breakeven floor: disabled inputs return 0; a configured
+// powerWatts × price ÷ BTC/USD converts to sats/sec and splits evenly
+// across managed devices.
+func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+	devs := []arbitration.DeviceRef{{Identity: hal.Identity{ID: "cpu-0"}}}
+
+	// Disabled inputs: no power, no price, no devices, no rate source.
+	for name, o := range map[string]arbitrationLoopOpts{
+		"zero power":    {powerWatts: 0, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"zero price":    {powerWatts: 3000, powerPricePerKWh: 0, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"no devices":    {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: nil, metrics: m},
+		"nil rate":      {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: nil, devRefs: devs, metrics: m},
+		"nonpos rate":   {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 0}, devRefs: devs, metrics: m},
+		"negative both": {powerWatts: -1, powerPricePerKWh: -1, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+	} {
+		if got := o.powerFloor(); got != 0 {
+			t.Errorf("%s: powerFloor() = %v, want 0", name, got)
+		}
+	}
+
+	// 3000 W × $0.10/kWh = $0.30/h → at $100,000/BTC = 0.30/100000×1e8/3600
+	// ≈ 0.0833 sats/s for the single device; halves across two devices.
+	want := 0.30 / 100000 * 1e8 / 3600
+	o := arbitrationLoopOpts{
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+		devRefs:          devs,
+		metrics:          m,
+	}
+	if got := o.powerFloor(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("powerFloor() = %v, want ~%v", got, want)
+	}
+	if got := m.powerBreakevenFloor.Value(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("power_breakeven_floor gauge = %v, want ~%v", got, want)
+	}
+	o.devRefs = append(o.devRefs, arbitration.DeviceRef{Identity: hal.Identity{ID: "gpu-0"}})
+	if got := o.powerFloor(); math.Abs(got-want/2) > 1e-9 {
+		t.Errorf("powerFloor() with 2 devices = %v, want ~%v", got, want/2)
+	}
+}
+
+// TestRunArbitrationLoop_PowerFloorIdlesDevice verifies the derived floor
+// reaches Decide: a stream below the power-breakeven leaves the device
+// idle even when min_yield_sats_per_sec is unset.
+func TestRunArbitrationLoop_PowerFloorIdlesDevice(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	streamMap := map[string]arbitration.Stream{
+		"mining.stratum:cpu-0": {
+			ID:              "mining.stratum",
+			IsBitcoinMining: true,
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 0.01, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 0.01, Confidence: 1.0},
+		},
+	}
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{SHA256d: true},
+		}},
+		streamsMu:        &sync.Mutex{},
+		streamMap:        streamMap,
+		quoteCh:          make(chan provider.Quote),
+		metrics:          m,
+		log:              func(_, _ string) {},
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	// Floor ≈ 0.0833 sats/s > yield 0.01 sats/s → the device must idle.
+	deadline := time.After(250 * time.Millisecond)
+	for m.devicesIdle.Value() != 1 {
+		select {
+		case <-deadline:
+			t.Fatalf("devicesIdle = %v, want 1 (yield below power breakeven)", m.devicesIdle.Value())
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	<-done
 }
 
 // ============================================================================
@@ -1080,6 +1179,45 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
 					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
+// fakeV1PoolSilent completes the V1 handshake then holds the connection open
+// without ever sending a job — used to exercise the silent-pool tripwire,
+// which requires the session to stay alive past jobStallWarnAfter.
+func fakeV1PoolSilent(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolSilent listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		// Same handshake trio as fakeV1Pool.
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Hold the connection open without sending a job; drain until the
+		// engine disconnects so the goroutine exits on test teardown.
+		for {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
 		}
 	}()
 
@@ -2411,6 +2549,91 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_JobStallWarnsOnce exercises the same silent-pool tripwire
+// on the V1 path: a connected pool that never sends a job must warn exactly
+// once per episode.
+func TestRunSessionV1_JobStallWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	old := jobStallWarnAfter
+	jobStallWarnAfter = 50 * time.Millisecond
+	defer func() { jobStallWarnAfter = old }()
+
+	poolURL := "stratum+tcp://" + fakeV1PoolSilent(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  poolURL,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var stallWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "no new job") {
+			stallWarns++
+		}
+	}
+	if stallWarns == 0 {
+		t.Errorf("silent-pool warning never fired; warns=%v", warns)
+	}
+	if stallWarns > 1 {
+		t.Errorf("silent-pool warning fired %d times, want once per episode", stallWarns)
 	}
 }
 

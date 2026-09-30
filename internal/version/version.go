@@ -20,7 +20,7 @@ var (
 	// Version is the semantic version of this build, e.g. "v3.0.0-alpha.1".
 	// For unreleased development builds, it may contain suffixes like
 	// "-dev" or "-dirty".
-	Version = "v3.0.0-alpha.0-dev"
+	Version = "v3.0.0-alpha.1-dev"
 
 	// Commit is the short git commit hash of this build, e.g. "a1b2c3d".
 	// For builds without git metadata, it is "unknown".
