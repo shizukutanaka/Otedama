@@ -22,6 +22,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### テスト (session 395)
+
+- `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。
+
+### Chore (session 332 — yaml.v3 のメンテ先へ移行)
+
+`gopkg.in/yaml.v3`（2025年4月にアーカイブ、CLAUDE.md の依存
+メンテ基準を満たさない）を、Yaml プロジェクトの正式な継続先
+`go.yaml.in/yaml/v3` v3.0.5 へ移行。API 互換のためコード変更は
+import パスのみ（configfile.go / config_file_test.go）。
+
+### テスト (session 391)
+
+- `cmd/otedama` に `FuzzLoadConfigFile` を追加 — 任意バイト列の YAML 設定ファイルがロード経路で panic/ハングせず、デコード失敗は常に「警告 + 空 Config」へ縮退することを検証（非UTF8・深いネスト・alias・バイナリ・未知フィールドを含む入力、98K exec でクリーン）。これで非信頼入力を受ける全パーサ/境界に fuzz または property カバレッジが揃った。
+
+### テスト (session 392)
+
+- `internal/lightning` に BIP-39 パース境界の fuzz を追加 — `FuzzMnemonicToEntropy` は任意の語列（不正な語数・未知語・大文字・空文字・チェックサム破損）で panic せず常にエラー、受理した語列は再エンコードが一致することを検証（150万 exec クリーン）。`FuzzMnemonicRoundtrip` は全合法エントロピー長（16–32B）でエンコード→デコードが bit-exact に往復することを検証（300万 exec クリーン）。ウォレット復元の入力境界をカバー。
+
+### 追加 (session 434 — サブコマンド did-you-mean 提案)
+
+- `otedama verson` 等の誤記時に stderr へ `did you mean "version"?` を
+  提案（Levenshtein 距離 ≤2 の最近接。exit 64 は不変、無関係入力には
+  提案なし、先頭ダッシュは無視）。新規依存なし。
+
+### テスト (session 396)
+
+- `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。
+
+### 修正 (session 413)
+
+solo-operations.md の CODEOWNERS サンプルが非実在パス
+（`/internal/security/`・`/internal/auth/` — CLAUDE.md の作成禁止
+パス）を参照していた問題を実ファイルと同じ構成に訂正。
+`.github/dependabot.yml` の無効な `automerge` キー（Dependabot に
+存在しないオプション — 自動マージは発動していなかった）を除去し
+実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
+
+### 修正 (session 415)
+
+**lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
+gosec・gocritic・misspell・gofumpt・prealloc・goconst・unparam・dogsled・
+bodyclose 等）に対する ~350 件の違反を解消し 65 件まで削減。主な実修正:
+`err ==` 等価比較を `errors.Is`/`errors.As` へ統一（ラップ済み fatalError が
+無限再試行されていた意味的バグを含む）、systemd/launchd サービス定義の
+パーミッションを 0644→0600 へ厳格化、未使用コード（remoteStatic・test
+parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチャ整理、
+テストの bodyclose・unnecessaryDefer 等。BIP-39 ワードリストと i18n
+カタログは正規データのため misspell 対象外として恒久的に除外。残りは
+hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
+案件として記録。
+
 ### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
 
 **問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も

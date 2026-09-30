@@ -83,9 +83,6 @@ __debug_bin
 # IDE and editor files
 .idea/
 .vscode/
-# AI-tool local settings are per-developer and must not be committed
-# (a stale copy with dead paths was committed once; keep them local).
-.claude/settings.local.json
 *.swp
 *.swo
 *.swn
