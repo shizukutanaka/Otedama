@@ -612,3 +612,18 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 591 update — test-goroutine assertions + filesystem-path hygiene sweep
+
+Two mechanical axes not covered by the earlier lint/race/concurrency
+rounds, verified by inspection of every matched site (not just pattern
+counts):
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `t.Fatal`/`t.Fatalf` called inside a spawned goroutine would `runtime.Goexit` that goroutine only — the test continues and can pass while the assertion never ran (silent pass-through). | ✅ Clean: every `t.Fatal*` site sits on the main test goroutine; spawned goroutines only do I/O or report via `t.Error*`/`t.Logf` (both safe off-main). No assertion inside any `go func` anywhere in the test tree. |
+| S | `filepath`/`os` path handling — `os.Stat`/`os.Lstat`/`os.Open`/`os.ReadFile`/`os.WriteFile`/`filepath.Join` on derived paths (wallet dir, config, log file, unit files, sysfs). | ✅ Clean: every joined path is rooted at an operator-owned directory (dataDir from the 4-layer config, `$HOME` service dirs, sysfs `drmBasePath`); the only operator-supplied single paths are `--config`, `--log-file`, and `tls_ca_file`, which the operator legitimately controls. `filepath.Glob` wallet-tmp sweep is pattern-bounded to the same dir. No traversal or symlink-follow surface reachable from untrusted input. |
+
+All 24 packages build, vet, and test green.
