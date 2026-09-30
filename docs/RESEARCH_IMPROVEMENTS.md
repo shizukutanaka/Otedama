@@ -947,5 +947,7 @@ the arXiv listing; all API endpoints against current vendor documentation.*
   are the documented best-effort tolerations in parse.go:164/176
   ("tolerate non-string" — deliberate lenient parsing for pool
   quirks), each carrying an inline justification comment.
-- yaml: one `yaml.Unmarshal` site (config-file decode), error
-  checked — the fuzz target for this boundary exists (session 391).
+- yaml: the config-file decode uses `yaml.NewDecoder` with
+  `KnownFields(true)` (unknown keys rejected), checks `Decode`'s
+  error, and treats io.EOF as "use defaults" — the fuzz target for
+  this boundary exists (session 391).
