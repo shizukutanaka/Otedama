@@ -976,6 +976,33 @@ accept-everything).
   `opts.Output` (stdout on first run) — it is never passed to the
   logger; wallet.dat stores only the encrypted seed.
 
+## Session 403 — CONTRIBUTING/README command audit + DCO drift [SURFACED]
+
+**DCO sign-off required by CONTRIBUTING.md but not practiced [🟡
+SURFACED — maintainer policy decision].** CONTRIBUTING.md §DCO states
+all commits must carry `git commit -s` Signed-off-by, and the PR
+template repeats it. Reality: **zero** of the last 50 commits on
+master carry the trailer — including the maintainer's own merges and
+every session-NNN PR landed so far. The requirement is either (a)
+intended but unenforced — in which case a CI DCO check would be the
+fix, or (b) stale boilerplate carried in from a template — in which
+case the docs should drop it. Deliberately NOT edited: whether the
+project wants DCO is a legal-policy call for the maintainer, and a
+docs patch that silently removes a contributor's attestation
+requirement could hide real intent. Recorded here instead; the PR
+template's DCO checkbox likewise goes unchecked in practice.
+
+**CONTRIBUTING.md command surface [AUDITED — accurate].**
+`make setup`/`build`/`test`/`lint` all exist and do what the doc says;
+`.golangci.yml` exists and is referenced correctly; the PR-flow
+section (feature branch, `make test` + `make lint`, template) matches
+practice.
+
+**README.md [AUDITED — clean].** Only command reference is
+`make build` — exists; no phantom targets or flags. CLI flag docs
+(`docs/API.md`) were already verified against `cmd/otedama` in
+sessions 339/346.
+
 ## Session 406 — API.md env-var table completed [FIXED]
 
 **API.md's environment-variable table omitted five real vars [FIXED].**
