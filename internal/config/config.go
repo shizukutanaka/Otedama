@@ -34,6 +34,8 @@ package config
 
 import (
 	"fmt"
+	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -636,6 +638,23 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// NaN/±Inf must be rejected explicitly: comparisons like `x < 0` are
+	// false for NaN, so a non-finite value would otherwise sail through
+	// every range check and poison the arbitration math downstream.
+	for _, f := range []struct {
+		name  string
+		value float64
+	}{
+		{"arbitration_hysteresis_pct", c.ArbitrationHysteresisPct},
+		{"curtail_below_btc_usd", c.CurtailBelowBTCUSD},
+		{"min_yield_sats_per_sec", c.MinYieldSatsPerSec},
+		{"power_watts", c.PowerWatts},
+		{"electricity_price_per_kwh", c.ElectricityPricePerKWh},
+	} {
+		if math.IsNaN(f.value) || math.IsInf(f.value, 0) {
+			issues = append(issues, fmt.Sprintf("%s must be a finite number", f.name))
+		}
+	}
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
@@ -694,16 +713,40 @@ func validateBitcoinAddress(addr string) error {
 	return nil
 }
 
-// validatePoolURL checks that a pool URL has an acceptable scheme.
+// validatePoolURL checks that a pool URL has an acceptable scheme and a
+// dialable host:port target.
 func validatePoolURL(raw string) error {
 	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
 	for _, s := range validSchemes {
 		if rest, ok := strings.CutPrefix(raw, s); ok {
-			if rest == "" {
-				return fmt.Errorf("URL has no host after scheme")
-			}
-			return nil
+			return validatePoolTarget(rest)
 		}
 	}
 	return fmt.Errorf("URL must start with one of: %s", strings.Join(validSchemes, ", "))
+}
+
+// validatePoolTarget checks the portion after the scheme. Otedama passes
+// it verbatim to the dialer (poolproto.StripScheme) and applies no default
+// port, so reject everything that cannot be a "host:port" dial target —
+// userinfo, path/query/fragment, a missing or non-numeric port, and
+// out-of-range ports — at config load rather than at first dial.
+func validatePoolTarget(rest string) error {
+	if rest == "" {
+		return fmt.Errorf("URL has no host after scheme")
+	}
+	if strings.ContainsAny(rest, "@/?# \t") {
+		return fmt.Errorf("must be host:port with no userinfo, path, or whitespace (got %q)", rest)
+	}
+	host, port, err := net.SplitHostPort(rest)
+	if err != nil {
+		return fmt.Errorf("must be host:port (e.g. pool.example.com:3333): %v", err)
+	}
+	if host == "" {
+		return fmt.Errorf("host is empty")
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil || p < 1 || p > 65535 {
+		return fmt.Errorf("port %q is not a number in 1-65535", port)
+	}
+	return nil
 }
