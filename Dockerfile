@@ -54,7 +54,8 @@ USER nonroot:nonroot
 VOLUME ["/var/lib/otedama"]
 
 # Otedama has no listening ports of its own; it dials out to the pool.
-EXPOSE 0
+# No EXPOSE: port 0 is not a valid port declaration, and --http-addr is an
+# operator-chosen runtime binding, not a fixed port to document here.
 
 ENTRYPOINT ["/usr/local/bin/otedama"]
 CMD ["run", "--help"]
