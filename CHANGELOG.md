@@ -21,6 +21,14 @@ AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安
 Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
 報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
 
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
 ### 修正 (session 406)
 
 API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
