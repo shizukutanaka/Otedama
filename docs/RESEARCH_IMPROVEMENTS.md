@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 551 — untrusted-input cost audit + base58 bound
+
+- `regexp` in non-test code: **zero usages** — no ReDoS surface.
+- `TargetFromNBits` on pool-controlled `nBits`: bounded — exp is a
+  byte (≤255) so the big.Int shift is ≤2016 bits (~255 bytes)
+  before the >32-byte reject. Cheap by construction.
+- `base58Decode` had NO length bound: `n.Mul(n, radix)` per char
+  is O(n²) big.Int work on arbitrary-length input before the
+  `len(raw) != 25` reject — and the check runs only after the
+  decode. Input is local config (user's payout address), so not
+  attacker-reachable, but Otedama bounds everything upstream can
+  reach: added a 64-char cap (real Base58Check addresses are
+  26–34 chars) that short-circuits before decode. Regression
+  cases added; `-race` green.
