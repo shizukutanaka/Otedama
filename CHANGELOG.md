@@ -18,6 +18,12 @@ ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
 を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
 go.mod と完全整合を確認済み。
 
+### 修正 (session 412)
+
+SECURITY.md の非実在コマンド `otedama migrate-from-v2` への言及を
+`docs/MIGRATING-FROM-V2.md` への誘導に訂正。ADR-006/010/011・
+SECURITY.md のスコープ節は実装と整合を確認済み。
+
 ### 修正 (session 414)
 
 competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
