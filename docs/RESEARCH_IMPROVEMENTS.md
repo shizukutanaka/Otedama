@@ -940,6 +940,24 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 517 — test-code audit pass + ecosystem recheck
+
+**Test-suite mechanical audit.** All 33 K lines of `*_test.go` swept:
+skips are all environmental and self-describing (OS-gated GPU/permission
+checks, listener binds, root-user semantics); `_ =` error swallows are
+confined to fixture setup/teardown and test-only probes; sleeps are
+localized concurrency timing, not correctness dependencies; assertion
+density ~1.8–2 per test with no tautological or always-true checks found.
+`go test -race ./...` on master (go1.26.8): all 23 packages green —
+clean baseline re-verified.
+
+**Ecosystem recheck — no drift.** SRI release line still tops out at
+v1.12.0 (the BIP323/cipher-drop/hardening release recorded in session
+478); nothing newer to reconcile. Local toolchain go1.26.8 confirmed
+current-latest against go.dev. ESP-Miner 2.15.3 already recorded (no
+HAL delta). The go1.24.0→go1.26 toolchain bump remains closed-PR-owned
+(#369) — recorded, not re-delivered.
+
 ## Session 518 — sv2-spec: error-code automation + non-custodial payouts
 
 Two verified specification developments recorded in ADR-009:

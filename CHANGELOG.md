@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
+
+- **`go test -race ./...` green on all 23 packages** (go1.26.8);
+  33 K lines of test code mechanically audited — skips environmental,
+  error-swallows fixture-scoped, no tautological assertions. Ecosystem
+  recheck: SRI still at v1.12.0, go1.26.8 confirmed current; toolchain
+  bump remains closed-PR-owned (#369).
+
 ### Documentation & audit (session 518 — sv2-spec tracking)
 
 - **ADR-009 ecosystem update:** sv2-spec #194 merged — error codes may
