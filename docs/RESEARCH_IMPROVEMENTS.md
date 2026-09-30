@@ -940,6 +940,15 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 540 — test-order dependence: -shuffle=on clean
+
+`go test -shuffle=on ./...` twice with different seeds — all 24
+packages green both runs. No test depends on package-level
+execution order (no shared fixture state leaking between tests),
+consistent with the session-517 race sweep and session-535 flake
+sweep: the suite is deterministic and order-independent.
+No action needed; recorded as an audit verdict.
+
 ## Session 541 — serialized scheduling: -cpu=1 clean
 
 `go test -cpu=1 ./...` (GOMAXPROCS=1, single-threaded scheduling)

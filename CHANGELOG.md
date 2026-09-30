@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 540 — order dependence)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-shuffle=on` ×2 full-suite runs
+  all green — no order-dependent tests; suite is deterministic.
+
 ### Documentation & audit (session 542 — ecosystem recheck)
 
 - `docs/adr/ADR-009`: sv2-spec #220 (Noise Act 2 = 234 bytes —
