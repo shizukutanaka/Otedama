@@ -950,6 +950,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** CODE_OF_CONDUCT は標準 Contributor Covenant 2.1＋正しい Security Advisories 報告 URL で clean。CODEOWNERS（lightning/noise* カバー）・MAINTAINERS.md の succession plan・ADR append-only 方針は実体と一致。パス参照棚卸し: `config.yaml`/`test.yml` 言及は全て正当（非実在を論じる文脈 or 実在）— 新規 phantom パス参照なし。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
