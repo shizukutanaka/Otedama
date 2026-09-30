@@ -219,7 +219,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -260,7 +260,8 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+			winfo, err := os.Stat(walletPath)
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
@@ -271,6 +272,20 @@ func checkWallet(dataDir string) Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("cannot stat %s: %v", walletPath, err),
 					Fix:    "check filesystem permissions",
+				}
+			}
+
+			// The file itself must be owner-only: a wallet restored via
+			// scp/rsync or extracted from a backup tarball lands 0644,
+			// exposing the encrypted seed to other local users even though
+			// the enclosing directory check already covers fresh installs.
+			if runtime.GOOS != "windows" {
+				if perm := winfo.Mode().Perm(); perm&0o077 != 0 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("%s has permissions %04o (group/other readable)", walletPath, perm),
+						Fix:    fmt.Sprintf("run: chmod 0600 %s", walletPath),
+					}
 				}
 			}
 
@@ -753,8 +768,18 @@ func checkNetwork() Check {
 var clockSkewProbeURL = "https://api.coinbase.com/v2/time"
 
 // clockSkewHTTPClient is the HTTP client used by checkClockSkew. Nil means
-// use http.DefaultClient. Tests replace this with a fake-server client.
+// use clockSkewDefaultClient. Tests replace this with a fake-server client.
 var clockSkewHTTPClient *http.Client
+
+// clockSkewDefaultClient is used when clockSkewHTTPClient is nil. Like the
+// rate fetcher, it refuses to follow redirects: the probe target is a
+// hardcoded HTTPS endpoint, so a redirect can only be an https→http
+// downgrade leaking the request and feeding the check an attacker Date.
+var clockSkewDefaultClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return fmt.Errorf("doctor: redirects are not followed")
+	},
+}
 
 // clockSkewWarnSecs is the skew magnitude at which we warn; beyond this TLS
 // certificate validation windows, mining nTime fields, and rate-freshness
@@ -785,7 +810,7 @@ func checkClockSkew() Check {
 
 			client := clockSkewHTTPClient
 			if client == nil {
-				client = http.DefaultClient
+				client = clockSkewDefaultClient
 			}
 			resp, err := client.Do(req)
 			if err != nil {

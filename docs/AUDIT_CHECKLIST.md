@@ -36,9 +36,9 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | Every `uses:` has `@<40-char-sha>` |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
+| 13 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install; optional cosign `verify-blob` path exists but signatures are not yet published by the release workflow |
 | 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
 | 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
@@ -47,7 +47,7 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 16 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
-| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
+| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `save()` | Atomic `os.CreateTemp` → `Sync` → `os.Chmod(0600)` → `os.Rename` |
 | 18 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
 | 19 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
 | 20 | No default password or pre-shared key | Grep for hardcoded strings | None found |

@@ -2483,6 +2483,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2500,5 +2501,128 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
+// the TCP connection but never answers SetupConnection makes handshake
+// return within handshakeTimeout instead of blocking forever.
+func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	client, server := net.Pipe()
+	defer server.Close()
+	// Drain reads but never respond — the peer is alive yet silent.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	dec := stratum.NewDecoder(client)
+	start := time.Now()
+	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	if err == nil {
+		t.Fatal("handshake should fail against a silent peer")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("handshake blocked %v, want <5s", elapsed)
+	}
+}
+
+// TestHandshake_DeadlineCleared verifies the handshake deadline is
+// removed on return so steady-state session reads stay unbounded.
+func TestHandshake_DeadlineCleared(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+
+	go func() {
+		// Answer SetupConnection and OpenMiningChannel minimally.
+		dec := stratum.NewDecoder(server)
+		_, _ = dec.ReadFrame()
+		payload, _ := (&stratum.SetupConnectionSuccess{UsedVersion: 2}).Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+		_, _ = dec.ReadFrame()
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 3}
+		payload, _ = omcSucc.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+	}()
+
+	dec := stratum.NewDecoder(client)
+	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 3 {
+		t.Errorf("chanID = %d, want 3", chanID)
+	}
+	// Post-handshake reads must not inherit the deadline: a blocking read
+	// with no incoming frame should still be blocked after ~150ms.
+	go func() {
+		_, _ = dec.ReadFrame()
+	}()
+	select {
+	case <-time.After(150 * time.Millisecond):
+		// success: read is still blocked (no deadline fired)
+	}
+	_ = client.Close()
+}
+
+// TestStoreBoundedJob_BoundsOutstandingJobs pins the jobsCap bound: flooding
+// distinct job IDs must evict oldest-first while keeping the newest.
+func TestStoreBoundedJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for i := uint32(1); i <= jobsCap+10; i++ {
+		order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(jobs) != jobsCap {
+		t.Fatalf("len(jobs) = %d, want cap %d", len(jobs), jobsCap)
+	}
+	// FIFO: the first 10 IDs were evicted; the newest survive.
+	for i := uint32(1); i <= 10; i++ {
+		if _, ok := jobs[i]; ok {
+			t.Errorf("job %d should have been evicted (FIFO)", i)
+		}
+	}
+	for i := uint32(jobsCap + 1); i <= jobsCap+10; i++ {
+		if _, ok := jobs[i]; !ok {
+			t.Errorf("newest job %d should have survived", i)
+		}
+	}
+	// Re-inserting an existing ID must not grow the order slice.
+	before := len(order)
+	order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: jobsCap + 10})
+	if len(order) != before {
+		t.Errorf("re-insert grew order to %d, want %d", len(order), before)
+	}
+}
+
+func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := newSubmitLimiter(ctx)
+	// Burst starts full; the (submitBurst+1)-th take without a tick fails.
+	for i := 0; i < submitBurst; i++ {
+		if !l.take() {
+			t.Fatalf("take %d/%d should succeed (burst full)", i+1, submitBurst)
+		}
+	}
+	if l.take() {
+		t.Fatal("take should fail once the burst is exhausted")
+	}
+	// After one refill interval a token is available again.
+	time.Sleep(submitRateInterval + 50*time.Millisecond)
+	if !l.take() {
+		t.Fatal("take should succeed after a refill tick")
 	}
 }
