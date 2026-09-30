@@ -118,7 +118,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if !ok {
 				return
 			}
-			key := updateStream(opts.streamsMu, opts.streamMap, q)
+			key := updateStream(opts.streamsMu, opts.streamMap, &q)
 			ts := q.At
 			if ts.IsZero() {
 				ts = time.Now()
@@ -129,7 +129,8 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
-					key, streamStaleTimeout))
+					key, streamStaleTimeout,
+				))
 			}
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
@@ -139,7 +140,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if margin == 0 {
 				margin = defaultHysteresisPct
 			}
-			alloc, err := arbitration.Decide(arbitration.Input{
+			alloc, err := arbitration.Decide(&arbitration.Input{
 				Devices:            opts.devRefs,
 				Streams:            streams,
 				Previous:           prevAlloc,
@@ -187,7 +188,8 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				if alloc.SkippedDevice > 0 {
 					opts.log("info", fmt.Sprintf(
 						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
-						alloc.SkippedDevice))
+						alloc.SkippedDevice,
+					))
 				} else {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
@@ -222,7 +224,7 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 // updateStream folds one provider quote into the live streams map,
 // keyed by "providerID:deviceID". It returns the key it wrote, so the caller
 // can track per-stream freshness for staleness pruning.
-func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
+func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
 	key := q.ProviderID + ":" + q.DeviceID
