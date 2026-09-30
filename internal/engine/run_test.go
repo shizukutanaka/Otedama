@@ -2390,10 +2390,11 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 // until the client disconnects, which allows multiple stats-tick cycles to
 // run inside runSession.
 type responsivePool struct {
-	t       *testing.T
-	ln      net.Listener
-	addr    string
-	started chan struct{}
+	t           *testing.T
+	ln          net.Listener
+	addr        string
+	started     chan struct{}
+	shareTarget [32]byte
 	// retargetRejects changes the share policy to the ESP-Miner #212
 	// scenario: the first submitted share gets a SetTarget (new, still
 	// easy epoch) followed by SubmitSharesError("Above target") — a
@@ -2417,12 +2418,28 @@ func newResponsivePool(t *testing.T) *responsivePool {
 	return newResponsivePoolOpt(t, false)
 }
 
+// newResponsivePoolT lets a test pick the channel's share target: all-0xFF
+// is trivially easy, while a near-zero target starves share production.
+func newResponsivePoolT(t *testing.T, shareTarget [32]byte) *responsivePool {
+	t.Helper()
+	return newResponsivePoolFull(t, false, false, shareTarget)
+}
+
 func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
 	t.Helper()
 	return newResponsivePoolOpts(t, bogusReject, false)
 }
 
 func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *responsivePool {
+	t.Helper()
+	var easy [32]byte
+	for i := range easy {
+		easy[i] = 0xFF
+	}
+	return newResponsivePoolFull(t, bogusReject, bogusAccept, easy)
+}
+
+func newResponsivePoolFull(t *testing.T, bogusReject, bogusAccept bool, shareTarget [32]byte) *responsivePool {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -2433,6 +2450,7 @@ func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *respons
 		ln:          ln,
 		addr:        ln.Addr().String(),
 		started:     make(chan struct{}),
+		shareTarget: shareTarget,
 		bogusReject: bogusReject,
 		bogusAccept: bogusAccept,
 	}
@@ -2485,14 +2503,12 @@ func (fp *responsivePool) serve() {
 		return
 	}
 
-	// Send OpenMiningChannelSuccess with all-0xFF target (trivially easy)
+	// Send OpenMiningChannelSuccess with the pool's configured share target.
 	omcSucc := stratum.OpenMiningChannelSuccess{
 		ReqID:           omc.ReqID,
 		ChannelID:       1,
 		ExtraNonce2Size: 4,
-	}
-	for i := range omcSucc.Target {
-		omcSucc.Target[i] = 0xFF
+		Target:          fp.shareTarget,
 	}
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
@@ -2893,6 +2909,97 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
+// tripwire: a near-impossible share target must produce exactly one warning
+// per episode no matter how many stats ticks run.
+func TestRunSession_StarvationWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// Tiny share target — only hash value 0 or 1 can ever satisfy it, so
+	// the implied share difficulty is astronomical and no share is found.
+	var starved [32]byte
+	starved[0] = 0x01
+	fp := newResponsivePoolT(t, starved)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	// First warn should appear quickly once a tick observes the huge
+	// estimated interval; let many more ticks run to prove it stays once.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	// A few hundred ms of extra ticks — warn-once is the assertion.
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var starveWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "between shares") {
+			starveWarns++
+		}
+	}
+	if starveWarns == 0 {
+		t.Errorf("starvation warning never fired; warns=%v", warns)
+	}
+	if starveWarns > 1 {
+		t.Errorf("starvation warning fired %d times, want once per episode", starveWarns)
 	}
 }
 
