@@ -951,6 +951,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** 第1層〜第7層の推奨設計（SHA pinning 原則・Renovatebot 設定例・Private Vulnerability Reporting・DCO・CODEOWNERS サンプル・週10時間上限）は全て将来形の設計提案として正しく記述されており実装要求ではない。Dependabot 設定済み・Branch-Protection「設定必要」表記は正直。CodeQL/Semgrep の security.yml 存在も確認。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
