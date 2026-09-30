@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 522 — EROSION threat modeled)
+
+- `docs/THREAT_MODEL.md`: added the missing network-adversary DoS
+  class — the EROSION single-packet Noise-nonce-desync attack (S&P'24),
+  with Otedama's verified posture (frame/decrypt error → reconnect →
+  fresh handshake; no silent degradation) and its residual (bounded
+  reconnect loop, inherent).
+
 ### Documentation & audit (session 524 — golangci-lint pin divergence)
 
 - `docs/KNOWN_LIMITATIONS.md` §13: recorded that golangci-lint is

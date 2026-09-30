@@ -940,6 +940,23 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 522 — EROSION network-adversary threat modeled
+
+Recorded in THREAT_MODEL's DoS section (a class previously unmodeled —
+network adversary disruption, vs pool-side DoS):
+
+- **EROSION (Tran/von Arx/Vanbever, IEEE S&P'24)**: one corrupted SV2
+  ciphertext desynchronizes Noise nonce counters → session dies while
+  the miner keeps hashing stale jobs; 91% of surveyed pools reachable,
+  one malicious AS could hit 96% of BTC hashrate.
+- **Otedama posture verified**: any frame/decrypt error is session
+  fatal → reconnect → fresh handshake re-syncs counters. No
+  silent-degradation mode; residual = bounded reconnect loop under
+  sustained tampering (inherent; countermeasure is routing hygiene).
+- Spot-GPU scheduling literature (SkyNomad, committed-horizon spot
+  allocators) reviewed — tangential to the current provider layer
+  (simulated); noted for future arbitration work only.
+
 ## Session 524 — golangci-lint version divergence recorded
 
 Recorded in KNOWN_LIMITATIONS §13 (CI-workflow ledger):
