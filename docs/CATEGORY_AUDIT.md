@@ -612,3 +612,14 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 597 update — V2 handshake strictness + service-definition audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | V2 Noise `readMessage2` soft-degrade — the `err == nil` try-encodings chain (65B uncompressed → 33B compressed → 32B x-only fallback) accepts an arbitrary 32-byte payload as the responder key. | ✅ Deferred (fund-critical, alpha stub): the fallback is a documented P-256 stub simplification; a bogus "key" yields a wrong shared secret and the handshake fails at AEAD verification anyway (fail-eventually, never silently accepted). Any change belongs in the Noise NX secp256k1 migration, which is CODEOWNERS-reviewed by rule — not this sweep. |
+| S | Service-definition injection — pool URL / config path / binary path breaking out of `ExecStart=` or plist `<string>` into a new directive (systemd `;`/newline, plist `</string>`). | ✅ Clean: `quoteToken` escapes whitespace+quotes+control chars on every ExecStart token (the literal-newline → new-directive class is covered); plist uses `serviceArgv` as discrete `<string>` elements with `xmlEscape`; Windows sc.exe binaryPath is os.Executable-derived (operator input, not attacker input). |
+
+All packages build, vet, and test green.
