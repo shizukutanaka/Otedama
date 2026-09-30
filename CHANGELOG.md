@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### 修正 (session 383)
+
+- Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
+
 ### 修正 (session 374)
 
 - プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
