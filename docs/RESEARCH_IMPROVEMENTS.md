@@ -951,6 +951,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** Fuzz* 関数2件の記述（FuzzDecodeHeader/FuzzDecoder_ReadFrame）・提出手順・メンテナ工数見積・`primary_contact` は提出時差し替えのテンプレートとして妥当。CONTRIBUTING の make ターゲット・DCO・二重レビュー方針（Phase-1 単独メンテ下での意図的ポリシー）・Braiins/DEMAND 手検証クレームは正確。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
