@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Tests (session 537 — stdlib modernization)
+
+- `internal/i18n/messages/messages_test.go`: `sort.Strings` →
+  `slices.Sort` — the tree no longer imports `sort` or calls
+  `reflect.DeepEqual` anywhere (all other sorts were already on
+  `slices`/`cmp`/`maps`).
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
