@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 402)
+
+`skills/` 内の実在しないテスト基盤の記述を訂正 — `//go:build
+integration`/`e2e` タグ、`make test-e2e` ターゲット、`otedama
+migrate-from-v2` サブコマンドはいずれも存在しません。統合テストは
+`testing.Short()` でゲート（`make test-integration` が全件実行）し、
+E2E スイートは意図的に未実装。LDK/regtest・ZKP の記述は v4.0
+スコープの将来指針として明記。
+
 ### 修正 (session 404)
 
 TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
