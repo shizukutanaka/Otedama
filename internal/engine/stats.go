@@ -19,6 +19,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -82,7 +83,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
-		PoolURL:           opts.poolURL,
+		PoolURL:           poolproto.StripUserinfo(opts.poolURL),
 		PoolLatency:       poolLatency,
 		Connected:         true,
 		Stalled:           stalled,
@@ -107,7 +108,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 // snapshot does not know the true current state of any of them.
 func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) tui.Stats {
 	return tui.Stats{
-		PoolURL:           poolURL,
+		PoolURL:           poolproto.StripUserinfo(poolURL),
 		Connected:         false,
 		WalletFingerprint: wallet,
 		Uptime:            time.Since(startTime),
