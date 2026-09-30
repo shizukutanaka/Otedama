@@ -19,6 +19,13 @@ SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
 根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
 当方クライアント側バウンドで既にミラー済み。
 
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
 ### 監査判定 (session 403)
 
 CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
