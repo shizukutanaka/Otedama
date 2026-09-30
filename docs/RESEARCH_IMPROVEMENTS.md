@@ -950,6 +950,16 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証 clean**: gitignore 追跡逸脱ファイル 0件、dependabot エコシステム3種（gomod/github-actions/docker）整合、全埋め込み YAML 構造 parse 通過、Deployment の probe/securityContext/label 整合。
 
+## Session 506 — competitive-analysis.md の外部事実検証（2件訂正・引用確認済み）
+
+**Sweep.** docs/adr/README 索引（11 ADR・status 一致で clean）・gitignore 追跡逸脱（0件）・dependabot・.claude 再出現（#563 の担当域）を棚卸し後、competitive-analysis の外部事実クレームを一次ソース照合。
+
+**対応（2件 — 訂正）。**
+1. **「Bitcoin Core v30 が Stratum V2 を公式サポート」は過大記述**: v30 の release notes（bitcoincore.org）によれば出荷は **experimental IPC Mining Interface**（`bitcoin -m node -ipcbind=unix`、IPC でテンプレート要求・ブロック提出を受ける Unix socket）で、ノード自体は SV2 を話さない — 「公式サポート」を訂正し、Go 製 TP の直接バインド経路である点を併記。
+2. **計画 vs 出荷分岐の Note**: 実装順序節が「LDK バインディング」「x/text 基盤」を記述するが、出荷は stdlib ウォレット（ADR-001）・独自 i18n カタログ（ADR-003）で分岐 — 起案時計画である旨の Note を追加。
+
+**検証 clean（引用確認）**: CVE-2014-4501 は実在（client.reconnect のスタックオーバーフロー、sgminer/cgminer/BFGMiner — NVD/fulldisclosure 確認）。NiceHash 4700 BTC・ADR 索引・dependabot エコシステム整合。
+
 ## Session 507 — skills/code-review.md の stale 参照2件（訂正）
 
 **Sweep.** パッケージ doc コメント網羅・main.go usage/exit-code 表と実 dispatch 照合の後、最後の未精読 skill ファイル code-review.md を精読。
