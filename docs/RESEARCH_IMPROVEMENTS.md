@@ -984,6 +984,32 @@ prerelease (2026-09-20) is preset-scoped frequency warnings only — no
 stratum changes. Go advisories: go1.26.8 toolchain still clears the
 Sept advisories.
 
+## Session 338 — set_extranonce race fix + V1 method-surface audit
+
+**set_extranonce data race [FIXED].** `mining.set_extranonce` (read
+goroutine) replaced `extranonce1`/`extranonce2Size` while `Submit`
+(caller goroutine) read them — plain fields, a real race whenever a
+pool rotated extranonce mid-session. Both now atomic
+(`atomic.Pointer[string]` / `atomic.Int64`); a concurrent dispatch+load
+test locks the fix in. Benign-read note: today's V1 path leaves
+`MerkleRoot` to the pool (poolproto.Job comment), so rotation stales
+no in-flight work; a future en1-dependent coinbase path (open #417)
+must additionally flush queued jobs on rotation.
+**V1 method coverage [AUDITED — clean].** Handled: mining.notify,
+set_difficulty, set_extranonce, client.show_message,
+client.reconnect/mining.reconnect. mining.set_version_mask and other
+extensions are deliberately ignored (forward-compatible). Requests
+with an id are never sent pool→client by conforming pools; unknown
+methods are dropped without reply.
+
+## Session 383 — SV2 nominal_hashrate seeding
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.
+
+[FIXED] **engine `handshake` declared `nominal_hashrate ≈ 0`** (`internal/engine/run.go`, `setup.go`): the value was summed from `w.Stats().HashRate`, which is always ~0 at handshake time because no job has been hashed yet. Pools use `nominal_hashrate` to seed variable difficulty, so a 0 declaration mis-seeds vardiff for real hardware. Fix: compute a capability-based nominal estimate in `Run` (per-worker sum of `provider.DefaultHashrates` over each worker's device family, via `nominalMiningHashrate`), thread it through `reconnectOpts`/`sessionOpts`, and declare it whenever the live rate is non-positive. On reconnect the live rate wins, reflecting sustained throughput. Tests: `TestHandshake_DeclaresNominalHashrateWhenWorkersCold` (net.Pipe server asserts the declared float) and `TestNominalMiningHashrate`.
+
+[AUDITED — clean] SV2 `DispatchFrame` (messages.go:406-483): every known msg type decodes or errors (error → session drop → reconnect); unknown types become `UnknownMessage` and are ignored; the 16 MiB frame cap is enforced in `ReadFrame` before allocation.
+
 ## Session 374 — config-layer pool URL validation hardening
 
 [AUDITED — clean] `config show`/`config validate` output: passphrases are
