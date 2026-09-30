@@ -16,6 +16,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   canonical — BIP-39 wordlist integrity panic + plugin-registry
   registration; no I/O or goroutines at init time.
 
+### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
+
+- `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
+  （argv 経由禁止 — プロセスリスト漏洩防止）、BIP-39 チェックサム検証後に
+  派生シードの公開フィンガープリントを `wallet.fingerprint` と比較。
+  `wallet.dat` の復号不要。mnemonic パスフレーズ付きウォレットは
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` で対応。フィンガープリントファイル
+  不在時は `OTEDAMA_WALLET_PASSPHRASE` による wallet.dat 復号へフォールバック。
+- `otedama wallet change-passphrase`: 既実装・テスト済みだが未接続だった
+  `WalletManager.ChangePassphrase` を CLI へ配線。パスフレーズは
+  `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE` 環境変数経由。
+- 両 verb は `wallet.dat` を事前 stat — `--data-dir` のタイポで空ウォレットを
+  誤作成しない（`NewWalletManager` は不在時に新規作成する契約のため）。
+- データディレクトリは `run` と同一の4層優先（flag > env > config.yaml >
+  プラットフォーム既定）で解決。
+- バックアップ復元（wallet.dat 単体コピー）で欠落した `wallet.fingerprint`
+  を既存ウォレット open 時に再生成 — フィンガープリント照合が復元後も
+  復号不要で動作する。既存ファイルは上書きしない（不一致は改竄シグナル）。
+
+### Added (session 336 — pool show_message 通知をログへ)
+
+Stratum V1 の `client.show_message`（メンテナンス予告、資格情報
+エラー、移行告知などプール運営者通知）が解析済みながら消費者ゼロ
+の dead channel で破棄されていた問題を修正。`PoolNoticeReceiver`
+経由で notices を取得し info ログへ転送。#405/#424 由来の再
+デリバー。
+
 ### Security (session 353 — dialer ハンドシェイクエラーのクォート)
 
 `poolproto/stratumv2` の `Negotiate` で `SetupConnectionError` /
