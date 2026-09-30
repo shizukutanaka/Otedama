@@ -66,7 +66,7 @@ func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *La
 	// (see arbitrationLoopOpts.activity). Nil activityMu (no arbitration
 	// loop wired, e.g. some tests) renders every provider inactive rather
 	// than defaulting back to the old unconditional true.
-	var providerStats []tui.ProviderStats
+	providerStats := make([]tui.ProviderStats, 0, len(opts.providers))
 	for _, p := range opts.providers {
 		ps := tui.ProviderStats{Name: p.Name()}
 		if opts.activityMu != nil {
@@ -255,7 +255,7 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
-// rejectClass categorises a pool's share-rejection reason. The category
+// rejectClass categorizes a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
 // classification (community field taxonomy, e.g. D-Central's guide):
@@ -506,7 +506,7 @@ type rateStats interface {
 // skew into their respective gauges. The rate gauge uses the fetcher's fallback
 // before the first successful fetch, so it is never left at zero. The skew
 // gauge is updated whenever the fetcher has seen at least one HTTP Date header
-// from a source (0 until then, signalling "not yet observed").
+// from a source (0 until then, signaling "not yet observed").
 func publishBTCRate(m *engineMetrics, f rateStats) {
 	if rate, _ := f.BTCUSDRate(); rate > 0 {
 		m.btcUSDRate.Set(rate)
