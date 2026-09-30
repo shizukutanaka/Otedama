@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 557 — debt markers, timer leaks, panic sites
+
+- **Debt markers:** zero TODO/FIXME/HACK/XXX in non-test code — no
+  stale markers to drift from reality.
+- **Timer leaks:** no `time.After`/`time.Tick` call sites; the one
+  timer (engine reconnect backoff, run.go:509) uses `time.NewTimer`
+  + `Stop()` on the ctx-cancel path — the documented fix for the
+  pre-1.23 timer-GC pitfall, still harmless on 1.23+.
+- **`panic(` sweep:** 12 sites, all programmer-error invariant
+  guards (metric/label-name validation at registration, BIP-39
+  wordlist integrity at init, duplicate scheme/dialer/worker-Start)
+  — none reachable from untrusted input.
