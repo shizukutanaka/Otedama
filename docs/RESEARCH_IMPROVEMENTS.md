@@ -973,6 +973,28 @@ practice.
 (`docs/API.md`) were already verified against `cmd/otedama` in
 sessions 339/346.
 
+## Session 406 — API.md env-var table completed [FIXED]
+
+**API.md's environment-variable table omitted five real vars [FIXED].**
+`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`, `OTEDAMA_CURTAIL_BELOW_BTC_USD`,
+`OTEDAMA_MIN_YIELD_SATS_PER_SEC`, `OTEDAMA_POWER_WATTS`, and
+`OTEDAMA_ELECTRICITY_PRICE_PER_KWH` are all implemented in
+`internal/config/config.go` (validated, origin-tracked) and documented
+in `config.yaml.example` — but missing from the user-facing env table.
+Added rows noting they are config-file-only knobs (no `--flag`
+equivalent) with their yaml key names and the metrics each enables.
+
+**Cross-checks [AUDITED — clean]:** every other `OTEDAMA_*` var named
+in API.md/DEPLOYMENT.md/TROUBLESHOOTING.md exists in code; Dockerfile
+(distroless + nonroot + static ldflags version injection, VOLUME at
+/var/lib/otedama) matches DEPLOYMENT.md's run/compose examples; the
+compose healthcheck (`otedama doctor`) and the loopback-published
+metrics port both behave as documented.
+
+Note: `EXPOSE 0` in the Dockerfile is a documented no-op (the binary
+dials out; metrics binds only when `--http-addr` is set inside the
+container) — harmless, left as-is since the comment explains intent.
+
 ## Session 407 — release pipeline vs VERIFY.md: major drift [SURFACED]
 
 **The release pipeline does not produce what VERIFY.md documents
