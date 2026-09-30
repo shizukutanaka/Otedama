@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 377 — build tooling audit
+
+[FIXED] `make fuzz` silently ran zero fuzzers: `go list ./...` emits
+import paths, so `grep -l "func Fuzz" {}/*.go` globbed a nonexistent
+directory for every package and the loop body never ran. The target now
+discovers fuzz tests from the filesystem and runs each
+`Fuzz*` function individually (`-fuzz=^Name$`) — also fixing the
+"matches more than one fuzz test" error that a package with multiple
+fuzzers would hit. Verified live: both `internal/stratum` fuzzers ran
+30s each (~4.8M execs, PASS).
+
+[AUDITED — clean] Remaining Makefile targets checked for the same
+class of bug (`docs`, `licenses`, `audit` sub-steps) — all correct.
+
 ## Session 426 — .gitignore: strip vestigial v2 sections [HYGIENE]
 
 The ignore file still described the pre-reset repository, not this one —
