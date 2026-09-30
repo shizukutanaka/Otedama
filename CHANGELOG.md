@@ -23,6 +23,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
   2026; 1.26.5–1.26.8 carried security fixes).
 
+### 修正 (session 399)
+
+マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
+(header, nonce) を各デバイスが重複計算し、後着シェアが duplicate 拒否されていた。
+`WorkerConfig.NonceOffset` を追加し、エンジンがワーカー i に `i*Threads` オフセット・
+共有ステップ `next-pow2(threads×workers)` を割当 — 各 (worker, thread) がジョブ全期間で
+互いに素な剰余類を所有。単一デバイス時の挙動は不変。
+
+### 修正 (session 462)
+
+1. TUI のカラム揃えずれを修正 — ANSI エスケープを含むフィールドを
+   `%-Ns` でパディングするとルーン数ベースのため不足し、後続カラムが
+   エスケープ長分左にずれていた。`padToVisibleWidth` で表示幅準拠の
+   パディングに統一（pool 状態・デバイス数・est. earned の3箇所）。
+
+### Added (session 318 — client.reconnect の wait_seconds を尊重)
+
+**問題.** `client.reconnect`/`mining.reconnect` の `wait_seconds` は
+記録のみで適用されない dead write だった。closed #388/#413 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.ReconnectWaiter` インターフェース + V1
+`ReconnectWait()`（[0,300s] クランプ）を追加し、`runSessionV1` の
+終了経路で ctx キャンセル可能に適用。Host:Port は従来どおり
+非追従（リダイレクト防御）。
+
+### Fixed (session 512 — hal.Identity.Validate whitespace coverage)
+
+- **`Identity.Validate` now rejects all Unicode whitespace, matching its
+  documented contract.** The check covered only `' '`, `'\t'`, and
+  `'\n'`, so IDs containing `'\r'`, `'\v'`, `'\f'`, or non-ASCII
+  whitespace (e.g. U+00A0) passed validation despite the doc stating IDs
+  "must not contain whitespace". Replaced the explicit character list
+  with `unicode.IsSpace`. Driver-supplied IDs with such characters (a
+  sysfs entry name, say) would previously flow into log lines and metrics
+  labels where control/space characters corrupt output or split label
+  values. Also recorded the `internal/miner` + `internal/hal`
+  audit-complete verdicts (all files read; only residual is the
+  open-PR-owned nonce-wrap item).
+
 ### 修正 (session 394)
 
 - `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
