@@ -244,6 +244,41 @@ func TestSystemdUnit_DoesNotQuoteSimpleBinaryPath(t *testing.T) {
 	}
 }
 
+func TestSystemdUnit_NewlineInValueCannotInjectDirective(t *testing.T) {
+	// A flag value containing a literal newline must not break out of the
+	// ExecStart= line into a new unit directive: before quoteToken learned
+	// about control characters, a data dir of "x\nProtectHome=false" would
+	// have landed in the unit file raw and silently removed the sandbox.
+	m := &Manager{
+		binaryPath: "/usr/local/bin/otedama",
+		dataDir:    "/home/u/.otedama\nProtectHome=false",
+	}
+	unit := m.systemdUnit()
+	if strings.Contains(unit, "\nProtectHome=false") {
+		t.Errorf("newline in flag value injected a unit directive:\n%s", unit)
+	}
+	if !strings.Contains(unit, `\n`) {
+		t.Errorf("expected the newline to be escaped inside quotes; got:\n%s", unit)
+	}
+	// Only the intended directive lines exist — the escaped form sits
+	// inside quotes as backslash-n, so line-anchored count must be 1.
+	if strings.Count(unit, "\nProtectHome=") != 1 {
+		t.Errorf("expected exactly one ProtectHome= directive; got:\n%s", unit)
+	}
+}
+
+func TestQuoteToken_ControlCharacters(t *testing.T) {
+	if got := quoteToken("plain"); got != "plain" {
+		t.Errorf("quoteToken(plain) = %q", got)
+	}
+	for _, s := range []string{"a\nb", "a\rb", "a\x00b", "a\x7fb"} {
+		got := quoteToken(s)
+		if !strings.HasPrefix(got, `"`) || strings.ContainsAny(got, "\n\r\x00") {
+			t.Errorf("quoteToken(%q) = %q — control char not escaped", s, got)
+		}
+	}
+}
+
 // ----- launchd plist -----
 
 func TestLaunchdPlist_IsValidXMLLike(t *testing.T) {
