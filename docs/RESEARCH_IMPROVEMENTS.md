@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 546 — API-convention sweep: rand/defer/Sleep clean
+
+- `math/rand` in non-test code: **zero imports** — all randomness
+  sources are crypto/rand (wallet/seed paths verified in earlier
+  sessions; no statistical-quality shortcuts anywhere).
+- `defer` inside a loop body: **zero true positives** — every hit
+  is a defer inside a per-iteration goroutine's own function body
+  (`defer wg.Done()`), a single deferred cleanup containing the
+  loop, or a defer before the loop. No resource accumulation.
+- `time.Sleep` in non-test code: exactly one — `worker.go:241`'s
+  10 ms idle yield when no job is assigned, with ctx checked at
+  the top of the loop (≤10 ms added cancellation latency; the
+  standard "yield and retry" idiom, not a missed timer/cond-var).
