@@ -962,6 +962,106 @@ correctly shown in their own contexts. `otedama v` is a real alias for
 **skills/ quality-pass "24 packages" [VERIFIED]** — matches
 `go list ./...` output exactly.
 
+## Session 517 — test-code audit pass + ecosystem recheck
+
+**Test-suite mechanical audit.** All 33 K lines of `*_test.go` swept:
+skips are all environmental and self-describing (OS-gated GPU/permission
+checks, listener binds, root-user semantics); `_ =` error swallows are
+confined to fixture setup/teardown and test-only probes; sleeps are
+localized concurrency timing, not correctness dependencies; assertion
+density ~1.8–2 per test with no tautological or always-true checks found.
+`go test -race ./...` on master (go1.26.8): all 23 packages green —
+clean baseline re-verified.
+
+**Ecosystem recheck — no drift.** SRI release line still tops out at
+v1.12.0 (the BIP323/cipher-drop/hardening release recorded in session
+478); nothing newer to reconcile. Local toolchain go1.26.8 confirmed
+current-latest against go.dev. ESP-Miner 2.15.3 already recorded (no
+HAL delta). The go1.24.0→go1.26 toolchain bump remains closed-PR-owned
+(#369) — recorded, not re-delivered.
+
+## Session 518 — sv2-spec: error-code automation + non-custodial payouts
+
+Two verified specification developments recorded in ADR-009:
+
+- **sv2-spec #194 merged (2026-06-16)**: the spec now explicitly permits
+  implementations to take automated actions on protocol error codes —
+  upstream validation of Otedama's canonical reject-code classification
+  (open-PR lineage since session 257).
+- **sv2-spec #202/#203 (open)**: competing designs for a non-custodial
+  pool-payouts extension to JDP (request/response vs push-based) —
+  miner-declared payout outputs inside the declared template, directly
+  on Otedama's sovereignty axis; worth tracking for any future JDC work.
+
+## Session 519 — duplication candidates recorded as ledger entries
+
+Recorded (not fixed, per CLAUDE.md rule 3 — consolidation is a contract
+decision) in `docs/CATEGORY_AUDIT.md`:
+
+- **`tui` truncator family**: `truncateToBudget` hard-cuts at `budget<4`
+  vs `shortenURL` returning the over-limit string intact — divergent
+  edge semantics, same class as Issue #3.
+- **`metrics.metricKey`**: label values join `,`/`=` unescaped —
+  collision possible only if a label value contains those characters;
+  unreachable from today's producers but live on the API surface.
+
+## Session 520 — Go 1.27 verification + upstream sv2-ui orchestrator
+
+- **Go 1.27 released Aug 2026** — environment toolchain auto-upgraded to
+  go1.27.1; `go test ./...` green on all 23 packages; no >`go 1.22`
+  stdlib symbols → 1.27's new `stdversion` vet is clean; godebug block
+  parses under the new removed-setting acceptance rule. Toolchain bump
+  remains closed-PR-owned (#369).
+- **`stratum-mining/sv2-ui`** — upstream Docker orchestrator (translator
+  + JDC + Core IPC 30.x/31.x) for JDP stacks; recorded in ADR-009 as the
+  deployment target a future Otedama JDC would compose with.
+- ESP-Miner still at v2.15.3 (AxeOS UI now embedded in the main
+  firmware binary + mDNS since 2.15.0); DATUM gateway v0.4.1beta, no
+  protocol drift.
+
+## Session 521 — ecosystem recheck: SV2 trajectory, repo landscape
+
+- SV2 transport ~15–20% of hashrate early 2026 (estimate); SRI WG
+  projects 40–60% by end-2026 (forecast). 7-pool WG commitment remains
+  the load-bearing datapoint — recorded in ADR-009.
+- `stratum-mining/stratum` (SRI monorepo) and `stratum-mining/sv2-apps`
+  (translator/JDC/sv2-ui) coexist — JD tooling lives in sv2-apps.
+- `cbyam/solo-pool-rs` demonstrates single-port SV1/SV2 auto-detection
+  from the first frame byte.
+- Japanese-source recheck (Qiita/Zenn): no new mining-protocol or
+  arbitration content — coverage gap persists, no drift.
+
+## Session 522 — EROSION network-adversary threat modeled
+
+Recorded in THREAT_MODEL's DoS section (a class previously unmodeled —
+network adversary disruption, vs pool-side DoS):
+
+- **EROSION (Tran/von Arx/Vanbever, IEEE S&P'24)**: one corrupted SV2
+  ciphertext desynchronizes Noise nonce counters → session dies while
+  the miner keeps hashing stale jobs; 91% of surveyed pools reachable,
+  one malicious AS could hit 96% of BTC hashrate.
+- **Otedama posture verified**: any frame/decrypt error is session
+  fatal → reconnect → fresh handshake re-syncs counters. No
+  silent-degradation mode; residual = bounded reconnect loop under
+  sustained tampering (inherent; countermeasure is routing hygiene).
+- Spot-GPU scheduling literature (SkyNomad, committed-horizon spot
+  allocators) reviewed — tangential to the current provider layer
+  (simulated); noted for future arbitration work only.
+
+## Session 524 — golangci-lint version divergence recorded
+
+Recorded in KNOWN_LIMITATIONS §13 (CI-workflow ledger):
+
+- **Three different pins**: `ci.yml` curl-installs `v1.55.2`;
+  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3`; local tooling
+  is `v1.64.8`. Upstream is at `v2.13.x` — v2.13.0 added go1.27
+  support (needed locally since go1.27.1's export data exceeds
+  v1.64.8's typecheck decoder; run under `GOTOOLCHAIN=go1.26.8`).
+- Upgrading implies a v2 config migration of `.golangci.yml` plus
+  bumping both CI pin sites — maintainer-owned (workflow files).
+- Repo's GitHub Issues #2/#3 (duplication ledger links) re-checked:
+  still open, status unchanged.
+
 ## Session 526 — in-tree fuzz targets smoke-verified
 
 CI has no fuzz job (recorded in KNOWN_LIMITATIONS §13), so the two
