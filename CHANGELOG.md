@@ -17,6 +17,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
   が単一依存で完結する形に収束することを記録。
 
+### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
+
+* 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
+* 行11「SHA pinning」・行13「cosign 署名済み」は master 側の Gap 注記が先に着地済みのため重複追記せず。
+* CI gate 節を実態に書換 — ci.yml に独立した `go vet`/`staticcheck`/`govulncheck` ジョブは非存在（govet+staticcheck は golangci-lint 内で実行、5-OS ビルド行列は Build ジョブに実在）、nightly ファズ・ベンチマーク比較ジョブも非存在。
+
+### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
+
+* §2・§5 の実装状況は master 側で同内容の訂正が先に着地済みのため重複追記せず。
+* §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
+
+### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
+
+* 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
+* 「`otedama --log-level=debug doctor`」→ サブコマンド前のフラグは `unknown subcommand` で失敗し、`doctor` は `--log-level` を持たない。
+
 ### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
 
 - **`internal/engine` audit surface complete.** All six non-test files
