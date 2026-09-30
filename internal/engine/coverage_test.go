@@ -2157,3 +2157,28 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// channelIDOf must report the channel_id on every channel-scoped SV2
+// message and ok=false on frames that carry none.
+func TestChannelIDOf(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  stratum.Message
+		want uint32
+		ok   bool
+	}{
+		{"NewMiningJob", stratum.Message{NewMiningJob: &stratum.NewMiningJob{ChannelID: 7}}, 7, true},
+		{"SetNewPrevHash", stratum.Message{SetNewPrevHash: &stratum.SetNewPrevHash{ChannelID: 9}}, 9, true},
+		{"SetTarget", stratum.Message{SetTarget: &stratum.SetTarget{ChannelID: 11}}, 11, true},
+		{"SubmitSharesSuccess", stratum.Message{SubmitSharesSuccess: &stratum.SubmitSharesSuccess{ChannelID: 13}}, 13, true},
+		{"SubmitSharesError", stratum.Message{SubmitSharesError: &stratum.SubmitSharesError{ChannelID: 15}}, 15, true},
+		{"Unknown", stratum.Message{Unknown: &stratum.UnknownMessage{MsgType: 0x99}}, 0, false},
+		{"Empty", stratum.Message{}, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := channelIDOf(c.msg)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%s: channelIDOf = (%d, %v), want (%d, %v)", c.name, got, ok, c.want, c.ok)
+		}
+	}
+}
