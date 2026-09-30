@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 590 — ctx.Value / ticker / exec sweep
+
+- All six `NewTicker` sites pair with `defer ticker.Stop()`;
+  `AfterFunc` is unused.
+- `ctx.Value` uses a private typed `ctxKey` for logger
+  propagation — no string-key collision surface.
+- Every `os/exec` call goes through `.Output()`/
+  `.CombinedOutput()` (which wait internally); commands are
+  fixed names (`systemctl`, `launchctl`, `sc.exe`) with literal
+  args — no shell, no user-controlled expansion, no leaked
+  child processes.
