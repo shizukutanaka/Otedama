@@ -134,12 +134,12 @@ func TestDialer_PerPoolCAVerifiesSelfSignedPool(t *testing.T) {
 	defer cancel()
 
 	// Sanity: without the CA bundle, the self-signed pool is rejected.
-	if _, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), poolproto.Credentials{User: "x"}); err == nil {
+	if _, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), &poolproto.Credentials{User: "x"}); err == nil {
 		t.Fatal("expected verification failure without the per-pool CA")
 	}
 
 	// With the CA bundle, it verifies and connects over TLS.
-	c, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), poolproto.Credentials{
+	c, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), &poolproto.Credentials{
 		User:          "x",
 		TLSRootCAsPEM: certPEM,
 	})
@@ -180,7 +180,7 @@ func TestDialer_UseTLSProducesEncryptedConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	c, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), poolproto.Credentials{User: "x"})
+	c, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), &poolproto.Credentials{User: "x"})
 	if err != nil {
 		t.Fatalf("Dial(stratum+tls) failed: %v", err)
 	}

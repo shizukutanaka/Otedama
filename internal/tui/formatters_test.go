@@ -114,7 +114,7 @@ func TestDefaultSatsPerHash_IsPositiveAndTiny(t *testing.T) {
 func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:   "stratum+v2://example.com:3336",
 		Connected: false,
 	}, d.cols)
@@ -126,7 +126,7 @@ func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 func TestDashboard_PoolLineWhenConnected(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:     "stratum+v2://example.com:3336",
 		Connected:   true,
 		PoolLatency: 42 * time.Millisecond,
@@ -151,7 +151,7 @@ func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	const cols = 40 // documented minimum, see SetWidth
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:   "stratum+v2://a-very-long-pool-hostname.example.com:3336",
 		Connected: true,
 	}, cols)
@@ -168,7 +168,7 @@ func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
 func TestDashboard_WalletLine_WithFingerprint(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.walletLine(Stats{WalletFingerprint: "a1b2c3d4"})
+	line := d.walletLine(&Stats{WalletFingerprint: "a1b2c3d4"})
 	if !strings.Contains(line, "a1b2c3d4") {
 		t.Errorf("walletLine missing fingerprint: %q", line)
 	}
@@ -177,7 +177,7 @@ func TestDashboard_WalletLine_WithFingerprint(t *testing.T) {
 func TestDashboard_WalletLine_NotInitialized(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.walletLine(Stats{WalletFingerprint: ""})
+	line := d.walletLine(&Stats{WalletFingerprint: ""})
 	if !strings.Contains(line, "not initialized") {
 		t.Errorf("empty fingerprint must show 'not initialized': %q", line)
 	}
@@ -186,7 +186,7 @@ func TestDashboard_WalletLine_NotInitialized(t *testing.T) {
 func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 2.5e6, Devices: 3, SharesFound: 42, SharesSent: 40,
 	}, d.cols)
 	if !strings.Contains(line, "2.50 MH/s") {
@@ -203,7 +203,7 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Stalled: true,
 	}, d.cols)
 	if !strings.Contains(line, "stalled") {
@@ -214,7 +214,7 @@ func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 1e9, Devices: 2, Stalled: false,
 	}, d.cols)
 	if strings.Contains(line, "stalled") {
@@ -225,7 +225,7 @@ func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Curtailed: true,
 	}, d.cols)
 	if !strings.Contains(line, "paused") {
@@ -242,7 +242,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 	// shown — never the misleading fault badge.
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
 	}, d.cols)
 	if !strings.Contains(line, "paused") {
@@ -256,7 +256,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.earningsLine(Stats{
+	line := d.earningsLine(&Stats{
 		HashRate:      1e9, // 1 GH/s
 		EstSatsEarned: 1234,
 	})
@@ -271,7 +271,7 @@ func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 func TestDashboard_EarningsLine_IncludesProviders(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.earningsLine(Stats{
+	line := d.earningsLine(&Stats{
 		HashRate: 1e6,
 		Providers: []ProviderStats{
 			{Name: "akash", SatsPerSecond: 1000, Active: true},
@@ -301,7 +301,7 @@ func TestDashboard_Footer_IncludesUptimeAndHint(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(80)
-	line := d.footer(Stats{Uptime: 3*time.Hour + 15*time.Minute + 30*time.Second}, 80)
+	line := d.footer(&Stats{Uptime: 3*time.Hour + 15*time.Minute + 30*time.Second}, 80)
 	if !strings.Contains(line, "3h") {
 		t.Errorf("footer missing uptime: %q", line)
 	}
@@ -383,7 +383,7 @@ func TestDashboard_StopDoesNotRaceRenderLoop(t *testing.T) {
 	d := NewDashboard(&buf)
 	d.Start()
 	for i := 0; i < 5; i++ {
-		d.Update(Stats{HashRate: float64(i) * 1e6, Devices: 1})
+		d.Update(&Stats{HashRate: float64(i) * 1e6, Devices: 1})
 		time.Sleep(2 * time.Millisecond)
 	}
 	d.Stop() // must not race renderLoop's writes to buf
@@ -514,7 +514,7 @@ func TestDashboard_PoolLine_StatusColumnAligned(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	const cols = 60
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:   "stratum+v2://a.co:3336",
 		Connected: true,
 	}, cols)
