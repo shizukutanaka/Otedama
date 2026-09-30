@@ -42,6 +42,50 @@ type arbitrationLoopOpts struct {
 	// exists. See buildStats/stats.go for the read side.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+
+	// paused, when non-nil, is the shared per-device pause set rewritten
+	// after each Decide: devices whose assignment is idle or routed to a
+	// non-mining ("ai.") stream are marked paused so pool job dispatch
+	// (updateWork/applyJob) does not re-arm them between ticks. applyAllocation
+	// alone only pauses a worker once; without this the next pool job
+	// silently undid every arbitration pause (the per-device counterpart
+	// of the curtailGate documented in run.go).
+	paused *pauseSet
+}
+
+// pauseSet tracks device IDs arbitration has currently paused (idle below
+// the yield floor, or assigned to a non-mining stream). The arbitration
+// loop is the only writer; the pool-session job dispatch reads it.
+// The zero value is ready to use.
+type pauseSet struct{ m sync.Map }
+
+// Pause records deviceID as arbitration-paused.
+func (p *pauseSet) Pause(deviceID string) { p.m.Store(deviceID, struct{}{}) }
+
+// Resume removes deviceID from the paused set.
+func (p *pauseSet) Resume(deviceID string) { p.m.Delete(deviceID) }
+
+// Paused reports whether deviceID is currently arbitration-paused.
+func (p *pauseSet) Paused(deviceID string) bool {
+	_, ok := p.m.Load(deviceID)
+	return ok
+}
+
+// reconcileArbPauses rewrites the shared pause set to exactly the devices
+// whose current assignment is idle or routed to a non-mining stream. It is
+// called after every successful Decide, before applyAllocation, so the set
+// always mirrors the latest allocation. A nil paused is a no-op (tests).
+func reconcileArbPauses(alloc *arbitration.Allocation, paused *pauseSet) {
+	if paused == nil || alloc == nil {
+		return
+	}
+	for _, a := range alloc.Assignments {
+		if a.Idle() || strings.HasPrefix(string(a.Stream), "ai.") {
+			paused.Pause(a.DeviceID)
+		} else {
+			paused.Resume(a.DeviceID)
+		}
+	}
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -148,6 +192,11 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
+			// Keep the shared pause set in step with this allocation BEFORE
+			// applyAllocation runs: the set is what makes a pause survive the
+			// next pool job, so it must reflect the new Decide result even on
+			// the tick where the worker gets its one-shot SetWork(nil).
+			reconcileArbPauses(alloc, opts.paused)
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}
@@ -212,7 +261,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
-			// updateStream always initialises YieldPerDevice before inserting
+			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y
