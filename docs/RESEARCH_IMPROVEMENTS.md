@@ -945,3 +945,105 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 [FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
 
 [AUDITED — clean] Re-check of remaining closed-unmerged queue for re-delivery eligibility: #372/#386/#400/#410 (batch accepts) → live as open #433; #374/#384/#398/#411 (extranonce2 bound) → live as open #428; #377/#385/#397/#412 (job-map bounds) → live as open #429; #387/#399/#409 (reject-code classification) → live as open #434; #388/#413 (reconnect wait) → live as open #430; #381/#414 (wallet mode audit) → live as open #431; #378/#415 (live hashrate feed) → live as open #432; #389/#393/#403/#404 (seq validation) → live as open #422/#423; #426 ntime roll → open #426; #427 in-flight gauge → open; #416/#418–#421/#425/#435–#446 → all open. #375 FIPS doctor still blocked (go1.26 module directive vs CI pin), #380 hashrate gauges blocked by #432, #271 halves blocked by #417. #371 both halves landed this stretch (mnemonic flake → #497; atomic.Bool → pushed to #447's branch). Docs-only closed #469/#471/#472 remain low-value. No eligible candidate left un-delivered.
+
+## Session 348 — pool-notice sanitization + config-write audit
+
+**Terminal-escape injection via client.show_message [FIXED].**
+`parseShowMessage` forwarded the pool's string verbatim into
+`noticeCh`; every downstream consumer (the log wiring on PR #448, or a
+future TUI notice line) would write raw text to a terminal or log file.
+A hostile pool could embed ANSI escape sequences (screen clear, cursor
+moves, OSC window-title / hyperlink payloads) or newlines that forge
+log entries. `sanitizeNotice` now strips all Unicode control characters
+(C0, DEL, C1) and truncates to 256 runes at parse time, so every
+consumer gets safe text regardless of how it renders.
+
+**Config-file write path [AUDITED — clean].** `otedama` never writes
+the YAML config — `loadConfigFile` is read-only with
+`KnownFields(true)` (rejects typo'd keys), so there is no
+config-write permission path to audit. The wallet passphrase flag
+documented in `--help` is consumed in-process only.
+## Session 384 — pool-URL credential redaction
+
+[FIXED] **Userinfo in pool URLs could leak into logs and status surfaces** (`internal/poolproto/poolproto.go` + call sites): a `scheme://user:pass@host` pool URL was echoed verbatim by the connect log (`connecting to %s`), the bad-URL error, the V1 connected log, the TUI `PoolURL` field, `config show` (text + JSON), and four doctor `Detail` strings. `poolproto.StripUserinfo` removes the authority-section userinfo at every display boundary (dial-path parsing unchanged — `StripScheme` semantics untouched). Malformed URLs pass through so redaction cannot corrupt diagnostics. Defense-in-depth regardless of upstream userinfo validation. Test: `TestStripUserinfo` (9 cases incl. path-`@`, multi-`@`, no-scheme edge cases).
+
+[AUDITED — clean] V2 handshake `OpenMiningChannelSuccess` consumption: `ExtraNonce2Size` is legitimately unused — Otedama uses standard channels where the pool supplies the merkle root and the miner varies only nonce/ntime, so extranonce2 never participates. `ReqID` echo unchecked (cosmetic; ChannelID is authoritative). V1 `mining.authorize` is a mandatory handshake step — rejection is `ErrHandshakeFailed`, not silent. `internal/daemon` `launchdLogPath`/`systemdUnitName` take literals only — no name-traversal surface.
+
+## Session 368 — v2tls silent-downgrade fix
+
+**Fixed [FIXED — real reachable bug].** `stratumv2.Dialer{useTLS: true}`
+(the registered handler for `stratum+v2tls://`) ignored `useTLS` in
+`Dial` — it always opened plaintext TCP while reporting the V2-TLS
+protocol ID. The engine's live path was already correct
+(`stratum.DialTLS` with verified certs + `tls_ca_file`), so the trap
+was dormant but armed: the first wiring of the poolproto V2 adapter
+(KNOWN_LIMITATIONS §3 Step 3b) would silently downgrade every v2tls
+pool to plaintext — under a scheme operators are explicitly told to
+use for encryption. `Dial` now routes `useTLS` through
+`stratum.DialTLS` (system roots, TLS 1.2+, ServerName from the
+address, no plaintext fallback).
+
+**Tests [FIXED].** `TestDialer_V2TLS_DialsTLS` drives the production
+dial path (no injected dialFn) against a TLS server with an untrusted
+cert and asserts a `*tls.CertificateVerificationError` — proof the
+handshake ran and verification is enforced.
+`TestDialer_V2TLS_ConnectsToTrustedServer` completes the positive path
+with a CA-trusted dialFn injection and asserts the conn is *tls.Conn.
+
+## Session 344 — V1 set_difficulty value validation
+
+**Non-positive/non-finite difficulty [FIXED].** `parseDifficulty`
+stored `params[0]` unchecked: `d <= 0` collapses the share target to
+accept-every-hash (a share flood from a hostile pool or MitM on
+cleartext V1), and non-finite values poisoned the target math
+downstream (same class as the s325 `Yield.Effective` and s331 hysteresis
+non-finite fixes). NaN/±Inf cannot arrive via JSON literals but
+`1e999` decodes to +Inf without error — all now rejected. Fractional
+and subnormal difficulties stay valid (ESP-Miner #1594/#1779 show real
+pools use them).
+
+**Ecosystem re-check [FETCHED].** SRI v1.12.0 (Sep 17) unchanged since
+s329. ESP-Miner v2.15.3 (Sep 20) is a UI-only patch; the v2.15.x stratum
+changes (fractional SV2 difficulty, duplicate-jobId drop,
+submit-response-only share counting, TCP_NODELAY) are all behaviours
+Otedama already matches — recorded. Go advisory batch (Sep 2) — the
+reachable classes (crypto/tls KeyUpdate DoS CVE-2026-56862,
+net/url quadratic CVE-2026-56860) are fixed in go1.26.8 which the
+toolchain already requires; encoding/xml recursion and unencrypted-HTTP/2
+do not apply (no xml decode, no h2c listener).
+
+## Session 316 — bound pool-controlled extranonce2_size (re-delivers closed #384/#398/#411)
+
+**Finding [OBSERVED — code-verified].** `extranonce2_size` is
+pool-controlled and flowed unbounded into `strings.Repeat` on every
+`mining.submit` — a hostile pool or MitM on cleartext V1 could force a
+~2 GiB allocation per share (memory-exhaustion DoS).
+
+**Fix [OBSERVED].** Bounded to [0, 64] at both negotiation entry points
+(`parseSubscribeResult`, `parseSetExtranonce`) plus a defensive clamp in
+`Submit`. THREAT_MODEL documents the threat and residual.
+
+**Tests [OBSERVED].** Boundary unit tests on both entry points.
+
+## Session 342 — service-definition injection via control characters
+
+**Unit-file directive injection [FIXED].** `quoteToken` quoted values on
+whitespace/quotes but passed control characters raw: a flag value
+containing a literal newline (`--data-dir`, `--config`, payout flags —
+reachable from CLI, env, or a poisoned config file) broke out of the
+systemd `ExecStart=`/`ReadWritePaths=` lines into a new unit directive —
+e.g. `\nProtectHome=false` silently removed the sandbox, or
+`ExecStartPost=` ran an arbitrary command. Now any rune < 0x20 or 0x7f
+triggers `%q` quoting, which escapes it to `\\n` inside the token.
+launchd was already safe (argv slice + XML escape); Windows sc.exe
+binPath= shares `serviceArgs` so it inherits the fix. Same for the
+`%q`-inside-quotes caveat: systemd does not unescape Go `\uXXXX`, so a
+path mixing spaces with non-printable bytes quotes correctly for the
+file but resolves differently — recorded, not exploitable.
+
+**Daemon surface audit [AUDITED — hardened].** Verified already-clean:
+launchd XML escaping (`xmlEscape` covers the five specials),
+LaunchAgent log path moved off world-readable `/tmp` to
+`~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
+`NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
+`binPath=` quoting.
