@@ -952,6 +952,53 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 502 — 監査検証ラウンド（godoc 適合・panic サイト・全テスト実行 — 全件 clean）
+
+**Sweep.** (a) CLAUDE.md「主要型・公開関数に godoc 必須」の機械検査: exported func/type の doc コメント有無を全 internal/ で走査。(b) `panic(` サイトの正当性。(c) `go test ./...` 全実行。(d) LICENSE/NOTICE/CODEOWNERS/.editorconfig/CHANGELOG↔VERSION 整合。
+
+**発見なし（全件 clean）。**
+- godoc 欠落ヒット20件は全て正当: `Identity()`/`Capabilities()`/`Read()`/`Error()`/`Close()` 等の **interface 充足メソッド**（hal.Device・provider・io.Reader・error）で、interface 側に文書があるためメソッド毎の godoc は不要 — Go 慣行適合。
+- panic 11箇所は全て正当: `init()` の BIP-39 SHA 検証・registry 二重登録・worker 多重 Start のような programmer-error ガード — ライブラリ境界を越える panic なし。
+- `go test ./...` **24パッケージ全緑**（master 現状、18.3s engine 含む）。
+- CHANGELOG セクション構成（Unreleased → 3.0.0-alpha.1 → 2.1.9）と VERSION 一致、LICENSE 著作権行記入済み、CODEOWNERS noise* パターン実解決。
+
+本ラウンドは検証のみ（コード・ドキュメント変更なし）。
+
+## Session 503 — エコシステム再照合: NexusPool の JDP 本番稼働（新事実）
+
+**Sweep.** GitHub/海外技術情報の最新差分: SRI は 1.12.0（9/17、session 478 追跡済み）が最新で新リリースなし。Go は 1.26 系パッチ進行中でブートストラップ要件等の新規影響なし。**新事実: NexusPool が 2026-08-24 から native SV2 Job Declaration を本番稼働** — Braiins・DMND に続く3例目（5月ワーキンググループ発表後の初の実稼働追加）。
+
+**対応（1件 — ADR-009 エビデンス更新）。**
+- ADR-009 の「production-viable」エビデンスに NexusPool を追記。特に価値があるのは同社ポストモーテムの教訓: **単体テストが通っても SRI 参照 JDC との実接続テストでしか見つからなかった欠陥が4件**（allocation メッセージの field-count 不一致・未配線 payout フィールド・JD 専用接続を殺す reaper）— これは ADR-009 のコスト見積が unit test だけでなく reference-implementation interop テスト工数を含むべき根拠として記録。
+
+## Session 504 — エコシステム再照合: BIP-110 と拡大した本番プールセット（2件）
+
+**Sweep.** Reddit/海外技術情報・公式エコシステム表の差分。
+
+**対応（2件 — ADR-009 エビデンス更新）。**
+1. **本番セットの拡充**: stratumprotocol.org 公式表で production プールが Blitzpool/MKPool/NexusPool/Public Pool/PyBlock（solo）+ Braiins/DMND（DMND は miner-selected templates）に拡大、Auradine FluxOS・Bitaxe・BraiinsOS の SV2 ネイティブファームウェアも稼働。
+2. **BIP-110 = 初のライブ template-signaling 展開**: Reduced Data Temporary Softfork が Knots ベース activation client で listening node の ~10% に到達。OCEAN は BIP110/非シグナルの2専用 endpoint を追加し split 時は「2つのプール」として運用すると発表（7月）。テンプレート所有が**どの consensus chain に着陸するか**を左右する初の実例 — ADR-009 の solo/JDP 提案が「プールではなく自ノードの consensus rule で検証」を要する根拠として記録。
+
+## Session 505 — DEPLOYMENT.md の K8s 例に未解決参照2件（マニフェスト追記）
+
+**Sweep.** リポジトリメタ整合（gitignore 追跡逸脱・dependabot エコシステム・compose 参照）＋ DEPLOYMENT.md の埋め込み YAML を構造検証。
+
+**発見（2件 — 修正）。**
+1. **`otedama-data` PVC 未定義**: Deployment が `persistentVolumeClaim.claimName` を参照するがドキュメントに PVC マニフェストが存在せず、コピー運用で pod が mount 失敗。PVC を追記。
+2. **ServiceMonitor がセレクトする Service が非存在**: `app: otedama` を select する ServiceMonitor はあるが Service がなくスクレイプ対象ゼロ — ServiceMonitor は pod ではなく Service をセレクトするため必須。Service を追記（port 名 `metrics` を ServiceMonitor の `endpoints[].port` と一致、targetPort は pod の `metrics` ポートを指す）。
+
+**検証 clean**: gitignore 追跡逸脱ファイル 0件、dependabot エコシステム3種（gomod/github-actions/docker）整合、全埋め込み YAML 構造 parse 通過、Deployment の probe/securityContext/label 整合。
+
+## Session 506 — competitive-analysis.md の外部事実検証（2件訂正・引用確認済み）
+
+**Sweep.** docs/adr/README 索引（11 ADR・status 一致で clean）・gitignore 追跡逸脱（0件）・dependabot・.claude 再出現（#563 の担当域）を棚卸し後、competitive-analysis の外部事実クレームを一次ソース照合。
+
+**対応（2件 — 訂正）。**
+1. **「Bitcoin Core v30 が Stratum V2 を公式サポート」は過大記述**: v30 の release notes（bitcoincore.org）によれば出荷は **experimental IPC Mining Interface**（`bitcoin -m node -ipcbind=unix`、IPC でテンプレート要求・ブロック提出を受ける Unix socket）で、ノード自体は SV2 を話さない — 「公式サポート」を訂正し、Go 製 TP の直接バインド経路である点を併記。
+2. **計画 vs 出荷分岐の Note**: 実装順序節が「LDK バインディング」「x/text 基盤」を記述するが、出荷は stdlib ウォレット（ADR-001）・独自 i18n カタログ（ADR-003）で分岐 — 起案時計画である旨の Note を追加。
+
+**検証 clean（引用確認）**: CVE-2014-4501 は実在（client.reconnect のスタックオーバーフロー、sgminer/cgminer/BFGMiner — NVD/fulldisclosure 確認）。NiceHash 4700 BTC・ADR 索引・dependabot エコシステム整合。
+
 ## Session 507 — skills/code-review.md の stale 参照2件（訂正）
 
 **Sweep.** パッケージ doc コメント網羅・main.go usage/exit-code 表と実 dispatch 照合の後、最後の未精読 skill ファイル code-review.md を精読。
