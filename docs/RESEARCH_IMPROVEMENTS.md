@@ -975,6 +975,11 @@ has never existed. Replaced with a config-load-path verification and a
 note that `make test-e2e` does not exist (prevents a releaser failing
 the checklist on a phantom step).
 
+Note: the integration/E2E/`migrate-from-v2` corrections in `skills/tdd.md`
+and `skills/release-procedure.md` had already landed on master in
+session 483, so the duplicate paragraphs were dropped from this change;
+only the Lightning/ZKP v4.0-scope rewrite in `skills/tdd.md` remains.
+
 `skills/code-review.md`, `security-audit.md`, and both quality-pass
 files contain no phantom commands [AUDITED — clean]; the "24 package"
 count in the quality-pass files matches `go list ./...` = 24.
