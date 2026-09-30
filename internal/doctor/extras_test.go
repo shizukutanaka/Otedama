@@ -353,7 +353,7 @@ func TestCheckPoolReachability_UnreachableReturnsFail(t *testing.T) {
 			{URL: "stratum+v2://192.0.2.1:9999"},
 		},
 	}
-	c := checkPoolReachability(cfg)
+	c := checkPoolReachability(&cfg)
 
 	// Short timeout to keep the test fast.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -374,7 +374,7 @@ func TestCheckPoolReachability_MalformedURL(t *testing.T) {
 			{URL: "not-a-valid-url"},
 		},
 	}
-	c := checkPoolReachability(cfg)
+	c := checkPoolReachability(&cfg)
 	r := c.Run(context.Background())
 	if r.Status != StatusFail {
 		t.Errorf("malformed URL status = %v, want Fail", r.Status)
@@ -394,7 +394,7 @@ func TestCheckPoolReachability_ReachableEndpoint(t *testing.T) {
 			{URL: "stratum+v2://" + ln.Addr().String()},
 		},
 	}
-	c := checkPoolReachability(cfg)
+	c := checkPoolReachability(&cfg)
 	r := c.Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("reachable pool status = %v, want Pass (detail: %s)", r.Status, r.Detail)
@@ -423,7 +423,7 @@ func TestCheckNetwork_ReturnsResult(t *testing.T) {
 // ============================================================================
 
 func TestCheckConfig_NoPathEmitsWarning(t *testing.T) {
-	c := checkConfig(config.Config{}, "")
+	c := checkConfig(&config.Config{}, "")
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (no config file is not fatal)", r.Status)
@@ -434,7 +434,7 @@ func TestCheckConfig_NoPathEmitsWarning(t *testing.T) {
 }
 
 func TestCheckConfig_NonexistentPathEmitsWarning(t *testing.T) {
-	c := checkConfig(config.Config{}, "/nonexistent/path/config.yaml")
+	c := checkConfig(&config.Config{}, "/nonexistent/path/config.yaml")
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (missing file is not fatal)", r.Status)
@@ -446,7 +446,7 @@ func TestCheckConfig_NonexistentPathEmitsWarning(t *testing.T) {
 // ============================================================================
 
 func TestDefaultChecks_AllHaveRunFunction(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(&config.Config{}, "")
 	if len(checks) == 0 {
 		t.Fatal("DefaultChecks returned empty slice")
 	}
@@ -468,11 +468,11 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 	// A file that exists but whose config fails Validate (no bitcoin address).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
-	c := checkConfig(cfg, path)
+	c := checkConfig(&cfg, path)
 	r := c.Run(context.Background())
 	if r.Status != StatusFail {
 		t.Errorf("invalid config status = %v, want Fail (detail: %s)", r.Status, r.Detail)
@@ -485,11 +485,11 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
-	c := checkConfig(cfg, path)
+	c := checkConfig(&cfg, path)
 	r := c.Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("valid config status = %v, want Pass (detail: %s)", r.Status, r.Detail)
@@ -569,7 +569,7 @@ func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
 	// In a network-isolated test environment the dial will fail, but the
 	// important thing is that the default-URL branch was taken (coverage).
 	cfg := config.Config{} // no Pools
-	c := checkPoolReachability(cfg)
+	c := checkPoolReachability(&cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	r := c.Run(ctx)
@@ -625,7 +625,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	dir := t.TempDir()
 	// Simulate two render nodes.
 	for _, name := range []string{"renderD128", "renderD129", "card0"} {
-		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
@@ -708,11 +708,11 @@ func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
 
 func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "a1b2c3d4"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -725,9 +725,60 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	}
 }
 
+// A wallet restored via scp/rsync or unpacked from a backup tarball lands
+// group/other-readable — the data-dir permission check does not catch this
+// because the directory itself is fine. The file-mode check must Warn with
+// a chmod fix.
+func TestCheckWallet_GroupReadableWalletDat_Warns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	walletPath := filepath.Join(dir, walletDatFile)
+	if err := os.WriteFile(walletPath, []byte("stub"), 0o600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	if err := os.Chmod(walletPath, 0o644); err != nil {
+		t.Fatalf("chmod wallet.dat: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("0644 wallet.dat status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "0644") {
+		t.Errorf("detail should report the offending mode: %q", r.Detail)
+	}
+	if !strings.Contains(r.Fix, "chmod 0600") {
+		t.Errorf("Fix should offer chmod 0600: %q", r.Fix)
+	}
+}
+
+func TestCheckWallet_OwnerOnlyWalletDat_StillShowsFingerprint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	const fp = "feedface"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("0600 wallet.dat status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, fp) {
+		t.Errorf("fingerprint %q missing from detail: %q", fp, r.Detail)
+	}
+}
+
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	c := checkWallet(dir)
@@ -752,11 +803,11 @@ func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 
 func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "deadbeef"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -770,7 +821,7 @@ func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesWalletCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(&config.Config{}, "")
 	var found bool
 	for _, c := range checks {
 		if c.Name == "Lightning wallet" {
@@ -855,7 +906,7 @@ func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
 // ============================================================================
 
 func TestCheckPoolEncryption_NoPoolsSkips(t *testing.T) {
-	r := checkPoolEncryption(config.Config{}).Run(context.Background())
+	r := checkPoolEncryption(&config.Config{}).Run(context.Background())
 	if r.Status != StatusSkip {
 		t.Errorf("no pools: status = %v, want Skip", r.Status)
 	}
@@ -865,7 +916,7 @@ func TestCheckPoolEncryption_PlaintextWarns(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tcp://pool.example.com:3333"},
 	}}
-	r := checkPoolEncryption(cfg).Run(context.Background())
+	r := checkPoolEncryption(&cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("plaintext pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
 	}
@@ -884,7 +935,7 @@ func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
 		"stratum+v2tls://pool.example.com:34254",
 	} {
 		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
-		r := checkPoolEncryption(cfg).Run(context.Background())
+		r := checkPoolEncryption(&cfg).Run(context.Background())
 		if r.Status != StatusPass {
 			t.Errorf("%s: status = %v, want Pass (detail: %s)", url, r.Status, r.Detail)
 		}
@@ -896,7 +947,7 @@ func TestCheckPoolEncryption_MixedWarnsOnPlaintextOnly(t *testing.T) {
 		{URL: "stratum+tls://safe.example.com:3334"},
 		{URL: "stratum+tcp://risky.example.com:3333"},
 	}}
-	r := checkPoolEncryption(cfg).Run(context.Background())
+	r := checkPoolEncryption(&cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("mixed: status = %v, want Warn", r.Status)
 	}
@@ -907,7 +958,7 @@ func TestCheckPoolEncryption_MixedWarnsOnPlaintextOnly(t *testing.T) {
 
 func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(&config.Config{}, "") {
 		if c.Name == "Pool connection encryption" {
 			found = true
 			break
@@ -923,7 +974,7 @@ func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
 // ============================================================================
 
 func TestCheckPowerEconomics_BothUnsetSkips(t *testing.T) {
-	r := checkPowerEconomics(config.Config{}).Run(context.Background())
+	r := checkPowerEconomics(&config.Config{}).Run(context.Background())
 	if r.Status != StatusSkip {
 		t.Errorf("both unset: status = %v, want Skip", r.Status)
 	}
@@ -931,14 +982,14 @@ func TestCheckPowerEconomics_BothUnsetSkips(t *testing.T) {
 
 func TestCheckPowerEconomics_BothSetPasses(t *testing.T) {
 	cfg := config.Config{PowerWatts: 1200, ElectricityPricePerKWh: 0.10}
-	if r := checkPowerEconomics(cfg).Run(context.Background()); r.Status != StatusPass {
+	if r := checkPowerEconomics(&cfg).Run(context.Background()); r.Status != StatusPass {
 		t.Errorf("both set: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
 	}
 }
 
 func TestCheckPowerEconomics_PowerOnlyWarnsAboutCost(t *testing.T) {
 	cfg := config.Config{PowerWatts: 1200}
-	r := checkPowerEconomics(cfg).Run(context.Background())
+	r := checkPowerEconomics(&cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("power only: status = %v, want Warn", r.Status)
 	}
@@ -949,7 +1000,7 @@ func TestCheckPowerEconomics_PowerOnlyWarnsAboutCost(t *testing.T) {
 
 func TestCheckPowerEconomics_PriceOnlyWarnsInert(t *testing.T) {
 	cfg := config.Config{ElectricityPricePerKWh: 0.10}
-	r := checkPowerEconomics(cfg).Run(context.Background())
+	r := checkPowerEconomics(&cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("price only: status = %v, want Warn", r.Status)
 	}
@@ -960,7 +1011,7 @@ func TestCheckPowerEconomics_PriceOnlyWarnsInert(t *testing.T) {
 
 func TestDefaultChecks_IncludesPowerEconomicsCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(&config.Config{}, "") {
 		if c.Name == "Power & cost config" {
 			found = true
 			break
@@ -976,7 +1027,7 @@ func TestDefaultChecks_IncludesPowerEconomicsCheck(t *testing.T) {
 // ============================================================================
 
 func TestCheckProfitabilityFloor_UnsetSkips(t *testing.T) {
-	r := checkProfitabilityFloor(config.Config{}).Run(context.Background())
+	r := checkProfitabilityFloor(&config.Config{}).Run(context.Background())
 	if r.Status != StatusSkip {
 		t.Errorf("unset: status = %v, want Skip", r.Status)
 	}
@@ -984,7 +1035,7 @@ func TestCheckProfitabilityFloor_UnsetSkips(t *testing.T) {
 
 func TestCheckProfitabilityFloor_SetPassesAndSurfacesValue(t *testing.T) {
 	cfg := config.Config{MinYieldSatsPerSec: 0.25}
-	r := checkProfitabilityFloor(cfg).Run(context.Background())
+	r := checkProfitabilityFloor(&cfg).Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("set: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
 	}
@@ -1000,7 +1051,7 @@ func TestCheckProfitabilityFloor_SetPassesAndSurfacesValue(t *testing.T) {
 
 func TestDefaultChecks_IncludesProfitabilityFloorCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(&config.Config{}, "") {
 		if c.Name == "Profitability floor" {
 			found = true
 			break
@@ -1034,7 +1085,7 @@ func writePEMCert(t *testing.T) string {
 		t.Fatalf("createcert: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	return path
@@ -1042,7 +1093,7 @@ func writePEMCert(t *testing.T) string {
 
 func TestCheckPoolTLSCA_NoneConfiguredSkips(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{{URL: "stratum+tls://p.example.com:3334"}}}
-	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusSkip {
+	if r := checkPoolTLSCA(&cfg).Run(context.Background()); r.Status != StatusSkip {
 		t.Errorf("status = %v, want Skip", r.Status)
 	}
 }
@@ -1052,7 +1103,7 @@ func TestCheckPoolTLSCA_ValidFilePasses(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: ca},
 	}}
-	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusPass {
+	if r := checkPoolTLSCA(&cfg).Run(context.Background()); r.Status != StatusPass {
 		t.Errorf("status = %v, want Pass (detail: %s)", r.Status, r.Detail)
 	}
 }
@@ -1061,7 +1112,7 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: "/nonexistent/ca.pem"},
 	}}
-	r := checkPoolTLSCA(cfg).Run(context.Background())
+	r := checkPoolTLSCA(&cfg).Run(context.Background())
 	if r.Status != StatusFail {
 		t.Errorf("status = %v, want Fail", r.Status)
 	}
@@ -1072,13 +1123,13 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 
 func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.pem")
-	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: path},
 	}}
-	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusFail {
+	if r := checkPoolTLSCA(&cfg).Run(context.Background()); r.Status != StatusFail {
 		t.Errorf("status = %v, want Fail (no valid PEM)", r.Status)
 	}
 }
@@ -1088,7 +1139,7 @@ func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tcp://p.example.com:3333", TLSCAFile: ca},
 	}}
-	r := checkPoolTLSCA(cfg).Run(context.Background())
+	r := checkPoolTLSCA(&cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (CA set on non-TLS pool)", r.Status)
 	}
@@ -1099,7 +1150,7 @@ func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
 // ============================================================================
 
 func TestCheckPayoutScheme_NoPoolsSkips(t *testing.T) {
-	c := checkPayoutScheme(config.Config{})
+	c := checkPayoutScheme(&config.Config{})
 	r := c.Run(context.Background())
 	if r.Status != StatusSkip {
 		t.Errorf("no pools: status = %v, want Skip", r.Status)
@@ -1123,7 +1174,7 @@ func TestCheckPayoutScheme_KnownSchemes(t *testing.T) {
 					{URL: "stratum+tcp://pool.example.com:3333", PayoutScheme: tt.scheme},
 				},
 			}
-			r := checkPayoutScheme(cfg).Run(context.Background())
+			r := checkPayoutScheme(&cfg).Run(context.Background())
 			if r.Status != StatusPass {
 				t.Errorf("%s: status = %v, want Pass", tt.scheme, r.Status)
 			}
@@ -1143,7 +1194,7 @@ func TestCheckPayoutScheme_UnknownScheme_EmitsFixHint(t *testing.T) {
 			{URL: "stratum+tcp://pool.example.com:3333", PayoutScheme: ""},
 		},
 	}
-	r := checkPayoutScheme(cfg).Run(context.Background())
+	r := checkPayoutScheme(&cfg).Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("unknown scheme: status = %v, want Pass", r.Status)
 	}
@@ -1162,7 +1213,7 @@ func TestCheckPayoutScheme_MultiplePoolsMixedSchemes(t *testing.T) {
 			{URL: "stratum+tcp://pool2.example.com:3333", PayoutScheme: "pplns"},
 		},
 	}
-	r := checkPayoutScheme(cfg).Run(context.Background())
+	r := checkPayoutScheme(&cfg).Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("mixed schemes: status = %v, want Pass", r.Status)
 	}
@@ -1175,7 +1226,7 @@ func TestCheckPayoutScheme_MultiplePoolsMixedSchemes(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesPayoutSchemeCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(&config.Config{}, "")
 	var found bool
 	for _, c := range checks {
 		if c.Name == "Pool payout schemes" {
@@ -1193,7 +1244,7 @@ func TestCheckPoolDiversity(t *testing.T) {
 	ctx := context.Background()
 
 	run := func(cfg config.Config) Result {
-		return checkPoolDiversity(cfg).Run(ctx)
+		return checkPoolDiversity(&cfg).Run(ctx)
 	}
 
 	// No pools configured → warn (built-in default, no failover).
@@ -1251,7 +1302,7 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
 		return []string{"203.0.113.1"}, nil
 	}
-	one := checkPoolEndpointDiversity(config.Config{
+	one := checkPoolEndpointDiversity(&config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+tcp://only.example.com:3333"}},
 	}).Run(ctx)
 	if one.Status != StatusSkip {
@@ -1265,7 +1316,7 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 		}
 		return []string{"203.0.113.2"}, nil
 	}
-	distinct := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	distinct := checkPoolEndpointDiversity(&twoPools).Run(ctx)
 	if distinct.Status != StatusPass {
 		t.Errorf("distinct endpoints: status = %v, want StatusPass (detail: %s)", distinct.Status, distinct.Detail)
 	}
@@ -1274,7 +1325,7 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
 		return []string{"203.0.113.7"}, nil
 	}
-	shared := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	shared := checkPoolEndpointDiversity(&twoPools).Run(ctx)
 	if shared.Status != StatusWarn {
 		t.Errorf("shared endpoint: status = %v, want StatusWarn", shared.Status)
 	}
@@ -1286,7 +1337,7 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
 		return nil, fmt.Errorf("no such host")
 	}
-	unresolved := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	unresolved := checkPoolEndpointDiversity(&twoPools).Run(ctx)
 	if unresolved.Status != StatusSkip {
 		t.Errorf("unresolvable: status = %v, want StatusSkip", unresolved.Status)
 	}
@@ -1298,7 +1349,7 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 		}
 		return nil, fmt.Errorf("no such host")
 	}
-	partial := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	partial := checkPoolEndpointDiversity(&twoPools).Run(ctx)
 	if partial.Status != StatusSkip {
 		t.Errorf("partial resolve: status = %v, want StatusSkip", partial.Status)
 	}
@@ -1495,7 +1546,7 @@ func (t *stripDateRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 func TestDefaultChecks_IncludesClockSkewCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(&config.Config{}, "")
 	for _, c := range checks {
 		if c.Name == "System clock accuracy" {
 			return
@@ -1530,7 +1581,7 @@ func TestCheckEnvVars_WarnsOnMalformed(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(&config.Config{}, "")
 	for _, c := range checks {
 		if c.Name == "Environment variables" {
 			return
@@ -1691,7 +1742,7 @@ func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
 			{URL: "http://bad.example.com"}, // unrecognised scheme → host "" → skipped
 		},
 	}
-	r := checkPoolEndpointDiversity(cfg).Run(context.Background())
+	r := checkPoolEndpointDiversity(&cfg).Run(context.Background())
 	if r.Status != StatusSkip {
 		t.Errorf("empty-host pool: status = %v, want Skip (detail: %s)", r.Status, r.Detail)
 	}
@@ -1707,7 +1758,7 @@ func TestCheckPayoutScheme_EmptyHostUsesURL(t *testing.T) {
 			{URL: rawURL, PayoutScheme: "fpps"},
 		},
 	}
-	r := checkPayoutScheme(cfg).Run(context.Background())
+	r := checkPayoutScheme(&cfg).Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("empty-host payout: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
 	}
@@ -1805,5 +1856,113 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 	r := checkClockSkew().Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// checkPoolReachability — multi-pool probing (session 378)
+// ============================================================================
+
+func TestCheckPoolReachability_PartialOutageWarns(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+v2://" + ln.Addr().String()},
+			// RFC 5737 TEST-NET-1 — guaranteed unreachable.
+			{URL: "stratum+v2://192.0.2.1:9999"},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	r := checkPoolReachability(&cfg).Run(ctx)
+	if r.Status != StatusWarn {
+		t.Errorf("one reachable + one unreachable pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "1/2") {
+		t.Errorf("detail should report 1/2 reachable: %q", r.Detail)
+	}
+}
+
+func TestCheckPoolReachability_AllMalformedFail(t *testing.T) {
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "not-a-url-1"},
+			{URL: "datum://no.dial:1"},
+		},
+	}
+	r := checkPoolReachability(&cfg).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("all-malformed status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckPoolReachability_MalformedAlongsideReachableWarns(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+v2://" + ln.Addr().String()},
+			{URL: "not-a-url"},
+		},
+	}
+	r := checkPoolReachability(&cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("reachable + malformed status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "unparseable") {
+		t.Errorf("detail should name the unparseable URL: %q", r.Detail)
+	}
+}
+
+// ============================================================================
+// checkWallet — malformed fingerprint file (session 378)
+// ============================================================================
+
+func TestCheckWallet_MalformedFingerprintNotEchoed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	// Control bytes + wrong length — must not be echoed into the report.
+	evil := "a\x1b[31mZ\nnot-hex-at-all"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(evil), 0600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	r := checkWallet(dir).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("malformed-fp status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if strings.Contains(r.Detail, "not-hex-at-all") || strings.ContainsRune(r.Detail, '\x1b') {
+		t.Errorf("malformed fingerprint content leaked into detail: %q", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "malformed") {
+		t.Errorf("detail should flag malformed fingerprint: %q", r.Detail)
+	}
+}
+
+func TestIsFingerprint(t *testing.T) {
+	for s, want := range map[string]bool{
+		"a1b2c3d4": true,
+		"deadbeef": true,
+		"01234567": true,
+		"":         false,
+		"a1b2c3":   false,   // too short
+		"A1B2C3D4": false,   // uppercase
+		"a1b2c3d ": false,   // space
+		"a1b2c3d\n": false,  // newline
+		"zzzzzzzz": false,   // not hex
+	} {
+		if got := isFingerprint(s); got != want {
+			t.Errorf("isFingerprint(%q) = %v, want %v", s, got, want)
+		}
 	}
 }
