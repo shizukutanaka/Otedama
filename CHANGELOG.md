@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 363 — provider ライフサイクル)
+
+pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
+WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
+quoteCh 置換 caveat は未到達パスとして文書化。
+
 ### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
 
 V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
