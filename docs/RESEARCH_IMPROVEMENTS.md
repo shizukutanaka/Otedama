@@ -979,6 +979,23 @@ runReconnectLoop).
   gauge shipped in session 54 and is catalogued in SPECIFICATION §6;
   corrected.
 
+## Session 329 — SRI 1.12.0 cipher alignment (verified)
+
+**noise_sv2 dropped AES-256-GCM [FETCHED — freedom.tech SRI 1.12.0
+release notes, 2026-09-17].** SRI now ships ChaCha20-Poly1305 as the
+sole Noise cipher. **Otedama is already aligned**: `internal/stratum/
+noise.go` implements only `Noise_NX_secp256k1_ChaChaPoly_SHA256` — no
+AES-GCM code path exists to remove, and interop with 1.12.0 peers is
+unaffected.
+
+**Repo split note [FETCHED].** Roles moved to `stratum-mining/sv2-apps`
+under a separate versioning scheme; `stratum-mining/stratum` keeps the
+library crates. Our sv2-spec canonical-source pin (s306) is unaffected.
+
+**ESP-Miner v2.15.3 [FETCHED].** Per-preset low-frequency warnings —
+dashboard tuning only, no pool-protocol change. `checksum-test-0`
+(2026-09-26) is a CI test tag, not a release.
+
 ## Session 330 — ecosystem + Japanese-source scan verdicts
 
 **internal/hal GPU sysfs [OBSERVED — clean].** sysfs reads bounded by
