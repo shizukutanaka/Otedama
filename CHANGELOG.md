@@ -16,6 +16,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * 行11「SHA pinning」・行13「cosign 署名済み」→ 両方現状 fails と明記（uses: は全てタグ参照、release.yml は goreleaser 未呼出）。
 * CI gate 節を実態に書換 — 独立した `go vet`/`staticcheck`/`govulncheck`/5-OS ビルド行列は非存在（govet+staticcheck は golangci-lint 内で実行）、nightly ファズ・ベンチマーク比較ジョブも非存在。
 
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
+### Documentation & audit (session 527 — end-to-end binary smoke)
+
+- First real-binary smoke: `version`, `completion`, `doctor` (17
+  checks, documented 0/1/2 exit contract), `config show`, and `config
+  validate` (exit 78 per §2.1) all verified against their documented
+  contracts on the go1.27.1-built artifact.
+
+### Documentation & audit (session 528 — non-custodial E2E)
+
+- Verified the core non-custodial path on the real binary: first run
+  creates the wallet and shows the 24-word phrase exactly once
+  (`wallet.dat` at 0600); second run loads the same fingerprint and
+  never re-shows the phrase; connect loop backs off gracefully and
+  shuts down clean on SIGTERM.
+
 ### Documentation & audit (session 529 — benchmarks re-verified)
 
 - `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
