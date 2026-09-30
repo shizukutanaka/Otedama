@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 437 — ADR-011 依存先の上流進展を Erratum 2 として記録)
+
+- `docs/adr/ADR-011`: Erratum 2 追記 — `btcsuite/btcd/btcec/v2@v2.5.0`
+  が `ellswift`（BIP-324 公式ベクタ・`V2Ecdh` 含む）を上流同梱。
+  前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
+  が単一依存で完結する形に収束することを記録。
+
 ### 修正 (session 463)
 
 1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
