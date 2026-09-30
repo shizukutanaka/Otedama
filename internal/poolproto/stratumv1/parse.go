@@ -15,7 +15,6 @@ package stratumv1
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -157,7 +156,20 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 const maxExtranonce2Size = 64
 
 // extranonce2SizeOK reports whether sz is a usable extranonce2_size.
-func extranonce2SizeOK(sz int) bool { return sz >= 0 && sz <= maxExtranonce2Size }
+// completeV1Job requires sz > 0 to fold the client's en2 into the
+// coinbase — 0 would leave MerkleRoot zeroed and every share invalid.
+func extranonce2SizeOK(sz int) bool { return sz > 0 && sz <= maxExtranonce2Size }
+
+// extranonce1OK reports whether en1 is usable hex: completeV1Job
+// hex-decodes it and silently skips the job when decode fails, so a
+// non-hex or empty extranonce1 must be rejected at the parse boundary.
+func extranonce1OK(en1 string) bool {
+	if en1 == "" {
+		return false
+	}
+	b, err := hex.DecodeString(en1)
+	return err == nil && len(b) > 0
+}
 
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int].
@@ -174,7 +186,7 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	if err := json.Unmarshal(p[1], &sz); err != nil {
 		return "", 0, false
 	}
-	if !extranonce2SizeOK(sz) {
+	if !extranonce1OK(en1) || !extranonce2SizeOK(sz) {
 		return "", 0, false
 	}
 	return en1, sz, true
@@ -281,17 +293,18 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
 	}
-	if en1 == "" {
-		return "", 0, errors.New("stratumv1: empty extranonce1")
+	if !extranonce1OK(en1) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce1 not hex: %q", en1)
 	}
 	en2SizeF, ok := arr[2].(float64)
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
 	// Validate on the float: int() truncation would let 64.5 or -0.5 pass
-	// the bounds check below as 64 or 0.
-	if en2SizeF != math.Trunc(en2SizeF) || en2SizeF < 0 || en2SizeF > maxExtranonce2Size {
-		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range [0, %d]", en2SizeF, maxExtranonce2Size)
+	// the bounds check below as 64 or 0. completeV1Job requires sz > 0,
+	// so 0 is rejected at the boundary too.
+	if en2SizeF != math.Trunc(en2SizeF) || en2SizeF <= 0 || en2SizeF > maxExtranonce2Size {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range (0, %d]", en2SizeF, maxExtranonce2Size)
 	}
 	return en1, int(en2SizeF), nil
 }

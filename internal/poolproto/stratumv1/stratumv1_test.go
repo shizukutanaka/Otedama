@@ -175,6 +175,31 @@ func TestParseNotify_MalformedRequiredFields(t *testing.T) {
 	}
 }
 
+// extranonce1 must be non-empty valid hex and extranonce2_size must be
+// > 0 at both entry points — completeV1Job silently skips the job
+// otherwise (zero MerkleRoot → every share self-verifies invalid).
+func TestExtranonce_ParseBoundaries(t *testing.T) {
+	for _, raw := range []string{
+		`["zz", 4]`,   // non-hex en1
+		`["abc", 4]`,  // odd-length en1
+		`["", 4]`,     // empty en1
+		`["dead", 0]`, // en2_size 0 — completeV1Job requires sz > 0
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(raw)); ok {
+			t.Errorf("parseSetExtranonce(%s) ok=true, want false", raw)
+		}
+	}
+	for _, result := range []any{
+		[]any{[]any{}, "zz", float64(4)},       // non-hex en1
+		[]any{[]any{}, "abc", float64(4)},      // odd-length en1
+		[]any{[]any{}, "deadbeef", float64(0)}, // en2_size 0
+	} {
+		if _, _, err := parseSubscribeResult(result); err == nil {
+			t.Errorf("parseSubscribeResult(%v) err=nil, want error", result)
+		}
+	}
+}
+
 // ============================================================================
 // parseDifficulty
 // ============================================================================
@@ -1415,15 +1440,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"deadbeef01",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
@@ -1588,7 +1613,7 @@ func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
 		defer serverConn.Close()
 		r := bufio.NewReader(serverConn)
 		_, _ = r.ReadString('\n') // subscribe
-		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"abc",4]],"error":null}`+"\n")
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"deadbeef",4]],"error":null}`+"\n")
 		// Oops — that subscribe result is malformed (len=1), so the test below
 		// verifies that a minimal valid result still works. Let's fix it:
 		// We'll just read the authorize line but not respond (simulate immediate
@@ -2096,12 +2121,12 @@ func TestParseSetExtranonce_SizeBounds(t *testing.T) {
 		raw  string
 		want bool
 	}{
-		{`["abc", 0]`, true},
-		{`["abc", 4]`, true},
-		{`["abc", 64]`, true},
-		{`["abc", 65]`, false},
-		{`["abc", -1]`, false},
-		{`["abc", 1073741824]`, false},
+		{`["ab", 0]`, false},
+		{`["ab", 4]`, true},
+		{`["ab", 64]`, true},
+		{`["ab", 65]`, false},
+		{`["ab", -1]`, false},
+		{`["ab", 1073741824]`, false},
 	} {
 		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
 			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
@@ -2114,7 +2139,7 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		sz   float64
 		want bool
 	}{
-		{0, true},
+		{0, false},
 		{8, true},
 		{64, true},
 		{65, false},
@@ -2125,7 +2150,7 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		{-0.5, false},
 		{4.5, false},
 	} {
-		result := []any{[]any{}, "abc", tc.sz}
+		result := []any{[]any{}, "ab", tc.sz}
 		_, _, err := parseSubscribeResult(result)
 		if (err == nil) != tc.want {
 			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
