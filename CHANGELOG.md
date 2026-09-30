@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `internal/lightning` に BIP-39 パース境界の fuzz を追加 — `FuzzMnemonicToEntropy` は任意の語列（不正な語数・未知語・大文字・空文字・チェックサム破損）で panic せず常にエラー、受理した語列は再エンコードが一致することを検証（150万 exec クリーン）。`FuzzMnemonicRoundtrip` は全合法エントロピー長（16–32B）でエンコード→デコードが bit-exact に往復することを検証（300万 exec クリーン）。ウォレット復元の入力境界をカバー。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
