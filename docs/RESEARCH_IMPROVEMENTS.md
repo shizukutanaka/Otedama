@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 563 — context propagation
+
+- `context.Background()`/`TODO()` in non-test code: 3 sites, all
+  legitimate roots — the CLI entry point (run.go:195), the doctor
+  command root (doctor.go:36), and the HTTP server's graceful-
+  shutdown parent (server.go:138, which must outlive the request
+  ctx). No goroutine escapes its caller's cancellation — there are
+  no detached `Background()` spawns anywhere in internal/.
