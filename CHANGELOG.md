@@ -17,6 +17,106 @@ API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATI
 `OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
 修正 — config.yaml キー名と有効化されるメトリクスを明記。
 
+### 新機能 (session 387)
+
+- 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)
+
+### Fixed (session 311 — SubmitSharesError の未送信シーケンス棄却)
+
+**問題.** SV2 の SubmitSharesError がシーケンス未検証で受理され、
+未送信 seq の偽 reject フレームが reject 率を水増しできた
+（curtailment 悪用）。closed #404 の未マージ修正を master へ再デリバー。
+
+**修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
+受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
+
+### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
+
+価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、
+`strconv.ParseFloat` が受理し sanity band を通過して BTC/USD に NaN が
+混入する経路を遮断（extractor 層の `parseRate` で非有限値を拒否 +
+band を否定形 in-range 判定に変更し将来のソースでも fail-closed）。
+`parseSubscribeResult` が空 extranonce1 を受理する問題を修正
+（fuzzer が発見）。V1 JSON-RPC dispatcher と subscribe 応答に
+fuzz カバレッジを追加（350万+ exec クリーン）。
+
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
+### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
+
+**問題.** `wallet.dat` の権限監査はディレクトリのみで、
+scp/rsync 復元や tarball 展開で 0700 ディレクトリ内に 0644 で
+置かれた暗号化シードファイルを見逃していた。closed #381/#414 の
+未マージ修正を master へ再デリバー。
+
+**修正.** doctor が wallet.dat 自身のモードを監査し、`chmod 0600` の
+修正手順とともに警告（Unix のみ）。
+
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
+### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
+
+Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +
+OpenMiningChannel の応答読み取り）が deadline も ctx 観測もなく
+ブロッキング read で、`DialURL` が応答しないプールで無期限に
+ハングしエンジンの reconnect ループ全体を stall させていた問題を
+修正。ハンドシェイク全体を 15s にバウンドし、定常状態では
+従来どおり Close()/ctx で解除されるよう終了時にクリア。
+
 ### Fixed (session 324 — SV2 書き込み deadline の追加)
 
 **問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
