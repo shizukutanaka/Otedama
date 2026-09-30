@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記）
+
+* `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
+* 「SRI の Go バインディングを統合利用」/「自前実装ではなく SRI を選択」の理由付けが実態と逆であることを追記 — SRI は Rust のみで Go バインディング非存在、`internal/stratum` は自前実装。LDK のメンテ済み Go バインディングも非存在。
+
 ### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
 
 * Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
