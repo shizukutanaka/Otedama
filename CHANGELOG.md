@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 397 — トランスポート/ファンイン/エンコード側)
+
+V1 アウトバウンドリクエスト面（authorize/submit はオペレータ由来フィールドのみ、
+pending-RPC マップは全出口で解放）。V1 `readLine` は ReadSlice+64KiB 上限。
+両 TLS ダイアラは TLS1.2+・検証常時・ServerName 自動・平文フォールバックなし。
+`fanIn` は ctx 双方向対応でリークなし。hal sysfs は kernel 生成値のみ。
+BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 `ExtraNonce2Size` は
+decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
+エコシステム不変（SRI v1.12.0）。
+
 ### 監査判定 (session 400)
 
 プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
