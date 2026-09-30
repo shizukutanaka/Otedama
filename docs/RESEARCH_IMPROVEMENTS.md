@@ -967,6 +967,30 @@ practice.
 (`docs/API.md`) were already verified against `cmd/otedama` in
 sessions 339/346.
 
+## Session 390 — wallet temp-file sweep + save() failure-path tests
+
+[FIXED — session 390] **Stale wallet temp files swept at startup** (`internal/lightning/wallet.go`): `save()`'s atomic write (CreateTemp → write → fsync → chmod → rename) leaves a `.wallet-*.tmp` file behind if the process is killed mid-write or a late step fails. Nothing ever removed them, so every failed save accumulated a permanent ciphertext fragment in the data dir — confusing operators and backup tooling. `sweepStaleTempFiles` runs once in `NewWalletManager` after `MkdirAll` and removes only files older than `staleTempMaxAge` (1 min): a live save holds its tmp for milliseconds, so the age gate both guarantees the file is abandoned and prevents unlinking a temp file mid-write in a second process sharing the data dir. Best-effort — a sweep error never blocks startup. Changes in `internal/lightning` are CODEOWNERS-reviewed per repo policy.
+
+[FIXED — session 390] **save() failure-path coverage**: three tests — stale/fresh/decoy sweep behavior, encrypt-failure leaves zero temp files (`failAfterNReader` exhausting after the 32-byte entropy read), read-only data dir propagates a wrapped CreateTemp error. Lightning package coverage improves at the lowest-covered function (save 62%).
+
+[AUDITED — clean] Coverage sweep: every package sits at 92–99% (above the 90% bar); zero TODO/FIXME/XXX/`unsafe` in non-test code; benchmarks exist on all hot paths (miner grind, sha256d, metrics write, noise HMAC, clock, version). Japanese-source scan this week: no new Qiita/Zenn mining-ops posts relevant to Otedama's stratum layer.
+
+## Session 320 — live network-hashrate feed (re-delivers closed #378/#415)
+
+**Finding [OBSERVED — fetched live].** The mining-yield estimate consumed
+a compile-time network-hashrate constant (1e21 H/s). mempool.space and
+blockchain.info both expose live difficulty/hashrate endpoints — fetched
+and shape-verified live, the two agree (~930 EH/s vs the stale 1e21
+constant). Closes KNOWN_LIMITATIONS §7's deferred "live difficulty
+feed".
+
+**Fix [OBSERVED].** `rates.HashrateFetcher` polls both endpoints, takes
+the median inside a plausibility band, and replaces the constant via
+`MiningProvider.NetworkHashrateFunc`. Stale/unwired falls back to the
+constant, so offline start is unaffected.
+
+**Tests [OBSERVED].** rates + provider + engine suites green.
+
 ## Session 379 — reconnect-loop + docs/config-surface audit
 
 [FIXED] `runReconnectLoop` never reset its exponential backoff after a
