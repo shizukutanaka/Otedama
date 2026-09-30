@@ -82,7 +82,7 @@ func TestWorker_StartAndStop(t *testing.T) {
 	select {
 	case _, ok := <-shares:
 		if ok {
-			// A share arrived before stop — that's fine, just drain.
+			t.Log("a share arrived before stop — drained")
 		}
 	case <-time.After(100 * time.Millisecond):
 		// Channel not closed — Stop didn't terminate goroutines.
