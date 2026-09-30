@@ -18,6 +18,15 @@ ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
 整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
 （ライブラリ crate は stratum-mining/stratum に残留）。
 
+### Docs (session 330 — エコシステム+日本語ソース走査判定)
+
+internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
+SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
+知見なし、`0xf0xx0/stratumv2`（Go SV2 codec）は先行実装として
+記録（Otedama internal/stratum が scope を包含するため依存追加
+根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
+当方クライアント側バウンドで既にミラー済み。
+
 ### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
 
 `internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
