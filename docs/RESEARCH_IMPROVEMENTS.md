@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 562 — process-exit + signal surface
+
+- `os.Exit`/`log.Fatal`/`log.Panic`/`os.Kill` in non-test code:
+  exactly one `os.Exit` (cmd/otedama/main.go:108, the single
+  process exit point). No library can kill the process — every
+  error propagates to the caller.
+- Signal handling: one `signal.NotifyContext` (Interrupt+SIGTERM,
+  cmd/otedama/run.go:194) at the entry point; shutdown propagates
+  via ctx — no double-handlers anywhere (E2E SIGTERM verified in
+  session 528).
