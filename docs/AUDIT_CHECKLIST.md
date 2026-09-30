@@ -37,8 +37,10 @@ If any row does not pass, open a security advisory.
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Correction (session 488): currently fails** — every `uses:` is a tag/branch ref (`@v4`, `@master`), none are SHA-pinned; this row is the target state, not the current state |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Correction (session 488): currently fails** — `release.yml` never invokes goreleaser or cosign; the `.goreleaser.yaml` `signs:` block is dead config and no signed artefact exists |
+| 13 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install; optional cosign `verify-blob` path exists but signatures are not yet published by the release workflow |
 | 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
 | 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
@@ -47,7 +49,7 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 16 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
-| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
+| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `save()` | Atomic `os.CreateTemp` → `Sync` → `os.Chmod(0600)` → `os.Rename` |
 | 18 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
 | 19 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
 | 20 | No default password or pre-shared key | Grep for hardcoded strings | None found |
@@ -57,7 +59,7 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 21 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
-| 22 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
+| 22 | Key derivation uses scrypt | `internal/lightning/seedstore.go` | `scrypt.Key(..., N=131072 (2^17), r=8, p=1, keyLen=32)` |
 | 23 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
 | 24 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
 | 25 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
