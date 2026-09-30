@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 583 — sync.Once audit
+
+- Four `sync.Once` sites, all canonical:
+  - `closeOnce` ×3 (stratumv1 connection/session,
+    stratumv2 connection) — makes `Close()` idempotent so a
+    double-close can't panic on an already-closed channel.
+  - `startOnce` ×1 (stratumv2 session) — guarantees `readLoop`
+    is spawned exactly once, which is what makes the producer's
+    `defer close(jobsCh)` safe (a second spawn would double-close).
+- Once usage is always the correctness-guard form, never lazy
+  initialization that could hide an init error.
