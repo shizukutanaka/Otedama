@@ -5,8 +5,14 @@ package stratumv2
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"math"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1017,5 +1023,57 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+// TestDialer_V2TLS_DialsTLS proves a stratum+v2tls:// dialer performs a real,
+// certificate-verified TLS handshake rather than silently opening plaintext:
+// against a TLS server with an untrusted (httptest self-signed) certificate,
+// Dial must surface an x509 verification error — and the error proves the
+// connection never degraded to TCP.
+func TestDialer_V2TLS_DialsTLS(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "https://")
+
+	d := &Dialer{useTLS: true}
+	_, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("v2tls dial against untrusted cert should fail verification")
+	}
+	var certErr *tls.CertificateVerificationError
+	if !errors.As(err, &certErr) {
+		t.Fatalf("expected *tls.CertificateVerificationError, got %T: %v", err, err)
+	}
+}
+
+// TestDialer_V2TLS_ConnectsToTrustedServer completes the positive path: a
+// TLS server whose cert is minted by a CA the dialer is configured to trust.
+func TestDialer_V2TLS_ConnectsToTrustedServer(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "https://")
+
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+
+	// Inject a dialFn that performs the same TLS handshake the production
+	// path does — but against the test server's CA bundle. This keeps the
+	// dialer under test deciding *whether* TLS applies while avoiding real
+	// DNS/PKI.
+	d := &Dialer{
+		useTLS: true,
+		dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+			cfg := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+			return (&tls.Dialer{Config: cfg}).DialContext(ctx, "tcp", address)
+		},
+	}
+	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("trusted v2tls dial failed: %v", err)
+	}
+	defer conn.Close()
+	if _, ok := conn.(*connection).raw.(*tls.Conn); !ok {
+		t.Fatalf("v2tls connection is %T, want *tls.Conn", conn.(*connection).raw)
 	}
 }
