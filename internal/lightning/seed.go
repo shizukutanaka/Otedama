@@ -202,7 +202,9 @@ func EntropyToMnemonic(e Entropy, w *WordList) (Mnemonic, error) {
 	checksumByte := sum[0]
 
 	// Build a bit buffer: entropy || high `cs` bits of sum[0].
+	// The buffer holds the full secret entropy — wipe it on return.
 	bits := make([]byte, 0, ent+cs)
+	defer func() { zeroBytes(bits) }()
 	for _, b := range e {
 		for i := 7; i >= 0; i-- {
 			bits = append(bits, (b>>uint(i))&1)
@@ -250,6 +252,7 @@ func MnemonicToEntropy(m Mnemonic, w *WordList) (Entropy, error) {
 	cs := totalBits / 33 // because ENT + CS = ENT * 33/32 <=> CS = totalBits/33
 	entBits := totalBits - cs
 	bits := make([]byte, 0, totalBits)
+	defer func() { zeroBytes(bits) }()
 
 	for i, word := range m {
 		idx, err := w.Index(word)
@@ -296,6 +299,7 @@ func MnemonicToSeed(m Mnemonic, passphrase string) Seed {
 	salt := "mnemonic" + passphrase
 	password := []byte(m.String())
 	seed := pbkdf2.Key(password, []byte(salt), 2048, 64, sha512.New)
+	defer func() { zeroBytes(password); zeroBytes(seed) }()
 	var out Seed
 	copy(out[:], seed)
 	return out
