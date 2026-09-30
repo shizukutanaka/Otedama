@@ -1164,3 +1164,27 @@ func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
 		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
 	}
 }
+
+func TestFetcher_RedirectRefused(t *testing.T) {
+	// A rate source answering with a redirect (even to a valid-looking
+	// URL) must fail rather than follow it — https→http downgrade on a
+	// price feed lets a network attacker inject a manipulated rate.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://evil.example/price", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	f := NewFetcher(50000)
+	f.sources = []Source{{
+		Name: "redirecting",
+		URL:  srv.URL,
+		extract: func(b []byte) (float64, error) {
+			t.Error("extract must not be reached on a redirect")
+			return 0, nil
+		},
+	}}
+
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch should refuse to follow a redirect")
+	}
+}
