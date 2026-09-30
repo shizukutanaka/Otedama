@@ -16,6 +16,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * §5「SHA pinning + cosign signing は v3.0.0-alpha で実装済み」→ Dependabot のみ実装済み（SHA pin ゼロ、cosign は dead config）。
 * §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
 
+### Security (session 353 — dialer ハンドシェイクエラーのクォート)
+
+`poolproto/stratumv2` の `Negotiate` で `SetupConnectionError` /
+`OpenMiningChannelError` のプール理由文字列を `%q` クォート —
+session 351 のエンジン側修正を dialer 側にも適用。
+
+### 修正 (session 405)
+
+`.goreleaser.yaml` の実在しないパス2件を修正 — アーカイブ同梱 glob
+`docs/locales/*.toml`（i18n は `internal/i18n/messages/` の Go ソース
+内蔵で当該ディレクトリなし、全リリースで空一致）と、リリース本文の
+死リンク `docs/verify-release.md`（正しくは `VERIFY.md`）。
+
+### セキュリティ (session 372 — argv パスフレーズ警告)
+
+`--wallet-passphrase` / `--wallet-mnemonic-passphrase` をフラグ経由で
+指定すると stderr に警告 — argv はプロセスリスト (ps) で全プロセス
+から可視。推奨経路の OTEDAMA_WALLET_*_PASSPHRASE 環境変数を案内。
+
+### セキュリティ (session 393)
+
+- `--http-addr` が非ループバックアドレス（`0.0.0.0` 等）に bind される際、起動時に stderr 警告を発行 — metrics/health エンドポイントのネットワーク公開をオペレータに通知（`--pprof` 有効時はヒープ/ゴルーチンプロファイル公開についても明記）。ループバック bind は従来通り無警告。
+
+### 修正 (session 385)
+
+- `TestSetupWallet_MnemonicNeverReachesLogger` の確率的フレークを解消: 24語ニーモニックのランダム語（BIP-39 語彙は一般英単語）が固定ログ文（"recovery phrase" 等）の散文と衝突し誤検出していた。既知の定数行をスキャン対象外にし、動的ログ内容のみを検査（実際の漏洩は引き続き検出）。(closed #371 の該当半分の再デリバー)
+- TUI ダッシュボードが常に80カラム固定で描画され、実端末幅を一切検出していなかった既知の制限（KNOWN_LIMITATIONS §15）を解消。`internal/tui` が描画ティック毎にカーネルへ端末幅を問い合わせ（Unix: `TIOCGWINSZ`、Windows: `GetConsoleScreenBufferInfo`）、端末リサイズにも追従。出力先が端末ファイルでない場合やクエリ失敗時は従来の80カラムにフォールバックし、`SetWidth` による固定指定も従来通り優先される。`golang.org/x/sys` を间接依存から直接依存へ昇格（BSD・Go チーム保守・既存 module graph 内のため新規モジュール追加なし）。
+
 ### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
 
 V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
