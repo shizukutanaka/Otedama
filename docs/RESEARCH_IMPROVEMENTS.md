@@ -969,6 +969,34 @@ host string logged is the operator's own config value. Clock-skew and
 rates probes were hardened in earlier sessions (no redirects, bounded
 bodies).
 
+## Session 410 — THREAT_MODEL claims vs shipped reality [FIXED]
+
+**False mitigation claims corrected [FIXED].**
+- "Falling back to V1 is not supported, so downgrade attacks are
+  structurally impossible" — V1 support shipped long ago
+  (`internal/poolproto/stratumv1`, ADR-006). Rewrote the Spoofing
+  section: protocol is chosen by the operator's URL scheme; a
+  `stratum+v2*` pool cannot be downgraded by an attacker (no
+  auto-negotiation), but a `stratum://` config is plaintext with zero
+  MITM protection — now documented as a residual risk with guidance.
+- "fuzz tests run nightly with automatic crasher reporting" — no
+  fuzz job exists in any workflow; replaced with the accurate
+  inventory (fuzzers ship in-repo, `make fuzz`; scheduled CI fuzz
+  not yet wired).
+- "Release artifacts are cosign-signed" — false (session 407 finding);
+  reframed as planned-not-live with the source-rebuild path.
+- "Only three runtime dependencies" listed two deps + stdlib — now
+  "two third-party dependencies" plus stdlib.
+- ADR-002 reference annotated as partially superseded by ADR-006.
+
+**Verified — accurate as written:** $95,000 fallback constant
+(engine/run.go:205), median-of-3 price feeds, MaxFrameSize=16 MiB
+pre-allocation bound, bounded job channel (32), atomic wallet write,
+maskAddress truncation, non-root service hardening flags.
+
+**Not touched:** the stale `scrypt (N=32768)` claim — already fixed
+in open #494; editing the same line would conflict.
+
 ## Session 411 — GODEBUG_NOTES/ADR cross-reference audit [FIXED]
 
 **Dead cross-reference fixed [FIXED].** GODEBUG_NOTES tells users
