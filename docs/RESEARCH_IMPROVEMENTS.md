@@ -964,6 +964,181 @@ encryption/CA/diversity/scheme checks, env-var lint, profitability
 floor advisory. Results are indexed back into report order, so output
 is deterministic despite concurrent execution.
 
+## Session 371 — unimplemented schemes + live V2 dial bound
+
+**[FIXED] Unimplemented scheme fail-fast.** `datum://` is recognised by
+`poolproto.FromURL` (ADR-009, OCEAN's SV1-transport variant) but has no
+implementation — it previously fell through to the plaintext SV2 branch
+and emitted binary V2 frames to a pool expecting DATUM, surfacing only
+as a confusing connect/handshake timeout. `runSession` now rejects any
+protocol that is not V1-family/V2 with a named error; regular (non-fatal)
+error so pool failover still rotates past the unusable entry to
+configured alternatives.
+
+**[FIXED] Live V2 dial bound.** The engine's inline V2 path dialled with
+a bare `net.Dialer` (and `stratum.DialTLS` for v2tls) — no connect
+timeout, so a blackholed endpoint stalled each failover hop for the OS
+TCP timeout (~127s on Linux). `poolDialTimeout` (15s, test-overridable
+var) now bounds the TCP connect; for `stratum+v2tls://` a derived ctx
+bounds connect + TLS handshake together.
+
+## Session 345 — per-attempt dial timeout on pool connections
+
+**Blackhole dial stall [FIXED].** Both dialers called `DialContext` with
+only the caller's context — which the engine session loop supplies
+without a deadline — so a pool endpoint that swallows SYNs stalled each
+failover hop for the OS TCP default (~127 s on Linux). Both `Dial`
+implementations now wrap the attempt in a 15 s `dialTimeout` (covers the
+TLS handshake on `stratum+tls://`), report it as a clear "dial timeout"
+error, and keep the caller's deadline when it is tighter. `TestDialer_
+DialTimeout` covers both protocols via a dialFn that blocks on ctx.
+
+**Credentials-in-URL audit [AUDITED — clean].** `Credentials` are passed
+separately from the pool URL; `StripScheme`/`DialURL` never splice user
+material into URLs, so dial errors that embed the URL cannot leak a
+password. Userinfo in a pool URL (`stratum+tcp://u:p@host`) is not
+parsed — it reaches the resolver as literal text and fails fast.
+
+## Session 314 — roll stale pool ntime forward to wall clock (SRI 1.12.0 nTime-bound lesson)
+
+**Finding [FETCHED — freedom.tech SRI 1.12.0 release notes, 2026-09-17].**
+`channels_sv2` now enforces `min_ntime`/`nTime` bounds on share
+validation across all channel types: shares stamped with an aging ntime
+get rejected once they fall outside the pool's window.
+
+**Fix [OBSERVED].** New `rollNTime()` in run.go: `updateWork` (V2) and
+`applyJob` (V1) roll a stale declared ntime forward to `time.Now()`;
+a future ntime stays verbatim (rolling down would undershoot min_ntime —
+itself a reject). Submission echoes `Header.Time`, so the submitted nTime
+always matches the hashed header.
+
+**Tests [OBSERVED].** `TestRollNTime` — stale→now, future→verbatim,
+now→unchanged.
+
+**Other SRI 1.12.0 notes audited [FETCHED].** noise_sv2 dropped
+AES-256-GCM (ChaCha20-Poly1305 sole cipher) — Otedama's noise stack is
+already ChaChaPoly-only, no action. Coinbase defects (undersized BIP141
+parts, scriptSig serialization) are server-side taker paths — not a
+client concern. ESP-Miner v2.15.x continues (v2.15.3); its SV2
+"pending shares" dashboard maps to our `shares_pending` gauges.
+
+## Session 387 — first-run wallet backup verification re-delivery
+
+[FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
+
+[AUDITED — clean] Re-check of remaining closed-unmerged queue for re-delivery eligibility: #372/#386/#400/#410 (batch accepts) → live as open #433; #374/#384/#398/#411 (extranonce2 bound) → live as open #428; #377/#385/#397/#412 (job-map bounds) → live as open #429; #387/#399/#409 (reject-code classification) → live as open #434; #388/#413 (reconnect wait) → live as open #430; #381/#414 (wallet mode audit) → live as open #431; #378/#415 (live hashrate feed) → live as open #432; #389/#393/#403/#404 (seq validation) → live as open #422/#423; #426 ntime roll → open #426; #427 in-flight gauge → open; #416/#418–#421/#425/#435–#446 → all open. #375 FIPS doctor still blocked (go1.26 module directive vs CI pin), #380 hashrate gauges blocked by #432, #271 halves blocked by #417. #371 both halves landed this stretch (mnemonic flake → #497; atomic.Bool → pushed to #447's branch). Docs-only closed #469/#471/#472 remain low-value. No eligible candidate left un-delivered.
+
+## Session 311 — drop SubmitSharesError frames with unsent sequence numbers (re-delivers closed #404)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesError` was
+counted without checking the sequence number — a forged reject frame
+with an unsent seq inflated the reject rate, feeding curtailment.
+
+**Fix [OBSERVED].** Frames with `SequenceNumber > seqNum` drop at debug
+level; error responses for real seqs still settle `submitTimes` and run
+reject classification.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqRejectIgnored`.
+
+## Session 366 — rates NaN injection + parser fuzz
+
+**Fixed [FIXED — real reachable bug].** `strconv.ParseFloat` accepts the
+literals `"NaN"`, `"Infinity"`, `"-Inf"` with nil error, and the doFetch
+sanity band `rate < min || rate > max` cannot reject NaN (every
+comparison against NaN is false). A price source returning
+`{"data":{"amount":"NaN"}}` (Coinbase shape) or `{"c":["NaN",…]}`
+(Kraken shape) — compromised endpoint or a proxy sitting inside TLS —
+injected NaN into the median, producing a NaN BTC/USD rate that
+poisons every downstream yield estimate. Two-layer fix: a `parseRate`
+helper rejects non-finite values at the extractor, and the band check
+is now a negated in-range test (`!(x >= lo && x <= hi)`) so NaN fails
+closed for any future source. New `FuzzSourceExtract` asserts every
+extractor's contract: no panic, and err==nil implies a finite rate —
+1.9M execs clean.
+
+**Fixed [FIXED — fuzzer-found].** `parseSubscribeResult` accepted an
+empty `extranonce1` (`[[], "", 0]` — found by the new fuzzer on its
+first pass): shares built on an empty extranonce are guaranteed
+invalid, silently burning accepted-looking work. Empty en1 now errors,
+terminating the handshake instead.
+
+**New fuzz coverage [FIXED — CLAUDE.md parity].** `FuzzDispatchLine`
+drives the session's JSON-RPC dispatcher (mining.notify /
+set_difficulty / set_extranonce / show_message / reconnect /
+response-id routing) over net.Pipe with arbitrary lines — 1.7M execs,
+no panic/block. `FuzzParseSubscribeResult` covers the subscribe
+response shape; its crash seed lives in testdata as a regression
+input. This brings the cleartext V1 wire — the most exposed parser in
+the codebase — under the fuzz mandate alongside the SV2 frame
+fuzzers.
+
+## Session 373 — wallet lifecycle audit + docs-code drift fix
+
+[AUDITED — clean] `internal/lightning` wallet lifecycle: wallet.dat writes
+are fully atomic (tempfile + Sync + Close + pre-rename chmod 0600 + Rename
+into a 0700 data dir); decrypt errors are deliberately opaque ("wallet
+unlock failed"); the WalletManager is short-lived in the engine
+(`setupWallet` keeps only the fingerprint string, so the BIP-39 mnemonic
+is collectable after first-run display).
+
+[AUDITED — clean] BIP-39 wordlist + derivation: `GenerateEntropy`
+restricts to valid bit widths and requires a full read; `MnemonicToEntropy`
+rejects invalid word counts and enforces the checksum (transcription
+errors caught); `Fingerprint` is an HMAC so it reveals nothing about the
+seed. Intermediate derivation buffers are zeroed (session 340, PR #452).
+
+[FIXED] Docs-code drift on the wallet KDF work factor: THREAT_MODEL and
+AUDIT_CHECKLIST claimed `scrypt N=32768`; the actual constant is
+`scryptN = 1 << 17` = 131072 in `internal/lightning/seedstore.go`
+(4x understatement — the brute-force residual-risk paragraph materially
+understates the real work factor). AUDIT_CHECKLIST also pointed item 22
+at `internal/lightning/seed.go`; the call site is `seedstore.go`.
+Corrected both. `docs/API.md` already documented N=2^17 correctly.
+
+[AUDITED — clean] THREAT_MODEL channel bound: the SV2 reader channel is
+`make(chan poolMsg, 32)` (run.go), matching the documented "Job channel
+is bounded (buffer size 32)" claim.
+
+## Session 382 — re-delivery of #485 + arbitration pause persistence fix
+
+[FETCHED] Re-delivered the closed-unmerged #485 (docs-code drift on the
+wallet scrypt work factor: THREAT_MODEL/AUDIT_CHECKLIST said N=32768;
+implementation is `scryptN = 1 << 17` = 131072) — cherry-picked onto
+master verbatim; no equivalent open PR exists.
+
+[FIXED] Arbitration device pause was defeated by the next pool job:
+`applyAllocation` pauses below-floor/idle/AI-routed workers with
+`SetWork(nil)`, but `updateWork`/`applyJob` re-armed *every* worker on
+each new pool job — undoing the pause for the ~30 s until the next Decide
+tick. Introduced `pauseSet` (sync.Map), the per-device counterpart of
+`curtailGate`: `reconcileArbPauses` rewrites the set after every Decide
+(before applyAllocation), and both job-dispatch paths skip paused device
+IDs. Hashing resumes on the next job after arbitration routes the device
+back to a mining stream.
+
+[FIXED] `updateLiveness` now treats "every worker arbitration-paused" the
+same as curtailment — stall monitor not advanced, `otedama_up` stays 1 —
+preventing false "hashrate stalled" warnings while the rig is
+deliberately idle below the yield floor. Partial pause still stalls
+normally (a nominally-mining device at 0 rate is a real fault).
+
+[AUDITED — clean] fanIn share-merge backpressure: buffer 4·N capped at
+64; when full during a reconnect the producers block and workers drop
+shares via the dropped-share counter — bounded loss, no unbounded queue.
+
+## Session 319 — doctor audits wallet.dat file mode (re-delivers closed #381/#414)
+
+**Finding [OBSERVED — code-verified].** The wallet-permission audit
+checked only the containing directory; a wallet restored via scp/rsync
+or unpacked from a tarball lands 0644 inside a correctly-moded 0700
+directory, silently exposing the encrypted seed.
+
+**Fix [OBSERVED].** `doctor` now audits `wallet.dat`'s own file mode and
+warns with a `chmod 0600` remediation (Unix-only; Windows builds report
+N/A as before).
+
+**Tests [OBSERVED].** Mode-audit cases green.
+
 ## Session 358 — engine V2 handshake deadline
 
 **Live V2 handshake had no read bound [FIXED].** The engine's inline

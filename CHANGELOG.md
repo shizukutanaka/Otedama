@@ -15,6 +15,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
 - `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
 
+### 修正 (session 371 — scheme dispatch + dial bound)
+
+`datum://`（ADR-009 で認識されるが未実装）を fail-fast で拒否 —
+従来は平文 SV2 経路へフォールスルーし DATUM プールへバイナリ V2
+フレームを送出していた。フェイルオーバー経路のライブ V2 ダイアルに
+15 秒の接続タイムアウトを追加（TCP 接続＋TLS ハンドシェイク）。
+
+### Fixed (session 345 — プール接続タイムアウト)
+
+V1/V2 ダイアラが 1 回の接続試行を 15 秒で打ち切るよう変更（TCP
+コネクト + TLS ハンドシェイク）。呼び出し側 ctx に期限がない場合、
+ブラックホール端点が OS の SYN 再送既定（Linux 約2分）まで
+フェイルオーバー全体を停滞させていた。
+
+### Fixed (session 314 — stale ntime を現在時刻へロール（SRI 1.12.0 nTime 境界対応）)
+
+**問題.** V1 `mining.notify` の ntime・V2 の min_ntime/SetNewPrevHash ntime が
+検証なしにブロックヘッダへ直行し、ジョブが古くなるほど提出シェアの
+タイムスタンプが陳腐化。SRI 1.12.0（2026-09-17）が min_ntime/nTime
+境界のシェア検証を全チャネル型で強制したため、stale ntime のシェアは
+サーバーで一律拒否＝ハッシュレートの空費。
+
+**修正.** `rollNTime()` で stale な宣言 ntime をローカル時刻へ前倒し
+（ntime rolling は標準的マイナー挙動で実効 nonce 空間の一部）。
+未来 ntime は min_ntime 下限として原文のまま保持——現在時刻への
+丸め込みは逆に reject になるため。
+
+### 新機能 (session 387)
+
+- 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)
+
+### Fixed (session 311 — SubmitSharesError の未送信シーケンス棄却)
+
+**問題.** SV2 の SubmitSharesError がシーケンス未検証で受理され、
+未送信 seq の偽 reject フレームが reject 率を水増しできた
+（curtailment 悪用）。closed #404 の未マージ修正を master へ再デリバー。
+
+**修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
+受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
+
+### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
+
+価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、
+`strconv.ParseFloat` が受理し sanity band を通過して BTC/USD に NaN が
+混入する経路を遮断（extractor 層の `parseRate` で非有限値を拒否 +
+band を否定形 in-range 判定に変更し将来のソースでも fail-closed）。
+`parseSubscribeResult` が空 extranonce1 を受理する問題を修正
+（fuzzer が発見）。V1 JSON-RPC dispatcher と subscribe 応答に
+fuzz カバレッジを追加（350万+ exec クリーン）。
+
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
+### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
+
+**問題.** `wallet.dat` の権限監査はディレクトリのみで、
+scp/rsync 復元や tarball 展開で 0700 ディレクトリ内に 0644 で
+置かれた暗号化シードファイルを見逃していた。closed #381/#414 の
+未マージ修正を master へ再デリバー。
+
+**修正.** doctor が wallet.dat 自身のモードを監査し、`chmod 0600` の
+修正手順とともに警告（Unix のみ）。
+
 ### Fixed (session 365 — V2 handshake deadline 再デリバー)
 
 live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
