@@ -940,6 +940,177 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 568 — recover() + goroutine-spawn audit
+
+- Zero `recover()` calls in non-test code: no panic-swallowing
+  surface anywhere — every error propagates as a returned error,
+  matching the library-kill audit (session 562).
+- 20 `go` spawn sites across 10 packages — the exact set mapped in
+  session 553's leak-coverage table. Each is ctx-scoped
+  (readLoop/renderLoop/arbitration), wg-tracked (fan-in
+  collectors closing via `wg.Wait(); close`), or a one-shot
+  trigger (`go s.Close()`). NumGoroutine shutdown evidence from
+  session 553 covers all of them.
+
+## Session 569 — `any` usage audit
+
+- The only `any` values in non-test code are: V1 JSON-RPC wire
+  struct fields (`ID`, `Result`, `Error`, `result`, `errResult`)
+  — spec-mandated untyped payloads at the wire boundary, parsed
+  into typed values by the parsers; `sync.Pool.New`'s required
+  `func() any` signature; and `fanIn[T any]` — a generic
+  constraint, the correct modern form.
+- Zero loose-typing escapes at internal package boundaries; every
+  internal API is concretely typed.
+
+## Session 570 — enum exhaustiveness audit
+
+- Five iota-enum types (`Format`, `ValueOrigin`, `Status`,
+  `AddressType`, `Policy`). Every switch over them is either
+  exhaustive (`doctor.go:177` enumerates all four Status cases) or
+  uses a correct default: `logger.go` FormatJSON→JSON,
+  default→text (two-value enum); `doctor.go:114` counts only
+  Warn/Fail — correct for exit-code semantics; `config.go` string
+  field with explicit validation default.
+- Zero silent pass-through on an unhandled enum value.
+
+## Session 571 — context cancel-function audit
+
+- Six `context.WithTimeout/WithCancel` sites; every cancel is
+  paired: three use immediate `defer cancel()` (checks.go:772,
+  httpserver:138, doctor.go:36) and three store the func into a
+  lifecycle field that is unconditionally invoked — `p.cancel`
+  called at polling.go:87 with nil-reset under lock, `s.ctxCancel`
+  inside `closeOnce.Do` (stratumv1:377), `w.cancel` retrieved by
+  worker Stop (worker.go:158).
+- Zero leaked contexts; no `WithCancel` whose cancel is dropped.
+
+## Session 315 — submit in-flight depth gauge (ESP-Miner v2.15.0 pending-shares parity)
+
+**Finding [FETCHED — bitaxeorg/ESP-Miner v2.15.0 release notes, 2026-08-21].**
+ESP-Miner added "Show pending SV2 shares on the dashboard" (#1735) —
+exposing submit→ack in-flight depth as a first-class operational signal.
+
+**Fix [OBSERVED].** New `otedama_shares_submit_in_flight` gauge publishes
+`len(submitTimes)` on the 30 s stats tick (V2 path; V1 submits
+synchronously and stays 0). SPECIFICATION §6 catalogue row added —
+`TestMetricsDocumentedInSpecification` green. Also audited [OBSERVED]:
+V1 fractional difficulty + negative/zero difficulty are already handled
+(`[]float64` parse + `TargetFromDifficulty` `>0`/IsInf guard).
+
+## Session 388 — arbitration property tests + ecosystem re-check
+
+[FETCHED — 2026-09-25] Stratum V2 SRI: v1.12.0 (2026-09-17) remains the latest release — channels_sv2 hardening pass, codec_sv2/framing_sv2 refactor (Frame enum → MessageFrame/SerializedFrame), BIP323 adaptations, AES-256-GCM dropped from noise_sv2 leaving ChaCha20-Poly1305 sole cipher. All mapped onto Otedama in earlier sessions (this client never implemented AES-256-GCM; framing is Otedama's own). ESP-Miner v2.15.3 (2026-09-20) remains latest; no new stratum-facing changes to chase.
+
+[FIXED — session 388] **Arbitration property tests** (`internal/arbitration/fuzz_test.go`): the `Decide` doc comment has always claimed its invariants "are verified by property-based tests" but no such test existed — a doc/code drift and a real coverage gap on the package CLAUDE.md explicitly requires property tests for. `FuzzDecide` generates randomized devices/streams/policies/margins/previous-allocations (seeded `math/rand` over a fuzz `int64`) and asserts on every run: bijective DeviceID assignment in sorted order; no assignment to an unknown or family-incompatible stream; idle only when no compatible stream both yields >0 and clears MinYieldSatsPerSec; `TotalYield` == exact IEEE-754 sum of ExpectedYield; `ForegoneSatsPerSec` >= 0; byte-identical determinism via a second `Decide` call; and — on a quarter of runs that force PolicyMaximizeEarnings + zero hysteresis + no Previous — the documented greedy-optimality invariant (TotalYield equals the per-device max). 13.5M execs in 90s, zero violations.
+
+[AUDITED — clean] Open-PR review-comment sweep: #495, #496, #497, #498 all mergeable, zero unresolved reviewer/Devin-Review comments. Re-delivery queue stays exhausted (audit recorded in session-387 entry).
+
+## Session 543 — sync.Pool wiring: Noise handshake hashers
+
+`noise_pool.go` shipped a correctness-tested `hmacSHA256Pooled`
+that the file itself documented as "not yet wired" — hkdf2/hkdf3
+still called the unpooled `hmacSHA256`, allocating ~12 hasher
+objects per handshake. Wired hkdf2 (3 calls) and hkdf3 (4 calls)
+to the pooled variant; the unpooled `hmacSHA256` remains as the
+test reference implementation. Equivalence is covered by the
+existing pooled-vs-reference test matrix; `go test -race
+./internal/stratum/` green. Frame-codec `make([]byte)` calls are
+per-message (share/notify rate), not per-hash — pooling there
+would not pay; recorded as reviewed-and-skipped.
+
+## Session 398 — SV2 encode-side round-trip fuzz
+
+**`FuzzMessageRoundTrip` [FIXED — coverage gap].** The six steady-state
+mining-channel messages (`NewMiningJob`, `SetNewPrevHash`, `SetTarget`,
+`SubmitSharesStandard`, `SubmitSharesSuccess`, `SubmitSharesError`)
+previously had decode-only fuzzers (#479): arbitrary bytes never wedge
+the parser, but nothing proved the encode direction is correct or
+canonical. The new fuzzer builds every message from fuzz input and
+asserts three invariants per type: Encode never fails, Decode of the
+output returns an identical value, and re-encoding is byte-identical
+(canonical-form stability in both directions). 60 s / 8.7 M execs clean
+(`internal/stratum/roundtrip_fuzz_test.go`). With this, both directions
+of every SV2 message type Otedama emits or consumes have property
+coverage.
+
+## Session 389 — fuzz coverage for target bitmath + numeric env resolution
+
+[FIXED — session 389] **Target-math fuzzers** (`internal/miner/fuzz_test.go`): `TargetFromNBits` and `TargetFromDifficulty` convert pool-supplied wire values into the 256-bit targets shares are compared against — until now covered only by fixed vectors. `FuzzTargetFromNBits` asserts: never panic; accepted inputs produce a positive target; `TargetFromNBits(NBitsFromTarget(t))` reproduces the identical target (value round-trip, since re-encoding may pick a non-canonical nBits); the all-zero hash meets every valid target. `FuzzTargetFromDifficulty` asserts invalid difficulties (NaN/±Inf/≤0) always error and accepted ones produce positive targets. `FuzzTargetFromDifficultyMonotonic` asserts d1<d2 ⟹ target1≥target2 (weak monotonicity under float truncation). ~41M execs total, zero violations.
+
+[FIXED — session 389] **Numeric env-resolution fuzz** (`internal/config/fuzz_test.go`): `FuzzResolveNumericEnv` drives `EnvWarnings` + `ResolveWithOrigins` with arbitrary strings on each `OTEDAMA_*` float key, asserting the documented contract both ways — a parseable value lands on its field bit-exact with `OriginEnv`, while an unparseable non-empty value yields exactly one warning naming the key and leaves the field untouched (no env origin). Covers typo classes the unit tests missed (comma decimals, overflow exponents, "NaN" literals). ~7M execs, zero violations.
+
+## Session 481
+
+**Ecosystem drift check (SRI 1.11.1, 2026-07-22).** The reference
+implementation's translation proxy rounded *up* Stratum V1 difficulty
+values during V1→V2 conversion (stratum-mining/stratum#2227), making the
+effective share target stricter than the pool assigned. Otedama's
+`miner.TargetFromDifficulty` performs full-precision division
+(`target = diff1Target / difficulty` at 256-bit `big.Float` precision,
+truncation error <1 ULP) — the same defect class is not present. The
+V1 notification parsers (`parseNotify`, `parseDifficulty`,
+`parseSetExtranonce`, `parseShowMessage`, `client.reconnect`) were
+re-audited: all bounded, and the zero-fill fallbacks are on the
+pool-side-invalid V1 share path (KNOWN_LIMITATIONS §17), so they cannot
+produce misleading mining behaviour beyond what is already documented.
+
+**Repo hygiene sweep — one real fix.** `Makefile` targets were all
+inventoried: every referenced binary, path, and subcommand exists; the
+only remaining stale reference is `docs-serve`'s
+`golang.org/x/tools/cmd/godoc@latest`, which resolves to
+`v0.1.0-deprecated` (godoc was split out of x/tools and abandoned — it
+still runs today but upstream is dead and a future `@latest`
+resolution can fail outright; left as-is since `setup:` uses the same
+`@latest` convention and the correct replacement choice — pkgsite vs.
+`go doc` static output — is a maintainer call).
+
+The committed `.claude/settings.local.json` was deleted and added to
+`.gitignore`. It is a per-developer Claude Code permissions file that
+must not be versioned (upstream convention: `settings.local.json` is
+local-only; the shared file is `settings.json`). The committed copy
+accumulated 130+ stale `Bash(...)` allow-entries for a pre-rewrite
+project shape that no longer exists — `internal/mining`,
+`internal/crypto`, `internal/monitoring`, `internal/database`,
+`cmd/improvements`, `cmd/demo`, `cmd/test-runner`, WSL paths
+(`/mnt/c/...`, `"C:\Program Files\Go"`), and phantom helper scripts
+(`./fix_imports.sh`, `./cleanup_tests.sh`, `dos2unix`) — plus
+broad `Bash(rm:*)`/`Bash(git push:*)` grants. Removing it cannot break
+the tool: Claude Code regenerates the file locally on first use.
+
+## Session 482
+
+**ROADMAP.md reconciliation against shipped code — four stale entries
+corrected.** The v3.1.0/v3.2.0 milestone lists still described the
+pre-integration state:
+
+- `engine → poolproto 統合` claimed `engine.Run` was still on
+  `stratum.NewDecoder` + raw TCP and that "SV1 transport 等が使えない" —
+  false since the `runSessionV1` dispatch shipped: V1 connections go
+  through `poolproto.DialURL` and the `poolproto.Session` interface
+  (`Jobs()`/`Submit()`). The remaining gap is narrower: the V2 loop is
+  still on the native decoder path, and `internal/poolproto/stratumv2`
+  (registered dialer) has no engine caller — the open decision is
+  "migrate the V2 loop onto poolproto" vs "drop the unused dialer".
+- `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` —
+  "informational" was inaccurate: neither tool runs in any CI workflow;
+  govulncheck exists only in the local `security`/`audit`/`setup`
+  Makefile targets and osv-scanner is absent from the repo entirely.
+- `internal/poolproto/ 抽象化レイヤ` — marked partially complete: only
+  the SV1 switch actually dispatches through the abstraction.
+- `Stratum V1 互換の追加` — marked connection-complete: the dialer,
+  handshake, extranonce/difficulty notifications, and submit path all
+  ship, but V1 jobs hash a zero MerkleRoot (coinbase is never
+  reconstructed — `stratumv1/parse.go`), so pools cannot accept the
+  shares; V1 remains a connectivity/diagnostic path, SV2 is required
+  for real revenue.
+
+## Session 395 — fuzz for the V1 notification parsers
+
+[FIXED — session 395] **V1 notification-parser fuzz** (`internal/poolproto/stratumv1/notify_fuzz_test.go`): `parseNotify`, `parseReconnect`, `parseSetExtranonce`, `parseShowMessage` — pool-controlled params decoders reachable on every read-loop tick. The dispatch-level fuzzer (#478) reaches them only after producing a well-formed method string; direct seeds drive the parsers past their length guards into per-field unmarshal and hex/dec paths. ~15M execs clean; `client.reconnect` verified to always yield a directive (its host/port remain advisory-only and are never dialed — documented anti-redirection design).
+
+[AUDITED — clean] `parseReconnect` Wait field is stored but unconsumed on master (no sleep path); `parseSubscribeResult` fuzz lives in open #478; `extranonce2_size` bounds are open in #428/#450. The dormant Noise handshake stub (x-only fallback completes without DH) is documented as unwired alpha in KNOWN_LIMITATIONS §2 — targeted for spec-compliant replacement in v3.1.0, deliberately not hardened in place.
+
 ## Session 332 — yaml.v3 maintained-continuation migration
 
 **gopkg.in/yaml.v3 archived [FETCHED + FIXED].** The gopkg.in yaml repo

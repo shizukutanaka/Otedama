@@ -208,18 +208,18 @@ func (hs *HandshakeState) deriveTransportKeys() {
 // hkdf2 returns two 32-byte outputs from HKDF using SHA-256.
 // Used for HKDF(ck, input) → (new_ck, output_key).
 func hkdf2(ck, input []byte) ([]byte, []byte) {
-	tempKey := hmacSHA256(ck, input)
-	out1 := hmacSHA256(tempKey, []byte{0x01})
-	out2 := hmacSHA256(tempKey, append(out1, 0x02))
+	tempKey := hmacSHA256Pooled(ck, input)
+	out1 := hmacSHA256Pooled(tempKey, []byte{0x01})
+	out2 := hmacSHA256Pooled(tempKey, append(out1, 0x02))
 	return out1, out2
 }
 
 // hkdf3 returns three 32-byte outputs (for split).
 func hkdf3(ck []byte) ([]byte, []byte, []byte) {
-	tempKey := hmacSHA256(ck, []byte{})
-	out1 := hmacSHA256(tempKey, []byte{0x01})
-	out2 := hmacSHA256(tempKey, append(out1, 0x02))
-	out3 := hmacSHA256(tempKey, append(out2, 0x03))
+	tempKey := hmacSHA256Pooled(ck, []byte{})
+	out1 := hmacSHA256Pooled(tempKey, []byte{0x01})
+	out2 := hmacSHA256Pooled(tempKey, append(out1, 0x02))
+	out3 := hmacSHA256Pooled(tempKey, append(out2, 0x03))
 	return out1, out2, out3
 }
 
