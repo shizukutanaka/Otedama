@@ -612,3 +612,16 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 592 update — observability-boundary + test-timing sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `log.Print*`/`fmt.Print*` bypassing the `internal/logger` abstraction inside library packages would write unfiltered output to stdout/stderr (breaks `--log-file` redirection, the structured-logger contract, and the non-TTY TUI flip). | ✅ Clean: zero `log.*` or `fmt.Print*` call sites in non-test code outside `cmd/otedama`, `internal/tui` (its own output layer), and `internal/logger` itself. All library reporting routes through the injected `log func(level, msg)` / `*slog.Logger` seam. |
+| S | `time.Sleep` in tests (76 sites) — the sleep-then-assert race class where the test's verdict depends on wall-clock scheduling. | ✅ Clean: every site is simulation pacing — letting a fake-pool session reach a state, keeping a connection alive through a window, or draining a goroutine before teardown. Verdicts are taken on channels/`select` timeouts or post-sleep reads of atomically-published state, not on the sleep itself. Consistent with the session-535 empirical verdict (`-count=3` + `-race`×2 green on all timing-sensitive packages). |
+
+All 24 packages build, vet, and test green.
