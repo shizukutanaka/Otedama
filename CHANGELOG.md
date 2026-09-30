@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 309 — server→client 入力面の監査判定を記録)
+
+**内容.** Stratum V1/V2 でサーバー→クライアント方向の入力面
+（reconnect/version_mask/未知フレーム/backoff/notify 各フィールド）を
+全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
+判定記録。closed #383 の未マージ変更を master へ再デリバー。
+
 ### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
 
 `mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
