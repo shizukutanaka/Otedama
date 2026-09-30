@@ -18,6 +18,16 @@ ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
 を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
 go.mod と完全整合を確認済み。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
