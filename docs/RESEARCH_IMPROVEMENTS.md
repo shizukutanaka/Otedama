@@ -940,6 +940,27 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 531 — per-package coverage measured
+
+`go test -cover ./...` under go1.27.1: **24 packages, all green;
+median ~97% statement coverage.** Distribution:
+
+- 100%: arbitration, clock, i18n, logger, metrics, poolproto, version
+- 97–99.7%: btccrypto, doctor, hal, httpserver, i18n/messages, miner,
+  poolproto/stratumv1, poolproto/stratumv2, provider, rates, stratum,
+  tui
+- 92–95%: config, daemon, engine, lightning
+- 88%: `cmd/otedama` — the only package below the 90% intent.
+
+The two <50% functions inside cmd/otedama are `main` (0% — untestable
+entrypoint by design) and `cmdRun` (36.4%). cmdRun's uncovered
+residue is the live-run tail — `engine.Run(...)` call site, the
+signal-NotifyContext wiring, HTTP server Start/Stop — i.e.
+integration-only territory already exercised by the session-527/528
+binary E2E smokes rather than unit tests. Recorded as a
+coverage-gap verdict, not a defect: unit coverage of the remaining
+paths would require a live pool or a scripted service manager.
+
 ## Session 534 — escape analysis: hot path clean
 
 `go build -gcflags='-m'` on `internal/miner`: every heap escape is on
