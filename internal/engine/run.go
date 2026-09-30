@@ -471,6 +471,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
+		connectedThisAttempt := false
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:         poolURL,
 			user:            user,
@@ -494,6 +495,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			activity:        r.activity,
 			onConnected: func() {
 				addrConnected = true
+				connectedThisAttempt = true
 				if r.opts.OnReady != nil {
 					r.opts.OnReady(true) // pool session established → ready
 				}
@@ -518,6 +520,15 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		if isFatal(sessionErr) {
 			return sessionErr
+		}
+
+		// A session that actually established resets the backoff: the delay
+		// exists to stop hammering a dead endpoint, not to defer reconnects
+		// after a healthy (possibly hours-long) session dropped. Done before
+		// the failover branches so both the immediate-retry continue and the
+		// log lines below see the post-reset value.
+		if connectedThisAttempt {
+			backoff = reconnectBackoffInitial
 		}
 
 		// Pool failover (fast): advance to the next pool in priority order
