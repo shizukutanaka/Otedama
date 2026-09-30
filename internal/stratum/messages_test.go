@@ -81,17 +81,17 @@ func TestDecodeSetupConnection_Truncated(t *testing.T) {
 
 func TestValidateSetupConnection(t *testing.T) {
 	good := SetupConnection{Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2}
-	if err := ValidateSetupConnection(good); err != nil {
+	if err := ValidateSetupConnection(&good); err != nil {
 		t.Errorf("valid SetupConnection rejected: %v", err)
 	}
 
 	badProto := SetupConnection{Protocol: Protocol(99), MinVersion: 2, MaxVersion: 2}
-	if err := ValidateSetupConnection(badProto); err == nil {
+	if err := ValidateSetupConnection(&badProto); err == nil {
 		t.Error("unknown protocol accepted")
 	}
 
 	badVersion := SetupConnection{Protocol: MiningProtocol, MinVersion: 3, MaxVersion: 2}
-	if err := ValidateSetupConnection(badVersion); err == nil {
+	if err := ValidateSetupConnection(&badVersion); err == nil {
 		t.Error("min > max version accepted")
 	}
 }
@@ -458,7 +458,8 @@ func TestWrapMessage_ChannelMsg(t *testing.T) {
 }
 
 func TestWrapMessage_NonChannelMsg(t *testing.T) {
-	payload, _ := (SetupConnection{Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2}).Encode()
+	m := SetupConnection{Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2}
+	payload, _ := m.Encode()
 	f, err := WrapMessage(MsgSetupConnection, false, payload)
 	if err != nil {
 		t.Fatalf("WrapMessage: %v", err)
