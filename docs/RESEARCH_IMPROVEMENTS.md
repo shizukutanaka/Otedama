@@ -2319,3 +2319,23 @@ LaunchAgent log path moved off world-readable `/tmp` to
 `~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
 `NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
 `binPath=` quoting.
+
+## Session 367 — SV2 message-decoder fuzz coverage
+
+**Coverage [FIXED — CLAUDE.md parity].** The SV2 frame fuzzers covered
+header + stream decode, but the six typed payload decoders
+(`DecodeNewMiningJob`, `DecodeSetNewPrevHash`, `DecodeSetTarget`,
+`DecodeSubmitSharesStandard`, `DecodeSubmitSharesSuccess`,
+`DecodeSubmitSharesError`) and the STR0_255/B0_255/U16/U32 wire
+primitives had none — all run on pool-controlled post-handshake bytes.
+`FuzzMessageDecoders` now drives every one of them with arbitrary
+payloads plus shape-targeted seeds (OPTION-present NewMiningJob,
+over-claimed STR0_255 length prefixes, 255-byte strings): 2.7M execs,
+no panic or hang. `TestMessageDecoderBounds` pins the short-payload
+contract as a plain unit test so the invariant holds even outside
+fuzzing.
+
+**Audit [AUDITED — clean].** The decoders were already bounds-safe —
+every field read is preceded by a `len < need` guard, every
+length-prefixed read goes through `io.ReadFull`, and the
+`byteSliceReader` cannot over-read. The fuzzer confirms empirically.
