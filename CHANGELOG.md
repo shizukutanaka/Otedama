@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。
 
+### 修正 (session 413)
+
+solo-operations.md の CODEOWNERS サンプルが非実在パス
+（`/internal/security/`・`/internal/auth/` — CLAUDE.md の作成禁止
+パス）を参照していた問題を実ファイルと同じ構成に訂正。
+`.github/dependabot.yml` の無効な `automerge` キー（Dependabot に
+存在しないオプション — 自動マージは発動していなかった）を除去し
+実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
+
 ### 修正 (session 415)
 
 **lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
