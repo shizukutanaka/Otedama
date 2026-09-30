@@ -227,6 +227,11 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Consulted on first run (new wallet creation) and by `otedama wallet verify`. |
 | `OTEDAMA_WALLET_NEW_PASSPHRASE` | — | New passphrase for `otedama wallet change-passphrase`. Environment variable only — never accepted as a flag, so it cannot leak through process lists. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
+| `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `arbitration_hysteresis_pct` (config only) | Fraction (0–1) yield advantage required to switch a device's workload. |
+| `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `curtail_below_btc_usd` (config only) | Pause all hashing when BTC/USD drops below this price (0 = disabled). |
+| `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `min_yield_sats_per_sec` (config only) | Per-device profitability floor (0 = disabled). |
+| `OTEDAMA_POWER_WATTS` | `power_watts` (config only) | Rig's total power draw; enables `otedama_power_watts`/cost metrics (0 = unset). |
+| `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `electricity_price_per_kwh` (config only) | USD per kWh; enables the `otedama_power_cost_usd_per_hour` gauge. |
 
 ---
 
