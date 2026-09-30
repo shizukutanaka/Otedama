@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 537 — stdlib modernization: sort → slices complete
+
+Audit found every non-test sort already on `slices`/`cmp`/`maps`
+(stdlib since Go 1.21) across metrics, rates, hal, btccrypto,
+arbitration, i18n, engine. The single holdout — `sort.Strings` in
+`internal/i18n/messages/messages_test.go` — is now `slices.Sort`,
+so the tree no longer imports `sort` or calls `reflect.DeepEqual`
+anywhere. `go test ./internal/i18n/...` green.

@@ -5,7 +5,7 @@ package messages
 
 import (
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"text/template"
@@ -29,7 +29,7 @@ func placeholders(msg string) []string {
 	for k := range set {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
