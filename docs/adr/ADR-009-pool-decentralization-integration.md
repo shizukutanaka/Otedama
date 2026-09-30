@@ -798,3 +798,29 @@ The combined cost (~1,940h over 24 months) significantly exceeds the available 1
 2. Update CHANGELOG.md with research-and-architecture entry.
 3. Land `internal/btcnode/` skeleton in the next minor as a no-op scaffold (low cost, signals direction).
 4. Begin Bitcoin Core RPC adapter as the first concrete deliverable.
+
+---
+
+## Session-600 ecosystem update (2026-09-30)
+
+**SRI v1.12.0 (2026-09-17)** — largest hardening release to date:
+`channels_sv2` received a correctness pass enforcing `min_ntime`/`nTime`
+bounds across all channel types, hardened share dedup and extranonce-
+prefix rotation, and fixed several consensus-invalid coinbase
+construction bugs. `codec_sv2`/`framing_sv2` were split into
+`MessageFrame`/`SerializedFrame`; `noise_sv2` dropped AES-256-GCM,
+leaving ChaCha20-Poly1305 the sole cipher. Otedama alignment: already
+ChaChaPoly-only (noise.go) and min_ntime semantics are correct
+(dialer.go future-job wait + `max(SetNewPrevHash.ntime, MinNtime)`);
+the share-side ntime enforcement is pool-side validation — clients
+only need ntime ≥ min_ntime, which emit() guarantees.
+
+**sv2-spec #203 (open)** — non-custodial payouts extension via JDP:
+push-based payout construction avoiding RTT latency, alternative to
+#195/#202. Directly relevant to the non-custodial wallet + JDP
+direction; watch for spec stabilization before ADR-009 phase 2.
+
+**sv2-apps #638 (open)** — JDC opt-in `accept_upstream_tip_work`: a
+JDC may mine the pool's template when its tip is ahead, bounded by a
+timeout (default-off). Addresses the honest-latency case for solo JDP
+stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
