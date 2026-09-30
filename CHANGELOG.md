@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 535 — flake sweep)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
+  `-race -count=2` on engine/stratum/poolproto, all green on
+  go1.27.1/arm64; no nondeterminism evidence anywhere in the suite.
+
 ### Documentation & audit (session 536 — extended vet)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: `nilness` zero findings tree-wide;
