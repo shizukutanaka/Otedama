@@ -21,6 +21,14 @@ AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安
 Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
 報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
 
+### Docs (session 329 — SRI 1.12.0 暗号整合確認)
+
+SRI 1.12.0 が noise_sv2 から AES-256-GCM を削除し
+ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
+当初から `Noise_NX_secp256k1_ChaChaPoly_SHA256` のみ実装のため
+整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
+（ライブラリ crate は stratum-mining/stratum に残留）。
+
 ### Docs (session 330 — エコシステム+日本語ソース走査判定)
 
 internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
