@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 588 — select-default spin + read bound audit
+
+- Every `select { ... default: }` is the bounded coalescing
+  idiom ("drain one stale entry, try once more" in `tui` and
+  `provider`) — a single non-blocking pass inside a message
+  handler, not a `for { select default }` re-poll that would
+  busy-spin.
+- `io.ReadAll` is `LimitReader`-capped (64 KiB in rates); every
+  `os.ReadFile` reads a local admin-controlled file (wallet.dat
+  — size bound at unmarshal per PR #445; TLS CA PEM; sysfs;
+  fingerprint) — no unbounded read of peer- or
+  network-controlled input.
