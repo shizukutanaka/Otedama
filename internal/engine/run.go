@@ -1013,18 +1013,30 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
-				opts.log("info", "engine: share accepted")
-				if opts.m != nil {
-					opts.m.sharesAccepted.Inc()
-				}
-				// Settle round-trip latency for every submitted share up
-				// to LastSequenceNumber, then drop those entries.
-				now := time.Now()
 				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
-				for seq, sent := range submitTimes {
-					if seq <= last {
-						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
-						delete(submitTimes, seq)
+				if last > seqNum {
+					// The pool acknowledged a share we never sent — a
+					// bogus or misrouted frame. Crediting it would inflate
+					// sharesAccepted and drain submitTimes for shares that
+					// were never acknowledged, skewing acceptance rate and
+					// latency the same way a forged reject skews them
+					// downward. Drop it like the SubmitSharesError check.
+					opts.log("debug", fmt.Sprintf(
+						"engine: share accept with future seq %d ignored (sent %d)",
+						last, seqNum))
+				} else {
+					opts.log("info", "engine: share accepted")
+					if opts.m != nil {
+						opts.m.sharesAccepted.Inc()
+					}
+					// Settle round-trip latency for every submitted share
+					// up to LastSequenceNumber, then drop those entries.
+					now := time.Now()
+					for seq, sent := range submitTimes {
+						if seq <= last {
+							latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
+							delete(submitTimes, seq)
+						}
 					}
 				}
 			}

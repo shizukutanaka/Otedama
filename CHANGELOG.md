@@ -14,6 +14,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
 
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
