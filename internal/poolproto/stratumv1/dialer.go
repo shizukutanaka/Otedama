@@ -15,6 +15,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -46,6 +47,11 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	}
 	return poolproto.ProtocolStratumV1
 }
+
+// handshakeTimeout bounds the whole Negotiate handshake (subscribe +
+// authorize + optional extranonce.subscribe). Declared as a var so tests
+// can shorten it.
+var handshakeTimeout = 30 * time.Second
 
 // Dial opens a TCP connection to the pool. The URL must be of the form
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
@@ -115,9 +121,15 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	sess := newSession(conn)
 	sess.start(ctx)
 
+	// Bound the whole handshake: the steady-state read deadline is 5 min
+	// per line, so a pool that trickles a line under that cadence but never
+	// answers subscribe/authorize would wedge the dial loop forever.
+	hctx, hcancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer hcancel()
+
 	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
 	id := sess.nextID.Add(1)
-	resp, err := sess.call(ctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
+	resp, err := sess.call(hctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)
@@ -141,7 +153,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		password = "x" // most pools accept "x" as the password
 	}
 	id = sess.nextID.Add(1)
-	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
+	resp, err = sess.call(hctx, id, "mining.authorize", []any{user, password})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: authorize: %w", err)
@@ -163,7 +175,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// session is in a valid state and the engine will detect stale connections
 	// through the normal Jobs-channel lifecycle.
 	id = sess.nextID.Add(1)
-	if _, eerr := sess.call(ctx, id, "extranonce.subscribe", []any{}); eerr != nil {
+	if _, eerr := sess.call(hctx, id, "extranonce.subscribe", []any{}); eerr != nil {
 		// Write failed (connection closed) or context expired: proceed without
 		// extranonce rotation — not a fatal condition.
 		_ = eerr
