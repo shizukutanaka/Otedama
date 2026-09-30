@@ -946,6 +946,33 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 356 — hal/sysfs and V1 dispatch verdicts
+
+**GPU sysfs enumeration [AUDITED — clean].** `internal/hal/gpu_linux.go`
+enumerates `/sys/class/drm` via `os.ReadDir` and reads sysfs attributes
+with `readSysFile` (unbounded `os.ReadFile`). Both inputs are
+kernel-generated; fabricating them needs root, which is already outside
+the threat model — a local-root attacker owns the box. No bound added.
+
+**V1 server→client dispatch [AUDITED — complete].** All six handled
+methods (`mining.notify`, `set_difficulty`, `set_extranonce`,
+`client.show_message`, `client.reconnect`/`mining.reconnect`) are
+parsed-or-dropped; unknown methods (`set_version_mask`, etc.) fall
+through harmlessly — ignoring version-rolling masks is correct for a
+CPU/GPU arbiter (no version-rolling hardware path exists). In-flight
+fixes for `set_extranonce` atomicity (PR #450) and `set_difficulty`
+validation (PR #456) are deliberately not re-delivered here.
+
+**Noise transport wiring [OBSERVED — intentionally dormant].**
+`internal/stratum`'s `NewHandshakeInitiator`/`NewEncryptedConn` are
+unwired from `poolproto` — V2 runs plaintext per KNOWN_LIMITATIONS §3,
+which documents the gap and the logged warning. Not dead code to
+delete; it is the staged substrate for a future encryption land.
+
+**Ecosystem [FETCHED — steady].** SRI v1.12.0 (Sep 17) and ESP-Miner
+v2.15.3 (Sep 20) remain latest; no new stratum-facing changes since
+session 346.
+
 ## Session 362 — btccrypto + dependency-posture verdicts
 
 **btccrypto [AUDITED — clean].** Bech32: BIP-173 length cap (90),
