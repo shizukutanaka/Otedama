@@ -17,6 +17,13 @@ dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監�
 記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
 文書化済み事項として再確認。
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### セキュリティ (session 407)
 
 VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
