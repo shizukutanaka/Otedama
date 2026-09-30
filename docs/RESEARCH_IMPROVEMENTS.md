@@ -981,6 +981,48 @@ so a future TUI/metrics reader doesn't add one silently.
 With this, every file under `internal/` and `cmd/` has been audited at
 least once across sessions 340–401.
 
+## Session 414 — competitive-analysis present-tense overclaims [FIXED]
+
+**Present-tense claims corrected to roadmap scope [FIXED].**
+`docs/competitive-analysis.md` described three features as shipped
+design: (1) "プール自動選択（Stratum V2対応プール優先）" — the actual
+default is a single constant `config.DefaultPoolURL`
+(stratum+v2 Slushpool), not pool-list auto-selection; (2) "ZKP認証により…
+数学的に証明" — ZKP auth does not exist (v4.0-scoped per CLAUDE.md; no ADR
+covers it); (3) "LDKバインディングを使い Lightning Wallet
+自動生成" — no LDK binding exists; the shipped wallet is BIP-39 local
+store (AES-256-GCM + scrypt). Each is now qualified as implemented vs
+proposed without rewriting the market analysis.
+
+**Audited clean:** CATEGORY_AUDIT.md is a historical record (all rows
+✅-resolved); ADR index status markers consistent with each ADR header
+(ADR-002 "partially superseded" annotation correct); DEPLOYMENT.md
+service-install flags (`--config`, `--data-dir`) and Docker/compose
+`--http-addr` usage all real; i18n claims ~10 languages — actual
+catalogue has ar/de/en/es/fi/fr/ja/ko/pt/ru/zh (claim accurate).
+
+## Session 437 — ADR-011 依存先の上流進展: btcec/v2 が ellswift を同梱 [RESEARCH]
+
+- **発見**: `github.com/btcsuite/btcd/btcec/v2@v2.5.0`（2026-05-15,
+  Go 1.25, ISC）が `ellswift` パッケージを上流マージ済み
+  （btcsuite/btcd commit d79d37d・BIP-324 公式テストベクタ付き）。
+  エクスポート API は SV2 Noise NX に必要な全面をカバー:
+  `EllswiftCreate`・`XSwiftEC`/`XElligatorSwift`/`XSwiftECInv`・
+  `EllswiftECDHXOnly`・`V2Ecdh`（`bip324_ellswift_xonly_ecdh`
+  タグ付きハッシュの x-only ECDH）。
+- **意味**: ADR-011 の前回 erratum が記録した「Go の監査済み
+  ellswift 実装が存在しない → 手移植必須（Option B と同等の DIY
+  リスク）」が解消。Option A は `btcec/v2` 単一依存で curve +
+  encoding + ECDH ヘルパまで完結する形に収束（btcec 自体が
+  decred/dcrd 系譜のため審査根拠は同一・推移的に dcrec/v4 に依存
+  するため追加面積も最小）。ADR-011 へ Erratum 2 を追記。
+- **残件（不変）**: SV2 spec の "2-level PKI server authentication"
+  のメッセージフロー実装 — ellswift は DH エンコードのみで、
+  レスポンダ固定鍵認証は別件（CODEOWNERS・Noise 領域）。
+- 併せて検証: closed PR #371 の responsivePool flag-race は master
+  に吸収済み（atomic gate + started chan）、prose-collision flake は
+  open #425 が担当済み — 再デリバリー不要。
+
 ## Session 463
 
 Audited the stale "Highest-leverage next actions" tail list against
