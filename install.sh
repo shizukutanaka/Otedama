@@ -11,7 +11,8 @@
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
 #   2. Downloads the matching Otedama binary from GitHub Releases.
-#   3. Verifies the SHA-256 checksum against the published checksums.txt.
+#   3. Verifies the SHA-256 checksum against the published checksums file
+#      (a release without one is refused unless --skip-verify is given).
 #   4. Optionally verifies the cosign signature of the checksums file.
 #   5. Installs the binary to $PREFIX/bin (default: /usr/local/bin, or
 #      $HOME/.local/bin if /usr/local is not writable).
@@ -113,33 +114,95 @@ mkdir -p "$INSTALL_BIN"
 
 # ---------- Download + verify ----------
 
-ARCHIVE="otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+# The repo has more than one release pipeline and they disagree on asset
+# naming: .goreleaser.yaml produces "otedama_<ver>_<os>_<arch>.tar.gz" where
+# <ver> is the tag minus its leading "v" (GoReleaser's .Version strips it),
+# release.yml produces "otedama-<os>-<arch>.tar.gz", and ci-cd.yml uploads
+# the bare binary "otedama-<os>-<arch>". Try each convention in turn so the
+# installer works regardless of which pipeline produced the release.
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+TAGVER="${VERSION#v}"
+CANDIDATES=(
+    "otedama_${TAGVER}_${OS}_${ARCH}.tar.gz"
+    "otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+    "otedama-${OS}-${ARCH}"
+    "otedama-${OS}-${ARCH}.tar.gz"
+)
 
 # Temporary workspace cleaned up on exit.
 TMPDIR=$(mktemp -d)
 trap "rm -rf '$TMPDIR'" EXIT
 
-log "downloading ${ARCHIVE}..."
-curl -sSfL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}" \
-    || die "download failed"
+# ---------- Checksums ----------
 
-log "downloading checksums..."
-curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
-    || die "checksums download failed"
+# ci-cd publishes "checksums.txt"; goreleaser publishes
+# "otedama_<ver>_checksums.txt". A 404 means that name simply wasn't
+# published — but any other fetch failure (timeout, 5xx) must not silently
+# downgrade to an unverified install, so it aborts unless --skip-verify.
+CHECKSUMS_FILE=""
+CHECKSUM_FETCH_ERROR=""
+for cs in "checksums.txt" "otedama_${TAGVER}_checksums.txt" "otedama_${VERSION}_checksums.txt"; do
+    code=$(curl -sL -o "${TMPDIR}/${cs}" -w '%{http_code}' "${BASE_URL}/${cs}" 2>/dev/null || echo "000")
+    if [[ "$code" == "200" ]]; then
+        CHECKSUMS_FILE="${TMPDIR}/${cs}"
+        break
+    elif [[ "$code" != "404" ]]; then
+        CHECKSUM_FETCH_ERROR="$cs (HTTP $code)"
+    fi
+done
+if [[ -z "$CHECKSUMS_FILE" && -n "$CHECKSUM_FETCH_ERROR" ]]; then
+    if [[ "$SKIP_VERIFY" == "1" ]]; then
+        log "checksums fetch failed ($CHECKSUM_FETCH_ERROR); --skip-verify given, continuing"
+    else
+        die "checksums download failed ($CHECKSUM_FETCH_ERROR) — refusing unverified install; retry or pass --skip-verify"
+    fi
+fi
+
+# ---------- Download ----------
+
+# When a checksums file exists, prefer the first candidate it actually
+# covers: a tag published by several pipelines can offer both a verified
+# asset and an unverified one — pick the verified one.
+ARCHIVE=""
+if [[ -n "$CHECKSUMS_FILE" ]]; then
+    for name in "${CANDIDATES[@]}"; do
+        grep -q " ${name}$" "$CHECKSUMS_FILE" || continue
+        log "trying ${name}..."
+        if curl -sSfL "${BASE_URL}/${name}" -o "${TMPDIR}/${name}"; then
+            ARCHIVE="$name"
+            break
+        fi
+    done
+fi
+if [[ -z "$ARCHIVE" ]]; then
+    for name in "${CANDIDATES[@]}"; do
+        log "trying ${name}..."
+        if curl -sSfL "${BASE_URL}/${name}" -o "${TMPDIR}/${name}"; then
+            ARCHIVE="$name"
+            break
+        fi
+    done
+fi
+[[ -n "$ARCHIVE" ]] || die "no release asset matched (tried: ${CANDIDATES[*]})"
+log "downloaded ${ARCHIVE}"
 
 # ---------- SHA-256 verification ----------
 
 if [[ "$SKIP_VERIFY" == "1" ]]; then
     log "SKIPPING checksum verification (--skip-verify)"
+elif [[ -z "$CHECKSUMS_FILE" ]]; then
+    die "no checksums file published for this release — refusing unverified install; pass --skip-verify to override"
+elif ! grep -q " ${ARCHIVE}$" "$CHECKSUMS_FILE"; then
+    die "${ARCHIVE} is not listed in $(basename "$CHECKSUMS_FILE") — refusing unverified install"
 else
     log "verifying SHA-256..."
     cd "$TMPDIR"
     if command -v sha256sum >/dev/null 2>&1; then
-        grep " ${ARCHIVE}$" checksums.txt | sha256sum -c - >/dev/null 2>&1 \
+        grep " ${ARCHIVE}$" "$(basename "$CHECKSUMS_FILE")" | sha256sum -c - >/dev/null 2>&1 \
             || die "SHA-256 verification FAILED. Download may be tampered."
     else
-        expected=$(grep " ${ARCHIVE}$" checksums.txt | awk '{print $1}')
+        CSNAME="$(basename "$CHECKSUMS_FILE")"
+        expected=$(grep " ${ARCHIVE}$" "$CSNAME" | awk '{print $1}')
         actual=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
         [[ "$expected" == "$actual" ]] \
             || die "SHA-256 mismatch: expected $expected, got $actual"
@@ -149,17 +212,18 @@ fi
 
 # ---------- Cosign verification (optional, skipped if cosign missing) ----------
 
-if command -v cosign >/dev/null 2>&1; then
+if command -v cosign >/dev/null 2>&1 && [[ -n "$CHECKSUMS_FILE" ]]; then
     log "verifying cosign signature..."
+    CSNAME="$(basename "$CHECKSUMS_FILE")"
     cd "$TMPDIR"
-    if curl -sSfL "${BASE_URL}/checksums.txt.sig" -o checksums.txt.sig 2>/dev/null \
-        && curl -sSfL "${BASE_URL}/checksums.txt.pem" -o checksums.txt.pem 2>/dev/null; then
+    if curl -sSfL "${BASE_URL}/${CSNAME}.sig" -o "${CSNAME}.sig" 2>/dev/null \
+        && curl -sSfL "${BASE_URL}/${CSNAME}.pem" -o "${CSNAME}.pem" 2>/dev/null; then
         if cosign verify-blob \
-            --certificate checksums.txt.pem \
-            --signature checksums.txt.sig \
+            --certificate "${CSNAME}.pem" \
+            --signature "${CSNAME}.sig" \
             --certificate-identity-regexp "https://github.com/${REPO}/.github/workflows/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            checksums.txt >/dev/null 2>&1; then
+            "$CSNAME" >/dev/null 2>&1; then
             log "cosign verification OK"
         else
             die "cosign verification FAILED"
@@ -172,8 +236,28 @@ fi
 
 # ---------- Install ----------
 
-log "extracting..."
-tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
+# ci-cd releases ship the bare binary (no tarball); goreleaser ships the
+# binary as "otedama" inside the tarball; release.yml tarballs keep the
+# platform-named binary (otedama-<os>-<arch>) — normalise it to "otedama".
+if [[ "$ARCHIVE" == *.tar.gz ]]; then
+    log "extracting..."
+    tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
+    if [[ ! -f "${TMPDIR}/otedama" ]]; then
+        for f in "${TMPDIR}"/otedama-*; do
+            case "$f" in
+                *.tar.gz|*.txt|*.sig|*.pem) continue ;;
+            esac
+            if [[ -f "$f" ]]; then
+                mv "$f" "${TMPDIR}/otedama"
+                break
+            fi
+        done
+    fi
+else
+    log "release asset is a bare binary; no extraction needed"
+    mv "${TMPDIR}/${ARCHIVE}" "${TMPDIR}/otedama"
+    chmod +x "${TMPDIR}/otedama"
+fi
 
 [[ -f "${TMPDIR}/otedama" ]] || die "otedama binary not found in archive"
 
