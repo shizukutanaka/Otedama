@@ -19,6 +19,15 @@ Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
 config 数値パース（warn+skip）、provider quote チャネル（bounded）
 ——全て master 上で健全と確認し記録。
 
+### Docs (session 330 — エコシステム+日本語ソース走査判定)
+
+internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
+SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
+知見なし、`0xf0xx0/stratumv2`（Go SV2 codec）は先行実装として
+記録（Otedama internal/stratum が scope を包含するため依存追加
+根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
+当方クライアント側バウンドで既にミラー済み。
+
 ### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
 
 `internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
