@@ -16,6 +16,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   clean on the raw-byte packages; `go version -m` confirms the
   release path pins CGO_ENABLED=0 (fully static) per ADR-003.
 
+### Documentation & audit (session 545 — pprof)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: hot loop confirmed 0-alloc via
+  benchmem+pprof, 98.5% CPU inside FIPS SHA-256; midstate reuse
+  (~30% headroom) analyzed and rejected — stdlib has no midstate
+  API and custom compression violates the no-custom-crypto rule.
+
+### Documentation & audit (session 565 — atomic API)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all `sync/atomic` uses are the
+  typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
+  386-misalignment panic class is absent.
+
+### Documentation & audit (session 566 — JSON/YAML decode)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
+  pointer and checks its error; yaml config decode uses
+  `KnownFields(true)`; the only ignored results are documented
+  best-effort tolerations.
+
+### Documentation & audit (session 567 — init surface)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
+  canonical — BIP-39 wordlist integrity panic + plugin-registry
+  registration; no I/O or goroutines at init time.
+
 ### Documentation & audit (session 568 — recover/spawn)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
