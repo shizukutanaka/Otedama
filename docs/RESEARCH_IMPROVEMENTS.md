@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 586 — infinite-loop exit-path audit
+
+- All 16 `for {}` sites across 10 files have a termination
+  path: `select` on `<-ctx.Done()` (rate/health loops, V1/V2
+  read loops, arbitration, fan-in, polling) or channel close
+  + `wg.Wait()`→`close` (`miner` grind threads exit on the
+  inner ctx; `worker.Stop` cancels it).
+- No unbounded `for {}` that ignores cancellation; the
+  grind loop also exits on nonce-wrap + share-found.
