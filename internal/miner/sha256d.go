@@ -56,7 +56,7 @@ type Header struct {
 }
 
 // Bytes serialises the header to its canonical 80-byte wire representation.
-func (h Header) Bytes() [HeaderSize]byte {
+func (h *Header) Bytes() [HeaderSize]byte {
 	var b [HeaderSize]byte
 	binary.LittleEndian.PutUint32(b[0:4], h.Version)
 	copy(b[4:36], h.PrevHash[:])
@@ -68,7 +68,7 @@ func (h Header) Bytes() [HeaderSize]byte {
 }
 
 // ParseHeader decodes an 80-byte wire-format block header.
-func ParseHeader(b [HeaderSize]byte) Header {
+func ParseHeader(b *[HeaderSize]byte) Header {
 	var h Header
 	h.Version = binary.LittleEndian.Uint32(b[0:4])
 	copy(h.PrevHash[:], b[4:36])
@@ -111,7 +111,7 @@ func SHA256d(data []byte) Hash {
 
 // HashHeader computes SHA256d of the 80-byte serialised header.
 // This is the core inner loop of Bitcoin mining.
-func HashHeader(h Header) Hash {
+func HashHeader(h *Header) Hash {
 	b := h.Bytes()
 	return SHA256d(b[:])
 }

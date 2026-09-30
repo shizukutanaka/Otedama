@@ -331,14 +331,14 @@ func TestDefaultPoolURL_UsesConfiguredPool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://custom.pool:3336"}},
 	}
-	got := defaultPoolURL(cfg)
+	got := defaultPoolURL(&cfg)
 	if got != "stratum+v2://custom.pool:3336" {
 		t.Errorf("got %q, want custom pool", got)
 	}
 }
 
 func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
-	got := defaultPoolURL(config.Config{})
+	got := defaultPoolURL(&config.Config{})
 	if got == "" {
 		t.Error("default pool URL is empty")
 	}
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, nil, job, 1, 0); err != nil {
+	if err := applyJob(workers, nil, &job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,7 +457,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, nil, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }
@@ -602,7 +602,7 @@ func TestTransitionReject(t *testing.T) {
 }
 
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
-	urls := poolURLs(config.Config{})
+	urls := poolURLs(&config.Config{})
 	if len(urls) != 1 {
 		t.Fatalf("empty config: got %d URLs, want 1 default", len(urls))
 	}
@@ -619,7 +619,7 @@ func TestPoolURLs_PreservesOrder(t *testing.T) {
 			{URL: "stratum+tcp://backup2.example.com:3333"},
 		},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 3 {
 		t.Fatalf("got %d URLs, want 3", len(urls))
 	}
@@ -640,7 +640,7 @@ func TestPoolURLs_SinglePool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://only.example.com:3336"}},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 1 || urls[0] != "stratum+v2://only.example.com:3336" {
 		t.Errorf("single pool: got %v", urls)
 	}
@@ -952,7 +952,7 @@ func TestPayoutAddresses_PrimaryFirstThenList(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"bc1qbackup100000000000000000000000000000", "bc1qbackup200000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	want := []string{
 		"bc1qprimary00000000000000000000000000000",
 		"bc1qbackup100000000000000000000000000000",
@@ -973,7 +973,7 @@ func TestPayoutAddresses_DedupAndSkipEmpty(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"", "bc1qprimary00000000000000000000000000000", "bc1qbackup100000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	// primary + one unique backup; empty and duplicate-of-primary dropped.
 	if len(got) != 2 {
 		t.Fatalf("got %d addresses, want 2 (dedup + skip empty): %v", len(got), got)
@@ -987,7 +987,7 @@ func TestPayoutAddresses_ListOnlyNoPrimary(t *testing.T) {
 	cfg := config.Config{
 		BitcoinAddresses: []string{"bc1qonly000000000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	if len(got) != 1 || got[0] != "bc1qonly000000000000000000000000000000000" {
 		t.Fatalf("list-only config: got %v, want single backup as the active address", got)
 	}
@@ -1440,7 +1440,7 @@ func TestSetupWallet_EmptyPassphraseReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "", Config: config.Config{DataDir: "/tmp"}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty passphrase = %q, want empty", fp)
 	}
@@ -1454,7 +1454,7 @@ func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "correct-horse-battery-staple", Config: config.Config{DataDir: ""}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty DataDir = %q, want empty", fp)
 	}
@@ -1472,7 +1472,7 @@ func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple",
 		Config:           config.Config{DataDir: "/dev/null/impossible"},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with unwritable DataDir = %q, want empty", fp)
 	}
@@ -1496,7 +1496,7 @@ func TestSetupWallet_NewWalletReturnsFingerprint(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: dir},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp == "" {
 		t.Error("setupWallet should return a non-empty fingerprint for a new wallet")
 	}
@@ -1533,7 +1533,7 @@ func TestSetupWallet_NewWalletPrintsRecoveryPhrase(t *testing.T) {
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
 	}
-	fp := setupWallet(opts, func(_, _ string) {})
+	fp := setupWallet(&opts, func(_, _ string) {})
 	if fp == "" {
 		t.Fatal("setupWallet returned an empty fingerprint for a new wallet")
 	}
@@ -1577,7 +1577,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	nop := func(_, _ string) {}
 
 	var first bytes.Buffer
-	fp1 := setupWallet(Options{
+	fp1 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &first,
@@ -1587,7 +1587,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	}
 
 	var second bytes.Buffer
-	fp2 := setupWallet(Options{
+	fp2 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &second,
@@ -1608,7 +1608,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 	var out bytes.Buffer
 	var logs []string
-	setupWallet(Options{
+	setupWallet(&Options{
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
