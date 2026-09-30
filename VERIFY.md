@@ -3,10 +3,13 @@
 > **Status: the signed-release pipeline described below is not yet live.**
 > The current `release.yml` workflow builds plain tarballs — it does not
 > produce `checksums.txt`, cosign signatures, or SBOMs. The `.goreleaser.yaml`
-> config that would generate them exists but is not wired into CI. Until a
-> release actually ships those assets, the only available verification is
-> rebuilding from source (see "Verifying the source matches the release").
-> Do not trust a downloaded artifact you cannot verify.
+> config that would generate them exists but is not wired into CI. The
+> separate `ci-cd.yml` tag job may attach an **unsigned** plain
+> `checksums.txt` (what `install.sh` checks) — that only detects transit
+> corruption, not tampering at the source. Until a release actually ships
+> signed assets, the only provenance check is rebuilding from source (see
+> "Verifying the source matches the release"). Do not trust a downloaded
+> artifact you cannot verify.
 
 This document describes the **intended** verification flow once the
 goreleaser pipeline is live, plus the source-rebuild check that works
@@ -84,9 +87,9 @@ embedded signed timestamp, without contacting any external service.
 
 Each release ships two SBOMs:
 
-- `sbom.cyclonedx.json` (CycloneDX 1.6) — preferred for security
+- `otedama_<ver>_<os>_<arch>.sbom.cyclonedx.json` (CycloneDX 1.6) — preferred for security
   scanners (`grype`, `osv-scanner`).
-- `sbom.spdx.json` (SPDX 3.0.1) — preferred for license-compliance
+- `otedama_<ver>_<os>_<arch>.sbom.spdx.json` (SPDX 3.0.1) — preferred for license-compliance
   workflows.
 
 Both are signed alongside `checksums.txt` and can be verified with the
