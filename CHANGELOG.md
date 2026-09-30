@@ -19,6 +19,13 @@ SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
 根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
 当方クライアント側バウンドで既にミラー済み。
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### セキュリティ (session 407)
 
 VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
