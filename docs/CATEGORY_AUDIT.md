@@ -627,3 +627,42 @@ counts):
 | S | `filepath`/`os` path handling — `os.Stat`/`os.Lstat`/`os.Open`/`os.ReadFile`/`os.WriteFile`/`filepath.Join` on derived paths (wallet dir, config, log file, unit files, sysfs). | ✅ Clean: every joined path is rooted at an operator-owned directory (dataDir from the 4-layer config, `$HOME` service dirs, sysfs `drmBasePath`); the only operator-supplied single paths are `--config`, `--log-file`, and `tls_ca_file`, which the operator legitimately controls. `filepath.Glob` wallet-tmp sweep is pattern-bounded to the same dir. No traversal or symlink-follow surface reachable from untrusted input. |
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 592 update — observability-boundary + test-timing sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `log.Print*`/`fmt.Print*` bypassing the `internal/logger` abstraction inside library packages would write unfiltered output to stdout/stderr (breaks `--log-file` redirection, the structured-logger contract, and the non-TTY TUI flip). | ✅ Clean: zero `log.*` or `fmt.Print*` call sites in non-test code outside `cmd/otedama`, `internal/tui` (its own output layer), and `internal/logger` itself. All library reporting routes through the injected `log func(level, msg)` / `*slog.Logger` seam. |
+| S | `time.Sleep` in tests (76 sites) — the sleep-then-assert race class where the test's verdict depends on wall-clock scheduling. | ✅ Clean: every site is simulation pacing — letting a fake-pool session reach a state, keeping a connection alive through a window, or draining a goroutine before teardown. Verdicts are taken on channels/`select` timeouts or post-sleep reads of atomically-published state, not on the sleep itself. Consistent with the session-535 empirical verdict (`-count=3` + `-race`×2 green on all timing-sensitive packages). |
+
+All 24 packages build, vet, and test green.
+
+---
+
+## Session 593 update — signed-arithmetic + TLS-configuration sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Signed `%` on a possibly-negative dividend yields a negative remainder (index/stride wrap bugs); integer division in yield/price math truncates silently. | ✅ Clean: every `%` site operates on provably non-negative operands — `int(d.Minutes())%60`/`Seconds` on uptime durations, `(idx+1) % len(...)` ring indices. Every division in the yield/rate paths is `float64` (medians, rates, J/TH, latency ms); no integer truncation sits on a monetary or difficulty quantity. |
+| S | TLS configuration — `InsecureSkipVerify`, weak `MinVersion`, SNI not derived from the dial address — on the `stratum+tls://` and `stratum+v2tls://` paths. | ✅ Clean: `InsecureSkipVerify` appears nowhere; both dialers pin `MinVersion: TLS1.2`, leave `ServerName` empty so crypto/tls fills it from the actual dial address, use `tls.Dialer` so the handshake completes (and verification failures surface) before first write with no plaintext fallback. `TLSConfigWithExtraCAs`/`tlsConfigWithExtraCAs` add a private-CA bundle *on top of* system roots — verification stays enabled; a nil/empty bundle yields the secure default. `doctor` pre-validates the PEM with the same `AppendCertsFromPEM` path. |
+
+All 24 packages build, vet, and test green.
+
+---
+
+## Session 594 update — stdlib-modernization leftovers + error-sentinel sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| L | Modernization leftovers after the session-537 `slices` pass: manual map-clear loops (`for k := range m { delete(m,k) }` → `clear`), `HasPrefix`+slice pairs (→ `strings.Cut*`), hand-rolled min/max (→ builtins). | ✅ Clean: no whole-map clear loop exists (all `delete` sites are selective single-key expiry — `pending`, `submitTimes`, stale stream entries); every `HasPrefix`/`HasSuffix` call is a pure check with no following slice-off; no hand-rolled min/max remains. The tree is fully on current stdlib idiom. |
+| M,S | `err == sentinel` direct equality on the check side misses wrapped errors (a `fmt.Errorf("…: %w", sentinel)` passes by the guard) — the wrap-penetration bug class. | ✅ Clean: the only `==` sentinel comparison in the tree is `err == flag.ErrHelp`, which is the flag package's own documented idiom (flag.Parse returns it unwrapped). All other error checks are `err != nil` or `errors.Is`/`errors.As` (post-#526). |
+
+All 24 packages build, vet, and test green.
