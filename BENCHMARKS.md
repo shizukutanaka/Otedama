@@ -10,12 +10,6 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` runs in CI on every
-   push and PR, with results uploaded as a workflow artifact.
-   **Correction (session 484):** this item previously claimed a PR
-   regressing >5% fails automatically — no automated regression
-   gate exists; the CI job only runs the benchmarks and uploads
-   `benchmark-results.txt`.
 2. **Regression-visible.** `go test -bench` runs in CI and results are
    uploaded as a workflow artifact (`benchmark-results`) on every run —
    compare against the baseline artifact before merging a perf-sensitive
@@ -77,15 +71,6 @@ deliver them. A slow decoder becomes a DoS vector.
 | Header decode          | ~50 M frames/s | ~20 ns     |
 | Full frame (1KB payload)| ~5 M frames/s | ~200 ns    |
 
-**Correction (session 484):** this section previously gave
-`go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/` as
-the reproduce command — no `BenchmarkDecoder_ReadFrame` function
-exists, so the throughput figures above are unverified estimates,
-not measurements (they violate this document's own reproducibility
-rule and should be replaced once a decoder benchmark lands). The
-statement that the decoder "is fuzzed continuously in CI" was also
-incorrect — CI has no fuzz job (`make fuzz` is a local target);
-`FuzzDecoder_ReadFrame` exists but runs only on local invocations.
 *(Unverified estimates — no decode benchmark exists in the tree yet;
 the figures above are targets, not measurements. `FuzzDecoder_ReadFrame`
 exists and passes under `go test -fuzz`, but no CI job runs it — see
@@ -175,7 +160,7 @@ A PR that regresses any benchmark by >5% must include one of:
    noise (run the benchmark 20 times on a dedicated machine).
 
 CI runs benchmarks on every push to main and on every PR, uploading
-`benchmark-results.txt` as a workflow artifact. **Correction
+`benchmark.txt` as the `benchmark-results` workflow artifact. **Correction
 (session 484):** this item previously claimed CI posts a comparison
 to PRs — no comparison job or PR comment exists today.
 

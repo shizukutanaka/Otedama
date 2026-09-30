@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * 「デコーダーは CI で継続的にファズされる」→ CI にファズジョブなし（`make fuzz` ローカルのみ — session 483 の skills/ 訂正と同クラス）。
 * `BenchmarkDecoder_ReadFrame` の再現コマンド → 関数非実在のため、その throughput 表は未検証の推定値と明示。
 * 「Go 1.22 で計測」の表記に、現 master は Go ≥1.24 必須（`godebug tlsmlkem`）の注意書きを追加。
+* （マージ時注記）回帰ゲート・デコーダー推定値/ファズの訂正は master 側で先行済みのため BENCHMARKS.md への重複追記は行わず、本 PR は PR 比較投稿の訂正と Go ≥1.24 注記のみを反映。
 
 ### Fixed (session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正)
 

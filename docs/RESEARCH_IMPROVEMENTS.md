@@ -947,7 +947,7 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 **Sweep.** `BENCHMARKS.md` の全クレームを `.github/workflows/test.yml` と実在の `func Benchmark` 一覧と照合し、4件の虚偽/phantom 記述を発見・訂正。
 
 **発見（全件訂正、検証済み）。**
-- 「`go test -bench` is checked into CI. A PR that regresses performance by >5% fails automatically.」→ test.yml の `benchmark` ジョブは `go test -bench` を実行し `benchmark-results.txt` を artifact としてアップロードするのみ。回帰検出・閾値・失敗ロジックは非実在。
+- 「`go test -bench` is checked into CI. A PR that regresses performance by >5% fails automatically.」→ ci.yml の `benchmark` ジョブは `go test -bench` を実行し `benchmark.txt` を artifact `benchmark-results` としてアップロードするのみ。回帰検出・閾値・失敗ロジックは非実在。
 - 「CI runs benchmarks on every push to main and posts a comparison to PRs.」→ push + PR で実行される点は正しいが、「posts a comparison」は非実在（比較ステップなし・PR コメントなし）。
 - 「The decoder is fuzzed continuously in CI.」→ `.github/workflows/` に `fuzz` 参照ゼロ — session 483 の skills/ 訂正と同一の虚偽クラス（4箇所目の発生）。
 - 「`go test -bench=BenchmarkDecoder_ReadFrame`」→ その関数は非実在（phantom 再現コマンド）。フレームデコード throughput 表（~50M frames/s 等）は本書独自の「再現可能であること」ルールを満たせない未検証推定値と明示。
