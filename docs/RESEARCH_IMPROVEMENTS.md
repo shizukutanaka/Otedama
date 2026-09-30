@@ -942,6 +942,21 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正
+
+**Sweep.** `BENCHMARKS.md` の全クレームを `.github/workflows/test.yml` と実在の `func Benchmark` 一覧と照合し、4件の虚偽/phantom 記述を発見・訂正。
+
+**発見（全件訂正、検証済み）。**
+- 「`go test -bench` is checked into CI. A PR that regresses performance by >5% fails automatically.」→ ci.yml の `benchmark` ジョブは `go test -bench` を実行し `benchmark.txt` を artifact `benchmark-results` としてアップロードするのみ。回帰検出・閾値・失敗ロジックは非実在。
+- 「CI runs benchmarks on every push to main and posts a comparison to PRs.」→ push + PR で実行される点は正しいが、「posts a comparison」は非実在（比較ステップなし・PR コメントなし）。
+- 「The decoder is fuzzed continuously in CI.」→ `.github/workflows/` に `fuzz` 参照ゼロ — session 483 の skills/ 訂正と同一の虚偽クラス（4箇所目の発生）。
+- 「`go test -bench=BenchmarkDecoder_ReadFrame`」→ その関数は非実在（phantom 再現コマンド）。フレームデコード throughput 表（~50M frames/s 等）は本書独自の「再現可能であること」ルールを満たせない未検証推定値と明示。
+- 補足: 公表数値の計測環境（Go 1.22）は現 master の最低要件（Go ≥1.24、`godebug tlsmlkem`）を満たさないため注意書きを追加。
+
+**正しいと検証済みの記述（変更なし）。** `BenchmarkHashHeader`・`BenchmarkWorkerGrind_SingleThread`・`BenchmarkWriteText` 等の実在・reproduce コマンドの形式妥当性、benchmark ジョブが push+PR で起動すること、SHA-NI/ARM SHA ext が stdlib crypto/sha256 で自動使用されること。
+
+**帰納。** 「CIで実行される」系の虚偽記述は本ラウンドで ROADMAP（#564）→ skills（#565）→ BENCHMARKS と4ドキュメント目 — CI ワークフローの記述照合は引き続き監査対象。
+
 ## Session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正
 
 **Sweep.** `docs/DEPLOYMENT.md`（416行、初監査）の全コマンド・パス・サービス属性を `internal/daemon/service.go`・`Dockerfile`・`internal/metrics`・`.github/` と照合。
