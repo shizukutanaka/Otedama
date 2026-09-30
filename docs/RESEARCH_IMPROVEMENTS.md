@@ -952,6 +952,26 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 379 — reconnect-loop + docs/config-surface audit
+
+[FIXED] `runReconnectLoop` never reset its exponential backoff after a
+successful session: `backoff` doubled on every failure and was capped at
+64s, but a session that connected, mined for hours, then dropped still
+waited out whatever the backoff had grown to from earlier failed hops.
+`connectedThisAttempt` (set from `onConnected`) now resets it to
+`reconnectBackoffInitial`, placed before the failover branches and log
+lines so both the immediate-retry path and the "reconnecting in %v"
+message report the post-reset delay. New `dropAfterHandshakePool` fake +
+`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` verify the
+delay stays at 1s across repeated established-then-dropped sessions.
+
+[AUDITED — clean] `config.yaml.example` documents every Config field
+(all 17 yaml keys incl. pool sub-fields `tls_ca_file`, `payout_scheme`);
+Dockerfile is minimal (distroless nonroot, CGO_ENABLED=0, -trimpath,
+ldflags version injection, /LICENSE + /NOTICE copied, VOLUME /var/lib/
+otedama matching docs/DEPLOYMENT.md, EXPOSE 0); cmd wrappers
+(version/completion/doctor/main/service) are thin and correct.
+
 ## Session 399 — cross-worker nonce-space partition
 
 **Duplicate grinding across devices [FIXED].** Every `miner.Worker`
