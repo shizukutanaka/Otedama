@@ -388,6 +388,9 @@ Minimal alert set:
 4. Use the same wallet passphrase; seeds are forward-compatible
    across minor versions.
 
+`wallet.fingerprint` needs no backup — the daemon recreates it the
+first time it opens a wallet.dat that lacks one.
+
 ---
 
 ## Backup and recovery
@@ -407,6 +410,15 @@ cp ~/.local/share/otedama/wallet.dat /path/to/offsite/backup/
 **The mnemonic printed on first run is the canonical backup.** Write
 it on paper, store it in a fireproof location. A lost wallet.dat
 recoverable from mnemonic. A lost mnemonic AND wallet.dat is not.
+
+Verify the written phrase actually derives to the stored wallet before
+relying on it — `otedama wallet verify` reads the phrase from stdin and
+compares public fingerprints without decrypting `wallet.dat`:
+
+```bash
+otedama wallet verify
+# paste the 24-word phrase at the prompt — exit 0 on match
+```
 
 ---
 
