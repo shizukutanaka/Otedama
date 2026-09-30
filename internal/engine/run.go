@@ -232,6 +232,11 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+
+	// Nominal hashrate for the SV2 OpenMiningChannel handshake: live worker
+	// stats are ~0 at handshake time because no job has been hashed yet, so
+	// the declared value comes from device capability families instead.
+	nominalHR := nominalMiningHashrate(devices, workers)
 	defer func() {
 		for _, w := range workers {
 			w.Stop()
@@ -368,20 +373,21 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	return runReconnectLoop(ctx, reconnectOpts{
-		opts:        opts,
-		workers:     workers,
-		merged:      merged,
-		dashboard:   dashboard,
-		startTime:   startTime,
-		wallet:      walletFingerprint,
-		deviceN:     len(devices),
-		providers:   []provider.Provider{miningProvider, akashProvider},
-		metrics:     m,
-		log:         log,
-		curtailGate: curtailGate,
-		arbPaused:   arbPaused,
-		activityMu:  &activityMu,
-		activity:    activity,
+		opts:            opts,
+		workers:         workers,
+		merged:          merged,
+		dashboard:       dashboard,
+		startTime:       startTime,
+		wallet:          walletFingerprint,
+		deviceN:         len(devices),
+		providers:       []provider.Provider{miningProvider, akashProvider},
+		metrics:         m,
+		log:             log,
+		curtailGate:     curtailGate,
+		arbPaused:       arbPaused,
+		nominalHashrate: nominalHR,
+		activityMu:      &activityMu,
+		activity:        activity,
 	})
 }
 
@@ -402,6 +408,9 @@ type reconnectOpts struct {
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
 	curtailGate *atomic.Bool
+	// nominalHashrate is the capability-derived hashrate estimate declared
+	// in OpenMiningChannel when live worker stats are still zero.
+	nominalHashrate float64
 	// arbPaused, when non-nil, is the per-device pause set written by the
 	// arbitration loop; job dispatch must not arm a paused worker.
 	arbPaused *pauseSet
@@ -463,25 +472,26 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:      poolURL,
-			user:         user,
-			workers:      r.workers,
-			merged:       r.merged,
-			interval:     statsInterval,
-			dashboard:    r.dashboard,
-			startTime:    r.startTime,
-			wallet:       r.wallet,
-			devices:      r.deviceN,
-			log:          r.log,
-			providers:    r.providers,
-			m:            r.metrics,
-			powerWatts:   r.opts.Config.PowerWatts,
-			curtailGate:  r.curtailGate,
-			arbPaused:    r.arbPaused,
-			tlsCAFile:    poolTLSCAFile,
-			poolPassword: poolPassword,
-			activityMu:   r.activityMu,
-			activity:     r.activity,
+			poolURL:         poolURL,
+			user:            user,
+			workers:         r.workers,
+			merged:          r.merged,
+			interval:        statsInterval,
+			dashboard:       r.dashboard,
+			startTime:       r.startTime,
+			wallet:          r.wallet,
+			devices:         r.deviceN,
+			log:             r.log,
+			providers:       r.providers,
+			m:               r.metrics,
+			powerWatts:      r.opts.Config.PowerWatts,
+			curtailGate:     r.curtailGate,
+			arbPaused:       r.arbPaused,
+			nominalHashrate: r.nominalHashrate,
+			tlsCAFile:       poolTLSCAFile,
+			poolPassword:    poolPassword,
+			activityMu:      r.activityMu,
+			activity:        r.activity,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -613,6 +623,9 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// nominalHashrate is the capability-derived hashrate estimate used in
+	// OpenMiningChannel when live worker stats are still zero.
+	nominalHashrate float64
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -749,7 +762,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
+	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers, opts.nominalHashrate)
 	if err != nil {
 		return err
 	}
@@ -813,6 +826,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// cannot grow the map without bound over a long session.
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
+	// submitTargets maps a submitted share's SequenceNumber to the share
+	// target it was produced under (miner.Share.Target). Read on
+	// SubmitSharesError to detect retarget rejects (transitionReject),
+	// and reaped alongside submitTimes so the map stays bounded.
+	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
@@ -1024,6 +1042,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 							latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
 							delete(submitTimes, seq)
 							settled++
+							delete(submitTargets, seq)
 						}
 					}
 					n := uint64(pm.msg.SubmitSharesSuccess.NewSubmitsAccepted)
@@ -1061,13 +1080,28 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					delete(submitTimes, e.SequenceNumber)
 				}
 				reason := poolproto.SanitizePoolText(e.Error)
+				issued, tracked := submitTargets[e.SequenceNumber]
+				delete(submitTargets, e.SequenceNumber)
 				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				if tracked && transitionReject(category, issued, shareTarget) {
+					// ESP-Miner #212: the share was ground under a target the
+					// pool has since replaced via SetTarget — a retarget
+					// artifact, not a real reject. Counted in the per-reason
+					// breakdown only, never in the reject-rate counters.
+					opts.log("info", fmt.Sprintf(
+						"engine: share rejected under superseded share target: %s (excluded from reject rate)",
+						reason))
+					if opts.m != nil {
+						opts.m.rejectReason("difficulty-transition").Inc()
+					}
+				} else {
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
@@ -1105,6 +1139,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesSubmitted.Inc()
 			}
 			submitTimes[seqNum] = time.Now()
+			submitTargets[seqNum] = share.Target
 			if len(submitTimes) > submitTimesCap {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
@@ -1113,6 +1148,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				for seq := range submitTimes {
 					if seq < cutoff {
 						delete(submitTimes, seq)
+						delete(submitTargets, seq)
 					}
 				}
 			}
@@ -1322,6 +1358,22 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				} else {
 					reason := poolproto.SanitizePoolText(result.Reason)
 					category, diagnosis := rejectClass(reason)
+					// ESP-Miner #212: a share rejected as above-target may
+					// have been ground under a difficulty the pool has
+					// since replaced via set_difficulty — a retarget
+					// artifact, not a real reject. Compare the share's
+					// issue-time target against the current share target;
+					// counted in the per-reason breakdown only.
+					if current, ok := v1ShareTarget(capturedSess.SuggestedDifficulty()); ok &&
+						transitionReject(category, capturedShare.Target, current) {
+						opts.log("info", fmt.Sprintf(
+							"engine: V1 share rejected under superseded difficulty epoch: %s (excluded from reject rate)",
+							reason))
+						if opts.m != nil {
+							opts.m.rejectReason("difficulty-transition").Inc()
+						}
+						return
+					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						reason, diagnosis))
 					if opts.m != nil {
@@ -1347,7 +1399,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // exchange. Var so tests can shrink it.
 var handshakeTimeout = 15 * time.Second
 
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
+func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
 	// Bound the entire handshake: a peer that accepts the connection but
 	// never answers SetupConnection would otherwise hold the failover
@@ -1386,6 +1438,14 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	var hashRate float32
 	for _, w := range workers {
 		hashRate += float32(w.Stats().HashRate)
+	}
+	// Workers have not hashed anything on a fresh session, so their live
+	// rate is ~0; declaring 0 would tell the pool to seed vardiff for a
+	// zero-rate miner. Fall back to the capability-derived nominal estimate
+	// (on reconnect the live rate is non-zero and wins, reflecting the
+	// sustained — possibly thermally throttled — throughput).
+	if hashRate <= 0 {
+		hashRate = float32(nominalHashrate)
 	}
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
@@ -1527,6 +1587,24 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 		}
 	}
 	return target, nil
+}
+
+// v1ShareTarget resolves the share target implied by the pool's latest
+// mining.set_difficulty value — the "current" side of a transitionReject
+// comparison. ok is false when no difficulty has been assigned yet
+// (difficulty 0, meaning workers fall back to the nBits target via
+// v1JobTarget) or the difficulty fails conversion; either way the pool's
+// current target epoch cannot be established and a reject must take the
+// ordinary path.
+func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
+	if difficulty <= 0 {
+		return miner.Hash{}, false
+	}
+	t, err := miner.TargetFromDifficulty(difficulty)
+	if err != nil {
+		return miner.Hash{}, false
+	}
+	return t, true
 }
 
 // applyJob converts a poolproto.Job (the protocol-agnostic job type
