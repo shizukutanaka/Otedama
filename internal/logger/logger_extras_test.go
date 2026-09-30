@@ -181,7 +181,7 @@ func TestAdapter_EmptyLevelRoutedSafely(t *testing.T) {
 
 func TestAdapter_NilReceiverDoesNotProduceUnusableAdapter(t *testing.T) {
 	// Calling Adapter on a nil *Logger is a programming error.
-	// We document the current behaviour: the adapter call itself does
+	// We document the current behavior: the adapter call itself does
 	// not panic (we only return a closure), but invoking the returned
 	// closure on a nil receiver panics — which is a clear signal to
 	// the caller that they have a bug.
