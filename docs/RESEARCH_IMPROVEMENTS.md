@@ -951,6 +951,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** §1 godebug 3 knob・go.mod/toolchain 記述、§3 subsidy 式・witness dispatch、§4 btccrypto 抽象化済み、§6 MAINTAINERS/GOVERNANCE/Dependabot 存在、§7 metrics+http-addr 実装済み、§8 goreleaser matrix、§9 ファズ2件実在（FuzzDecodeHeader/FuzzDecoder_ReadFrame）、§10 Apache+DCO+AI clause 実在 — 全て一致。「CI で 60秒 fuzz」等は実装状況でなく判断（将来計画）欄のため保留。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
