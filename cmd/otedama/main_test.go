@@ -94,6 +94,9 @@ func TestSubcommandHelp_ExitsZeroOnStdout(t *testing.T) {
 		{"service install", []string{"service", "install", "--help"}},
 		{"config show", []string{"config", "show", "--help"}},
 		{"config validate", []string{"config", "validate", "--help"}},
+		{"wallet", []string{"wallet", "--help"}},
+		{"wallet verify", []string{"wallet", "verify", "--help"}},
+		{"wallet change-passphrase", []string{"wallet", "change-passphrase", "--help"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,6 +125,7 @@ func TestSubcommandUnknownFlag_StillExitsUsageOnStderr(t *testing.T) {
 		{"doctor", "--not-a-real-flag"},
 		{"version", "--not-a-real-flag"},
 		{"service", "install", "--not-a-real-flag"},
+		{"wallet", "verify", "--not-a-real-flag"},
 	}
 	for _, args := range cases {
 		var out, errBuf bytes.Buffer
