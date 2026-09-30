@@ -19,6 +19,14 @@ Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
 config 数値パース（warn+skip）、provider quote チャネル（bounded）
 ——全て master 上で健全と確認し記録。
 
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
 ### 修正 (session 411)
 
 GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
