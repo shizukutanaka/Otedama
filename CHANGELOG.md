@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
+
+**問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
+超える場合、reject も切断もないまま収益が実質ゼロになる——オペレータに
+気づかれない飢餓。closed #394 の未マージ修正を master へ再デリバー。
+
+**修正.** V1 統計ティックで `estimatedShareIntervalSeconds` > 3600 のとき
+エピソードごと一度だけ warn を出し、間隔が回復したら再アームする。
+
 ### 修正 (session 377)
 
 - `make fuzz` が機能していなかった問題を修正 — `go list` の出力はインポートパスであり `{}/*.go` グロブがファイルシステム上のディレクトリに一致せずループが常に空回りしていた。ファイルシステムから fuzz テストを発見し、ターゲット毎に `-fuzz=^Name$` で30秒実行するよう変更（1パッケージ複数 fuzz 関数での "matches more than one" 失敗も解消）。
