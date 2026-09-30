@@ -1134,6 +1134,74 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	}
 }
 
+// fakeV1PoolWithNotice is fakeV1Pool plus a client.show_message
+// notification before close, exercising the PoolNoticeReceiver wiring.
+func fakeV1PoolWithNotice(t *testing.T, message string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolWithNotice listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		msg, _ := json.Marshal(message)
+		fmt.Fprintf(conn, `{"id":null,"method":"client.show_message","params":[%s]}`+"\n", msg)
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
+	addr := fakeV1PoolWithNotice(t, "scheduled maintenance at 02:00 UTC")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      logf,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range logs {
+		if strings.Contains(l, "pool notice: scheduled maintenance") {
+			return
+		}
+	}
+	t.Error("client.show_message notice did not reach the log")
+}
+
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
 //
 // runSessionV1 previously hardcoded the V1 mining.authorize password to
