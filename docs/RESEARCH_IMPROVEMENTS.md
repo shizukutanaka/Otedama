@@ -960,3 +960,61 @@ cert and asserts a `*tls.CertificateVerificationError` — proof the
 handshake ran and verification is enforced.
 `TestDialer_V2TLS_ConnectsToTrustedServer` completes the positive path
 with a CA-trusted dialFn injection and asserts the conn is *tls.Conn.
+
+## Session 344 — V1 set_difficulty value validation
+
+**Non-positive/non-finite difficulty [FIXED].** `parseDifficulty`
+stored `params[0]` unchecked: `d <= 0` collapses the share target to
+accept-every-hash (a share flood from a hostile pool or MitM on
+cleartext V1), and non-finite values poisoned the target math
+downstream (same class as the s325 `Yield.Effective` and s331 hysteresis
+non-finite fixes). NaN/±Inf cannot arrive via JSON literals but
+`1e999` decodes to +Inf without error — all now rejected. Fractional
+and subnormal difficulties stay valid (ESP-Miner #1594/#1779 show real
+pools use them).
+
+**Ecosystem re-check [FETCHED].** SRI v1.12.0 (Sep 17) unchanged since
+s329. ESP-Miner v2.15.3 (Sep 20) is a UI-only patch; the v2.15.x stratum
+changes (fractional SV2 difficulty, duplicate-jobId drop,
+submit-response-only share counting, TCP_NODELAY) are all behaviours
+Otedama already matches — recorded. Go advisory batch (Sep 2) — the
+reachable classes (crypto/tls KeyUpdate DoS CVE-2026-56862,
+net/url quadratic CVE-2026-56860) are fixed in go1.26.8 which the
+toolchain already requires; encoding/xml recursion and unencrypted-HTTP/2
+do not apply (no xml decode, no h2c listener).
+
+## Session 316 — bound pool-controlled extranonce2_size (re-delivers closed #384/#398/#411)
+
+**Finding [OBSERVED — code-verified].** `extranonce2_size` is
+pool-controlled and flowed unbounded into `strings.Repeat` on every
+`mining.submit` — a hostile pool or MitM on cleartext V1 could force a
+~2 GiB allocation per share (memory-exhaustion DoS).
+
+**Fix [OBSERVED].** Bounded to [0, 64] at both negotiation entry points
+(`parseSubscribeResult`, `parseSetExtranonce`) plus a defensive clamp in
+`Submit`. THREAT_MODEL documents the threat and residual.
+
+**Tests [OBSERVED].** Boundary unit tests on both entry points.
+
+## Session 342 — service-definition injection via control characters
+
+**Unit-file directive injection [FIXED].** `quoteToken` quoted values on
+whitespace/quotes but passed control characters raw: a flag value
+containing a literal newline (`--data-dir`, `--config`, payout flags —
+reachable from CLI, env, or a poisoned config file) broke out of the
+systemd `ExecStart=`/`ReadWritePaths=` lines into a new unit directive —
+e.g. `\nProtectHome=false` silently removed the sandbox, or
+`ExecStartPost=` ran an arbitrary command. Now any rune < 0x20 or 0x7f
+triggers `%q` quoting, which escapes it to `\\n` inside the token.
+launchd was already safe (argv slice + XML escape); Windows sc.exe
+binPath= shares `serviceArgs` so it inherits the fix. Same for the
+`%q`-inside-quotes caveat: systemd does not unescape Go `\uXXXX`, so a
+path mixing spaces with non-printable bytes quotes correctly for the
+file but resolves differently — recorded, not exploitable.
+
+**Daemon surface audit [AUDITED — hardened].** Verified already-clean:
+launchd XML escaping (`xmlEscape` covers the five specials),
+LaunchAgent log path moved off world-readable `/tmp` to
+`~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
+`NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
+`binPath=` quoting.
