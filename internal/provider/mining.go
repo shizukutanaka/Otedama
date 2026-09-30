@@ -139,7 +139,7 @@ func (p *MiningProvider) publish(ctx context.Context) {
 			},
 		}
 		_ = rate // used for future USD display
-		if !p.sendQuote(ctx, q) {
+		if !p.sendQuote(ctx, &q) {
 			return
 		}
 	}
