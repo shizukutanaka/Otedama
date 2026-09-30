@@ -37,8 +37,11 @@ bitcoin_address: ""
 # List of mining pools in order of preference. Otedama connects to the
 # first and fails over to subsequent entries if the connection drops.
 #
-# If this list is empty, Otedama uses its built-in recommended pool list
-# (Stratum V2 pools prioritised, 0% fee where available).
+# If this list is empty, Otedama falls back to a single built-in default
+# pool (config.DefaultPoolURL) — there is no curated multi-pool
+# recommendation list; list the pools you want explicitly for failover.
+# (**Correction (session 498):** this previously claimed a "built-in
+# recommended pool list"; config.go documents none exists.)
 #
 # Supported URL schemes:
 #   stratum+v2://       Stratum V2 unencrypted  (LAN or trusted networks only)
