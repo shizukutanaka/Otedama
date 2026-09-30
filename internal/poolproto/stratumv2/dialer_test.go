@@ -44,8 +44,7 @@ func TestDialer_Dial_ParsesScheme(t *testing.T) {
 		},
 	}
 	conn, err := d.Dial(context.Background(),
-		"stratum+v2://pool.example.com:3336",
-		poolproto.Credentials{User: "alice"})
+		"stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -64,7 +63,7 @@ func TestDialer_Dial_ParsesScheme(t *testing.T) {
 
 func TestDialer_Dial_RejectsUnknownScheme(t *testing.T) {
 	d := &Dialer{}
-	_, err := d.Dial(context.Background(), "http://example.com", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "http://example.com", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with non-stratum scheme should fail")
 	}
@@ -159,7 +158,7 @@ func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	conn, err := d.Dial(ctx, "stratum+v2://fake:3336", poolproto.Credentials{User: "bc1qtest"})
+	conn, err := d.Dial(ctx, "stratum+v2://fake:3336", &poolproto.Credentials{User: "bc1qtest"})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -325,7 +324,7 @@ func TestDialer_Negotiate_Success(t *testing.T) {
 
 	go pool.doHandshake(42)
 
-	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -373,7 +372,7 @@ func TestDialer_Negotiate_PoolRejectsSetup(t *testing.T) {
 			stratum.SetupConnectionError{Error: "version not supported"})
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when pool sends SetupConnectionError")
@@ -402,7 +401,7 @@ func TestDialer_Negotiate_PoolRejectsChannel(t *testing.T) {
 			stratum.OpenMiningChannelError{ReqID: 1, Error: "unauthorized"})
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when pool sends OpenMiningChannelError")
@@ -443,7 +442,7 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -485,7 +484,7 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 		submitted <- f
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -523,7 +522,7 @@ func TestSession_Close_ClosesJobsChannel(t *testing.T) {
 
 	go pool.doHandshake(1)
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -553,7 +552,7 @@ func TestSession_SuggestedDifficulty_Default(t *testing.T) {
 
 	go pool.doHandshake(1)
 
-	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -600,7 +599,7 @@ func TestDialer_Dial_RealTCPListener(t *testing.T) {
 
 	d := &Dialer{} // no dialFn → real TCP path
 	ctx := context.Background()
-	conn, err := d.Dial(ctx, "stratum+v2://"+ln.Addr().String(), poolproto.Credentials{User: "test"})
+	conn, err := d.Dial(ctx, "stratum+v2://"+ln.Addr().String(), &poolproto.Credentials{User: "test"})
 	if err != nil {
 		t.Fatalf("Dial with real TCP listener: %v", err)
 	}
@@ -613,7 +612,7 @@ func TestDialer_Dial_DialFnError(t *testing.T) {
 			return nil, net.ErrClosed
 		},
 	}
-	_, err := d.Dial(context.Background(), "stratum+v2://pool.example.com:3336", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "stratum+v2://pool.example.com:3336", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with failing dialFn should return error")
 	}
@@ -629,7 +628,7 @@ func TestDialer_Negotiate_SendSetupConnectionFails(t *testing.T) {
 	server.Close() // closed before any write from client
 
 	d := makeDialer(client)
-	conn, _ := d.Dial(context.Background(), "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(context.Background(), "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(context.Background(), conn)
 	if err == nil {
 		t.Error("Negotiate should fail when sending SetupConnection to closed conn")
@@ -649,7 +648,7 @@ func TestDialer_Negotiate_ReadSetupResponseFails(t *testing.T) {
 		pool.conn.Close()
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when server closes without SetupConnection reply")
@@ -672,7 +671,7 @@ func TestDialer_Negotiate_SetupResponseGarbage(t *testing.T) {
 		pool.conn.Write([]byte{0x00, 0x00, 0x01, 0x00, 0x00, 0x00}) //nolint:errcheck
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when DispatchFrame returns error for SetupConnection response")
@@ -694,7 +693,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
 			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4})
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail on unexpected message type during setup")
@@ -717,7 +716,7 @@ func TestDialer_Negotiate_SendOpenMiningChannelFails(t *testing.T) {
 		pool.conn.Close() // close right after success reply
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when connection closes after SetupConnectionSuccess")
@@ -740,7 +739,7 @@ func TestDialer_Negotiate_ReadOpenMiningResponseFails(t *testing.T) {
 		pool.conn.Close()
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when server closes without OpenMiningChannel reply")
@@ -763,7 +762,7 @@ func TestDialer_Negotiate_OpenMiningResponseGarbage(t *testing.T) {
 		pool.conn.Write([]byte{0x00, 0x00, 0x11, 0x00, 0x00, 0x00}) //nolint:errcheck
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail when DispatchFrame returns error for OpenMiningChannel response")
@@ -787,7 +786,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringChannelOpen(t *testing.T) {
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
 	if err == nil {
 		t.Error("Negotiate should fail on unexpected message type during channel open")
@@ -807,7 +806,7 @@ func TestSession_Jobs_ContextCancelExitsLoop(t *testing.T) {
 
 	go pool.doHandshake(1)
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -843,7 +842,7 @@ func TestSession_Submit_ErrorOnClosedConn(t *testing.T) {
 
 	go pool.doHandshake(1)
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -890,7 +889,7 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 		}
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -941,7 +940,7 @@ func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
 	}()
 
-	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", &poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
 	if err != nil {
 		t.Fatalf("Negotiate: %v", err)
@@ -1027,6 +1026,28 @@ func TestFloat64FromBits(t *testing.T) {
 	}
 }
 
+func TestDialer_DialTimeout(t *testing.T) {
+	prev := dialTimeout
+	dialTimeout = 50 * time.Millisecond
+	defer func() { dialTimeout = prev }()
+
+	d := &Dialer{dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	start := time.Now()
+	_, err := d.Dial(context.Background(), "stratum+v2://127.0.0.1:1", &poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("Dial should fail when the dial attempt times out")
+	}
+	if !strings.Contains(err.Error(), "dial timeout") {
+		t.Errorf("expected dial-timeout error, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Dial took %v; want <5s", elapsed)
+	}
+}
+
 // TestSession_PendingJobsBounded floods the read loop with distinct future
 // job IDs past pendingCap, then confirms the newest job still emits when
 // SetNewPrevHash names it — the bound must not drop the flood-tail jobs.
@@ -1064,7 +1085,7 @@ func TestSession_PendingJobsBounded(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}()
 
-	conn, err := d.Dial(ctx, "stratum+v2://127.0.0.1:1", poolproto.Credentials{User: "u"})
+	conn, err := d.Dial(ctx, "stratum+v2://127.0.0.1:1", &poolproto.Credentials{User: "u"})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -1166,7 +1187,7 @@ func TestDialer_V2TLS_DialsTLS(t *testing.T) {
 	addr := strings.TrimPrefix(srv.URL, "https://")
 
 	d := &Dialer{useTLS: true}
-	_, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{})
 	if err == nil {
 		t.Fatal("v2tls dial against untrusted cert should fail verification")
 	}
@@ -1197,7 +1218,7 @@ func TestDialer_V2TLS_ConnectsToTrustedServer(t *testing.T) {
 			return (&tls.Dialer{Config: cfg}).DialContext(ctx, "tcp", address)
 		},
 	}
-	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, poolproto.Credentials{User: "u"})
+	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{User: "u"})
 	if err != nil {
 		t.Fatalf("trusted v2tls dial failed: %v", err)
 	}

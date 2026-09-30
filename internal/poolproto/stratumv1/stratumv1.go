@@ -112,9 +112,11 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// may be replaced by a mid-session mining.set_extranonce, which runs
+	// on the read goroutine while Submit reads them on the caller's.
+	extranonce1     atomic.Pointer[string]
+	extranonce2Size atomic.Int64
 	// en2Counter rolls extranonce2 per job so every job's coinbase (and
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
@@ -247,7 +249,7 @@ func (s *session) dispatch(line []byte) {
 			return
 		}
 		s.completeV1Job(&job)
-		s.sendJob(job)
+		s.sendJob(&job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -255,8 +257,8 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce1.Store(&en1)
+			s.extranonce2Size.Store(int64(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -293,6 +295,25 @@ func (s *session) dispatch(line []byte) {
 	}
 }
 
+// maxReconnectWaitSeconds caps a pool-supplied reconnect wait so a
+// hostile pool cannot park the session indefinitely.
+const maxReconnectWaitSeconds = 300
+
+// ReconnectWait returns the pool-requested reconnect delay recorded by
+// the last client.reconnect/mining.reconnect notification, clamped to
+// [0, maxReconnectWaitSeconds]. Zero when no directive was received.
+// Implements poolproto.ReconnectWaiter.
+func (s *session) ReconnectWait() time.Duration {
+	d := s.lastReconnect.Load()
+	if d == nil || d.Wait <= 0 {
+		return 0
+	}
+	if d.Wait > maxReconnectWaitSeconds {
+		return maxReconnectWaitSeconds * time.Second
+	}
+	return time.Duration(d.Wait) * time.Second
+}
+
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
@@ -317,17 +338,19 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	// extranonce2Size is pool-controlled; anything above the observed
 	// maximum (8–12 bytes) falls back to the old behaviour instead of
 	// allocating a pool-dictated buffer per job.
+	en1s := s.extranonce1.Load()
+	sz := int(s.extranonce2Size.Load())
 	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
-		s.extranonce1 == "" || s.extranonce2Size <= 0 ||
-		s.extranonce2Size > 64 {
+		en1s == nil || *en1s == "" || sz <= 0 ||
+		sz > 64 {
 		return
 	}
-	en1, err := hex.DecodeString(s.extranonce1)
+	en1, err := hex.DecodeString(*en1s)
 	if err != nil {
 		return
 	}
 	n := s.en2Counter.Add(1)
-	en2 := make([]byte, s.extranonce2Size)
+	en2 := make([]byte, sz)
 	// Big-endian counter in the tail bytes of en2: sizes < 8 keep the
 	// counter's low bytes (still rolling); sizes > 8 stay zero-padded
 	// at the head.
@@ -353,7 +376,7 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 // produce stale (rejected) shares, which is the #1 reject cause after
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
-func (s *session) sendJob(job poolproto.Job) {
+func (s *session) sendJob(job *poolproto.Job) {
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -366,7 +389,7 @@ func (s *session) sendJob(job poolproto.Job) {
 	}
 send:
 	select {
-	case s.jobsCh <- job:
+	case s.jobsCh <- *job:
 	default:
 		// Channel still full (clean_jobs=false, slow worker):
 		// drop oldest, push newest.
@@ -375,7 +398,7 @@ send:
 		default:
 		}
 		select {
-		case s.jobsCh <- job:
+		case s.jobsCh <- *job:
 		default:
 		}
 	}
@@ -393,7 +416,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", min(max(s.extranonce2Size, 0), maxExtranonce2Size))
+		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
@@ -450,7 +473,7 @@ type rpcMessage struct {
 	Error  any             `json:"error"`
 }
 
-func (m rpcMessage) uintID() uint64 {
+func (m *rpcMessage) uintID() uint64 {
 	switch v := m.ID.(type) {
 	case float64:
 		return uint64(v)
