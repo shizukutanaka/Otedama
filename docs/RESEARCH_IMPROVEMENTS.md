@@ -952,6 +952,23 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。
 
+## Session 499 — go.mod 依存選定理由コメント（CLAUDE.md ルール遵守）+ skills/docs 最終棚卸し
+
+**Sweep.** `docs/` 全ファイルの精読が本ラウンドで完結（adr/README 索引は11件・status 一致で clean）。残軸として (a) TODO/FIXME/XXX/HACK マーカー掃討 → **実コード 0件**（clean）、(b) skills/ 未精読3ファイル（code-review・quality-pass×2）→ 過去セッション記録で status は依然正確、(c) CLAUDE.md「go.mod コメントに追加理由と選定基準」遵守状況。
+
+**発見（1件対応）。**
+- **`go.mod` に依存根拠コメントが皆無** → CLAUDE.md 外部依存管理ルール違反状態を修正: `x/crypto`（scrypt — ウォレット KDF、BSD-3-Clause、ADR-003 予算内）と `gopkg.in/yaml.v3`（YAML デコーダ、MIT/Apache、上流 archived → go.yaml.in 移行は別途追跡中 ※open #444）に記録。`x/crypto` の実使用箇所は scrypt 単一と確認、`go mod verify` 緑。
+
+## Session 500 — DEPLOYMENT.md: 実害2件（ジェネシスアドレス例・healthcheck 終了コード）+ i18n 未翻訳混入なし
+
+**Sweep.** (a) i18n カタログ10言語の未翻訳混入 → 全言語適切に翻訳済み（ru/ar/fr/de/pt 確認）で clean。(b) `.github/` 非ワークフロー: dependabot.yml の dead `automerge` キーは open #524 の担当域で重複せず。(c) doctor チェック数 = 17 件で CLAUDE.md と一致。(d) BIP-39 wordlist は init 時 SHA-256 検証済みの堅牢設計。(e) DEPLOYMENT.md の YAML 5ブロックをパース＋照合。
+
+**発見（2件訂正 — 後者は注意喚起）。**
+- **デプロイ例がジェネシスブロックの coinbase アドレスを実例として使用**（docker run・compose env・k8s Secret stringData の3箇所、計3回）→ 有効な bech32 でバリデーション通過＝コピー運用で報酬が使用不能アドレスへ送金される実害。失敗する `<your-bitcoin-address>` プレースホルダに置換（静かに動く最悪パターン → 叫んで止まる安全パターン）。
+- **compose healthcheck `otedama doctor` が Warn で exit 1** → 単一 pool 構成（「Pool diversity」が Warn する典型構成）でコンテナが unhealthy 扱い — distroless にはシェルがなく exit-2 ゲートに書き換えられないため、warn-as-degraded 意図の確認コメントを付記。
+
+**検証済み・変更なし。** Dockerfile `/usr/local/bin/otedama` パス一致・k8s マニフェストの liveness/readiness（/healthz・/readyz）は httpserver 実装と一致・ServiceMonitor の port 名は Deployment の port と一致・Secret の `stringData` 用法正しい。
+
 ## Session 502 — 監査検証ラウンド（godoc 適合・panic サイト・全テスト実行 — 全件 clean）
 
 **Sweep.** (a) CLAUDE.md「主要型・公開関数に godoc 必須」の機械検査: exported func/type の doc コメント有無を全 internal/ で走査。(b) `panic(` サイトの正当性。(c) `go test ./...` 全実行。(d) LICENSE/NOTICE/CODEOWNERS/.editorconfig/CHANGELOG↔VERSION 整合。
