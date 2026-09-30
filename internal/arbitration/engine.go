@@ -370,7 +370,7 @@ func chooseForDevice(
 	// positive yield that nonetheless failed the minYield floor. It lets the idle
 	// reason distinguish "nothing wanted this device" from "the work on offer was
 	// not worth running", which is actionable for an operator tuning the floor.
-	var candidates []candidate
+	candidates := make([]candidate, 0, len(streams))
 	var belowFloor bool
 	for _, s := range streams {
 		if !s.Accepts(dev.Identity.Family) {
@@ -506,7 +506,7 @@ func policyScore(s *Stream, yield float64, p Policy) float64 {
 	case PolicyEnvironmentFriendly:
 		return yield * (1.0 + float64(s.EnvironmentalRating)*ratingBonusPerPoint)
 	case PolicyMaximizeEarnings:
-		fallthrough
+		return yield
 	default:
 		return yield
 	}
