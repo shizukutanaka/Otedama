@@ -17,6 +17,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    `godebug tlsmlkem` の両方が Go 1.24+ を必須にするため、実際の
    最小ツールチェーン要件を明記。
 
+### Fixed (session 324 — SV2 書き込み deadline の追加)
+
+**問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
+いた——プールが TCP を開いたまま読み止めると、カーネル送信バッファ
+満杯時に `Write` が無期限ブロックし runSession 全体がサイレントに
+stall した。V1 には 10s の write deadline があり非対称だった。
+
+**修正.** `writeTimeout`（10s、V1 と同値）を全 V2 書き込みに適用。
+新テスト `TestSendMsg_WriteDeadline` が未読 net.Pipe で timeout
+を確認。
+
+### Fixed (session 333 — wallet.dat サイズ上限)
+
+`UnmarshalEncryptedSeed` が入力長を無制限に `make([]byte, len-29)`
+で確保していたため、破損・異常な wallet.dat が巨大アロケーションを
+強制できた問題を修正。v1 ペイロードは厳密 80 バイトのため、将来
+バージョン用の余裕を持たせた 4 KiB 上限を追加。
+
+### Fixed (session 305 — V1 シェアがコインベース/マークル再構築なしで検証不能だった問題を修正)
+
+**問題.** V1 ジョブのコインベース（coinb1‖en1‖en2‖coinb2）とマークル
+ブランチが保持されず、submit 前に share の二重 SHA-256d 検証が不可能
+だった（プール reject まで無効シェアの見分けが付かない）。closed #401
+の未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.Job` に `ExtraNonce`/`Coinb1`/`Coinb2`/`MerkleBranch`
+（V1 のみ）、`miner.Work`/`Share` に `ExtraNonce` を通線。`en2Counter`
+（BE カウンタ）+ `completeV1Job()` でジョブ毎にコインベースを畳み込み
+（`btccrypto.Hash256` + per-branch `Hash256(merkle‖branch)`）。
+
+### Security (session 349 — プール文字列サニタイズ)
+
+V1/V2 のシェア拒否理由（pool 制御文字列）をログ出力前に
+`poolproto.SanitizePoolText` でサニタイズ — 制御文字除去＋
+256 rune 上限。ANSI エスケープ注入・ログ偽造を防止。
+
+### 修正 (session 375)
+
+- `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は `--skip-verify` なしでは拒否（存在時の不一致も fatal）。裸バイナリは tar 展開をスキップして直接インストール。
+- ドキュメントのセキュリティ過大記載を訂正: THREAT_MODEL は「リリース成果物は cosign 署名済み」「`-trimpath` による再現ビルド」「GitHub Actions は全て SHA ピン留め」を主張していたが、いずれも実装なし（release.yml に cosign なし、`-trimpath` なし、ldflags がビルド時刻を含むため再現不可、全 workflow が `@vN` タグ参照）。実態を正確に記述し、SHA ピン留めと Sigstore 署名公開をハードニング項目として明記。AUDIT_CHECKLIST の item 11/13/17/22 も同様に修正（scrypt N=131072、wallet.dat の atomic write、cosign 未配線、SHA ピン未適用）。
+
+### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)
+
+**問題.** プール/MitM が難易度 0 を割当てると share-target が巨大化し、
+ワーカーが全 nonce で「シェア成立」→ submit 嵐（帯域・CPU DoS）になった。
+closed #402 の未マージ修正を master へ再デリバー。
+
+**修正.** 両 submit パスにトークンバケット（8/s + burst 32）を導入し、
+超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
+SPECIFICATION/API/THREAT_MODEL 同期済み。
+
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
 ### Fixed (session 348 — プール通知サニタイズ)
 
 `client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
