@@ -20,6 +20,15 @@ master へ再デリバー。
 **修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
 受理クレジット・レイテンシ確定を行わない。
 
+### Fixed (session 331 — 非有限な裁定パラメータの拒否)
+
+`arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
+±Inf を設定できてしまい（YAML `.nan`、env `nan`/`inf` は
+ParseFloat を通過）、`< 0` チェックをすり抜けてヒステリシスが
+無効化・ incumbent 固定・フロア無効化が静かに起きていた問題を
+修正。`Decide` が非有限値を明示的にエラー拒否するようになり
+設定ミスが警告として可視化される。
+
 ### 修正 (session 378)
 
 - `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
