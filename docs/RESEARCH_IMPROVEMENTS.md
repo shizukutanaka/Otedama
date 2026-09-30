@@ -946,6 +946,34 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 347 — provider/engine/worker audit verdicts (all clean)
+
+**Provider quote path [AUDITED — clean].** Both providers are local
+simulators — no network fetch: `ai_inference` quotes the midpoint of the
+configured USD/hour range, `mining` computes yield from the static
+network-hashrate constant (the live feed remains on open PR #432). No
+response-size or redirect concerns apply; quote channels are buffered
+(32/16) so a stalled consumer cannot wedge the publisher.
+
+**Engine session loops [AUDITED — clean].** Every `for/select` in
+`run.go` honors `ctx.Done()`; the reconnect backoff uses
+`time.NewTimer`+`Stop` so shutdown does not linger; the V2 read
+goroutine checks ctx on every send and closes `inCh` on exit — no spin,
+no goroutine leak on teardown.
+
+**Worker nonce space [AUDITED — clean].** Threads partition the 32-bit
+nonce space by `threadID + k*Threads` (NonceStep defaults to Threads, so
+sequences are disjoint); a new job resets the counter rather than
+exhausting the space. uint32 wrap re-hashes old nonces, which is the
+accepted stratum behavior — a fresh job or an extranonce roll
+supersedes long before exhaustion at any real hashrate.
+
+**SV2 frame bound [AUDITED — clean].** `Decoder.ReadFrame` enforces
+`MaxFrameSize` (default 16 MiB, SRI-aligned) *before* allocating the
+payload buffer — a malicious length header cannot force a large
+allocation. Already covered by the v1.12.0-alignment pass; re-verified
+on master this session.
+
 ## Session 352 — wallet-write, TUI, doctor audit verdicts (all clean)
 
 **Wallet save path [AUDITED — hardened].** `wallet.dat` is written via
