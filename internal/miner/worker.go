@@ -73,6 +73,14 @@ type WorkerConfig struct {
 	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
 
+	// NonceOffset shifts every thread's starting nonce so that several
+	// workers grinding the same job partition the space instead of
+	// duplicating it. The engine assigns worker i an offset of
+	// i*Threads with a shared power-of-two NonceStep, giving each
+	// (worker, thread) pair a residue class no other worker touches.
+	// Zero preserves the legacy single-worker layout.
+	NonceOffset uint32
+
 	// DeviceID is the HAL identity of the hardware device this worker
 	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
 	// emits so the engine can attribute shares per device.
@@ -231,7 +239,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID
+		nonce        = w.cfg.NonceOffset + threadID
 		// ntimeRoll counts how many times this thread has exhausted the
 		// nonce space for localWork and rolled the timestamp forward.
 		// Without a roll the wrap would re-hash identical headers —
@@ -251,7 +259,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID // restart nonce from thread offset on new job
+			nonce = w.cfg.NonceOffset + threadID // restart from the thread's own residue class on new job
 			ntimeRoll = 0
 		}
 		w.mu.Unlock()
