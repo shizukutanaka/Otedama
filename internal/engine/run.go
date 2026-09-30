@@ -1261,10 +1261,25 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
 
+	// Pools send operator notices via client.show_message (maintenance
+	// windows, credential errors, migration hints). Nil channel when the
+	// session type has no notices — a nil case channel is never ready.
+	var notices <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		notices = nr.PoolNotices()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case notice, ok := <-notices:
+			if !ok {
+				notices = nil // pool is gone; never ready again
+			} else {
+				opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
+			}
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
