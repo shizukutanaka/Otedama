@@ -1005,6 +1005,28 @@ the latest SRI release: the `noise_sv2` 2.0.0 AES-256-GCM drop and the
 codec/framing split do not change any live Otedama path — the in-process
 Noise surface stays the documented alpha stub (KNOWN_LIMITATIONS §2).
 
+## Session 404 — docs/ flag sweep; phantom --worker-threads fixed [FIXED]
+
+**`docs/TROUBLESHOOTING.md` recommended a nonexistent flag [FIXED].**
+The "high CPU usage" section told users to run `otedama run
+--worker-threads 4`. No such flag exists — `run` accepts only the 15
+flags defined in `cmd/otedama/run.go`, and `WorkerConfig.Threads`
+defaults to `runtime.NumCPU()` with no CLI/config override. Replaced
+with the real mechanism (`GOMAXPROCS`, which caps how many grinding
+goroutines run in parallel) and kept the OS-level quota options.
+
+**All other docs flag/subcommand references [AUDITED — accurate].**
+Every `otedama` invocation across API.md, DEPLOYMENT.md,
+TROUBLESHOOTING.md, MIGRATING-FROM-V2.md, competitive-analysis.md maps
+to a real subcommand (run/version/config/service/doctor/completion);
+every `--flag` maps to a defined `fs.*` registration except container/
+OS-tool flags (docker `--name`/`--restart`, useradd `--system`/`--home`)
+correctly shown in their own contexts. `otedama v` is a real alias for
+`version`.
+
+**skills/ quality-pass "24 packages" [VERIFIED]** — matches
+`go list ./...` output exactly.
+
 ## Session 403 — CONTRIBUTING/README command audit + DCO drift [SURFACED]
 
 **DCO sign-off required by CONTRIBUTING.md but not practiced [🟡
