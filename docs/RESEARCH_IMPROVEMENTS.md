@@ -956,6 +956,26 @@ gets a "timed out" error, which the submit goroutine logs and exits.
 drop-oldest) are bounded on master; the V2 engine `jobs` map remains
 bounded only on open PR #397/#429 — not re-implemented here.
 
+## Session 327 — V2 handshake read deadline (real fix)
+
+**Negotiate reads unbounded [OBSERVED + FIXED].** The dialer's two
+handshake `ReadFrame` calls ran with no deadline and no ctx wiring —
+unlike `sendMsg` (write deadline, s324) and the steady-state read loop
+(unblocked by Close/ctx). A pool that accepts TCP then goes silent hung
+`DialURL` inside the engine's synchronous reconnect loop: no backoff, no
+failover, and shutdown could not cancel it. `handshakeTimeout` = 15 s now
+bounds the phase (cleared on return — steady state stays
+Close/ctx-governed). Test: `TestNegotiate_HandshakeTimeout` (net.Pipe,
+draining-but-silent peer) fails Negotiate in 50 ms.
+
+## Session 509 — V1 reject メトリクスのデータレース修正（実害）
+
+**Sweep.** `internal/engine/metrics.go`（581行・未精読）の排他制御監査: lazy 作成 map 4件全て専用 mutex（`lastRejectByReasonMu`・`sharesFoundPerDeviceMu`・`payoutInfoMu`・`submitTimes` ローカル）保有なのに **`rejectByReason` のみロック欠落**を発見。
+
+**実害**: `runSessionV1` はシェア毎に `go func()` で submit を非同期化し、reject 時に `rejectReason(category)` を呼ぶ → 2件の拒否が同時解決すると map への同時書き込み。さらに stats ループの `updateShareRates` が `m.rejectByReason["stale"]` をロックなしで読む → goroutine 書き込みとの同時 read/write。両経路とも `fatal error: concurrent map read/write`（recover 不可・プロセス強制終了）。Counter/Gauge 自体は atomic/RWMutex で安全 — map へのポインタ格納だけが問題だった。
+
+**対応**: `rejectByReasonMu sync.Mutex` を追加し両アクセスを保護（兄弟の既存パターンと同一形状）。回帰テスト `TestRejectByReasonConcurrent`: 8 goroutine が rejectReason を競合呼出 + 4 goroutine が updateShareRates を競合読取 → mutex 除去で `-race` が DATA RACE を検出することを確認済み（付けると緑）。engine パッケージ全テスト緑。
+
 ## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
 
 **Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
