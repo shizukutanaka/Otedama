@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 385)
+
+- `TestSetupWallet_MnemonicNeverReachesLogger` の確率的フレークを解消: 24語ニーモニックのランダム語（BIP-39 語彙は一般英単語）が固定ログ文（"recovery phrase" 等）の散文と衝突し誤検出していた。既知の定数行をスキャン対象外にし、動的ログ内容のみを検査（実際の漏洩は引き続き検出）。(closed #371 の該当半分の再デリバー)
+- TUI ダッシュボードが常に80カラム固定で描画され、実端末幅を一切検出していなかった既知の制限（KNOWN_LIMITATIONS §15）を解消。`internal/tui` が描画ティック毎にカーネルへ端末幅を問い合わせ（Unix: `TIOCGWINSZ`、Windows: `GetConsoleScreenBufferInfo`）、端末リサイズにも追従。出力先が端末ファイルでない場合やクエリ失敗時は従来の80カラムにフォールバックし、`SetWidth` による固定指定も従来通り優先される。`golang.org/x/sys` を间接依存から直接依存へ昇格（BSD・Go チーム保守・既存 module graph 内のため新規モジュール追加なし）。
+
 ### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
 
 V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
