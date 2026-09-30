@@ -17,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
 判定記録。closed #383 の未マージ変更を master へ再デリバー。
 
+### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
+
+`mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
+分割の disjoint 性、`TargetFromNBits`/`TargetFromDifficulty` の異常値
+拒否、`set_version_mask` の前方互換無視、notice キュー境界、
+TUI へのプール制御文字列不到達を全て確認・記録。ESP-Miner
+v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
+プール側機能）。stale な `otedama_build_info` backlog 行も訂正
+（session 54 で実装済み）。
+
+### Docs (session 326 — 衛生スイープ結果の記録)
+
+`govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
+（module-level advisory 22件は全て非到達）。`deadcode` の指摘は
+全てテスト専用/将来向けのエクスポート API 面であり実質デッド
+コードなし——削除対象とせず判定を記録。
+
 ### Docs (session 328 — 残存監査面の判定記録)
 
 `mining.set_version_mask`（BIP320 未実装・無害に drop）、Worker
