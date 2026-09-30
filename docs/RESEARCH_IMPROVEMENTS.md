@@ -940,6 +940,18 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 464
+
+Version-source drift fixed: the VERSION file reads
+v3.0.0-alpha.1 and `make build` injects it via ldflags, but the
+in-code default (used by plain `go build`/`go install`, which skip
+ldflags) still said v3.0.0-alpha.0-dev — a `go install`-built binary
+reported a stale version. Bumped the default to v3.0.0-alpha.1-dev
+(keeps the -dev marker distinguishing unblessed builds) and aligned
+the Makefile's missing-VERSION fallback the same way. Release
+builds via goreleaser inject {{.Version}} correctly and were
+unaffected.
+
 ## Session 523 — full linter sweep re-verified on master
 
 Re-ran the full golangci-lint suite under `GOTOOLCHAIN=go1.26.8`
