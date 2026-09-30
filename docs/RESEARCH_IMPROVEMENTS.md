@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 574 — package-level mutable state audit
+
+- Package-level `var` falls into five benign classes:
+  - sentinel errors (`ErrWrongPassphrase`, exported error blocks)
+  - compile-time interface assertions (`var _ Interface = ...`)
+  - init-populated read-only tables (`validEntropyBits`,
+    `defaultSources`, `numericEnvVars`, `knownSchemes`,
+    `DefaultHashrates`, `EnglishWords`)
+  - test seams (`drmBasePath`, `clockSkewProbeURL`, `goos`,
+    `poolIPResolver` — deliberately overridable by tests)
+  - `hashPool sync.Pool` — safe by design
+- The only runtime-mutable global is `defaultPtr
+  atomic.Pointer[Logger]` — the logger's default-instance pointer,
+  race-free by construction (session 565).
