@@ -20,7 +20,7 @@ Sonnetには、ドキュメント是正・回帰テスト追加・検証ルー�
 ## 1. 現状サマリー（検証済みの事実）
 
 **長所**: 全24パッケージ build/vet/test green。カバレッジ全域90%超（最低
-internal/lightning 91.2%）。監査済みclean領域は arbitration / rates / miner /
+internal/lightning 92.0%（session 508 実測））。監査済みclean領域は arbitration / rates / miner /
 stratum wire / btccrypto / lightning/wallet.go / cmd/otedama/completion.go。
 成果はPR #4（→master、209コミット）で公開済み。docsが実装を超える主張を
 しない「誠実な自己開示」状態が最大の資産 — **Sonnetの主戦場はまさにこの
