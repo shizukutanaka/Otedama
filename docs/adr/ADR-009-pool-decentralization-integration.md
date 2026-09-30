@@ -614,6 +614,27 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 550, September 2026)
+
+- **sv2-spec #207 merged (Aug 20):** the printable/limited charset
+  restriction on `error_code` is now normatively applied to
+  `reason_code` too. Otedama's reject classification is
+  substring/case-based over pool-supplied codes, so this is
+  defense-in-depth — the spec now bounds what the classifier can
+  ever see.
+- **sv2-spec #233 merged (Sep 23):** the spec repo itself adopted
+  repo-level agent conventions (`AGENTS.md` + `CLAUDE.md`
+  symlink + `AGENTS_CUSTOM.md` gitignored) — the same pattern
+  Otedama's `CLAUDE.md` uses. Ecosystem process convergence, no
+  wire-level change.
+- **SRI:** still v1.11.1 (2026-07-22) — no new release since
+  session 542.
+- **Go:** release history tops at go1.26.4; the environment
+  toolchain (go1.27.1) remains ahead of the doc'd stable line,
+  already verified green.
+
+---
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):

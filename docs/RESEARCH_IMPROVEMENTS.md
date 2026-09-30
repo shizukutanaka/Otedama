@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 550 — ecosystem recheck (SRI, sv2-spec, Go)
+
+- SRI: still v1.11.1 — no new release since session 542.
+- sv2-spec: two normative/process merges since last recheck —
+  #207 (`reason_code` charset now matches `error_code`'s
+  restrictions; defense-in-depth for the substring classifier)
+  and #233 (`AGENTS.md` repo conventions — same pattern as
+  Otedama's CLAUDE.md). Recorded in ADR-009.
+- Go: release history tops at go1.26.4; toolchain go1.27.1
+  remains green.
