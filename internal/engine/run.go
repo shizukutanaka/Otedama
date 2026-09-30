@@ -1481,7 +1481,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		return 0, miner.Hash{}, err
 	}
 	if msg.SetupConnectionError != nil {
-		return 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
+		return 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
 	}
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
@@ -1514,6 +1514,9 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	msg, err = stratum.DispatchFrame(f)
 	if err != nil {
 		return 0, miner.Hash{}, err
+	}
+	if msg.OpenMiningChannelError != nil {
+		return 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")

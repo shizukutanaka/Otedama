@@ -940,6 +940,18 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 351 — handshake-error sanitization + surfaced channel rejections
+
+**SetupConnectionError injection [FIXED].** The pool's error string was
+concatenated raw into `fatalError` and logged via `session ended: %v` —
+the same escape/newline injection class as the reject reasons. Now
+`%q`-quoted, which escapes control bytes. The same treatment was
+applied to `OpenMiningChannelError`: its reason string was previously
+dropped entirely ("channel open failed" with no detail) — it now
+surfaces the pool's reason, quoted, and classifies the rejection as
+fatal (consistent with a refused setup — failover to the next pool
+rather than a same-pool retry).
+
 ## Session 295 — publish V2 share-target difficulty + starvation warn (re-delivers closed #395)
 
 **Finding [OBSERVED — code-verified].** `publishDifficulty` ran only in the

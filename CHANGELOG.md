@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
+
+V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
+文字列を `%q` でクォート（制御文字エスケープ）し、OpenMiningChannel
+拒否の理由を fatal としてログに明示。従来は理由が破棄されていた。
+
 ### Fixed (session 295 — V2 経路でプール難易度がメトリクスに公開されず飢餓警告も出なかった問題を解消)
 
 **問題.** `publishDifficulty` は V1 の stats tick でのみ呼ばれ、V2 経路では
