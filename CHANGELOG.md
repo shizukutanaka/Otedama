@@ -18,6 +18,21 @@ V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択�
 fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
 hardening checklist 2項目に署名リリース未提供の注記を追加。
 
+### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
+
+* §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
+* §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
+
+### Fixed (session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記）
+
+* `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
+* 「SRI の Go バインディングを統合利用」/「自前実装ではなく SRI を選択」の理由付けが実態と逆であることを追記 — SRI は Rust のみで Go バインディング非存在、`internal/stratum` は自前実装。LDK のメンテ済み Go バインディングも非存在。
+
+### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
+
+* Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
+* リスク1 の「govulncheck は週次で自動実行済み」→ CI に非存在で Makefile ローカルのみ。
+
 ### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
 
 * 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
