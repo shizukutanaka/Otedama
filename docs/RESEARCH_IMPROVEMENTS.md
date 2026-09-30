@@ -952,6 +952,90 @@ reject_rate/sharesRejected/last_reject_seconds and log at info; the
 rejectByReason map race fix (rejectByReasonMu + rejectReasonValue)
 came along. Verified `-race` clean on the ported tests.
 
+## Session 361 — config NaN/±Inf rejection
+
+**Non-finite float fields passed Validate [FIXED].** Every float range
+check used `x < 0`/`x >= 1.0` — both false for NaN, so
+`arbitration_hysteresis_pct: .nan` in config.yaml or
+`OTEDAMA_...=NaN` via env validated cleanly and poisoned the
+arbitration math downstream. An explicit `math.IsNaN ||
+math.IsInf` sweep now rejects non-finite values on all five float
+fields (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`,
+`min_yield_sats_per_sec`, `power_watts`,
+`electricity_price_per_kwh`). Table-driven test covers NaN, +Inf,
+-Inf on each field.
+
+## Session 380 — stratum encode-side + stats-math audit; ecosystem re-check
+
+[FIXED — re-delivery] Cherry-picked closed-unmerged #473 (session 361):
+`Config.Validate` rejected non-finite floats only via `x < 0` / `x >= 1`
+comparisons — all false for NaN — so `.nan`/`NaN`/`Inf` config values
+flowed into arbitration math. Now explicit `IsNaN`/`IsInf` rejection on
+all five float fields; table-driven tests cover NaN/+Inf/−Inf each.
+
+[AUDITED — clean] Stratum encode side (fuzz covers the decode side):
+`appendStr0_255`/`appendB0_255`/`appendB0_32` all bound the length-prefix
+payload and every caller propagates the error; `WrapMessage`/`EncodeFrame`
+validate the U24 MsgLength bound. stats.go divisions are all guarded:
+hashrateWindow (`dt>0`, counter-reset safe), acceptanceRate (0/0→1.0),
+effectiveYield (`uptime<=0`→0, fraction clamped [0,1]), publishDifficulty
+(`diff<=0` no-op, `hashrate<=0`→0). Noise internals re-read end-to-end:
+the `ReadMessage2` x-only fallback's secret-less completion is a real
+structural gap but already documented verbatim in KNOWN_LIMITATIONS §2
+item 3 (alpha stub, zero callers outside tests — left for the v3.1.0
+full-message-flow rework rather than churned now). `stratum/tls.go`
+dialer verified: TLS1.2+, system roots + optional extra CAs, handshake
+performed before return, never falls back to plaintext. `setup.go`
+wiring clean (worker-per-device, provider Start errors non-fatal,
+mnemonic printed only to opts.Output pre-TUI).
+
+[FETCHED] Ecosystem unchanged since s375 re-check: SRI v1.12.0 (2026-09-17)
+remains latest (noise_sv2 AES-256-GCM removal is server-side; Otedama
+implements only the ChaChaPoly half already); ESP-Miner v2.15.3
+prerelease (2026-09-20) is preset-scoped frequency warnings only — no
+stratum changes. Go advisories: go1.26.8 toolchain still clears the
+Sept advisories.
+
+## Session 325 — non-finite yield collapse in the arbitration engine
+
+**Finding [OBSERVED — code-verified].** `Yield.Effective()`'s `<= 0`
+guards pass NaN through (NaN <= 0 is false): a provider division
+yielding 0/0 upstream produces a NaN candidate that enters the policy
+sort and contaminates `TotalYield` — silently corrupting every
+downstream sat/day figure.
+
+**Fix [OBSERVED].** `Effective` now collapses any non-finite product
+(NaN or ±Inf, from either field) to 0 — a bad quote can never win the
+sort or poison the total.
+
+**Tests [OBSERVED].** Five new table cases (NaN/±Inf on both fields).
+
+## Session 338 — set_extranonce race fix + V1 method-surface audit
+
+**set_extranonce data race [FIXED].** `mining.set_extranonce` (read
+goroutine) replaced `extranonce1`/`extranonce2Size` while `Submit`
+(caller goroutine) read them — plain fields, a real race whenever a
+pool rotated extranonce mid-session. Both now atomic
+(`atomic.Pointer[string]` / `atomic.Int64`); a concurrent dispatch+load
+test locks the fix in. Benign-read note: today's V1 path leaves
+`MerkleRoot` to the pool (poolproto.Job comment), so rotation stales
+no in-flight work; a future en1-dependent coinbase path (open #417)
+must additionally flush queued jobs on rotation.
+**V1 method coverage [AUDITED — clean].** Handled: mining.notify,
+set_difficulty, set_extranonce, client.show_message,
+client.reconnect/mining.reconnect. mining.set_version_mask and other
+extensions are deliberately ignored (forward-compatible). Requests
+with an id are never sent pool→client by conforming pools; unknown
+methods are dropped without reply.
+
+## Session 383 — SV2 nominal_hashrate seeding
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.
+
+[FIXED] **engine `handshake` declared `nominal_hashrate ≈ 0`** (`internal/engine/run.go`, `setup.go`): the value was summed from `w.Stats().HashRate`, which is always ~0 at handshake time because no job has been hashed yet. Pools use `nominal_hashrate` to seed variable difficulty, so a 0 declaration mis-seeds vardiff for real hardware. Fix: compute a capability-based nominal estimate in `Run` (per-worker sum of `provider.DefaultHashrates` over each worker's device family, via `nominalMiningHashrate`), thread it through `reconnectOpts`/`sessionOpts`, and declare it whenever the live rate is non-positive. On reconnect the live rate wins, reflecting sustained throughput. Tests: `TestHandshake_DeclaresNominalHashrateWhenWorkersCold` (net.Pipe server asserts the declared float) and `TestNominalMiningHashrate`.
+
+[AUDITED — clean] SV2 `DispatchFrame` (messages.go:406-483): every known msg type decodes or errors (error → session drop → reconnect); unknown types become `UnknownMessage` and are ignored; the 16 MiB frame cap is enforced in `ReadFrame` before allocation.
+
 ## Session 374 — config-layer pool URL validation hardening
 
 [AUDITED — clean] `config show`/`config validate` output: passphrases are
