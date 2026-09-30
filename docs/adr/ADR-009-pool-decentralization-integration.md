@@ -618,6 +618,28 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 511, September 2026)
+
+**First known production JDP block.** On June 25–26, 2026 DMND mined
+mainnet block **955,318** for GoMining — the first block produced via
+Stratum V2 Job Declaration where a *miner* (not the pool) constructed and
+declared its own template (verified against DMND's announcement and
+Bitcoin Magazine's report). GoMining used it for a real purpose — the
+template carried its own GoBTC Pay transactions — so this is the
+end-to-end existence proof for the miner-declared path this ADR builds
+on: template declaration is no longer specification-only or test-only; it
+has produced a confirmed mainnet block through a live pool. This
+strengthens the "Why now" argument's premise that pools will accept
+miner-declared templates at scale. (Recorded here rather than in the
+Context section per the original-text-immutable convention.)
+
+- DMND announcement:
+  https://blog.dmnd.work/dmnd-mines-the-first-known-bitcoin-block-using-stratum-v2-job-declaration/
+- Bitcoin Magazine report:
+  https://bitcoinmagazine.com/bitcoin-mining/bitcoin-mining-pool-dmnd-mines
+
+---
+
 ## Ecosystem update (session 518, September 2026)
 
 Two specification-level developments since the production-JDP evidence
