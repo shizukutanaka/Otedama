@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 361 — config 非有限値拒否)
+
+5 つの float 設定項目で NaN/±Inf がバリデーションを通過する
+問題を修正（`x < 0` は NaN で偽）。`.nan`/env "NaN" が裁定計算を
+汚染する経路を遮断。
+
 ### Fixed (session 325 — 裁定エンジンの非有限 yield を collapse)
 
 **問題.** `Yield.Effective()` の `<= 0` ガードは NaN を通す——
