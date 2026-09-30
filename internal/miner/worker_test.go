@@ -280,7 +280,7 @@ func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
 	h := work.Header
 	for i := 0; i < b.N; i++ {
 		h.Nonce = uint32(i)
-		_ = HashHeader(h)
+		_ = HashHeader(&h)
 	}
 }
 
