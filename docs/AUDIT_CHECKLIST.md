@@ -37,6 +37,7 @@ If any row does not pass, open a security advisory.
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Correction (session 488): currently fails** — every `uses:` is a tag/branch ref (`@v4`, `@master`), none are SHA-pinned; this row is the target state, not the current state |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are tag refs (`@v4`, one `@master`) — no SHA pins yet |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Correction (session 488): currently fails** — `release.yml` never invokes goreleaser or cosign; the `.goreleaser.yaml` `signs:` block is dead config and no signed artefact exists |
