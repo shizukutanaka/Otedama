@@ -55,7 +55,7 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 var dialTimeout = 15 * time.Second
 
 // Dial opens a TCP (or, when configured, TLS) connection to the pool.
-func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
+func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := poolproto.StripScheme(url)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: %w", err)
