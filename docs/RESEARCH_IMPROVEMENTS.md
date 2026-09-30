@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 547 — platform split + error-wrap convention: clean
+
+- Platform-gated code is exactly one file pair:
+  `gpu_linux.go` (`//go:build linux`, sysfs DRM enumeration — no
+  CGO/OpenCL) ↔ `gpu_stub.go` (`//go:build !linux`, explicit no-op
+  stub whose doc defers macOS/Windows GPU to the v3.5.0 roadmap).
+  Tags are complementary and the non-Linux path is compile-verified
+  by the GOOS build matrix in the earlier session.
+- Legacy `+build` syntax: absent — modern `//go:build` only.
+- Error-wrap convention: every wrapped error uses `%w`; the only
+  `%v`-formatted inner error is `dialer.go`'s deliberate
+  `%w: %v` (wraps the sentinel for `errors.Is`, flattens the
+  remote's raw text — the documented sentinel-wrap pattern).
+- `reflect` in non-test code: zero imports.
