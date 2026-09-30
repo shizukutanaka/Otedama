@@ -250,6 +250,15 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"ssh rejected", "ssh://pool.example.com", true},
 		{"no scheme rejected", "pool.example.com:3333", true},
 		{"empty host rejected", "stratum+v2://", true},
+		{"missing port rejected", "stratum+tcp://pool.example.com", true},
+		{"empty port rejected", "stratum+tcp://pool.example.com:", true},
+		{"non-numeric port rejected", "stratum+tcp://pool.example.com:abc", true},
+		{"port out of range rejected", "stratum+tcp://pool.example.com:99999", true},
+		{"zero port rejected", "stratum+tcp://pool.example.com:0", true},
+		{"userinfo rejected", "stratum+tcp://user:pass@pool.example.com:3333", true},
+		{"path rejected", "stratum+tcp://pool.example.com:3333/extra", true},
+		{"whitespace rejected", "stratum+tcp://pool.example.com :3333", true},
+		{"ipv6 literal accepted", "stratum+v2://[2001:db8::1]:3336", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
