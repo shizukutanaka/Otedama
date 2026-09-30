@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正)
+
+* Windows のログ参照手順 `Get-EventLog -Source Otedama` → イベントソース非登録の phantom（SCM で stdout 破棄・`--log-file` 非通過も併記）。
+* `contrib/grafana/otedama-dashboard.json`「lives at」→ `contrib/` 非実在のため v3.1.0 計画として訂正。
+* ハードニングチェック「Binary cosign signature verified」→ 署名リリース非実在（#562 で記録済みの release.yml 欠陥）と訂正。
+* 「Dependabot for the Otedama container image tag」→ dependabot docker エコシステムは Dockerfile のベースイメージ pin を更新するのみでデプロイ済みタグは更新しない、と訂正。
+
 ### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
 
 * §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
