@@ -63,6 +63,7 @@ func TestYield_Effective(t *testing.T) {
 		{"+Inf sats treated as zero", Yield{math.Inf(1), 1.0}, 0},
 		{"+Inf confidence treated as zero", Yield{100, math.Inf(1)}, 0},
 		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
+		{"negative sats and confidence treated as zero", Yield{-50, -0.5}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

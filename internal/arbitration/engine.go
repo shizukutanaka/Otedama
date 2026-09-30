@@ -92,8 +92,11 @@ type Yield struct {
 // e.g. a provider division producing 0/0 upstream) collapse to 0 so a
 // bad quote can never win the sort or poison TotalYield.
 func (y Yield) Effective() float64 {
+	if !(y.SatsPerSecond > 0) || !(y.Confidence > 0) {
+		return 0
+	}
 	v := y.SatsPerSecond * y.Confidence
-	if !(v > 0) || math.IsInf(v, 0) {
+	if math.IsInf(v, 0) {
 		return 0
 	}
 	return v
