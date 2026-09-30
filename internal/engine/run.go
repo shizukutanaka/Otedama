@@ -1030,19 +1030,32 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 						"engine: share accept with future seq %d ignored (sent %d)",
 						last, seqNum))
 				} else {
-					opts.log("info", "engine: share accepted")
-					if opts.m != nil {
-						opts.m.sharesAccepted.Inc()
-					}
 					// Settle round-trip latency for every submitted share
 					// up to LastSequenceNumber, then drop those entries.
+					// The pool may batch-acknowledge: NewSubmitsAccepted
+					// carries how many submits this message accepts, so
+					// counting one accept per message would undercount.
 					now := time.Now()
+					var settled uint64
 					for seq, sent := range submitTimes {
 						if seq <= last {
 							latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
 							delete(submitTimes, seq)
+							settled++
 							delete(submitTargets, seq)
 						}
+					}
+					n := uint64(pm.msg.SubmitSharesSuccess.NewSubmitsAccepted)
+					if n == 0 || n > settled {
+						// Pool sent no explicit count, or claims more
+						// accepts than submits it settled; locally observed
+						// settlements are both the floor and the ceiling —
+						// never credit shares that were never sent.
+						n = settled
+					}
+					opts.log("info", fmt.Sprintf("engine: share accepted (+%d)", n))
+					if opts.m != nil && n > 0 {
+						opts.m.sharesAccepted.Add(n)
 					}
 				}
 			}
@@ -1272,6 +1285,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 		case job, ok := <-sess.Jobs():
 			if !ok {
+				// A pool that sent client.reconnect/mining.reconnect may
+				// have asked for a pause before we reconnect; honor the
+				// (already-clamped) delay. Capped by ReconnectWait itself
+				// and cancellable via ctx, so shutdown stays instant.
+				if rw, isWaiter := sess.(poolproto.ReconnectWaiter); isWaiter {
+					if w := rw.ReconnectWait(); w > 0 {
+						opts.log("info", fmt.Sprintf("engine: pool requested %s reconnect delay", w))
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-time.After(w):
+						}
+					}
+				}
 				return fmt.Errorf("engine: pool closed connection")
 			}
 			// While curtailed, keep workers idle and ignore the job (see the
