@@ -65,6 +65,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	dialFn := d.dialFn
 	if dialFn == nil {
 		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+			if d.useTLS {
+				// A stratum+v2tls:// scheme must produce a certificate-verified
+				// TLS transport — never a silent plaintext downgrade. nil config
+				// = system roots, TLS 1.2+, ServerName from the dial address
+				// (stratum.DialTLS never falls back to plaintext).
+				return stratum.DialTLS(ctx, address, nil)
+			}
 			var dialer net.Dialer
 			return dialer.DialContext(ctx, "tcp", address)
 		}
@@ -331,6 +338,13 @@ type encodable interface {
 	Encode() ([]byte, error)
 }
 
+// writeTimeout bounds every write on the pool socket. Without a
+// deadline a pool that keeps the TCP connection open but stops reading
+// stalls the session loop on a full kernel send buffer — the V1 path
+// already applies the same bound (10s). Declared a var so tests can
+// shorten it.
+var writeTimeout = 10 * time.Second
+
 // sendMsg encodes, frames, and writes a Stratum V2 message. isChannel
 // sets the frame header's channel_msg bit — required for channel-scoped
 // messages (SubmitSharesStandard etc.), absent for connection-scoped
@@ -348,6 +362,7 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	_ = w.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}
