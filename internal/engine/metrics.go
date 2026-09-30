@@ -23,6 +23,7 @@ type engineMetrics struct {
 	hashrate            *metrics.Gauge
 	sharesFound         *metrics.Counter
 	sharesSubmitted     *metrics.Counter
+	sharesSubmitDropped *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
@@ -227,6 +228,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"shares_found_total: a share can be found by a worker but never "+
 				"submitted if its worker's share channel was full (a rate the "+
 				"engine only currently logs, as \"dropped N found share(s)\").",
+			nil),
+		sharesSubmitDropped: reg.NewCounter(
+			"otedama_shares_submit_dropped_total",
+			"Total found shares dropped by the submit rate cap before "+
+				"reaching the wire. A non-zero value means the pool's "+
+				"difficulty is so low that shares are produced faster "+
+				"than 8/s — normally only under a hostile or "+
+				"misconfigured mining.set_difficulty.",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",
