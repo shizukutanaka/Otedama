@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 556 — ecosystem recheck (sv2-ui v0.6.0, hashlabs case study)
+
+- sv2-ui v0.6.0 (Jul 29): NexusPool + CK pool listed as solo pools,
+  `min_individual_worker` hashrate config, custom-pool JDS ports —
+  ADR-009's "assemble-it-yourself JDP stack" assumption further
+  dissolving upstream.
+- stratumprotocol.org #336: hashlabs case study makes the
+  node-connectivity assumption explicit — production evidence for
+  ADR-009's `btcnode` colocation rationale.
+- SRI v1.11.1 unchanged; Otedama stays green on go1.27.1.
+- PR #637 CI failures verified as the known signatures
+  (tlsmlkem toolchain gate, dep-graph, npm-cache, tests/security).

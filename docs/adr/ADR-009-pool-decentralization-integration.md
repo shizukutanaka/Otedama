@@ -614,6 +614,21 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 556, September 2026)
+
+- **sv2-ui v0.6.0** (July 29): the upstream JDP stack orchestrator now lists
+  NexusPool and CK pool as solo pools, adds `min_individual_worker` hashrate
+  configuration, and lets custom pools specify a JDS port — more evidence the
+  "assemble-it-yourself JDP stack" assumption in this ADR is dissolving.
+- **stratumprotocol.org #336** (hashlabs case study): upstream now documents
+  the node-connectivity assumption explicitly — a production-operator data
+  point on colocating the pool/JDC with a full node, matching this ADR's
+  `btcnode` sub-domain rationale.
+- SRI remains v1.11.1 (2026-07-22); Go 1.27.x is current upstream with
+  Otedama verified green on go1.27.1.
+
+---
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):
