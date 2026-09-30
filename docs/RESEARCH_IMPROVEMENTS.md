@@ -979,6 +979,35 @@ runReconnectLoop).
   gauge shipped in session 54 and is catalogued in SPECIFICATION §6;
   corrected.
 
+## Session 328 — remaining surface verdicts
+
+**mining.set_version_mask [OBSERVED].** Ignored server→client
+notification (parse-only, never consumed) — BIP320 version-rolling is
+not implemented (coinbase reconstruction is open PR #417 scope); a
+malicious mask value can at worst be dropped, which it already is.
+
+**Worker Threads [OBSERVED].** Not user-configurable — always
+`runtime.NumCPU()` via DefaultWorkerConfig; `Threads<=0` falls back to
+NumCPU; `NonceStep=0` resolves to Threads. No goroutine-flood path.
+
+**internal/rates [OBSERVED].** http.Client Timeout=10s per fetch,
+64 KiB LimitReader on bodies, three-source median (Coinbase/Kraken/
+CoinGecko). Hashrate feed (s320) reuses the same bounded client shape.
+
+**internal/daemon [OBSERVED].** systemd/launchd unit files written
+0644 in 0755 dirs — correct modes for service units (world-readable
+config is systemd convention; no secrets inside).
+
+**internal/i18n [OBSERVED].** Missing-key fallback is explicit
+(requested tag → base tag → English); no panic/empty-render path.
+
+**internal/config [OBSERVED].** Env-var numeric parsing warns-and-skips
+on malformed values (two ParseFloat sites, both error-handled); no
+panic paths.
+
+**internal/provider [OBSERVED].** quoteCh buffered 16; no unbounded
+map/state on quote arrival.
+
 ## Session 329 — SRI 1.12.0 cipher alignment (verified)
 
 **noise_sv2 dropped AES-256-GCM [FETCHED — freedom.tech SRI 1.12.0
