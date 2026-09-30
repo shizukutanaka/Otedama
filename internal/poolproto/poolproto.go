@@ -65,6 +65,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // ----- Protocol identifiers -----
@@ -182,6 +183,20 @@ type Job struct {
 
 	// CleanJobs, when true, indicates older jobs may be discarded.
 	CleanJobs bool
+
+	// ExtraNonce is the extranonce2 the MerkleRoot was computed with.
+	// V1 only: the session picks a fresh value per job and folds it into
+	// the coinbase; shares must echo it back so the pool can rebuild the
+	// same coinbase. Empty for protocols that don't use it (V2).
+	ExtraNonce []byte
+
+	// Coinb1, Coinb2 and MerkleBranch are the raw Stratum V1 coinbase
+	// parts from mining.notify. The session folds them into MerkleRoot
+	// (with Extranonce) before handing the job to the engine. V2 leaves
+	// them empty — the pool supplies a ready MerkleRoot there.
+	Coinb1       []byte
+	Coinb2       []byte
+	MerkleBranch [][]byte
 
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
@@ -399,3 +414,28 @@ var (
 	// soft rejections that come back inside ShareResult).
 	ErrShareRejected = errors.New("poolproto: share rejected")
 )
+
+// maxPoolTextRunes caps sanitized pool-controlled text. Pool strings end
+// up in logs (and potentially the TUI); an unbounded string is a
+// log-flooding vector.
+const maxPoolTextRunes = 256
+
+// SanitizePoolText removes Unicode control characters (C0, DEL, C1 —
+// including ANSI escape introducers) from pool-controlled text and
+// truncates it to 256 runes. Callers use it before logging or rendering
+// any string the pool supplied (share-reject reasons, error objects,
+// job IDs), so escape sequences cannot manipulate the terminal or forge
+// log lines.
+func SanitizePoolText(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxPoolTextRunes {
+		clean = string(runes[:maxPoolTextRunes])
+	}
+	return clean
+}
