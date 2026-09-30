@@ -12,7 +12,7 @@
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
 #   2. Downloads the matching Otedama binary from GitHub Releases.
 #   3. Verifies the SHA-256 checksum against the published checksums file
-#      (when one is published — some release paths do not produce one).
+#      (a release without one is refused unless --skip-verify is given).
 #   4. Optionally verifies the cosign signature of the checksums file.
 #   5. Installs the binary to $PREFIX/bin (default: /usr/local/bin, or
 #      $HOME/.local/bin if /usr/local is not writable).
@@ -191,7 +191,7 @@ log "downloaded ${ARCHIVE}"
 if [[ "$SKIP_VERIFY" == "1" ]]; then
     log "SKIPPING checksum verification (--skip-verify)"
 elif [[ -z "$CHECKSUMS_FILE" ]]; then
-    log "WARNING: no checksums file published for this release; skipping SHA-256 check"
+    die "no checksums file published for this release — refusing unverified install; pass --skip-verify to override"
 elif ! grep -q " ${ARCHIVE}$" "$CHECKSUMS_FILE"; then
     die "${ARCHIVE} is not listed in $(basename "$CHECKSUMS_FILE") — refusing unverified install"
 else

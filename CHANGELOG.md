@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### 修正 (session 375)
 
-- `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は警告して続行（存在時の不一致は依然 fatal）。裸バイナリは tar 展開をスキップして直接インストール。
+- `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は `--skip-verify` なしでは拒否（存在時の不一致も fatal）。裸バイナリは tar 展開をスキップして直接インストール。
 - ドキュメントのセキュリティ過大記載を訂正: THREAT_MODEL は「リリース成果物は cosign 署名済み」「`-trimpath` による再現ビルド」「GitHub Actions は全て SHA ピン留め」を主張していたが、いずれも実装なし（release.yml に cosign なし、`-trimpath` なし、ldflags がビルド時刻を含むため再現不可、全 workflow が `@vN` タグ参照）。実態を正確に記述し、SHA ピン留めと Sigstore 署名公開をハードニング項目として明記。AUDIT_CHECKLIST の item 11/13/17/22 も同様に修正（scrypt N=131072、wallet.dat の atomic write、cosign 未配線、SHA ピン未適用）。
 
 ### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)

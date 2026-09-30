@@ -957,7 +957,8 @@ produces: it hardcoded the goreleaser asset name
 `otedama-<os>-<arch>.tar.gz` and ci-cd.yml emits a bare binary. The
 checksums download was a hard `die`, yet release.yml never publishes
 checksums. Now tries all three asset names, accepts either checksum file
-name, warns (not dies) when none is published, and installs bare binaries
+name, still refuses (dies) when none is published unless
+--skip-verify is given, and installs bare binaries
 without tar extraction. `bash -n` clean.
 
 [FIXED] Documentation overclaimed supply-chain mitigations that do not
