@@ -43,7 +43,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **JDPは延期**: 3つのメジャープールが対応するまで実装しない（2026/Q2時点でBraiinsとDEMANDのみ）。
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
-**実装状況:** `internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ。
+**実装状況:** `internal/poolproto/` 抽象化に加え、`poolproto/stratumv1`・`poolproto/stratumv2` の両 dialer が v3.0.0-alpha で実装済み（本判断記述時より前倒しで着地 — JDP 延期方針は継続）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -84,7 +84,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況:** SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況:** Dependabot は配置済み。SHA pinning と cosign signing は**両方とも未実施** — 全 `uses:` がタグ参照（`@v4` 等、`aquasecurity/trivy-action@master` はブランチ追尾 — 本書 §5 が引用する TeamPCP 型攻撃そのものの形態）で、`release.yml` は署名を生成しない（VERIFY.md が現状を記載）。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
