@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 555 — deliberate design)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: re-verified the three audit-ledger
+  items — `shortenURL`'s over-budget return is test-pinned and
+  unreachable (caller floors at 8), `metricKey` collision stays
+  unreachable (label-name validation rejects `,`/`=` at
+  registration), and exposition labels/HELP are escaped.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
