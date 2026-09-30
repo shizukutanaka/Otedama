@@ -232,10 +232,10 @@ jobs:
 
 **Scorecard で監視する項目（OpenSSF Security Scorecard）：**
 - Dependency-Update-Tool（Renovabot設定済み → 自動高スコア）
-- Signed-Releases（cosign設定済み → 自動高スコア）
+- Signed-Releases（cosign未設定 → 低スコア）**訂正 (session 488)**: `.goreleaser.yaml` に cosign 設定は残るが `release.yml` が goreleaser を一切呼ばないため dead code — 署名リリースは存在せず Scorecard では低スコアのまま
 - Branch-Protection（mainブランチのPR必須ルール → 設定必要）
 - Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → CIで継続実行 → 設定済み）
+- Fuzzing（go test -fuzz → 未設定）**訂正 (session 488)**: `.github/workflows/` にファズジョブは一切存在しない — `make fuzz` はローカル実行のみ
 
 ### 2.3 インシデント対応の事前設計
 
@@ -653,7 +653,7 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
 対策：
-- `govulncheck` は週次で自動実行済み
+- `govulncheck` は週次自動実行**未**設定（訂正 session 488：CI に govulncheck/osv-scanner ジョブは一切存在せず Makefile ローカルのみ — 第2層の週次ワークフロー例がそのまま必要）
 - LDKのセキュリティアドバイザリをGitHub Watch経由で監視
 - ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
 
