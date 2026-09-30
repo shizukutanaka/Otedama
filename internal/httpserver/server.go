@@ -39,6 +39,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+
 	// pprof registers its handlers via its init(); we do NOT blank-import it
 	// because that would register on http.DefaultServeMux. Instead we call
 	// the pprof handler functions explicitly so they land on our custom mux.
