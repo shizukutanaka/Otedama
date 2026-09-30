@@ -20,6 +20,13 @@ BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 
 decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
 エコシステム不変（SRI v1.12.0）。
 
+### 監査判定 (session 400)
+
+プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
+発見・記録（電力無駄なし: ジョブなしワーカーはアイドル待機。AI 再配分は設計判断
+項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
+の収益計算・信頼度・フォールバックは監査 clean。
+
 ### 監査判定 (session 401)
 
 最後の未個別監査ファイル `internal/lightning/seedstore.go` を監査 clean —
