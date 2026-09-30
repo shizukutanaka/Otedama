@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 func cmdConfig(args []string, stdout, stderr io.Writer) int {
@@ -85,7 +86,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintf(stdout, "pools:           %d configured%s\n", len(cfg.Pools), tag(origins.Pools))
 		for i, p := range cfg.Pools {
-			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(p.URL))
+			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(poolproto.StripUserinfo(p.URL)))
 		}
 	}
 	return exitOK
@@ -102,7 +103,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config.Origins, withOrigins bool) int {
 	pools := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		pools = append(pools, p.URL)
+		pools = append(pools, poolproto.StripUserinfo(p.URL))
 	}
 	doc := struct {
 		BitcoinAddress           string            `json:"bitcoin_address"`
