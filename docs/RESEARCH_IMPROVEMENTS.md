@@ -940,6 +940,16 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 496 — MAINTAINERS.md の虚偽引用訂正 + Dockerfile/.dockerignore 監査
+
+**Sweep.** `MAINTAINERS.md`（192行）全文精読 + `Dockerfile`（70行）を ci.yml の docker-verify クレーム・API.md・内部実装と照合。
+
+**発見（1件訂正 — 外部引用の捏造系）。**
+- 冒頭の動機付け「Kubernetes Ingress NGINX, **External Secrets Operator** have been declared end-of-life in 2025–2026」→ Ingress NGINX の 2026 EOL 宣言は実在だが **ESO は活発に開発中**（external-secrets.io のサポート表: 2026-08 時点で v2.10 までリリース）— 虚偽引用を訂正（CLAUDE.md「存在しない URL・API の生成禁止」と同クラスの事実捏造）。
+- MAINTAINERS の cosign「default path」記述（line ~101, 148）は未修正のまま残存 — **closed #562 の担当域**（同 PR で訂正済みだったが未マージで閉鎖）のため再提出せず帳簿記録のみ。
+
+**検証済み・変更なし。** Dockerfile: `golang:1.24-alpine`（実効要件と一致）・ldflags が正しい `internal/version.{Version,Commit,BuildDate}` シンボル（release.yml の間違った `main.*` と対照的）・NOTICE+LICENSE 同梱・nonroot uid 65532・`VOLUME /var/lib/otedama`・`EXPOSE 0`・`CMD ["run","--help"]` — 全て正確（ci.yml docker-verify の失敗は §13 記録済みのジョブ側欠陥で Dockerfile 側の問題ではない）。`.dockerignore` 非実在（COPY . . が .git 等を context に含めるが動作上無害 — open #530 担当域）。
+
 ## Session 497 — ADR-009 にエラッタ2件（残 Proposed ADR 007–010 の現在形検証）
 
 **Sweep.** Accepted ADR（001–006, 011）は session 473 で全照合済みのため、残る Proposed ADR 007–010 の「今日の実装」現在形クレームを検証（Proposed 自体は未来設計で正当 — 陳腐な現在形のみ対象）。
