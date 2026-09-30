@@ -2878,7 +2878,7 @@ func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
 
 	dec := stratum.NewDecoder(client)
 	start := time.Now()
-	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err == nil {
 		t.Fatal("handshake should fail against a silent peer")
 	}
@@ -2910,7 +2910,7 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(client)
-	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil)
+	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
