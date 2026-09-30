@@ -47,7 +47,7 @@ func bech32Polymod(values []int) int {
 		top := chk >> 25
 		chk = (chk&0x1ffffff)<<5 ^ v
 		for i := 0; i < 5; i++ {
-			if (top>>uint(i))&1 == 1 {
+			if (top>>uint(i))&1 == 1 { //nolint:gosec // i ranges over a 5-bit group
 				chk ^= gen[i]
 			}
 		}
@@ -74,23 +74,23 @@ func bech32HrpExpand(hrp string) []int {
 func convertBits(data []int, from, to uint, pad bool) ([]int, error) {
 	var acc, bits int
 	maxv := (1 << to) - 1
-	out := make([]int, 0, len(data)*int(from)/int(to)+1)
+	out := make([]int, 0, len(data)*int(from)/int(to)+1) //nolint:gosec // from/to are the constant 5/8 group sizes
 	for _, v := range data {
 		if v < 0 || v>>from != 0 {
 			return nil, fmt.Errorf("btccrypto: convertBits: value %d out of range", v)
 		}
 		acc = (acc << from) | v
-		bits += int(from)
-		for bits >= int(to) {
-			bits -= int(to)
-			out = append(out, (acc>>uint(bits))&maxv)
+		bits += int(from)     //nolint:gosec // from/to are the constant 5/8 group sizes
+		for bits >= int(to) { //nolint:gosec // from/to are the constant 5/8 group sizes
+			bits -= int(to)                           //nolint:gosec // from/to are the constant 5/8 group sizes
+			out = append(out, (acc>>uint(bits))&maxv) //nolint:gosec // bits < from+to <= 16
 		}
 	}
 	if pad {
 		if bits > 0 {
 			out = append(out, (acc<<(to-uint(bits)))&maxv)
 		}
-	} else if bits >= int(from) || ((acc<<(to-uint(bits)))&maxv) != 0 {
+	} else if bits >= int(from) || ((acc<<(to-uint(bits)))&maxv) != 0 { //nolint:gosec // from/to are the constant 5/8 group sizes
 		return nil, fmt.Errorf("btccrypto: convertBits: invalid padding")
 	}
 	return out, nil
