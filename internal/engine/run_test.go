@@ -2567,6 +2567,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2584,5 +2585,25 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := newSubmitLimiter(ctx)
+	// Burst starts full; the (submitBurst+1)-th take without a tick fails.
+	for i := 0; i < submitBurst; i++ {
+		if !l.take() {
+			t.Fatalf("take %d/%d should succeed (burst full)", i+1, submitBurst)
+		}
+	}
+	if l.take() {
+		t.Fatal("take should fail once the burst is exhausted")
+	}
+	// After one refill interval a token is available again.
+	time.Sleep(submitRateInterval + 50*time.Millisecond)
+	if !l.take() {
+		t.Fatal("take should succeed after a refill tick")
 	}
 }
