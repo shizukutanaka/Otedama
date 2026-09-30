@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 415)
+
+**lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
+gosec・gocritic・misspell・gofumpt・prealloc・goconst・unparam・dogsled・
+bodyclose 等）に対する ~350 件の違反を解消し 65 件まで削減。主な実修正:
+`err ==` 等価比較を `errors.Is`/`errors.As` へ統一（ラップ済み fatalError が
+無限再試行されていた意味的バグを含む）、systemd/launchd サービス定義の
+パーミッションを 0644→0600 へ厳格化、未使用コード（remoteStatic・test
+parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチャ整理、
+テストの bodyclose・unnecessaryDefer 等。BIP-39 ワードリストと i18n
+カタログは正規データのため misspell 対象外として恒久的に除外。残りは
+hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
+案件として記録。
+
 ### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
 
 **問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も

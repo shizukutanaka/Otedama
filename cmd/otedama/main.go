@@ -21,7 +21,7 @@
 //	0  — success
 //	1  — runtime error (engine failure, I/O error, network unreachable)
 //	64 — usage error (unknown subcommand, unknown flag, missing required argument)
-//	78 — configuration error (invalid bitcoin address, unrecognised log level, etc.)
+//	78 — configuration error (invalid bitcoin address, unrecognized log level, etc.)
 //
 // The doctor subcommand uses a narrower three-value scale:
 //
@@ -38,6 +38,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -73,7 +74,7 @@ func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Wri
 	}
 	fs.SetOutput(out)
 	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return false, exitOK
 		}
 		return false, exitUsage
@@ -82,20 +83,20 @@ func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Wri
 }
 
 // hasHelpFlag reports whether args requests help, matching the exact
-// spellings flag.FlagSet.Parse recognises (-h, -help, --help) before
+// spellings flag.FlagSet.Parse recognizes (-h, -help, --help) before
 // falling through to its own ErrHelp path. It scans every token rather
 // than stopping at the first argument that doesn't look like a flag:
 // every flag these subcommands define takes a value in the space-separated
 // "--flag value" form (e.g. "--bitcoin-address bc1q..."), so the token
 // right after a flag is that flag's value, not a positional argument
-// signalling the end of flags — stopping there produced false negatives
+// signaling the end of flags — stopping there produced false negatives
 // for the common case of --help appearing after any flag with a value.
 // Scanning still stops at a literal "--", the unambiguous end-of-flags
 // marker, since that ends flag.Parse's own scanning too.
 func hasHelpFlag(args []string) bool {
 	for _, a := range args {
 		switch a {
-		case "-h", "-help", "--help":
+		case "-h", "-help", helpFlag:
 			return true
 		case "--":
 			return false
@@ -128,7 +129,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case "help", helpFlag, "-h":
 		printUsage(stdout)
 		return exitOK
 	default:
