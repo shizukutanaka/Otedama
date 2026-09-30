@@ -19,6 +19,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -82,7 +83,7 @@ func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *La
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
-		PoolURL:           opts.poolURL,
+		PoolURL:           poolproto.StripUserinfo(opts.poolURL),
 		PoolLatency:       poolLatency,
 		Connected:         true,
 		Stalled:           stalled,
@@ -107,7 +108,7 @@ func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *La
 // snapshot does not know the true current state of any of them.
 func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) *tui.Stats {
 	return &tui.Stats{
-		PoolURL:           poolURL,
+		PoolURL:           poolproto.StripUserinfo(poolURL),
 		Connected:         false,
 		WalletFingerprint: wallet,
 		Uptime:            time.Since(startTime),
@@ -262,6 +263,15 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 // invalid→hardware.
 func rejectClass(reason string) (category, diagnosis string) {
 	r := strings.ToLower(reason)
+	// Canonical SV2 SubmitSharesError error codes (sv2-spec MiningProtocol):
+	// check them before substring heuristics — e.g. "invalid-job-id" would
+	// otherwise match "invalid" → hardware, but it is a stale-class reject.
+	switch r {
+	case "stale-share", "invalid-job-id", "invalid-channel-id":
+		return "stale", "likely cause: stale work (job superseded or channel closed)"
+	case "difficulty-too-low":
+		return "difficulty", "likely cause: share below negotiated difficulty"
+	}
 	switch {
 	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
 		return "stale", "likely cause: network latency / stale work"
@@ -274,6 +284,29 @@ func rejectClass(reason string) (category, diagnosis string) {
 	default:
 		return "other", "cause unclassified — check pool documentation"
 	}
+}
+
+// transitionReject reports whether a share rejection is a retarget
+// artifact rather than a genuine reject (ESP-Miner #212): the share was
+// produced under a different target than the pool's current share target,
+// meaning the pool changed difficulty/target while the share was in
+// flight, and the reason falls in the "above target" family (rejectClass
+// "difficulty"). The work was valid under the difficulty epoch it was
+// issued in, so the reject is benign: it is excluded from the reject-rate
+// counters and surfaced only in the per-reason breakdown as
+// "difficulty-transition".
+//
+// issued is the share's issue-time target (miner.Share.Target); current
+// is the pool's latest share target. A zero issued target (synthetic or
+// pre-field shares) cannot establish the epoch and is not eligible.
+func transitionReject(category string, issued, current miner.Hash) bool {
+	if category != "difficulty" {
+		return false
+	}
+	if issued == (miner.Hash{}) {
+		return false
+	}
+	return issued != current
 }
 
 // acceptanceRate computes the share acceptance rate — accepted /

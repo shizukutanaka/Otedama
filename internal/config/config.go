@@ -34,6 +34,8 @@ package config
 
 import (
 	"fmt"
+	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -212,8 +214,8 @@ type PoolConfig struct {
 	PayoutScheme string `yaml:"payout_scheme"`
 
 	// TLSCAFile is an optional path to a PEM file of certificate authorities
-	// to trust for this pool's stratum+tls:// connection, in addition to the
-	// system root store. Use it for a pool that presents a private-CA or
+	// to trust for this pool's stratum+tls:// or stratum+v2tls:// connection,
+	// in addition to the system root store. Use it for a pool that presents a private-CA or
 	// self-signed certificate, so the connection can be verified rather than
 	// either failing or being run in the clear. Empty means "system roots
 	// only". It has no effect on non-TLS schemes. Certificate verification is
@@ -637,6 +639,23 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// NaN/±Inf must be rejected explicitly: comparisons like `x < 0` are
+	// false for NaN, so a non-finite value would otherwise sail through
+	// every range check and poison the arbitration math downstream.
+	for _, f := range []struct {
+		name  string
+		value float64
+	}{
+		{"arbitration_hysteresis_pct", c.ArbitrationHysteresisPct},
+		{"curtail_below_btc_usd", c.CurtailBelowBTCUSD},
+		{"min_yield_sats_per_sec", c.MinYieldSatsPerSec},
+		{"power_watts", c.PowerWatts},
+		{"electricity_price_per_kwh", c.ElectricityPricePerKWh},
+	} {
+		if math.IsNaN(f.value) || math.IsInf(f.value, 0) {
+			issues = append(issues, fmt.Sprintf("%s must be a finite number", f.name))
+		}
+	}
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct,
@@ -669,10 +688,11 @@ func (c Config) Validate() error {
 	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
 }
 
-// validateBitcoinAddress performs a lightweight format check on a Bitcoin
-// address. Full cryptographic validation (checksum verification) is
-// performed by the lightning package when the address is first used;
-// this function only catches obvious typos and wrong-chain addresses.
+// validateBitcoinAddress validates a Bitcoin address at config load:
+// length and mainnet-prefix shape plus full checksum verification via
+// btccrypto.ValidateAddress, so a typo that stays inside the character
+// set is caught before mining begins rather than silently misdirecting
+// earnings.
 func validateBitcoinAddress(addr string) error {
 	if len(addr) < 26 {
 		return fmt.Errorf("address is too short (%d characters)", len(addr))
@@ -690,26 +710,48 @@ func validateBitcoinAddress(addr string) error {
 	default:
 		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
-	// Verify the address checksum (bech32/bech32m for bc1…, Base58Check for
-	// 1…/3…) so a transcription error that stays inside the character set —
-	// which would otherwise pass the prefix/length check and silently
-	// misdirect earnings — is rejected at config load, before mining begins.
+	// Checksum verification: bech32/bech32m for bc1…, Base58Check for
+	// 1…/3….
 	if _, err := btccrypto.ValidateAddress(addr); err != nil {
 		return fmt.Errorf("checksum verification failed (likely a typo in the address): %w", err)
 	}
 	return nil
 }
 
-// validatePoolURL checks that a pool URL has an acceptable scheme.
+// validatePoolURL checks that a pool URL has an acceptable scheme and a
+// dialable host:port target.
 func validatePoolURL(raw string) error {
 	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
 	for _, s := range validSchemes {
 		if rest, ok := strings.CutPrefix(raw, s); ok {
-			if rest == "" {
-				return fmt.Errorf("URL has no host after scheme")
-			}
-			return nil
+			return validatePoolTarget(rest)
 		}
 	}
 	return fmt.Errorf("URL must start with one of: %s", strings.Join(validSchemes, ", "))
+}
+
+// validatePoolTarget checks the portion after the scheme. Otedama passes
+// it verbatim to the dialer (poolproto.StripScheme) and applies no default
+// port, so reject everything that cannot be a "host:port" dial target —
+// userinfo, path/query/fragment, a missing or non-numeric port, and
+// out-of-range ports — at config load rather than at first dial.
+func validatePoolTarget(rest string) error {
+	if rest == "" {
+		return fmt.Errorf("URL has no host after scheme")
+	}
+	if strings.ContainsAny(rest, "@/?# \t") {
+		return fmt.Errorf("must be host:port with no userinfo, path, or whitespace (got %q)", rest)
+	}
+	host, port, err := net.SplitHostPort(rest)
+	if err != nil {
+		return fmt.Errorf("must be host:port (e.g. pool.example.com:3333): %v", err)
+	}
+	if host == "" {
+		return fmt.Errorf("host is empty")
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil || p < 1 || p > 65535 {
+		return fmt.Errorf("port %q is not a number in 1-65535", port)
+	}
+	return nil
 }

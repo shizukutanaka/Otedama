@@ -88,12 +88,18 @@ type Yield struct {
 }
 
 // Effective returns the confidence-adjusted yield. A quote with zero
-// confidence is treated as zero yield.
+// confidence is treated as zero yield. Non-finite inputs (NaN/±Inf —
+// e.g. a provider division producing 0/0 upstream) collapse to 0 so a
+// bad quote can never win the sort or poison TotalYield.
 func (y Yield) Effective() float64 {
-	if y.SatsPerSecond <= 0 || y.Confidence <= 0 {
+	if !(y.SatsPerSecond > 0) || !(y.Confidence > 0) {
 		return 0
 	}
-	return y.SatsPerSecond * y.Confidence
+	v := y.SatsPerSecond * y.Confidence
+	if math.IsInf(v, 0) {
+		return 0
+	}
+	return v
 }
 
 // Stream is a revenue source's quote for what it will pay for each
@@ -295,11 +301,11 @@ func Decide(in *Input) (*Allocation, error) {
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
-	if in.HysteresisMargin < 0 {
-		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
+	if in.HysteresisMargin < 0 || math.IsNaN(in.HysteresisMargin) || math.IsInf(in.HysteresisMargin, 0) {
+		return nil, errors.New("arbitration: HysteresisMargin must be non-negative and finite")
 	}
-	if in.MinYieldSatsPerSec < 0 {
-		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
+	if in.MinYieldSatsPerSec < 0 || math.IsNaN(in.MinYieldSatsPerSec) || math.IsInf(in.MinYieldSatsPerSec, 0) {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative and finite")
 	}
 
 	// Reject duplicate device IDs up front, since silently ignoring

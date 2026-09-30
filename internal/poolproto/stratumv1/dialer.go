@@ -11,15 +11,23 @@ package stratumv1
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // ----- Public registration -----
+
+// dialTimeout bounds one pool dial attempt — TCP connect plus, for TLS,
+// the handshake — so failover is not stalled by a blackhole endpoint
+// when the caller's context carries no deadline. Var (not const) so tests
+// can shorten it.
+var dialTimeout = 15 * time.Second
 
 // Dialer is the V1 implementation of poolproto.Dialer. It is registered
 // at package init time for both plaintext and TLS variants; users never
@@ -47,6 +55,11 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	return poolproto.ProtocolStratumV1
 }
 
+// handshakeTimeout bounds the whole Negotiate handshake (subscribe +
+// authorize + optional extranonce.subscribe). Declared as a var so tests
+// can shorten it.
+var handshakeTimeout = 30 * time.Second
+
 // Dial opens a TCP connection to the pool. The URL must be of the form
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
 // dialer). Credentials are stashed on the returned Connection so that
@@ -56,6 +69,12 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credenti
 	if err != nil {
 		return nil, err
 	}
+	// Bound the whole attempt — TCP connect plus, for TLS, the handshake —
+	// with its own deadline. Without it a blackhole endpoint stalls failover
+	// for the OS SYN-retry default (~2 min on Linux) when the caller's ctx
+	// has no deadline of its own.
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
 	dialFn := d.dialFn
 	if dialFn == nil {
 		if d.useTLS {
@@ -80,7 +99,14 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credenti
 			}
 		}
 	}
-	conn, err := dialFn(ctx, address)
+	conn, err := dialFn(dctx, address)
+	if err != nil {
+		// A deadline from our own timeout surfaces as context errors from
+		// the dialer; report it as a dial timeout, not a connection refusal.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("dial timeout after %s", dialTimeout)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("stratumv1: dial %s: %w", address, err)
 	}
@@ -115,9 +141,15 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	sess := newSession(conn)
 	sess.start(ctx)
 
+	// Bound the whole handshake: the steady-state read deadline is 5 min
+	// per line, so a pool that trickles a line under that cadence but never
+	// answers subscribe/authorize would wedge the dial loop forever.
+	hctx, hcancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer hcancel()
+
 	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
 	id := sess.nextID.Add(1)
-	resp, err := sess.call(ctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
+	resp, err := sess.call(hctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)
@@ -131,8 +163,8 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: %v", poolproto.ErrHandshakeFailed, err)
 	}
-	sess.extranonce1 = en1
-	sess.extranonce2Size = en2Size
+	sess.extranonce1.Store(&en1)
+	sess.extranonce2Size.Store(int64(en2Size))
 
 	// Step 2: mining.authorize — authenticate the worker.
 	user := conn.creds.User
@@ -141,7 +173,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		password = "x" // most pools accept "x" as the password
 	}
 	id = sess.nextID.Add(1)
-	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
+	resp, err = sess.call(hctx, id, "mining.authorize", []any{user, password})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: authorize: %w", err)
@@ -163,7 +195,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// session is in a valid state and the engine will detect stale connections
 	// through the normal Jobs-channel lifecycle.
 	id = sess.nextID.Add(1)
-	if _, eerr := sess.call(ctx, id, "extranonce.subscribe", []any{}); eerr != nil {
+	if _, eerr := sess.call(hctx, id, "extranonce.subscribe", []any{}); eerr != nil {
 		// Write failed (connection closed) or context expired: proceed without
 		// extranonce rotation — not a fatal condition.
 		_ = eerr

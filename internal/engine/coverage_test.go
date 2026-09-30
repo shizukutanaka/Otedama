@@ -24,6 +24,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/tui"
@@ -596,7 +597,7 @@ func TestUpdateWork_InvalidPrevNBitsNoShareTarget_IsNoOp(t *testing.T) {
 	// No share target (zero) forces the network-target fallback; an
 	// invalid prevNBits (0x00000000) makes TargetFromNBits error →
 	// early return. Must not panic; does nothing.
-	updateWork(nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
+	updateWork(nil, nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
 }
 
 // ============================================================================
@@ -734,7 +735,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -754,7 +755,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -778,7 +779,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -802,7 +803,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -835,7 +836,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -859,7 +860,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -884,7 +885,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -913,7 +914,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -941,7 +942,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -1085,6 +1086,108 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 	return ln.Addr().String()
 }
 
+// fakeV1PoolHighDiff is fakeV1Pool plus a mining.set_difficulty of 1e15 —
+// large enough that the expected share interval exceeds the 1-hour
+// starvation tripwire at any CPU hashrate.
+func fakeV1PoolHighDiff(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolHighDiff listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e15]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		// Stay connected so the stats ticker keeps firing.
+		time.Sleep(10 * time.Second)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_StarvationWarnsOnce(t *testing.T) {
+	addr := fakeV1PoolHighDiff(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns int
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + addr,
+			user:     "worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log: func(level, msg string) {
+				if level == "warn" && strings.Contains(msg, "between shares") {
+					mu.Lock()
+					warns++
+					mu.Unlock()
+				}
+			},
+		})
+	}()
+
+	deadline := time.After(3 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := warns
+			mu.Unlock()
+			if n > 0 {
+				goto asserted
+			}
+		case <-deadline:
+			goto asserted
+		}
+	}
+asserted:
+	cancel()
+	<-runDone
+	mu.Lock()
+	defer mu.Unlock()
+	if warns == 0 {
+		t.Fatal("expected starvation warning (difficulty 1e15 → interval > 1h)")
+	}
+	if warns > 1 {
+		t.Fatalf("starvation warning fired %d times, want exactly 1 per episode", warns)
+	}
+}
+
 func TestRunSessionV1_PoolClosesAfterHandshake(t *testing.T) {
 	addr := fakeV1Pool(t, false) // closes immediately after authorize
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -1131,6 +1234,74 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
 		t.Errorf("unexpected error: %v", err)
 	}
+}
+
+// fakeV1PoolWithNotice is fakeV1Pool plus a client.show_message
+// notification before close, exercising the PoolNoticeReceiver wiring.
+func fakeV1PoolWithNotice(t *testing.T, message string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolWithNotice listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		msg, _ := json.Marshal(message)
+		fmt.Fprintf(conn, `{"id":null,"method":"client.show_message","params":[%s]}`+"\n", msg)
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
+	addr := fakeV1PoolWithNotice(t, "scheduled maintenance at 02:00 UTC")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      logf,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range logs {
+		if strings.Contains(l, "pool notice: scheduled maintenance") {
+			return
+		}
+	}
+	t.Error("client.show_message notice did not reach the log")
 }
 
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
@@ -1444,6 +1615,91 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 
 	if got := m.sharesRejected.Value(); got != 1 {
 		t.Errorf("sharesRejected = %d, want 1", got)
+	}
+}
+
+func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
+	// ESP-Miner #212 over V1: the pool raises difficulty while the share
+	// is in flight, then rejects it as "Above target". The reject is a
+	// retarget artifact — the share was valid under the difficulty epoch
+	// it was issued in — so it must be counted only in the per-reason
+	// breakdown as "difficulty-transition", never in the reject-rate
+	// counters. Ordering is deterministic: set_difficulty is dispatched
+	// synchronously in the session's read loop, so the new epoch is
+	// applied before the submit response below it unblocks the call.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submitResponseSent := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Epoch A: the share injected below carries target(0.001).
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[0.001]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=4)
+		// The pool moves to epoch B before answering — an above-target
+		// reject for an epoch-A share is the classic #212 benign reject.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1000]}`+"\n")
+		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["21","Above target",null]}`+"\n")
+		close(submitResponseSent)
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	issued, err := miner.TargetFromDifficulty(0.001)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var watcherDone sync.WaitGroup
+	watcherDone.Add(1)
+	go func() {
+		defer watcherDone.Done()
+		select {
+		case <-submitResponseSent:
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		case <-time.After(3 * time.Second):
+			cancel()
+		}
+	}()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 10 * time.Second,
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+	watcherDone.Wait()
+
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — benign retarget rejects must not enter the reject-rate counters", got)
+	}
+	if got := m.rejectReason("difficulty-transition").Value(); got != 1 {
+		t.Errorf("rejectReason(difficulty-transition) = %d, want 1", got)
+	}
+	if got := m.rejectReason("difficulty").Value(); got != 0 {
+		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
 	}
 }
 
@@ -2155,5 +2411,364 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// ============================================================================
+// runReconnectLoop — backoff resets after a session that established
+// ============================================================================
+
+// dropAfterHandshakePool accepts every connection, completes the SV2
+// handshake (SetupConnection + OpenMiningChannel), then immediately closes
+// the connection — simulating a pool that establishes sessions and drops
+// them. Each accept runs on its own goroutine so reconnects can proceed.
+type dropAfterHandshakePool struct {
+	ln   net.Listener
+	addr string
+}
+
+func newDropAfterHandshakePool(t *testing.T) *dropAfterHandshakePool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dropAfterHandshakePool: listen: %v", err)
+	}
+	fp := &dropAfterHandshakePool{ln: ln, addr: ln.Addr().String()}
+	go fp.serve()
+	return fp
+}
+
+func (fp *dropAfterHandshakePool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *dropAfterHandshakePool) Close()      { fp.ln.Close() }
+
+func (fp *dropAfterHandshakePool) serve() {
+	for {
+		conn, err := fp.ln.Accept()
+		if err != nil {
+			return
+		}
+		go fp.handle(conn)
+	}
+}
+
+func (fp *dropAfterHandshakePool) handle(conn net.Conn) {
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+	emit := func(msgType uint8, isChannel bool, payload []byte) bool {
+		f, err := stratum.WrapMessage(msgType, isChannel, payload)
+		if err != nil {
+			return false
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			return false
+		}
+		_, err = conn.Write(data)
+		return err == nil
+	}
+	if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	if !emit(stratum.MsgSetupConnectionSuccess, false, payload) {
+		return
+	}
+	f, err := dec.ReadFrame() // OpenMiningChannel
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF
+	}
+	payload, _ = omcSucc.Encode()
+	emit(stratum.MsgOpenMiningChannelSuccess, true, payload)
+	// Close on return — the session ends as soon as the engine notices EOF.
+}
+
+// TestRunReconnectLoop_BackoffResetsAfterConnectedSession: a session that
+// completed its handshake resets the exponential backoff to the initial
+// value — a healthy hours-long session dropping should not inherit the
+// backoff grown by an earlier dead-endpoint episode. Without the reset the
+// third reconnect log would already read "reconnecting in 4s".
+func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
+	fp := newDropAfterHandshakePool(t)
+	defer fp.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3400*time.Millisecond)
+	defer cancel()
+
+	var logs []string
+	var logMu sync.Mutex
+	log := func(_, m string) {
+		logMu.Lock()
+		logs = append(logs, m)
+		logMu.Unlock()
+	}
+
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: fp.URL()}},
+			},
+			MaxReconnectAttempts: 10,
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     log,
+	}
+
+	runReconnectLoop(ctx, r) //nolint:errcheck
+
+	logMu.Lock()
+	defer logMu.Unlock()
+	reconnects := 0
+	for _, m := range logs {
+		if strings.Contains(m, "reconnecting in") {
+			reconnects++
+			if !strings.Contains(m, "reconnecting in 1s") {
+				t.Fatalf("backoff did not reset after an established session: %q (all: %v)", m, logs)
+			}
+		}
+	}
+	if reconnects < 2 {
+		t.Fatalf("expected >=2 reconnect logs in window, got %d: %v", reconnects, logs)
+	}
+}
+
+// ============================================================================
+// handshake — nominal_hashrate declaration (session 383)
+// ============================================================================
+
+// handshakeCaptureNominal drives the server side of an SV2 handshake over
+// net.Pipe and returns the NominalHashrate the client declared in
+// OpenMiningChannel.
+func handshakeCaptureNominal(t *testing.T, serverConn net.Conn) <-chan float32 {
+	t.Helper()
+	got := make(chan float32, 1)
+	go func() {
+		defer serverConn.Close()
+		dec := stratum.NewDecoder(serverConn)
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		scs := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := scs.Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		if _, err := serverConn.Write(encoded); err != nil {
+			return
+		}
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		msg, err := stratum.DispatchFrame(f)
+		if err != nil || msg.OpenMiningChannel == nil {
+			return
+		}
+		got <- msg.OpenMiningChannel.NominalHashrate
+
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		payload, _ = omcs.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		serverConn.Write(encoded) //nolint:errcheck
+	}()
+	return got
+}
+
+// TestHandshake_DeclaresNominalHashrateWhenWorkersCold: on a fresh session
+// every worker reports ~0 H/s (nothing hashed yet), so OpenMiningChannel
+// must declare the capability-derived nominal estimate instead of 0 — pools
+// seed vardiff from it.
+func TestHandshake_DeclaresNominalHashrateWhenWorkersCold(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	got := handshakeCaptureNominal(t, serverConn)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"}) // never started: HashRate == 0
+
+	dec := stratum.NewDecoder(clientConn)
+	chanID, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 1 {
+		t.Errorf("channel id = %d, want 1", chanID)
+	}
+	select {
+	case declared := <-got:
+		if declared != float32(10e6) {
+			t.Errorf("nominal_hashrate = %v, want %v (capability estimate, not live 0)", declared, 10e6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never received OpenMiningChannel")
+	}
+}
+
+// TestNominalMiningHashrate: per-worker capability lookup — SHA256d-capable
+// devices' families map to the default estimates; unknown families → 0.
+func TestNominalMiningHashrate(t *testing.T) {
+	devices := []hal.Device{
+		&cpuDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+		&cpuDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{SHA256d: false, GeneralCompute: true}},
+	}
+	wCPU := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	wGhost := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "no-such-device"})
+
+	got := nominalMiningHashrate(devices, []*miner.Worker{wCPU, wGhost})
+	if want := provider.DefaultHashrates[hal.FamilyCPU]; got != want {
+		t.Errorf("nominalMiningHashrate = %v, want %v (only cpu-0; ghost device contributes 0)", got, want)
+	}
+	if got := nominalMiningHashrate(devices, nil); got != 0 {
+		t.Errorf("nominalMiningHashrate(no workers) = %v, want 0", got)
+	}
+}
+
+// TestRunSession_UnimplementedSchemeFailsFast pins the datum:// dispatch
+// fix: datum:// is recognised by poolproto (ADR-009, OCEAN's SV1-transport
+// variant) but has no implementation, so runSession must reject it with a
+// clear error rather than dial an OCEAN-style pool and emit binary SV2
+// frames — which would only surface as a confusing handshake timeout.
+func TestRunSession_UnimplementedSchemeFailsFast(t *testing.T) {
+	err := runSession(context.Background(), sessionOpts{
+		poolURL:  "datum://ocean.example.com:3334",
+		log:      func(_, _ string) {},
+		interval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("runSession accepted an unimplemented datum:// URL")
+	}
+	if !strings.Contains(err.Error(), "unsupported protocol") {
+		t.Errorf("error should name the unimplemented protocol, got: %v", err)
+	}
+}
+
+// ============================================================================
+// arbitration pause persistence (session 382)
+// ============================================================================
+
+// TestUpdateWork_SkipsArbitrationPausedWorker: a device arbitration paused
+// (idle below the yield floor, or routed to a non-mining stream) must NOT be
+// re-armed by the next pool job — applyAllocation only pauses the worker
+// once, so without the shared pause set the pause was silently undone at the
+// next mining.notify/NewMiningJob.
+func TestUpdateWork_SkipsArbitrationPausedWorker(t *testing.T) {
+	wa := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	wb := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-b"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	var prevHash [32]byte
+	updateWork([]*miner.Worker{wa, wb}, paused, job, 1, prevHash, 0x1d00ffff, 0x60000000, miner.Hash{})
+
+	if wa.HasWork() {
+		t.Error("paused worker dev-a was re-armed by updateWork")
+	}
+	if !wb.HasWork() {
+		t.Error("unpaused worker dev-b did not receive work")
+	}
+}
+
+// TestApplyJob_SkipsArbitrationPausedWorker is the V1-path counterpart via
+// applyJob (poolproto.Job).
+func TestApplyJob_SkipsArbitrationPausedWorker(t *testing.T) {
+	wa := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	wb := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-b"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	job := poolproto.Job{JobID: "42", NTime: 0x60000000, NBits: 0x1d00ffff}
+	if err := applyJob([]*miner.Worker{wa, wb}, paused, &job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if wa.HasWork() {
+		t.Error("paused worker dev-a was re-armed by applyJob")
+	}
+	if !wb.HasWork() {
+		t.Error("unpaused worker dev-b did not receive work")
+	}
+}
+
+// TestUpdateWork_ResumesAfterArbResume: once arbitration routes the device
+// back to a mining stream, reconcileArbPauses clears the set entry and the
+// next job re-arms the worker — the "hashing resumes on next job" path.
+func TestUpdateWork_ResumesAfterArbResume(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	paused := &pauseSet{}
+	paused.Pause("dev-a")
+
+	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "dev-a", Stream: "mining.stratum"},
+	}}, paused)
+
+	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	var prevHash [32]byte
+	updateWork([]*miner.Worker{w}, paused, job, 1, prevHash, 0x1d00ffff, 0x60000000, miner.Hash{})
+	if !w.HasWork() {
+		t.Error("worker stayed paused after arbitration resumed it to a mining stream")
+	}
+}
+
+// TestReconcileArbPauses: membership follows the latest allocation —
+// idle (empty Stream) and ai.* assignments pause; mining resumes.
+func TestReconcileArbPauses(t *testing.T) {
+	paused := &pauseSet{}
+	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "dev-idle", Stream: ""},
+		{DeviceID: "dev-ai", Stream: "ai.akash"},
+		{DeviceID: "dev-min", Stream: "mining.stratum"},
+	}}, paused)
+	if !paused.Paused("dev-idle") {
+		t.Error("idle assignment did not pause dev-idle")
+	}
+	if !paused.Paused("dev-ai") {
+		t.Error("ai.* assignment did not pause dev-ai")
+	}
+	if paused.Paused("dev-min") {
+		t.Error("mining assignment left dev-min paused")
+	}
+
+	// A nil set must be a no-op (tests that never wire arbitration).
+	reconcileArbPauses(&arbitration.Allocation{}, nil)
+}
+
+// channelIDOf must report the channel_id on every channel-scoped SV2
+// message and ok=false on frames that carry none.
+func TestChannelIDOf(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  stratum.Message
+		want uint32
+		ok   bool
+	}{
+		{"NewMiningJob", stratum.Message{NewMiningJob: &stratum.NewMiningJob{ChannelID: 7}}, 7, true},
+		{"SetNewPrevHash", stratum.Message{SetNewPrevHash: &stratum.SetNewPrevHash{ChannelID: 9}}, 9, true},
+		{"SetTarget", stratum.Message{SetTarget: &stratum.SetTarget{ChannelID: 11}}, 11, true},
+		{"SubmitSharesSuccess", stratum.Message{SubmitSharesSuccess: &stratum.SubmitSharesSuccess{ChannelID: 13}}, 13, true},
+		{"SubmitSharesError", stratum.Message{SubmitSharesError: &stratum.SubmitSharesError{ChannelID: 15}}, 15, true},
+		{"Unknown", stratum.Message{Unknown: &stratum.UnknownMessage{MsgType: 0x99}}, 0, false},
+		{"Empty", stratum.Message{}, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := channelIDOf(c.msg)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%s: channelIDOf = (%d, %v), want (%d, %v)", c.name, got, ok, c.want, c.ok)
+		}
 	}
 }

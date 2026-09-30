@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -53,8 +54,9 @@ var defaultSources = []Source{
 			// "95000foo" would parse as 95000), whereas ParseFloat rejects any
 			// non-numeric suffix. The sanity band still catches out-of-range
 			// values, but strict parsing rejects them earlier and with a clearer
-			// error.
-			return strconv.ParseFloat(v.Data.Amount, 64)
+			// error. ParseFloat also accepts "NaN"/"Inf" literals, so non-finite
+			// results are rejected explicitly here.
+			return parseRate(v.Data.Amount)
 		},
 	},
 	{
@@ -73,7 +75,7 @@ var defaultSources = []Source{
 				if len(ticker.C) == 0 {
 					continue
 				}
-				return strconv.ParseFloat(ticker.C[0], 64)
+				return parseRate(ticker.C[0])
 			}
 			return 0, fmt.Errorf("rates: kraken: no ticker data")
 		},
@@ -94,6 +96,20 @@ var defaultSources = []Source{
 			return 0, fmt.Errorf("rates: coingecko: missing bitcoin.usd field")
 		},
 	},
+}
+
+// parseRate parses a source-supplied numeric string, rejecting non-finite
+// results (NaN, ±Inf) that strconv.ParseFloat would otherwise accept
+// silently for inputs like "NaN" or "Infinity".
+func parseRate(s string) (float64, error) {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, fmt.Errorf("rates: non-finite price %q", s)
+	}
+	return v, nil
 }
 
 // CacheDuration is how long a fetched rate is considered fresh.
@@ -165,6 +181,12 @@ func NewFetcher(fallback float64) *Fetcher {
 		fallback: fallback,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			// All sources are hardcoded HTTPS endpoints; a redirect can
+			// only be hostile (e.g. an https→http downgrade injecting a
+			// manipulated price), so refuse to follow any.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("rates: redirects are not followed")
+			},
 		},
 	}
 }
@@ -298,7 +320,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
-		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+		if !(r.rate >= minPlausibleRateUSD && r.rate <= maxPlausibleRateUSD) {
 			// A reading outside the sanity band is a unit/parse error or
 			// manipulation, never a real quote. Drop it so it cannot pull the
 			// median. Stay quiet on a plain zero (a source that simply has no

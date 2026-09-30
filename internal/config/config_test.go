@@ -4,6 +4,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -249,6 +250,15 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"ssh rejected", "ssh://pool.example.com", true},
 		{"no scheme rejected", "pool.example.com:3333", true},
 		{"empty host rejected", "stratum+v2://", true},
+		{"missing port rejected", "stratum+tcp://pool.example.com", true},
+		{"empty port rejected", "stratum+tcp://pool.example.com:", true},
+		{"non-numeric port rejected", "stratum+tcp://pool.example.com:abc", true},
+		{"port out of range rejected", "stratum+tcp://pool.example.com:99999", true},
+		{"zero port rejected", "stratum+tcp://pool.example.com:0", true},
+		{"userinfo rejected", "stratum+tcp://user:pass@pool.example.com:3333", true},
+		{"path rejected", "stratum+tcp://pool.example.com:3333/extra", true},
+		{"whitespace rejected", "stratum+tcp://pool.example.com :3333", true},
+		{"ipv6 literal accepted", "stratum+v2://[2001:db8::1]:3336", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1186,5 +1196,44 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 	}
 	if o.ElectricityPricePerKWh != OriginFile {
 		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
+	}
+}
+
+// TestValidate_RejectsNonFinite covers NaN/±Inf on every float field:
+// comparisons like `x < 0` are false for NaN, so without explicit
+// guards a .nan in config.yaml or "NaN" in an env var would validate.
+func TestValidate_RejectsNonFinite(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	fields := []struct {
+		name string
+		set  func(*Config, float64)
+	}{
+		{"arbitration_hysteresis_pct", func(c *Config, v float64) { c.ArbitrationHysteresisPct = v }},
+		{"curtail_below_btc_usd", func(c *Config, v float64) { c.CurtailBelowBTCUSD = v }},
+		{"min_yield_sats_per_sec", func(c *Config, v float64) { c.MinYieldSatsPerSec = v }},
+		{"power_watts", func(c *Config, v float64) { c.PowerWatts = v }},
+		{"electricity_price_per_kwh", func(c *Config, v float64) { c.ElectricityPricePerKWh = v }},
+	}
+	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		for _, f := range fields {
+			c := base()
+			f.set(&c, v)
+			err := c.Validate()
+			if err == nil {
+				t.Errorf("%s=%v should fail Validate()", f.name, v)
+				continue
+			}
+			if !strings.Contains(err.Error(), f.name) {
+				t.Errorf("%s=%v: error should mention field name: %v", f.name, v, err)
+			}
+		}
+	}
+	// Sanity: a valid base config still passes.
+	if err := base().Validate(); err != nil {
+		t.Errorf("valid config rejected: %v", err)
 	}
 }

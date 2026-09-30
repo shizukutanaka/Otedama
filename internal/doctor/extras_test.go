@@ -725,6 +725,57 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	}
 }
 
+// A wallet restored via scp/rsync or unpacked from a backup tarball lands
+// group/other-readable — the data-dir permission check does not catch this
+// because the directory itself is fine. The file-mode check must Warn with
+// a chmod fix.
+func TestCheckWallet_GroupReadableWalletDat_Warns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	walletPath := filepath.Join(dir, walletDatFile)
+	if err := os.WriteFile(walletPath, []byte("stub"), 0o600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	if err := os.Chmod(walletPath, 0o644); err != nil {
+		t.Fatalf("chmod wallet.dat: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("0644 wallet.dat status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "0644") {
+		t.Errorf("detail should report the offending mode: %q", r.Detail)
+	}
+	if !strings.Contains(r.Fix, "chmod 0600") {
+		t.Errorf("Fix should offer chmod 0600: %q", r.Fix)
+	}
+}
+
+func TestCheckWallet_OwnerOnlyWalletDat_StillShowsFingerprint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	const fp = "feedface"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("0600 wallet.dat status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, fp) {
+		t.Errorf("fingerprint %q missing from detail: %q", fp, r.Detail)
+	}
+}
+
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
@@ -1805,5 +1856,113 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 	r := checkClockSkew().Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// checkPoolReachability — multi-pool probing (session 378)
+// ============================================================================
+
+func TestCheckPoolReachability_PartialOutageWarns(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+v2://" + ln.Addr().String()},
+			// RFC 5737 TEST-NET-1 — guaranteed unreachable.
+			{URL: "stratum+v2://192.0.2.1:9999"},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	r := checkPoolReachability(&cfg).Run(ctx)
+	if r.Status != StatusWarn {
+		t.Errorf("one reachable + one unreachable pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "1/2") {
+		t.Errorf("detail should report 1/2 reachable: %q", r.Detail)
+	}
+}
+
+func TestCheckPoolReachability_AllMalformedFail(t *testing.T) {
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "not-a-url-1"},
+			{URL: "datum://no.dial:1"},
+		},
+	}
+	r := checkPoolReachability(&cfg).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("all-malformed status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckPoolReachability_MalformedAlongsideReachableWarns(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+v2://" + ln.Addr().String()},
+			{URL: "not-a-url"},
+		},
+	}
+	r := checkPoolReachability(&cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("reachable + malformed status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "unparseable") {
+		t.Errorf("detail should name the unparseable URL: %q", r.Detail)
+	}
+}
+
+// ============================================================================
+// checkWallet — malformed fingerprint file (session 378)
+// ============================================================================
+
+func TestCheckWallet_MalformedFingerprintNotEchoed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	// Control bytes + wrong length — must not be echoed into the report.
+	evil := "a\x1b[31mZ\nnot-hex-at-all"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(evil), 0600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	r := checkWallet(dir).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("malformed-fp status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if strings.Contains(r.Detail, "not-hex-at-all") || strings.ContainsRune(r.Detail, '\x1b') {
+		t.Errorf("malformed fingerprint content leaked into detail: %q", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "malformed") {
+		t.Errorf("detail should flag malformed fingerprint: %q", r.Detail)
+	}
+}
+
+func TestIsFingerprint(t *testing.T) {
+	for s, want := range map[string]bool{
+		"a1b2c3d4": true,
+		"deadbeef": true,
+		"01234567": true,
+		"":         false,
+		"a1b2c3":   false,   // too short
+		"A1B2C3D4": false,   // uppercase
+		"a1b2c3d ": false,   // space
+		"a1b2c3d\n": false,  // newline
+		"zzzzzzzz": false,   // not hex
+	} {
+		if got := isFingerprint(s); got != want {
+			t.Errorf("isFingerprint(%q) = %v, want %v", s, got, want)
+		}
 	}
 }

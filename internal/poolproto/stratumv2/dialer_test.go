@@ -5,8 +5,15 @@ package stratumv2
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"math"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1016,5 +1023,207 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+func TestDialer_DialTimeout(t *testing.T) {
+	prev := dialTimeout
+	dialTimeout = 50 * time.Millisecond
+	defer func() { dialTimeout = prev }()
+
+	d := &Dialer{dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	start := time.Now()
+	_, err := d.Dial(context.Background(), "stratum+v2://127.0.0.1:1", &poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("Dial should fail when the dial attempt times out")
+	}
+	if !strings.Contains(err.Error(), "dial timeout") {
+		t.Errorf("expected dial-timeout error, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Dial took %v; want <5s", elapsed)
+	}
+}
+
+// TestSession_PendingJobsBounded floods the read loop with distinct future
+// job IDs past pendingCap, then confirms the newest job still emits when
+// SetNewPrevHash names it — the bound must not drop the flood-tail jobs.
+func TestSession_PendingJobsBounded(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pool.doHandshake(7)
+
+		// Flood pendingJobs far past pendingCap — all future jobs (no
+		// min_ntime), so they sit in the map waiting for a tip.
+		for i := uint32(1); i <= pendingCap+6; i++ {
+			job := stratum.NewMiningJob{ChannelID: 7, JobID: i, Version: 0x20000000}
+			for k := range job.MerkleRoot {
+				job.MerkleRoot[k] = byte(i)
+			}
+			writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+
+		// Activate the NEWEST job: if FIFO eviction kept it, it emits.
+		prev := stratum.SetNewPrevHash{
+			ChannelID: 7,
+			JobID:     pendingCap + 6,
+			MinNtime:  0x60000000,
+			NBits:     0x207fffff,
+		}
+		writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		// Keep the conn open until the client has had time to emit.
+		time.Sleep(200 * time.Millisecond)
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://127.0.0.1:1", &poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != strconv.Itoa(int(pendingCap)+6) {
+			t.Errorf("emitted job %q, want newest %d", job.JobID, pendingCap+6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("newest job was evicted — pendingCap eviction is not FIFO")
+	}
+	<-done
+}
+
+// TestNegotiate_HandshakeTimeout exercises the handshake read deadline: a
+// peer that accepts TCP but never answers SetupConnection must fail
+// promptly rather than hang DialURL (and the engine's reconnect loop)
+// forever. net.Pipe gives an in-memory full-duplex pair with no reader.
+func TestNegotiate_HandshakeTimeout(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
+	// The pool drains our writes but never answers — it went silent after
+	// TCP accept (net.Pipe writes block until read, so drain them).
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	old := handshakeTimeout
+	handshakeTimeout = 50 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	conn := &connection{raw: client, remoteAddr: "pool.invalid:34254", protocol: poolproto.ProtocolStratumV2, user: "w.user"}
+	start := time.Now()
+	var d Dialer
+	_, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Fatal("Negotiate succeeded against a silent peer")
+	}
+	var nerr net.Error
+	if !errors.As(err, &nerr) || !nerr.Timeout() {
+		t.Fatalf("expected i/o timeout, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Negotiate blocked %v (deadline not applied)", elapsed)
+	}
+}
+
+// TestSendMsg_WriteDeadline exercises the stall guard: a pool that keeps
+// the TCP connection open but never reads must not block sendMsg
+// forever — the write deadline fires and the session loop can error out
+// to the reconnect path instead of hanging silently.
+func TestSendMsg_WriteDeadline(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	orig := writeTimeout
+	writeTimeout = 50 * time.Millisecond
+	defer func() { writeTimeout = orig }()
+
+	// Nobody reads server; kernel send buffer fills and the deadline
+	// must bound the write.
+	start := time.Now()
+	sc := stratum.SetupConnection{
+		Protocol:   stratum.MiningProtocol,
+		MinVersion: 2,
+		MaxVersion: 2,
+		Endpoint:   "pool.invalid:34254",
+	}
+	err := sendMsg(client, stratum.MsgSetupConnection, false, &sc)
+	if err == nil {
+		t.Fatal("sendMsg on an unread pipe should fail once the write deadline fires")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("sendMsg blocked %v — write deadline not applied", elapsed)
+	}
+}
+
+// TestDialer_V2TLS_DialsTLS proves a stratum+v2tls:// dialer performs a real,
+// certificate-verified TLS handshake rather than silently opening plaintext:
+// against a TLS server with an untrusted (httptest self-signed) certificate,
+// Dial must surface an x509 verification error — and the error proves the
+// connection never degraded to TCP.
+func TestDialer_V2TLS_DialsTLS(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "https://")
+
+	d := &Dialer{useTLS: true}
+	_, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("v2tls dial against untrusted cert should fail verification")
+	}
+	var certErr *tls.CertificateVerificationError
+	if !errors.As(err, &certErr) {
+		t.Fatalf("expected *tls.CertificateVerificationError, got %T: %v", err, err)
+	}
+}
+
+// TestDialer_V2TLS_ConnectsToTrustedServer completes the positive path: a
+// TLS server whose cert is minted by a CA the dialer is configured to trust.
+func TestDialer_V2TLS_ConnectsToTrustedServer(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	addr := strings.TrimPrefix(srv.URL, "https://")
+
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+
+	// Inject a dialFn that performs the same TLS handshake the production
+	// path does — but against the test server's CA bundle. This keeps the
+	// dialer under test deciding *whether* TLS applies while avoiding real
+	// DNS/PKI.
+	d := &Dialer{
+		useTLS: true,
+		dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+			cfg := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+			return (&tls.Dialer{Config: cfg}).DialContext(ctx, "tcp", address)
+		},
+	}
+	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("trusted v2tls dial failed: %v", err)
+	}
+	defer conn.Close()
+	if _, ok := conn.(*connection).raw.(*tls.Conn); !ok {
+		t.Fatalf("v2tls connection is %T, want *tls.Conn", conn.(*connection).raw)
 	}
 }

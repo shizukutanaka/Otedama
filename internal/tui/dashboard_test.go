@@ -5,6 +5,7 @@ package tui
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -343,5 +344,53 @@ func TestDashboard_RenderLoop_UpdateAndTick(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "1.50 MH/s") {
 		t.Error("expected rendered hashrate in output after ticker fired")
+	}
+}
+
+// ----- detectWidth -----
+
+// TestDetectWidth_NonFileWriter verifies the detection path leaves the
+// compiled-in default alone when the writer is not an *os.File — the
+// standard test/embedder setup.
+func TestDetectWidth_NonFileWriter(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.detectWidth()
+	if d.cols != 80 {
+		t.Errorf("non-file writer should keep default 80 cols, got %d", d.cols)
+	}
+}
+
+// TestDetectWidth_NonTerminalFile verifies a regular file (or pipe) that
+// is an *os.File but not a terminal does not change the width — the
+// ioctl/console query must fail quietly, not clobber d.cols with 0 or a
+// garbage value.
+func TestDetectWidth_NonTerminalFile(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	d := NewDashboard(f)
+	d.detectWidth()
+	if d.cols != 80 {
+		t.Errorf("non-terminal file should keep default 80 cols, got %d", d.cols)
+	}
+}
+
+// TestSetWidth_LocksDetection verifies an injected width wins over the
+// auto-detect path: once SetWidth has run, detectWidth must not touch
+// d.cols even if the writer is a terminal file.
+func TestSetWidth_LocksDetection(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	d := NewDashboard(f)
+	d.SetWidth(120)
+	d.detectWidth()
+	if d.cols != 120 {
+		t.Errorf("SetWidth should pin the width, got %d", d.cols)
 	}
 }
