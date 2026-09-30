@@ -969,6 +969,133 @@ v2.15.3 (9/20) derives low-frequency warnings from device presets. No
 actionable delta for Otedama's HAL (sysfs driver only, no ASIC bus code)
 — recorded for the drift log.
 
+## Session 513 — arbitration + logger + version fully read; core audit complete
+
+**Audit milestones.** With this session's reads of `internal/arbitration`
+(engine.go, 503 lines), `internal/logger`, and `internal/version`, every
+non-test file in the core path (engine, miner, hal, arbitration, logger,
+version) has now been read end-to-end across sessions 509–513.
+
+**arbitration verdicts.** `Decide` rejects invalid Policy, negative
+HysteresisMargin/MinYieldSatsPerSec, and duplicate device IDs up front;
+device order is sorted so identical inputs produce byte-identical
+allocations (the determinism contract tests and log-diffing rely on).
+`chooseForDevice` correctly computes `maxRaw` before the policy sort
+(ForegoneSatsPerSec measures raw yield, not policy score), compares
+hysteresis in the *policy-adjusted* score space so a worse-privacy
+higher-yield stream can't force a switch under MaximizePrivacy, and
+emits an assignment for every device. The only residual inputs are
+non-finite values (NaN hysteresis/floor/yield) — that class is owned by
+open PRs #437 (collapse non-finite yields) and #443 (reject non-finite
+margin/floor); no re-delivery here.
+
+**logger verdicts.** Default-logger singleton is a `sync/atomic.Pointer`
+with a CAS cold path (CAS-loser branch is unit-testable); `IntoContext`
+and `SetDefault` both no-op on nil so a typed-nil can never shadow the
+default; `Discard` uses a level above LevelError rather than a discarded
+writer alone. Clean.
+
+**version verdicts.** ldflags-injected vars + Info snapshot + stable
+`String()` format — clean. (The release.yml `-X main.Version` wrong-
+symbol defect is already recorded in docs/KNOWN_LIMITATIONS via #562 —
+different layer, not this file.)
+
+## Session 514 — provider + daemon fully read; toolchain pin verified current
+
+**Audit milestones.** `internal/provider` (all 4 files — provider.go,
+polling.go, mining.go, ai_inference.go) and `internal/daemon`
+(service.go, 463 lines) read end-to-end.
+
+**provider verdicts.** `pollingProvider` guards double-start under mutex
+and runs `prepare` inside the lock, so a rejected second Start can't
+mutate the device set the running loop reads; `Stop` cancels, waits for
+the sole-writer goroutine, then recreates the quote channel — the order
+is documented and correct for sequential use. `sendQuote` drops the
+oldest buffered quote so the freshest estimate wins without blocking the
+loop. AkashProvider emits an explicit zero-confidence quote when no GPU
+is present (matching the contract: publish zero rather than go silent).
+MiningProvider's yield math (device/network hashrate × block reward /
+block time) is correct and honestly constants-marked; the unused BTC/USD
+rate is gated behind `_ = rate` with a note — cosmetic only. Clean.
+
+**daemon verdicts.** `quoteToken`/`xmlEscape` quoting is correct for all
+three managers (systemd ExecStart, launchd plist argv, sc.exe binPath);
+`statusWindowsService` parses `sc.exe query` output correctly ("RUNNING"
+only appears as the state token); the `ProtectHome=read-only` +
+`ReadWritePaths` carve-out mirrors `DefaultDataDir` resolution so the
+unit's exception matches the path `otedama run` actually uses. Master's
+`installWindowsService` registers `start= auto` without starting the
+service — that semantics change is owned by closed PR #552 (user's
+review decision), not re-delivered here.
+
+**Toolchain watch.** Go 1.26.8 (released Sep 1, 2026) is the latest
+patch — the repo's `GOTOOLCHAIN=go1.26.8` pin already tracks it. Minor
+revisions 1.26.5–1.26.8 shipped security fixes across crypto/tls, x509,
+net/http and the go command; no action beyond confirming the pin.
+
+## Session 515 — metrics + clock + tui fully read
+
+**Audit milestones.** `internal/metrics` (both files), `internal/clock`,
+and `internal/tui` read end-to-end.
+
+**metrics verdicts.** Registry is RWMutex-guarded; counter/gauge
+cross-type name collisions panic at registration with a documented
+severity rationale (one bad name discards the whole Prometheus scrape).
+Exposition is sorted and deterministic; `escapeLabel`/`escapeHelp` cover
+the format's real specials; `formatFloat` renders NaN/±Inf canonically.
+Noted residual (recorded, not fixed): `metricKey` serializes label
+values without escaping `,`/`=`, so two distinct (name, labels) pairs
+could collide into one series key — requires a device ID containing `,`
+or `=`, which today's ID producers ("cpu-0", "gpu-<render-node>") cannot
+emit; worth revisiting if a user-controlled ID source ever lands.
+`RuntimeCollector`'s PauseTotalNs/GCCPUFraction are deprecated-but-still-
+populated MemStats fields — fine on go1.26.8.
+
+**clock verdicts.** Fake is RWMutex-guarded; Set/Advance deliberately
+allow backwards time with a documented non-monotonicity contract.
+Compile-time interface checks present. Clean.
+
+**tui verdicts.** Start/Stop are atomic-gated and Stop waits on the
+render-loop WaitGroup before writing to the (non-concurrent) writer —
+the race it documents is genuinely closed. `writeLine` truncates then
+pads to cols, keeping the cursor-home repaint model; `truncateVisible`
+preserves in-flight ANSI and appends reset. Two non-blocking findings
+(recorded, no code change): `truncateToBudget` and `shortenURL` are two
+near-identical truncators — a duplication candidate to file as an Issue
+per the dedupe convention, not fix inline; and the `⏸`/`⚠` badges in
+miningLine count as width-1 under `visibleLen` but render width-2 —
+self-consistent across frames since truncation uses the same count, so
+the residual is at most a one-column flicker on narrow terminals, not
+repaint corruption.
+
+## Session 516 — doctor + config read; full-tree audit complete
+
+**Audit milestone — full coverage.** With `internal/doctor`
+(doctor.go + checks.go) and `internal/config` (config.go) read
+end-to-end this session, every non-test `.go` file in the repository has
+now been read line-by-line across sessions 509–516 (plus the earlier
+CODEOWNERS-area sweeps): engine, miner, hal, arbitration, logger,
+version, provider, daemon, metrics, clock, tui, doctor, config, stratum,
+poolproto (V1+V2), lightning, btccrypto, rates, httpserver, i18n, cmd.
+
+**doctor verdicts.** All 17 checks (matching the architecture map's
+"17 並行ヘルスチェック") verified: concurrent runner preserves curated
+result order by index; exit codes 0/1/2 mirror correctly into JSON;
+clock-skew check drains a bounded 8 KB body so keep-alive reuse cannot
+become an unbounded read; `maskAddress`, charset helpers, tls_ca_file
+scheme-scoping, endpoint-diversity DNS check all sound. Per-pool probing
+remains open-PR-owned (#490).
+
+**config verdicts.** Four-layer resolution and Origins tracking are
+complete and consistent (all 14 fields); `numericEnvVars` is the single
+source the applier and warner share so they cannot drift;
+`DefaultDataDir` platform paths match the doc comment; `Validate`
+aggregates issues in one pass. Two residual items already owned by open
+PRs, recorded not re-delivered: non-finite env values parse as floats
+and pass Validate's `< 0`/`>= 1` guards (open #492 re-delivery), and
+pool-URL validation stops at scheme+non-empty host (open #486's
+host:port/userinfo tightening).
+
 ## Session 517 — test-code audit pass + ecosystem recheck
 
 **Test-suite mechanical audit.** All 33 K lines of `*_test.go` swept:
