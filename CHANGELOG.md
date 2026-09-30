@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
    していた問題を修正 — 既に実装済みの3項目（reject 分類+メトリクス、
-   submit レイテンシ、poolproto 配線）を残件2項目と区別して状態注記。
+   submit レイテンシ、poolproto 配線 — V1 のみ）を残件と区別して状態注記。
 
 ### 修正 (session 465)
 

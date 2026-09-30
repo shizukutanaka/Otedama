@@ -905,12 +905,14 @@ Ranked by impact on the path to a real v3.1.0 — **status updated session
 1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — **open**. The Noise NX handshake
    still stubs secp256k1+ElligatorSwift with P-256 (`internal/stratum/noise.go`);
    scheduled for v3.1.0, needs an ADR for the dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — **largely done**. Both V1
-   (`poolproto.DialURL`) and V2 (stratumv2 dialer) sessions are wired through
-   `run.go`; the abstraction is load-bearing.
+2. **engine→poolproto wiring (Cat 2 #8)** — **partly done**. V1 sessions
+   route through `poolproto.DialURL` in `internal/engine/run.go`; the V2 path
+   still uses inline framing — bridging the stratumv2 dialer into the session
+   loop is pending (see the `runSession` doc comment).
 3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
-   — **done**. `otedama_share_reject_rate` plus per-category reject counters
-   (stale/duplicate/difficulty/hardware/other) live in
+   — **done**. `otedama_reject_rate` plus per-category reject counters
+   (`otedama_shares_rejected_by_reason_total`,
+   stale/duplicate/difficulty/hardware/other) live in
    `internal/engine/metrics.go`.
 4. **Real Akash REST (Cat 5 #1)** — **open**. The provider is still the
    simulated AkashProvider; external-API work.
@@ -919,7 +921,7 @@ Ranked by impact on the path to a real v3.1.0 — **status updated session
    rate-source gauges are registered in `internal/engine/metrics.go`.
 
 Items 3 and 5 were shipped in the intervening sessions; the remaining open
-items are 1 and 4.
+items are 1, 4, and the V2 half of 2.
 
 ---
 
@@ -949,7 +951,7 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 Audited the stale "Highest-leverage next actions" tail list against
 current master — items 3 (reject classification + metric) and 5
 (submit-latency + pool-state gauges) have shipped since it was written,
-item 2 (engine→poolproto wiring) is largely done, items 1 (secp256k1,
+item 2 (engine→poolproto wiring) is done for V1 only, items 1 (secp256k1,
 v3.1.0 scope) and 4 (real Akash REST) remain open. Annotated each entry
 with its current status instead of rewriting the dated list. hal GPU
 sysfs enumeration audited clean (bounded reads, identity validation,
