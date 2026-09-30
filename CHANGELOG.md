@@ -16,6 +16,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
 * `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
