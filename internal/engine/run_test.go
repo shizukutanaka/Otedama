@@ -2568,3 +2568,53 @@ waitLoop:
 		t.Errorf("starvation warning fired %d times, want once per episode", starveWarns)
 	}
 }
+
+// TestStoreBoundedJob_BoundsOutstandingJobs pins the jobsCap bound: flooding
+// distinct job IDs must evict oldest-first while keeping the newest.
+func TestStoreBoundedJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for i := uint32(1); i <= jobsCap+10; i++ {
+		order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(jobs) != jobsCap {
+		t.Fatalf("len(jobs) = %d, want cap %d", len(jobs), jobsCap)
+	}
+	// FIFO: the first 10 IDs were evicted; the newest survive.
+	for i := uint32(1); i <= 10; i++ {
+		if _, ok := jobs[i]; ok {
+			t.Errorf("job %d should have been evicted (FIFO)", i)
+		}
+	}
+	for i := uint32(jobsCap + 1); i <= jobsCap+10; i++ {
+		if _, ok := jobs[i]; !ok {
+			t.Errorf("newest job %d should have survived", i)
+		}
+	}
+	// Re-inserting an existing ID must not grow the order slice.
+	before := len(order)
+	order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: jobsCap + 10})
+	if len(order) != before {
+		t.Errorf("re-insert grew order to %d, want %d", len(order), before)
+	}
+}
+
+func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := newSubmitLimiter(ctx)
+	// Burst starts full; the (submitBurst+1)-th take without a tick fails.
+	for i := 0; i < submitBurst; i++ {
+		if !l.take() {
+			t.Fatalf("take %d/%d should succeed (burst full)", i+1, submitBurst)
+		}
+	}
+	if l.take() {
+		t.Fatal("take should fail once the burst is exhausted")
+	}
+	// After one refill interval a token is available again.
+	time.Sleep(submitRateInterval + 50*time.Millisecond)
+	if !l.take() {
+		t.Fatal("take should succeed after a refill tick")
+	}
+}
