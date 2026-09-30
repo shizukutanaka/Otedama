@@ -295,6 +295,25 @@ func (s *session) dispatch(line []byte) {
 	}
 }
 
+// maxReconnectWaitSeconds caps a pool-supplied reconnect wait so a
+// hostile pool cannot park the session indefinitely.
+const maxReconnectWaitSeconds = 300
+
+// ReconnectWait returns the pool-requested reconnect delay recorded by
+// the last client.reconnect/mining.reconnect notification, clamped to
+// [0, maxReconnectWaitSeconds]. Zero when no directive was received.
+// Implements poolproto.ReconnectWaiter.
+func (s *session) ReconnectWait() time.Duration {
+	d := s.lastReconnect.Load()
+	if d == nil || d.Wait <= 0 {
+		return 0
+	}
+	if d.Wait > maxReconnectWaitSeconds {
+		return maxReconnectWaitSeconds * time.Second
+	}
+	return time.Duration(d.Wait) * time.Second
+}
+
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
