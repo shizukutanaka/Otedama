@@ -18,6 +18,38 @@ ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
 を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
 go.mod と完全整合を確認済み。
 
+### Fixed (session 523 — test-hygiene lint findings)
+
+- Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
+  (unused linter finding).
+- Closed the response body on the success path of the post-shutdown
+  probe in `internal/httpserver/server_test.go` (bodyclose finding).
+- Verified the remaining golangci-lint output maps to the open #526–#528
+  refactor family or documented false positives; govulncheck remains
+  zero-reachable under go1.26.8.
+
+### テスト (session 367 — SV2 メッセージ decode fuzz)
+
+SV2 型付きメッセージデコーダ6種と STR0_255/B0_255/U16/U32 ワイヤ
+プリミティブに fuzz カバレッジを追加（270万 exec クリーン）。
+短いペイロードの境界契約を単体テストでも固定。
+
+### Fixed (session 350 — V1 ジョブIDのログクォート)
+
+`mining.notify` の `job.JobID`（プール制御文字列）をログ出力する
+2箇所で `%s` → `%q` に変更。ANSI エスケープ・改行による
+ログ偽造を防止。
+
+### 修正 (session 416 — lint 債務フォローアップ: hugeParam クラス全滅)
+
+- 内部 API の大きい構造体 (80–200B: `Config`, `Stats`, `Job`, `Input`,
+  `Credentials`, `SetupConnection` 等) を値渡しからポインタ渡しへ一括変換 —
+  gocritic `hugeParam` 53件全て解消。ホットパスの `HashHeader`(nonce 毎),
+  `Decide`, `sendQuote`, TUI 描画経路を含む。
+- チャネル (`jobsCh`, `updateCh`, `quoteCh`) は意図的に値意味論を維持 —
+  送受境界でのみポインタ化し、プロデューサ/コンシューマ間のエイリアシングを回避。
+- `Decide` に nil `Input` ガードを追加。
+
 ### 修正 (session 409)
 
 SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
