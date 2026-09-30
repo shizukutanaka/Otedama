@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 565 — atomic API surface
+
+- All `sync/atomic` usage is the typed Go-1.19+ API:
+  `atomic.Uint64` (8), `atomic.Bool` (7), `atomic.Pointer[T]` (4),
+  `atomic.Int64` (1). Zero legacy `atomic.AddInt64(&field)`-style
+  calls — so the 386-misalignment panic class (64-bit atomics on
+  unaligned fields) is structurally absent; the typed API
+  guarantees alignment internally.
