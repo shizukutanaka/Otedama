@@ -322,8 +322,8 @@ type Origins struct {
 //
 // Resolve does not perform validation of the resulting Config; call
 // Config.Validate separately once all layers have been combined.
-func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
-	cfg, _ := ResolveWithOrigins(fromFile, env, flags)
+func Resolve(fromFile *Config, env map[string]string, flags *FlagValues) Config {
+	cfg, _ := ResolveWithOrigins(*fromFile, env, *flags)
 	return cfg
 }
 
@@ -380,7 +380,8 @@ func EnvWarnings(env map[string]string) []string {
 		}
 		if _, err := strconv.ParseFloat(v, 64); err != nil {
 			warnings = append(warnings, fmt.Sprintf(
-				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v,
+			))
 		}
 	}
 	return warnings
@@ -657,23 +658,28 @@ func (c Config) Validate() error {
 	}
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
-			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct,
+		))
 	}
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD,
+		))
 	}
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec,
+		))
 	}
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts,
+		))
 	}
 	if c.ElectricityPricePerKWh < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh,
+		))
 	}
 
 	if len(issues) == 0 {
