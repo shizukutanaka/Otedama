@@ -54,7 +54,6 @@ archives:
       - LICENSE
       - NOTICE
       - VERIFY.md
-      - docs/locales/*.toml  # 翻訳ファイルを同梱
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
@@ -144,7 +143,7 @@ release:
 
     非カストディ型計算資源裁定ソフトウェア。
     ダウンロードしたバイナリのsha256ハッシュを `otedama_{{ .Version }}_checksums.txt` で確認してください。
-    検証手順は https://github.com/shizukutanaka/Otedama/blob/master/docs/DEPLOYMENT.md を参照。
+    cosign署名の検証方法は https://github.com/shizukutanaka/Otedama/blob/master/VERIFY.md を参照。
 
   footer: |
     ---
