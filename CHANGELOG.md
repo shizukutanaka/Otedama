@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 353 — dialer ハンドシェイクエラーのクォート)
+
+`poolproto/stratumv2` の `Negotiate` で `SetupConnectionError` /
+`OpenMiningChannelError` のプール理由文字列を `%q` クォート —
+session 351 のエンジン側修正を dialer 側にも適用。
+
 ### 修正 (session 405)
 
 `.goreleaser.yaml` の実在しないパス2件を修正 — アーカイブ同梱 glob

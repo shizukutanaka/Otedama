@@ -940,6 +940,24 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 353 — poolproto V2 dialer handshake-error quoting
+
+**Handshake-error injection on the dialer path [FIXED].** The engine's
+inline `handshake()` was fixed in session 351, but the
+`poolproto/stratumv2` `Negotiate` implementation has its own
+independent handshake that embedded both `SetupConnectionError.Error`
+and `OpenMiningChannelError.Error` raw (`%s`) into
+`ErrHandshakeFailed`-wrapped errors — logged via `session ended: %v`.
+Both now `%q`-quote the pool string. All three STR0_255 error strings
+(SetupConnectionError, OpenMiningChannelError, SubmitSharesError) are
+now covered across both code paths: the handshake pair quoted here,
+share-reject reasons sanitized by PR #461.
+
+**Noise transport bounds [AUDITED — clean].** `EncryptedConn.Read`
+reads a u16 length prefix — inherently ≤ 65535, so no allocation bound
+is needed. `HandshakeState.ReadMessage2` guards every slice by length
+before parsing.
+
 ## Session 405 — release-config drift fixed [FIXED]
 
 **`.goreleaser.yaml` referenced two paths that don't exist [FIXED].**
