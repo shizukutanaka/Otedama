@@ -2884,6 +2884,153 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 }
 
+// TestRunSession_BatchAcceptCreditsPoolCount verifies the fix that credits
+// SubmitSharesSuccess.NewSubmitsAccepted (the pool-reported batch count)
+// instead of +1 per message: a pool that batch-acknowledges 3 shares in one
+// message must move sharesAccepted by 3.
+func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	poolDone := make(chan struct{})
+	go func() {
+		defer close(poolDone)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+		emit := func(msgType uint8, isChannel bool, payload []byte) {
+			f, err := stratum.WrapMessage(msgType, isChannel, payload)
+			if err != nil {
+				return
+			}
+			data, err := stratum.EncodeFrame(f)
+			if err != nil {
+				return
+			}
+			conn.Write(data) //nolint:errcheck
+		}
+
+		if _, err = dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		emit(stratum.MsgSetupConnectionSuccess, false, payload)
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+		if err != nil {
+			return
+		}
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range omcSucc.Target {
+			omcSucc.Target[i] = 0xFF
+		}
+		payload, _ = omcSucc.Encode()
+		emit(stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+		payload, _ = job.Encode()
+		emit(stratum.MsgNewMiningJob, true, payload)
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		payload, _ = prev.Encode()
+		emit(stratum.MsgSetNewPrevHash, true, payload)
+
+		// Third submit: batch-acknowledge all THREE shares in one message
+		// — the counter must credit 3 even though only one ack arrives.
+		// Keep reading afterwards: closing the conn right after the ack
+		// races the client's delivery of that frame.
+		acked := false
+		submits := 0
+		for {
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+			f, err = dec.ReadFrame()
+			if err != nil {
+				return
+			}
+			if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+				continue
+			}
+			share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+			if err != nil || acked {
+				continue
+			}
+			if submits++; submits < 3 {
+				continue
+			}
+			acked = true
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 3,
+			}
+			payload, _ = resp.Encode()
+			emit(stratum.MsgSubmitSharesSuccess, true, payload)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  "stratum+v2://" + addr,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			if v := m.sharesAccepted.Value(); v >= 3 {
+				cancel()
+				<-runDone
+				if v != 3 {
+					t.Fatalf("sharesAccepted = %v, want exactly 3 (one batch-ack of 3)", v)
+				}
+				return
+			}
+		case <-deadline:
+			cancel()
+			<-runDone
+			t.Fatalf("timed out; sharesAccepted=%v sharesSubmitted=%v",
+				m.sharesAccepted.Value(), m.sharesSubmitted.Value())
+		}
+	}
+}
+
 func TestRunSessionV2_FutureSeqAcceptIgnored(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

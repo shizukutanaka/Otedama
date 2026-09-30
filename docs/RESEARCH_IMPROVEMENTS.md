@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 321 — count pool-reported batch accepts (re-delivers closed #386/#400/#410)
+
+**Finding [OBSERVED — code-verified].** `SubmitSharesSuccess` credited
+`shares_accepted` by +1 per message, ignoring the pool-reported
+`NewSubmitsAccepted` batch count — on batching pools the acceptance rate
+drifted low.
+
+**Fix [OBSERVED].** `shares_accepted` now credits
+`NewSubmitsAccepted` (pool-reported batch count) instead of +1 per
+message.
+
+**Tests [OBSERVED].** Engine suite green; batch-accept cases added.
+
 ## Session 322 — classify canonical SV2 reject codes (re-delivers closed #387/#399/#409)
 
 **Finding [OBSERVED — code-verified].** `rejectClass` handled standard
