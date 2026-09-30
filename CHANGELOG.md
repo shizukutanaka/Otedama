@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 557 — debt/timer/panic)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: zero TODO/FIXME markers; the
+  reconnect-backoff timer correctly uses `NewTimer`+`Stop()`; all 12
+  `panic` sites are programmer-error invariant guards unreachable
+  from untrusted input.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
