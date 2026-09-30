@@ -961,6 +961,33 @@ daemon, metrics labels, arbitration params. Remaining backlog items are
 all blocked on unmerged PRs (#417 coinbase rebuild, #432 hashrate feed,
 go1.26 module bump) — not on missing analysis.
 
+## Session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正
+
+**Sweep.** `BENCHMARKS.md` の全クレームを `.github/workflows/test.yml` と実在の `func Benchmark` 一覧と照合し、4件の虚偽/phantom 記述を発見・訂正。
+
+**発見（全件訂正、検証済み）。**
+- 「`go test -bench` is checked into CI. A PR that regresses performance by >5% fails automatically.」→ ci.yml の `benchmark` ジョブは `go test -bench` を実行し `benchmark.txt` を artifact `benchmark-results` としてアップロードするのみ。回帰検出・閾値・失敗ロジックは非実在。
+- 「CI runs benchmarks on every push to main and posts a comparison to PRs.」→ push + PR で実行される点は正しいが、「posts a comparison」は非実在（比較ステップなし・PR コメントなし）。
+- 「The decoder is fuzzed continuously in CI.」→ `.github/workflows/` に `fuzz` 参照ゼロ — session 483 の skills/ 訂正と同一の虚偽クラス（4箇所目の発生）。
+- 「`go test -bench=BenchmarkDecoder_ReadFrame`」→ その関数は非実在（phantom 再現コマンド）。フレームデコード throughput 表（~50M frames/s 等）は本書独自の「再現可能であること」ルールを満たせない未検証推定値と明示。
+- 補足: 公表数値の計測環境（Go 1.22）は現 master の最低要件（Go ≥1.24、`godebug tlsmlkem`）を満たさないため注意書きを追加。
+
+**正しいと検証済みの記述（変更なし）。** `BenchmarkHashHeader`・`BenchmarkWorkerGrind_SingleThread`・`BenchmarkWriteText` 等の実在・reproduce コマンドの形式妥当性、benchmark ジョブが push+PR で起動すること、SHA-NI/ARM SHA ext が stdlib crypto/sha256 で自動使用されること。
+
+**帰納。** 「CIで実行される」系の虚偽記述は本ラウンドで ROADMAP（#564）→ skills（#565）→ BENCHMARKS と4ドキュメント目 — CI ワークフローの記述照合は引き続き監査対象。
+
+## Session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正
+
+**Sweep.** `docs/DEPLOYMENT.md`（416行、初監査）の全コマンド・パス・サービス属性を `internal/daemon/service.go`・`Dockerfile`・`internal/metrics`・`.github/` と照合。
+
+**発見（4件訂正）。**
+- Windows ログ参照手順 `Get-EventLog -LogName Application -Source Otedama -Newest 50` → phantom: Otedama はイベントソースを登録しないため「Cannot find source」で失敗。加えて SCM 起動サービスの stdout は破棄（`serviceArgv` が `--log-file` を通さない）— Windows サービスの永続ログは存在しないことを明示し、`otedama run --log-file` を案内。
+- 「A reference Grafana dashboard lives at `contrib/grafana/otedama-dashboard.json`」→ `contrib/` 非実在。「(TODO for v3.1.0)」併記だが「lives at」の存在断言と矛盾 — v3.1.0 計画に訂正。
+- ハードニングチェック「Binary cosign signature verified」→ 今日の release.yml は署名・チェックサム・SBOM を一切生成しない（#562 記録済み）ため未達成不可能な項目 — 訂正。
+- 「Automatic updates via Dependabot for the Otedama container image tag」→ dependabot `docker` エコシステム（dependabot.yml:52）は Dockerfile のベースイメージ pin 更新のみで、運用中のデプロイ済みタグは更新しない — 訂正。
+
+**正しいと検証済みの記述（変更なし）。** `service install` の `--config`/`--data-dir` フラグ実在、systemd unit の hardening 項目（NoNewPrivileges/ProtectHome=read-only/PrivateTmp/Restart=on-failure/RestartSec=10s）・`~/.config/systemd/user/` パス・launchd `~/Library/LaunchAgents/com.otedama.daemon.plist`+KeepAlive+即時 load・Windows `DisplayName=Otedama Mining Service`+`start=auto`（+install 時 start 追加は #552）・全6メトリクス名（SPECIFICATION §6 と一致）・`--log-format=json`・ENTRYPOINT `/usr/local/bin/otedama`（healthcheck パス整合）・NOTICE の依存列挙（go.mod と完全一致）・dependabot docker エコシステム存在。
+
 ## Session 486 — docs/SPECIFICATION.md §2/§7 の stale 記述を訂正
 
 **Sweep.** `docs/SPECIFICATION.md`（252行）の非メトリクス節を `internal/config/config.go`・`internal/daemon/service.go`・`internal/engine/run.go`・`.github/ISSUE_TEMPLATE/` と照合。
