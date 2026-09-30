@@ -975,6 +975,31 @@ panic paths.
 **internal/provider [OBSERVED].** quoteCh buffered 16; no unbounded
 map/state on quote arrival.
 
+## Session 408 — migration guide drift vs code reality [FIXED]
+
+**MIGRATING-FROM-V2.md claims corrected [FIXED].**
+The guide told v2 users "v3 has no V1 fallback" / "v3 is V2-only" /
+"[stratum_v1] — no V1 support" — all false: v3 has full Stratum V1
+support (`internal/poolproto/stratumv1`, `stratum+tcp://`+`stratum+tls://`
+schemes, `v1PoolWorker` in engine). Corrected to describe dual-protocol
+support and the per-pool URL-scheme selection. Also corrected the CI
+boast: "nightly fuzz, cosign signing" — no workflow runs fuzzers (they
+exist + `make fuzz` works, but no scheduled job) and cosign is not
+wired into release.yml (session 407). "verify the signature" in the
+install step → pointed at VERIFY.md's current-reality flow.
+DEPLOYMENT.md's hardening checklist already carries master's session-485
+notes on the checksum/cosign items, so it is not re-edited here.
+
+**Also found [SURFACED]:** CLAUDE.md's architecture map itself lists
+`test.yml (fuzz+benchmark)` — test.yml has benchmarks but no fuzz job.
+CLAUDE.md changes require maintainer agreement per its own update
+clause, so recorded rather than edited.
+
+**Audited — clean:** config.yaml.example value ranges match config.go
+validation ([0,1) hysteresis, ≥0 floors); doctor `--bitcoin-address`
+flag exists as documented; AUDIT_CHECKLIST scrypt claim (N=32768 vs
+actual 1<<17) already corrected in open #494 — no re-delivery needed.
+
 ## Session 410 — THREAT_MODEL claims vs shipped reality [FIXED]
 
 **False mitigation claims corrected [FIXED].**
