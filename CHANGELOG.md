@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
 ### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
 
 **問題.** `wallet.dat` の権限監査はディレクトリのみで、

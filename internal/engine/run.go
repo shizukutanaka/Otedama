@@ -236,6 +236,14 @@ func Run(ctx context.Context, opts Options) error {
 	// read 1, so the pause neither held nor matched the metric.
 	curtailGate := new(atomic.Bool)
 
+	// arbPaused is the per-device counterpart of curtailGate: the set of
+	// device IDs arbitration has paused (idle below the yield floor, or
+	// routed to a non-mining stream). applyAllocation pauses a worker once,
+	// but without a shared set the next pool job's updateWork/applyJob
+	// would silently re-arm it and mine until the next Decide tick — the
+	// same re-arm hole the curtail gate documents above.
+	arbPaused := &pauseSet{}
+
 	// Publish the BTC/USD rate to its gauge and enforce the optional
 	// curtailment threshold (curtail_below_btc_usd). When the price falls
 	// below the threshold all workers are idled (SetWork(nil)) and the gate
@@ -325,6 +333,7 @@ func Run(ctx context.Context, opts Options) error {
 		minYield:      opts.Config.MinYieldSatsPerSec,
 		activityMu:    &activityMu,
 		activity:      activity,
+		paused:        arbPaused,
 	})
 
 	// ----- Phase 7: TUI dashboard -----
@@ -356,6 +365,7 @@ func Run(ctx context.Context, opts Options) error {
 		metrics:     m,
 		log:         log,
 		curtailGate: curtailGate,
+		arbPaused:   arbPaused,
 		activityMu:  &activityMu,
 		activity:    activity,
 	})
@@ -378,6 +388,9 @@ type reconnectOpts struct {
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
 	curtailGate *atomic.Bool
+	// arbPaused, when non-nil, is the per-device pause set written by the
+	// arbitration loop; job dispatch must not arm a paused worker.
+	arbPaused *pauseSet
 	// activityMu/activity: see sessionOpts. Threaded through unchanged
 	// across reconnects since the arbitration loop (the writer) runs for
 	// the lifetime of Run(), independent of any one pool session.
@@ -450,6 +463,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			m:            r.metrics,
 			powerWatts:   r.opts.Config.PowerWatts,
 			curtailGate:  r.curtailGate,
+			arbPaused:    r.arbPaused,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
@@ -562,6 +576,10 @@ type sessionOpts struct {
 	// curtailGate, when non-nil and raised, suppresses applying pool jobs to
 	// workers (they stay idle) because BTC/USD is below the curtail threshold.
 	curtailGate *atomic.Bool
+	// arbPaused, when non-nil, is the per-device pause set written by the
+	// arbitration loop's reconcileArbPauses; updateWork/applyJob skip a
+	// paused worker so its arbitration-assigned state survives new jobs.
+	arbPaused *pauseSet
 	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
 	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
 	tlsCAFile string
@@ -589,16 +607,33 @@ func (o sessionOpts) isCurtailed() bool {
 	return o.curtailGate != nil && o.curtailGate.Load()
 }
 
+// allArbPaused reports whether every worker is currently paused by
+// arbitration (idle below the yield floor or routed to a non-mining
+// stream). A nil set, or no workers, reports false.
+func (o sessionOpts) allArbPaused() bool {
+	if o.arbPaused == nil || len(o.workers) == 0 {
+		return false
+	}
+	for _, w := range o.workers {
+		if !o.arbPaused.Paused(w.DeviceID()) {
+			return false
+		}
+	}
+	return true
+}
+
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
-// honouring curtailment. While curtailed the miner is intentionally idle, so a
+// honouring curtailment and arbitration idling. While curtailed — or while
+// every worker is arbitration-paused — the miner is intentionally idle, so a
 // zero hashrate is *expected*, not a fault: the stall monitor is not advanced
 // (no false "hashrate stalled — check device health" warning) and otedama_up
-// stays 1 (healthy, deliberately paused). otedama_curtailed carries the paused
-// signal separately, so operators can alert on otedama_up==0 for real stalls
-// without being paged during a price-driven pause. Returns whether the miner
-// is in a fault stall (for the dashboard badge); always false while curtailed.
+// stays 1 (healthy, deliberately paused). otedama_curtailed / the idle-device
+// log line carry the paused signal separately, so operators can alert on
+// otedama_up==0 for real stalls without being paged during a price-driven or
+// yield-floor pause. Returns whether the miner is in a fault stall (for the
+// dashboard badge); always false while intentionally idle.
 func (o sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate float64) bool {
-	if o.isCurtailed() {
+	if o.isCurtailed() || o.allArbPaused() {
 		if o.m != nil {
 			o.m.up.Set(1)
 		}
@@ -778,7 +813,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)", j.JobID))
 			return
 		}
-		updateWork(opts.workers, j, chanID, prevHash, prevNBits, ntime, shareTarget)
+		updateWork(opts.workers, opts.arbPaused, j, chanID, prevHash, prevNBits, ntime, shareTarget)
 		opts.log("info", fmt.Sprintf("engine: job %d version=0x%08X active", j.JobID, j.Version))
 	}
 
@@ -1146,7 +1181,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				if err := applyJob(opts.workers, opts.arbPaused, job, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
@@ -1359,8 +1394,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // block solve — effectively never, so the pool would see no shares at
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
-func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+func updateWork(workers []*miner.Worker, paused *pauseSet, job *stratum.NewMiningJob, chanID uint32,
+	prevHash [32]byte, prevNBits, ntime uint32, shareTarget miner.Hash,
 ) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
@@ -1384,6 +1419,9 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 		Target: target,
 	}
 	for _, wr := range workers {
+		if paused != nil && paused.Paused(wr.DeviceID()) {
+			continue // arbitration paused this device; the next Decide may resume it
+		}
 		wr.SetWork(w)
 	}
 }
@@ -1429,7 +1467,7 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, paused *pauseSet, job poolproto.Job, chanID uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
@@ -1451,6 +1489,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		ExtraNonce: job.ExtraNonce,
 	}
 	for _, wr := range workers {
+		if paused != nil && paused.Paused(wr.DeviceID()) {
+			continue
+		}
 		wr.SetWork(w)
 	}
 	return nil

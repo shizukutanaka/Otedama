@@ -377,7 +377,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
 
 	select {
 	case s := <-shares:
@@ -405,7 +405,7 @@ func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
 	var prevHash [32]byte
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, nil, job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,7 +457,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, nil, job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }
@@ -1216,7 +1216,7 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		updateWork(opts.workers, nil, job, 0, prevHash, 0x207fffff, 0x60000000, target)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -1267,6 +1267,42 @@ func TestUpdateLiveness_CurtailedReportsHealthyAndDoesNotStall(t *testing.T) {
 	}
 	if got := m.up.Value(); got != 1 {
 		t.Errorf("otedama_up = %v while curtailed, want 1 (healthy/paused)", got)
+	}
+}
+
+func TestUpdateLiveness_AllArbPausedReportsHealthyAndDoesNotStall(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	paused := &pauseSet{}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	paused.Pause("dev-a") // the only worker is arbitration-paused (yield floor)
+	opts := sessionOpts{m: m, arbPaused: paused, workers: []*miner.Worker{w}}
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	// The worker is intentionally idle, so hashrate is 0 every tick — this
+	// must not be read as a fault, same as curtailment.
+	for i := 0; i < 5; i++ {
+		if stalled := opts.updateLiveness(hashMon, 0); stalled {
+			t.Fatalf("sample %d: reported stalled while every worker is arbitration-paused", i)
+		}
+	}
+	if hashMon.Stalled() {
+		t.Error("stall monitor advanced to stalled while arbitration-paused (would emit a false warning)")
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Errorf("otedama_up = %v while arbitration-paused, want 1 (healthy/paused)", got)
+	}
+
+	// A partially-paused set is still a real stall: another device is
+	// nominally mining, so 0 total hashrate means fault.
+	paused.Resume("dev-a")
+	paused.Pause("dev-b") // not among workers
+	var stalled bool
+	for i := 0; i < 3; i++ {
+		stalled = opts.updateLiveness(hashMon, 0)
+	}
+	if !stalled {
+		t.Error("expected a fault stall once a worker is no longer arbitration-paused")
 	}
 }
 

@@ -940,6 +940,60 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 373 — wallet lifecycle audit + docs-code drift fix
+
+[AUDITED — clean] `internal/lightning` wallet lifecycle: wallet.dat writes
+are fully atomic (tempfile + Sync + Close + pre-rename chmod 0600 + Rename
+into a 0700 data dir); decrypt errors are deliberately opaque ("wallet
+unlock failed"); the WalletManager is short-lived in the engine
+(`setupWallet` keeps only the fingerprint string, so the BIP-39 mnemonic
+is collectable after first-run display).
+
+[AUDITED — clean] BIP-39 wordlist + derivation: `GenerateEntropy`
+restricts to valid bit widths and requires a full read; `MnemonicToEntropy`
+rejects invalid word counts and enforces the checksum (transcription
+errors caught); `Fingerprint` is an HMAC so it reveals nothing about the
+seed. Intermediate derivation buffers are zeroed (session 340, PR #452).
+
+[FIXED] Docs-code drift on the wallet KDF work factor: THREAT_MODEL and
+AUDIT_CHECKLIST claimed `scrypt N=32768`; the actual constant is
+`scryptN = 1 << 17` = 131072 in `internal/lightning/seedstore.go`
+(4x understatement — the brute-force residual-risk paragraph materially
+understates the real work factor). AUDIT_CHECKLIST also pointed item 22
+at `internal/lightning/seed.go`; the call site is `seedstore.go`.
+Corrected both. `docs/API.md` already documented N=2^17 correctly.
+
+[AUDITED — clean] THREAT_MODEL channel bound: the SV2 reader channel is
+`make(chan poolMsg, 32)` (run.go), matching the documented "Job channel
+is bounded (buffer size 32)" claim.
+
+## Session 382 — re-delivery of #485 + arbitration pause persistence fix
+
+[FETCHED] Re-delivered the closed-unmerged #485 (docs-code drift on the
+wallet scrypt work factor: THREAT_MODEL/AUDIT_CHECKLIST said N=32768;
+implementation is `scryptN = 1 << 17` = 131072) — cherry-picked onto
+master verbatim; no equivalent open PR exists.
+
+[FIXED] Arbitration device pause was defeated by the next pool job:
+`applyAllocation` pauses below-floor/idle/AI-routed workers with
+`SetWork(nil)`, but `updateWork`/`applyJob` re-armed *every* worker on
+each new pool job — undoing the pause for the ~30 s until the next Decide
+tick. Introduced `pauseSet` (sync.Map), the per-device counterpart of
+`curtailGate`: `reconcileArbPauses` rewrites the set after every Decide
+(before applyAllocation), and both job-dispatch paths skip paused device
+IDs. Hashing resumes on the next job after arbitration routes the device
+back to a mining stream.
+
+[FIXED] `updateLiveness` now treats "every worker arbitration-paused" the
+same as curtailment — stall monitor not advanced, `otedama_up` stays 1 —
+preventing false "hashrate stalled" warnings while the rig is
+deliberately idle below the yield floor. Partial pause still stalls
+normally (a nominally-mining device at 0 rate is a real fault).
+
+[AUDITED — clean] fanIn share-merge backpressure: buffer 4·N capped at
+64; when full during a reconnect the producers block and workers drop
+shares via the dropped-share counter — bounded loss, no unbounded queue.
+
 ## Session 319 — doctor audits wallet.dat file mode (re-delivers closed #381/#414)
 
 **Finding [OBSERVED — code-verified].** The wallet-permission audit
