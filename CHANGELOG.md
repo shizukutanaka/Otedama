@@ -16,6 +16,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 問題を修正（`x < 0` は NaN で偽）。`.nan`/env "NaN" が裁定計算を
 汚染する経路を遮断。
 
+### Fixed (session 325 — 裁定エンジンの非有限 yield を collapse)
+
+**問題.** `Yield.Effective()` の `<= 0` ガードは NaN を通す——
+上流プロバイダの 0/0 除算等で NaN が来ると `y <= 0` が false となり
+NaN 候補がソートへ混入、`TotalYield` を NaN 汚染しうる。
+
+**修正.** 積が非有限（NaN/±Inf）なら 0 に collapse——壊れたクォートは
+ソートに勝てず集計も汚さない。`TestYield_Effective` に NaN/±Inf
+の5ケース追加。
+
 ### Fixed (session 338 — set_extranonce のデータレース修正)
 
 `mining.set_extranonce`（リードゴルーチン）が `extranonce1`/
