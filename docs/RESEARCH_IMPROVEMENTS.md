@@ -950,6 +950,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** Dockerfile: `golang:1.24-alpine`（実効要件と一致）・ldflags が正しい `internal/version.{Version,Commit,BuildDate}` シンボル（release.yml の間違った `main.*` と対照的）・NOTICE+LICENSE 同梱・nonroot uid 65532・`VOLUME /var/lib/otedama`・`EXPOSE 0`・`CMD ["run","--help"]` — 全て正確（ci.yml docker-verify の失敗は §13 記録済みのジョブ側欠陥で Dockerfile 側の問題ではない）。`.dockerignore` 非実在（COPY . . が .git 等を context に含めるが動作上無害 — open #530 担当域）。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
