@@ -18,6 +18,14 @@ ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
 整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
 （ライブラリ crate は stratum-mining/stratum に残留）。
 
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist は master 側（session 485）で注記済みのため変更なし。
+
 ### セキュリティ (session 410)
 
 THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
