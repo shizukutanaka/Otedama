@@ -940,6 +940,16 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 339 — V1 handshake timeout (mirrors s327's V2 fix)
+
+**V1 Negotiate [FIXED].** `call()` waited only on the caller's ctx and
+the read loop's 5-minute per-line deadline — a pool that trickles a
+heartbeat line under 5 min but never answers `mining.subscribe` wedged
+the handshake forever. Negotiate now wraps all three calls in
+`context.WithTimeout(ctx, handshakeTimeout)` (30 s, var-overridable),
+mirroring the V2 `Negotiate` read deadline from session 327. The 30 s
+budget is shared across subscribe+authorize+extranonce.subscribe.
+
 ## Session 337 — SV2 channel_id validation + protocol-surface audit
 
 **Foreign-channel frames [FIXED].** The live V2 loop processed
