@@ -961,6 +961,35 @@ exitUsage=64/exitConfig=78; payout_scheme enum validation matches;
 config.yaml.example ranges match config.go checks; command table
 matches main.go dispatch.
 
+## Session 294 — warn once per episode on difficulty starvation (re-delivers closed #394)
+
+**Finding [OBSERVED — code-verified].** A pool-assigned difficulty so high the
+expected share interval exceeds an hour starves income silently — no rejects,
+no disconnect, nothing credited. Operators can't distinguish it from a dead
+pool.
+
+**Fix [OBSERVED].** On each V1 stats tick, when `estimatedShareIntervalSeconds`
+exceeds 3600 the engine logs a warn once per episode (`starvedWarned`),
+re-arming when the interval recovers. Downward floods stay bounded by the
+capped share channel (audit verdict, session-270 lineage).
+
+**Tests [OBSERVED].** `TestRunSessionV1_StarvationWarnsOnce` — fake pool sets a
+starving difficulty; exactly one warn fires across repeated ticks.
+
+## Session 377 — build tooling audit
+
+[FIXED] `make fuzz` silently ran zero fuzzers: `go list ./...` emits
+import paths, so `grep -l "func Fuzz" {}/*.go` globbed a nonexistent
+directory for every package and the loop body never ran. The target now
+discovers fuzz tests from the filesystem and runs each
+`Fuzz*` function individually (`-fuzz=^Name$`) — also fixing the
+"matches more than one fuzz test" error that a package with multiple
+fuzzers would hit. Verified live: both `internal/stratum` fuzzers ran
+30s each (~4.8M execs, PASS).
+
+[AUDITED — clean] Remaining Makefile targets checked for the same
+class of bug (`docs`, `licenses`, `audit` sub-steps) — all correct.
+
 ## Session 426 — .gitignore: strip vestigial v2 sections [HYGIENE]
 
 The ignore file still described the pre-reset repository, not this one —
