@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### セキュリティ (session 393)
+
+- `--http-addr` が非ループバックアドレス（`0.0.0.0` 等）に bind される際、起動時に stderr 警告を発行 — metrics/health エンドポイントのネットワーク公開をオペレータに通知（`--pprof` 有効時はヒープ/ゴルーチンプロファイル公開についても明記）。ループバック bind は従来通り無警告。
+
 ### 修正 (session 385)
 
 - `TestSetupWallet_MnemonicNeverReachesLogger` の確率的フレークを解消: 24語ニーモニックのランダム語（BIP-39 語彙は一般英単語）が固定ログ文（"recovery phrase" 等）の散文と衝突し誤検出していた。既知の定数行をスキャン対象外にし、動的ログ内容のみを検査（実際の漏洩は引き続き検出）。(closed #371 の該当半分の再デリバー)
