@@ -951,6 +951,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証 clean**: ellswift 出荷状況 — decred secp256k1/v4・btcec/v2 共に release 版に ellswift 未含有（btcsuite/btcd#2219 は 2025-06 に closed-unmerged、v2_transport フォークのみ）→ opus の「監査済み Go 実装非存在」主張は依然正確。URL 棚卸しで otedama.io の live 参照なし。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
