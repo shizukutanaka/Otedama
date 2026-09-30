@@ -894,18 +894,6 @@ func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	<-leaderDone // let the leader finish before the deferred srv.Close()
 }
 
-// parseFloat is the strict numeric parser used by the rates package: it
-// mirrors strconv.ParseFloat so test fixtures exercise the same semantics as
-// the production extract functions (rejects trailing garbage like "95000foo").
-func parseFloat(s string, out *float64) (int, error) {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, err
-	}
-	*out = v
-	return 1, nil
-}
-
 // ============================================================================
 // session 168 — cover previously uncovered branches in fetcher.go
 // ============================================================================
