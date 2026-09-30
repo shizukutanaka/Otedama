@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
 
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
 ### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
 
 **問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
