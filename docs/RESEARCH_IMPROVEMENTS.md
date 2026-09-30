@@ -940,6 +940,12 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 392 — fuzz for the BIP-39 restore boundary
+
+[FIXED — session 392] **BIP-39 mnemonic parse fuzz** (`internal/lightning/fuzz_test.go`): `MnemonicToEntropy` consumes operator-typed word sequences on the wallet-restore path — the last untrusted-input parser without fuzz coverage. Two fuzzers: `FuzzMnemonicToEntropy` (1.5M execs) asserts arbitrary word slices — wrong counts, unknown words, case-mismatch, empty strings — always error rather than panic, and any accepted mnemonic re-encodes identically; `FuzzMnemonicRoundtrip` (3.0M execs) asserts `EntropyToMnemonic` → `MnemonicToEntropy` is bit-exact across all five legal entropy sizes, pinning the checksum math.
+
+[AUDITED — clean] gh CLI is unauthenticated in this environment (expected); open-PR mergeability was verified via the builtin git tools instead — recent PRs (#497, #498, #502) report MERGEABLE.
+
 ## Session 434 — サブコマンド did-you-mean 提案 [UX]
 
 CATEGORY_AUDIT session-250 で「実在・低重要度・deferred」と記録されていた
