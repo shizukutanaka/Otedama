@@ -31,7 +31,7 @@ import (
 
 // DefaultChecks returns the built-in check set for a config.
 // Additional checks can be appended by callers before running.
-func DefaultChecks(cfg config.Config, configPath string) []Check {
+func DefaultChecks(cfg *config.Config, configPath string) []Check {
 	return []Check{
 		checkConfig(cfg, configPath),
 		checkBitcoinAddress(cfg.BitcoinAddress),
@@ -53,7 +53,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 	}
 }
 
-func checkConfig(cfg config.Config, path string) Check {
+func checkConfig(cfg *config.Config, path string) Check {
 	return Check{
 		Name: "Configuration",
 		Run: func(_ context.Context) Result {
@@ -321,7 +321,7 @@ func checkWallet(dataDir string) Check {
 // very long pool list cannot turn doctor into a port scanner.
 const maxReachabilityProbes = 8
 
-func checkPoolReachability(cfg config.Config) Check {
+func checkPoolReachability(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
 		Run: func(ctx context.Context) Result {
@@ -421,7 +421,7 @@ func checkPoolReachability(cfg config.Config) Check {
 // point of failure: if it goes down, mining stops until the operator
 // manually updates the config. Two or more pools give the reconnect loop
 // a failover target without human intervention.
-func checkPoolDiversity(cfg config.Config) Check {
+func checkPoolDiversity(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool diversity",
 		Run: func(_ context.Context) Result {
@@ -471,7 +471,7 @@ var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
 // dataset, which Otedama does not bundle; sharing a resolved IP is a strong,
 // dependency-free centralisation signal that covers the common misconfig
 // (two hostnames that are CNAMEs/round-robin for the same pool node).
-func checkPoolEndpointDiversity(cfg config.Config) Check {
+func checkPoolEndpointDiversity(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool endpoint diversity",
 		Run: func(ctx context.Context) Result {
@@ -545,7 +545,7 @@ var gpuDRMPath = "/sys/class/drm"
 // redirect every payout to their own address — a well-known stratum-hijacking
 // attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
 // which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
-func checkPoolEncryption(cfg config.Config) Check {
+func checkPoolEncryption(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
@@ -581,7 +581,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 // (where it would then fail confusingly for the private-CA pool it was meant to
 // trust). The PEM is parsed with the same x509.CertPool.AppendCertsFromPEM the
 // dialer uses, so doctor and the live path agree on what "valid" means.
-func checkPoolTLSCA(cfg config.Config) Check {
+func checkPoolTLSCA(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool TLS CA files",
 		Run: func(_ context.Context) Result {
@@ -635,7 +635,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 // a "half-configured feature" that silently does nothing the operator expects.
 // This is the cross-field-intent perspective: do these values, together, achieve
 // what the operator apparently wanted?
-func checkPowerEconomics(cfg config.Config) Check {
+func checkPowerEconomics(cfg *config.Config) Check {
 	return Check{
 		Name: "Power & cost config",
 		Run: func(_ context.Context) Result {
@@ -707,7 +707,7 @@ func checkEnvVars() Check {
 // "too high" threshold. Instead it points the operator at the observable that
 // settles the question — the otedama_devices_idle gauge — which reports how
 // many devices the floor actually idled each arbitration cycle.
-func checkProfitabilityFloor(cfg config.Config) Check {
+func checkProfitabilityFloor(cfg *config.Config) Check {
 	return Check{
 		Name: "Profitability floor",
 		Run: func(_ context.Context) Result {
@@ -721,14 +721,15 @@ func checkProfitabilityFloor(cfg config.Config) Check {
 				Status: StatusPass,
 				Detail: fmt.Sprintf(
 					"min_yield_sats_per_sec = %.4g sat/s; devices whose best stream yields less will idle",
-					cfg.MinYieldSatsPerSec),
+					cfg.MinYieldSatsPerSec,
+				),
 				Fix: "if more devices idle than you expect, watch the otedama_devices_idle metric and lower the floor",
 			}
 		},
 	}
 }
 
-func checkPayoutScheme(cfg config.Config) Check {
+func checkPayoutScheme(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool payout schemes",
 		Run: func(_ context.Context) Result {
@@ -930,7 +931,8 @@ func checkClockSkew() Check {
 					Fix: fmt.Sprintf(
 						"synchronise your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
 							"`w32tm /resync` on Windows). Skew >%.0f s breaks TLS certificate "+
-							"validation and mining nTime checks.", clockSkewFailSecs),
+							"validation and mining nTime checks.", clockSkewFailSecs,
+					),
 				}
 			case skew > clockSkewWarnSecs:
 				return Result{

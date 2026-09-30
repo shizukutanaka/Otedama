@@ -960,6 +960,97 @@ every field read is preceded by a `len < need` guard, every
 length-prefixed read goes through `io.ReadFull`, and the
 `byteSliceReader` cannot over-read. The fuzzer confirms empirically.
 
+## Session 416 — lint backlog follow-up: eliminate the entire hugeParam class [PERF]
+
+Session 415 (PR #526) cleared ~350 lint findings down to 65 and deferred two
+classes: 53 `hugeParam` (large structs passed by value, ≥80 bytes each copied
+per call) and 12 `gocyclo` (functions needing real decomposition, not cosmetic
+fixes). This session converts **all 53 hugeParam sites** — zero remain.
+
+What changed (value → pointer params/receivers):
+
+- `internal/arbitration`: `Stream.Accepts/YieldFor`, `Assignment.Idle`,
+  `Decide(in *Input)`, `chooseForDevice`, `policyScore` — the arbitration hot
+  path ran once per Decide tick copying 80–120-byte structs per call.
+- `internal/miner`: `Header.Bytes`, `ParseHeader`, `HashHeader` — `HashHeader`
+  is called once **per nonce** in the grind loop; the 80-byte Header copy per
+  hash is eliminated (BenchmarkHashHeader: ~107ns/op, 0 allocs — unchanged
+  correctness, the copy was the only overhead above SHA-256d itself).
+- `internal/poolproto`: `DialURL` and the `Dialer` interface now take
+  `*Credentials`; `sendJob` takes `*Job`; `rpcMessage.uintID` pointer receiver.
+- `internal/doctor`: `DefaultChecks` + all 10 check funcs take `*config.Config`
+  (200 bytes → 8 per call).
+- `internal/config`: `Resolve(fromFile *Config, env, flags *FlagValues)`.
+- `internal/engine`: `sessionOpts` receivers, `applyJob`, `setupWallet`,
+  `startProviders`, `poolURLs`, `payoutAddresses`, `buildStats`,
+  `disconnectedStats` (returns `*tui.Stats`).
+- `internal/provider`, `internal/stratum` (`SetupConnection.Encode`,
+  `ValidateSetupConnection`), `internal/tui` (`Stats` through the whole
+  render pipeline).
+
+Channel types (`jobsCh chan Job`, `updateCh chan Stats`, `quoteCh chan Quote`)
+intentionally keep value semantics — pointers are taken at send/apply
+boundaries only, avoiding aliasing across the producer/consumer handoff.
+
+`Decide` also gained a nil-`Input` guard (a pointer API must not panic on nil).
+
+Remaining deferred debt: the 12 `gocyclo` findings (cyclomatic complexity) —
+those need decomposition refactors, not signature changes, and stay parked as
+a separate judgement call.
+
+*Evidence: `golangci-lint run` hugeParam count 53 → 0; `go vet` clean;
+`go test ./...` all 24 packages green including `-race` on the engine suite.*
+
+## Session 409 — SPECIFICATION validation-section drift [FIXED]
+
+**Understated validation claims corrected [FIXED].**
+- §3.3 claimed the payout-address checksum is "*not* verified here" —
+  `validateBitcoinAddress` has called `btccrypto.ValidateAddress`
+  (bech32/bech32m + Base58Check) at config load for a long time. Both
+  §3.3 and the §3.1 rows corrected. The function's own godoc was stale
+  in the same way (claimed checksums deferred to the lightning package
+  while the body verified them) — rewrote to describe actual behaviour.
+- §3.1 `tls_ca_file` row: "honoured only for `stratum+tls://`" — it is
+  also honoured for `stratum+v2tls://` (engine loads the PEM for both
+  TLS dial paths; unreadable → warn + system roots, never plaintext).
+  Field godoc corrected too.
+
+**Audited — clean:** §3.1 schema table covers every yaml key (pools
+sub-fields url/user/password/payout_scheme/tls_ca_file, workers.name,
+all scalar fields + env vars); §2.1 exit-code contract matches
+exitUsage=64/exitConfig=78; payout_scheme enum validation matches;
+config.yaml.example ranges match config.go checks; command table
+matches main.go dispatch.
+
+## Session 294 — warn once per episode on difficulty starvation (re-delivers closed #394)
+
+**Finding [OBSERVED — code-verified].** A pool-assigned difficulty so high the
+expected share interval exceeds an hour starves income silently — no rejects,
+no disconnect, nothing credited. Operators can't distinguish it from a dead
+pool.
+
+**Fix [OBSERVED].** On each V1 stats tick, when `estimatedShareIntervalSeconds`
+exceeds 3600 the engine logs a warn once per episode (`starvedWarned`),
+re-arming when the interval recovers. Downward floods stay bounded by the
+capped share channel (audit verdict, session-270 lineage).
+
+**Tests [OBSERVED].** `TestRunSessionV1_StarvationWarnsOnce` — fake pool sets a
+starving difficulty; exactly one warn fires across repeated ticks.
+
+## Session 377 — build tooling audit
+
+[FIXED] `make fuzz` silently ran zero fuzzers: `go list ./...` emits
+import paths, so `grep -l "func Fuzz" {}/*.go` globbed a nonexistent
+directory for every package and the loop body never ran. The target now
+discovers fuzz tests from the filesystem and runs each
+`Fuzz*` function individually (`-fuzz=^Name$`) — also fixing the
+"matches more than one fuzz test" error that a package with multiple
+fuzzers would hit. Verified live: both `internal/stratum` fuzzers ran
+30s each (~4.8M execs, PASS).
+
+[AUDITED — clean] Remaining Makefile targets checked for the same
+class of bug (`docs`, `licenses`, `audit` sub-steps) — all correct.
+
 ## Session 426 — .gitignore: strip vestigial v2 sections [HYGIENE]
 
 The ignore file still described the pre-reset repository, not this one —
