@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 530 — sv2-spec cert version)
+
+- `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
+  `version` field is now normative (MUST be 0; reject unsupported).
+  Forward requirement for Otedama's future cert validation.
+
 ### Documentation & audit (session 531 — coverage measured)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
