@@ -287,11 +287,11 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 	case s.Stalled:
 		// Yellow hashrate + stall badge so the operator sees the warning
 		// immediately without needing to check Prometheus.
-		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  ", yellow, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %s  ", yellow, rate, reset, padToVisibleWidth(dim+devs+reset, 20))
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	default:
-		prefix := fmt.Sprintf("  %s%-14s%s  %-20s  ", green, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s%s  %s  ", green, rate, reset, padToVisibleWidth(dim+devs+reset, 20))
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	}
@@ -320,7 +320,19 @@ func (d *Dashboard) poolLine(s Stats, cols int) string {
 		urlBudget = 8
 	}
 	url := dim + shortenURL(s.PoolURL, urlBudget) + reset
-	return fmt.Sprintf("%s%-*s  %s", prefix, urlBudget, url, status)
+	return prefix + padToVisibleWidth(url, urlBudget) + "  " + status
+}
+
+// padToVisibleWidth appends spaces so s occupies width visible columns.
+// fmt's %-Ns pads by rune count, which counts ANSI escape bytes as width —
+// a value carrying colour codes would be under-padded and the column after
+// it would drift left by the escape length. Use this wherever the field
+// already contains escapes.
+func padToVisibleWidth(s string, width int) string {
+	if n := width - visibleLen(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
 }
 
 // truncateToBudget shortens a plain (no-ANSI) string to fit budget visible
@@ -352,7 +364,7 @@ func (d *Dashboard) earningsLine(s Stats) string {
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
 	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset
-	return fmt.Sprintf("  %-30s  %s", total, earned)
+	return "  " + padToVisibleWidth(total, 30) + "  " + earned
 }
 
 func (d *Dashboard) providerLine(p ProviderStats) string {
