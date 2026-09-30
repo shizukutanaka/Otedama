@@ -950,6 +950,55 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** KNOWN_LIMITATIONS の全未解決項目: §2（Noise 未配線・P-256・mixKey 破棄 — run.go:645 の警告と一致）、§4 GPU Linux-only、§5 PQ scaffold、§6 Lightning receive-only、§8 ASIC 未検出、§13 CI 6ワークフロー欠陥、§14 DATUM reserved、§15 TUI 固定80列、§16 wallet サブコマンド非実装 — 全て現状正確。TROUBLESHOOTING のバックオフ記述（1s→64s）は reconnectBackoffInitial/Max と一致、CPU 飽和対策・linger・LaunchAgent 説明も正しい。`--worker-threads` 行は open #558 の担当域のため未修正。
 
+## Session 526 — in-tree fuzz targets smoke-verified
+
+CI has no fuzz job (recorded in KNOWN_LIMITATIONS §13), so the two
+in-tree fuzzers were run locally for 30s each under go1.27.1:
+
+- `FuzzDecoder_ReadFrame` (frame decoder, length-field arithmetic):
+  ~618K execs, 20 seeds → 21 corpus, **zero crashes**.
+- `FuzzDecodeHeader` (header parser): ~3.97M execs, 7 seeds → 8
+  corpus, **zero crashes**.
+
+The protocol-parse boundary holds against random input; the only gap
+remains that CI never exercises these (maintainer-owned workflow).
+
+## Session 527 — first end-to-end binary smoke
+
+Built the real binary under go1.27.1 and exercised the user-facing
+surface (everything prior was library-level testing):
+
+- `otedama version` — prints version + toolchain + arch correctly
+  (`unknown` commit/build is the documented no-ldflags behavior).
+- `otedama completion bash` — emits a working script.
+- `otedama doctor` — all 17 checks run (119ms), correct pass/fail/warn/
+  skip counts, exit code 2 with failures per the documented 0/1/2
+  contract. (Pool-reachability fail is sandbox DNS, not a defect.)
+- `otedama config show` / `config validate` — resolved config with
+  origins prints; validate fails with exit **78** exactly per the
+  §2.1 EX_CONFIG contract.
+
+The documented CLI contract holds end-to-end on the built artifact.
+
+## Session 528 — non-custodial core path verified end-to-end
+
+Ran the real binary against a temp data dir; the product's core
+promise holds E2E:
+
+- **First run**: wallet auto-created → the 24-word BIP-39 phrase is
+  shown exactly once with its fingerprint and the "not saved to disk /
+  not in any log" banner → `wallet.dat` written at mode 0600 (+ a
+  `wallet.fingerprint` sidecar) → devices detected, worker spawned,
+  V2 connect attempted → plaintext-transport warning correctly
+  advises `stratum+v2tls://` → exponential-backoff reconnect loop on
+  DNS failure → clean shutdown on SIGTERM ("Your wallet remains
+  safe").
+- **Second run**: same fingerprint (`27d96d0d`), phrase NOT re-shown —
+  one-time disclosure honored.
+
+Also observed live: the sandbox can't resolve the default pool's DNS,
+so the connect loop's backoff behavior was exercised directly.
+
 ## Session 529 — BENCHMARKS re-verified against go1.27.1/arm64
 
 - **Measured `BenchmarkHashHeader`**: ~112 ns/op, 0 allocs on
