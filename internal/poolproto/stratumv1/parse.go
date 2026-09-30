@@ -204,7 +204,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 // V1 client.reconnect params: [hostname, port, wait] — all optional.
 // A pool sends this to gracefully move a miner to another node (load
 // balancing / maintenance / failover). Otedama deliberately records but
-// does NOT follow the pool-supplied Host:Port: honouring an arbitrary
+// does NOT follow the pool-supplied Host:Port: honoring an arbitrary
 // endpoint from an unauthenticated notification is a redirection vector,
 // and the reconnect loop already owns the operator-configured pool list.
 // Wait is advisory (seconds to pause before reconnecting).
@@ -218,16 +218,16 @@ type reconnectDirective struct {
 // All three fields are optional; an empty or malformed params list still
 // yields a valid (zero-value) directive with ok=true, because the bare
 // notification itself is the signal to reconnect.
-func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
+func parseReconnect(raw json.RawMessage) reconnectDirective {
 	var d reconnectDirective
 	if len(raw) == 0 {
-		return d, true
+		return d
 	}
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil {
 		// A bare "client.reconnect" with no/garbage params is still a
 		// valid directive — the method alone means "reconnect".
-		return d, true
+		return d
 	}
 	if len(p) >= 1 {
 		_ = json.Unmarshal(p[0], &d.Host) // best-effort; tolerate non-string
@@ -244,7 +244,7 @@ func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
 	if len(p) >= 3 {
 		_ = json.Unmarshal(p[2], &d.Wait)
 	}
-	return d, true
+	return d
 }
 
 // parseSubscribeResult extracts extranonce1 and extranonce2Size from a

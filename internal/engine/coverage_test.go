@@ -924,7 +924,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		serverConn.Read(buf) //nolint:errcheck
 		// Send a valid SetupConnectionSuccess but then a second one instead of
 		// the expected OpenMiningChannel flow — here we deliberately send
-		// an OpenMiningChannelError which is recognised but sets neither
+		// an OpenMiningChannelError which is recognized but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
@@ -1369,7 +1369,7 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 		t.Error("onConnected was not called")
 	}
 	// Ends with pool disconnect.
-	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
+	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1610,7 +1610,7 @@ func TestRunSessionV1_ContextCancelled(t *testing.T) {
 		interval: 500 * time.Millisecond,
 		log:      func(_, _ string) {},
 	})
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)
 	}
 }
