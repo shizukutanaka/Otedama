@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
+### Documentation & audit (session 530 — sv2-spec cert version)
+
+- `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
+  `version` field is now normative (MUST be 0; reject unsupported).
+  Forward requirement for Otedama's future cert validation.
+
+### Documentation & audit (session 531 — coverage measured)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
+  results — all 24 packages green, median ~97%; only `cmd/otedama`
+  (88%) below the 90% intent, its uncovered residue being the
+  integration-only `cmdRun` live path already exercised by the
+  binary E2E smokes.
+
+### Documentation & audit (session 534 — escape analysis)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-gcflags=-m` sweep — every heap
+  escape is on a cold path (package init, invalid-input errors,
+  construction); the grind loop is allocation-free, matching the
+  benchmark's 0 allocs/op.
+
 ### Documentation & audit (session 535 — flake sweep)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,

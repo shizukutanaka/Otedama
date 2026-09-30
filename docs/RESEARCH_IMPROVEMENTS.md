@@ -940,6 +940,65 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 529 — BENCHMARKS re-verified against go1.27.1/arm64
+
+- **Measured `BenchmarkHashHeader`**: ~112 ns/op, 0 allocs on
+  virtualized Apple M4 → ~8.9 MH/s/thread — added the missing M4 row
+  to the single-thread table (the existing rows predate M4).
+- **Frame-decode section corrected** (two stale claims surviving
+  session 484's pass): the cited `BenchmarkDecoder_ReadFrame` does not
+  exist in the tree (only `BenchmarkHmacSHA256_*` in `internal/stratum`)
+  so the reproduce command ran zero benchmarks; and "fuzzed
+  continuously in CI" is false (no fuzz job — KNOWN_LIMITATIONS §13;
+  fifth doc with this phantom). Table re-labeled as unverified
+  targets, not measurements.
+
+## Session 530 — sv2-spec drift: cert version now normative
+
+Recorded in ADR-009:
+
+- **sv2-spec #230 merged (Sep 10)**: Noise certificate `version` MUST
+  be 0; initiator MUST reject unsupported versions (was undefined;
+  implementations disagreed, #229). Forward requirement for Otedama:
+  `internal/stratum/noise*.go` does not yet parse the responder cert,
+  so when cert validation lands it must include the `version == 0`
+  check — recorded where implementers will look.
+- **sv2-spec #233 merged (Sep 23)**: upstream added `AGENTS.md` —
+  meta, no protocol impact.
+- SRI remains at v1.11.1 (no release since the V1-difficulty fix).
+
+## Session 531 — per-package coverage measured
+
+`go test -cover ./...` under go1.27.1: **24 packages, all green;
+median ~97% statement coverage.** Distribution:
+
+- 100%: arbitration, clock, i18n, logger, metrics, poolproto, version
+- 97–99.7%: btccrypto, doctor, hal, httpserver, i18n/messages, miner,
+  poolproto/stratumv1, poolproto/stratumv2, provider, rates, stratum,
+  tui
+- 92–95%: config, daemon, engine, lightning
+- 88%: `cmd/otedama` — the only package below the 90% intent.
+
+The two <50% functions inside cmd/otedama are `main` (0% — untestable
+entrypoint by design) and `cmdRun` (36.4%). cmdRun's uncovered
+residue is the live-run tail — `engine.Run(...)` call site, the
+signal-NotifyContext wiring, HTTP server Start/Stop — i.e.
+integration-only territory already exercised by the session-527/528
+binary E2E smokes rather than unit tests. Recorded as a
+coverage-gap verdict, not a defect: unit coverage of the remaining
+paths would require a live pool or a scripted service manager.
+
+## Session 534 — escape analysis: hot path clean
+
+`go build -gcflags='-m'` on `internal/miner`: every heap escape is on
+a cold path — `diff1Target` (package-init big.Int), error-string
+literals in `NBitsFromTarget`/`TargetFromDifficulty` (invalid-input
+paths only), `&Worker{}`/`wg` (once per construction/Start).
+`TargetFromDifficulty` allocates `big.Float` per call but runs once
+per `mining.set_difficulty`, not per hash. The grind loop itself is
+allocation-free, consistent with `BenchmarkHashHeader` 0 allocs/op.
+No action needed; recorded as an audit verdict.
+
 ## Session 535 — flake sweep: timing-sensitive packages clean
 
 Repeat-run sweep of the packages whose tests touch timers,
