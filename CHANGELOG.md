@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 395)
+
+- `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。
+
 ### Chore (session 332 — yaml.v3 のメンテ先へ移行)
 
 `gopkg.in/yaml.v3`（2025年4月にアーカイブ、CLAUDE.md の依存

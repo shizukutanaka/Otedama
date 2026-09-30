@@ -940,6 +940,12 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 395 — fuzz for the V1 notification parsers
+
+[FIXED — session 395] **V1 notification-parser fuzz** (`internal/poolproto/stratumv1/notify_fuzz_test.go`): `parseNotify`, `parseReconnect`, `parseSetExtranonce`, `parseShowMessage` — pool-controlled params decoders reachable on every read-loop tick. The dispatch-level fuzzer (#478) reaches them only after producing a well-formed method string; direct seeds drive the parsers past their length guards into per-field unmarshal and hex/dec paths. ~15M execs clean; `client.reconnect` verified to always yield a directive (its host/port remain advisory-only and are never dialed — documented anti-redirection design).
+
+[AUDITED — clean] `parseReconnect` Wait field is stored but unconsumed on master (no sleep path); `parseSubscribeResult` fuzz lives in open #478; `extranonce2_size` bounds are open in #428/#450. The dormant Noise handshake stub (x-only fallback completes without DH) is documented as unwired alpha in KNOWN_LIMITATIONS §2 — targeted for spec-compliant replacement in v3.1.0, deliberately not hardened in place.
+
 ## Session 332 — yaml.v3 maintained-continuation migration
 
 **gopkg.in/yaml.v3 archived [FETCHED + FIXED].** The gopkg.in yaml repo
