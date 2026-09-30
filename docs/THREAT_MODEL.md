@@ -249,6 +249,26 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A hostile or buggy SV2 pool floods *distinct* job IDs
+(`NewMiningJob`) without ever rotating the chain tip, so the
+outstanding-job maps grow without bound — memory exhaustion. The
+per-message bound (`MaxFrameSize`) does not help: each frame is small;
+the *count* is unbounded. Noise encryption is irrelevant because the
+actor here is the pool itself, not a MitM.
+
+**Mitigation:** Both outstanding-job maps are capped at 64 with FIFO
+eviction: the engine loop's `jobs` map (`storeBoundedJob`, `jobsCap`)
+and the stratumv2 adapter read loop's `pending` map (`pendingCap`).
+A `SetNewPrevHash` still drains the map to the named job, so the bound
+only bites pools that flood *without* rotating the tip. The newest jobs
+— most likely to be activated — survive eviction.
+
+**Residual risk:** None identified. A legitimate pool exceeding 64
+in-flight jobs would lose the oldest ones; the tip's named job is
+always retained when present, so activation still proceeds.
+
+---
+
 **Threat:** A malicious or compromised Stratum V1 pool negotiates an
 absurd `extranonce2_size` to force a large per-job allocation, or sends
 malformed coinbase hex to corrupt the merkle fold.
