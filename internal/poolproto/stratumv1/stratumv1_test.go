@@ -1933,6 +1933,45 @@ func TestDialer_DialTimeout(t *testing.T) {
 	}
 }
 
+func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
+	old := callTimeout
+	callTimeout = 50 * time.Millisecond
+	defer func() { callTimeout = old }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Server drains the request but never responds.
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+	}()
+
+	start := time.Now()
+	_, err := sess.call(context.Background(), 7, "mining.submit", nil)
+	if err == nil {
+		t.Fatal("call should return timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("err = %v, want timeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("call blocked %v, want <5s", elapsed)
+	}
+	// Pending entry must be released, not leaked.
+	sess.pendingMu.Lock()
+	n := len(sess.pending)
+	sess.pendingMu.Unlock()
+	if n != 0 {
+		t.Errorf("pending map has %d entries after timeout, want 0", n)
+	}
+}
+
 func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
 	sess := makeBareSess()
 	sess.extranonce1 = "c0ffee01"

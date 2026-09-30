@@ -10,9 +10,9 @@ import (
 	"errors"
 	"math"
 	"net"
-	"strings"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1046,6 +1046,103 @@ func TestDialer_DialTimeout(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Errorf("Dial took %v; want <5s", elapsed)
+	}
+}
+
+// TestSession_PendingJobsBounded floods the read loop with distinct future
+// job IDs past pendingCap, then confirms the newest job still emits when
+// SetNewPrevHash names it — the bound must not drop the flood-tail jobs.
+func TestSession_PendingJobsBounded(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pool.doHandshake(7)
+
+		// Flood pendingJobs far past pendingCap — all future jobs (no
+		// min_ntime), so they sit in the map waiting for a tip.
+		for i := uint32(1); i <= pendingCap+6; i++ {
+			job := stratum.NewMiningJob{ChannelID: 7, JobID: i, Version: 0x20000000}
+			for k := range job.MerkleRoot {
+				job.MerkleRoot[k] = byte(i)
+			}
+			writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+
+		// Activate the NEWEST job: if FIFO eviction kept it, it emits.
+		prev := stratum.SetNewPrevHash{
+			ChannelID: 7,
+			JobID:     pendingCap + 6,
+			MinNtime:  0x60000000,
+			NBits:     0x207fffff,
+		}
+		writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		// Keep the conn open until the client has had time to emit.
+		time.Sleep(200 * time.Millisecond)
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://127.0.0.1:1", poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != strconv.Itoa(int(pendingCap)+6) {
+			t.Errorf("emitted job %q, want newest %d", job.JobID, pendingCap+6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("newest job was evicted — pendingCap eviction is not FIFO")
+	}
+	<-done
+}
+
+// TestNegotiate_HandshakeTimeout exercises the handshake read deadline: a
+// peer that accepts TCP but never answers SetupConnection must fail
+// promptly rather than hang DialURL (and the engine's reconnect loop)
+// forever. net.Pipe gives an in-memory full-duplex pair with no reader.
+func TestNegotiate_HandshakeTimeout(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
+	// The pool drains our writes but never answers — it went silent after
+	// TCP accept (net.Pipe writes block until read, so drain them).
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	old := handshakeTimeout
+	handshakeTimeout = 50 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	conn := &connection{raw: client, remoteAddr: "pool.invalid:34254", protocol: poolproto.ProtocolStratumV2, user: "w.user"}
+	start := time.Now()
+	var d Dialer
+	_, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Fatal("Negotiate succeeded against a silent peer")
+	}
+	var nerr net.Error
+	if !errors.As(err, &nerr) || !nerr.Timeout() {
+		t.Fatalf("expected i/o timeout, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Negotiate blocked %v (deadline not applied)", elapsed)
 	}
 }
 
