@@ -976,6 +976,64 @@ by ctx/keepalive, not a stale timer.
 the v1.12.0 line (sv2-apps repo carries app roles post v1.6.0 split);
 ESP-Miner v2.15.x line unchanged. No new alignment gaps.
 
+## Session 339 — V1 handshake timeout (mirrors s327's V2 fix)
+
+**V1 Negotiate [FIXED].** `call()` waited only on the caller's ctx and
+the read loop's 5-minute per-line deadline — a pool that trickles a
+heartbeat line under 5 min but never answers `mining.subscribe` wedged
+the handshake forever. Negotiate now wraps all three calls in
+`context.WithTimeout(ctx, handshakeTimeout)` (30 s, var-overridable),
+mirroring the V2 `Negotiate` read deadline from session 327. The 30 s
+budget is shared across subscribe+authorize+extranonce.subscribe.
+
+## Session 337 — SV2 channel_id validation + protocol-surface audit
+
+**Foreign-channel frames [FIXED].** The live V2 loop processed
+channel-scoped frames without checking `channel_id` against the
+channel opened in handshake. A confused or hostile pool could mutate
+`jobs`/prevHash/`shareTarget` via frames for a channel Otedama never
+opened. `channelIDOf` extracts the id from the five channel-scoped
+types; mismatches drop with a warn. Non-channel frames pass through.
+**Message surface [AUDITED — clean].** Standard-channel message set is
+complete (SetupConnection*/OpenMiningChannel*/NewMiningJob/
+SetNewPrevHash/SetTarget/SubmitShares*); extended-channel and unknown
+types land in `Message.Unknown` without error. `Decoder.MaxFrameSize`
+bounds every frame at 16 MiB — matching SRI — so a peer announcing a
+max-U24 payload cannot force an oversized allocation. The
+`internal/poolproto/stratumv2` adapter's `channel_id`/pending-map gaps
+are moot: it is not the live V2 path (its own comment + KNOWN_LIMITATIONS
+§3), and pending-map bounding ships separately in #429.
+
+## Session 317 — bound outstanding V2 job maps (re-delivers closed #385/#397/#412)
+
+**Finding [OBSERVED — code-verified].** Two SV2 maps were unbounded: the
+engine's live-loop `jobs` map and the adapter's `pending` future-job set.
+A hostile/compromised pool flooding distinct `NewMiningJob` IDs without
+rotating the tip could grow memory without bound (Noise encrypts the
+wire, so the attacker IS the pool itself).
+
+**Fix [OBSERVED].** `jobsCap`/`pendingCap` = 64 with oldest-first FIFO
+eviction on both stores.
+
+**Tests [OBSERVED].** Engine store-bound test + dialer flood test over a
+real net.Pipe read loop.
+
+## Session 355 — V1 RPC-call wait timeout
+
+**Goroutine/pending leak on a silent pool [FIXED].** `session.call`
+waited on `respCh` or `ctx.Done()` only. A pool that keeps TCP alive
+but stops answering (wedged server, silent failure) left the waiting
+goroutine and its `pending[id]` entry forever — V1 submits run one
+goroutine per share, so the leak compounded at the share rate for the
+session's whole life. `callTimeout = 60s` (var, test-overridable) now
+bounds the wait: on expiry the pending entry is deleted and the caller
+gets a "timed out" error, which the submit goroutine logs and exits.
+
+**Remaining in-flight state [AUDITED — bounded].** `submitTimes`
+(1024-cap oldest-evict) and the `jobsCh`/`noticeCh` buffers (8 each,
+drop-oldest) are bounded on master; the V2 engine `jobs` map remains
+bounded only on open PR #397/#429 — not re-implemented here.
+
 ## Session 340 — BIP-39 intermediate-buffer zeroization
 
 **Secret-material wipe [FIXED].** `EntropyToMnemonic` and

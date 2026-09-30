@@ -23,6 +23,36 @@ TCP 受付・応答停止のプールがフェイルオーバー全体を無期�
 問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
 adapter 側修正と同型だが live path に適用）。
 
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
 ### Fixed (session 340 — シード派生の中間バッファ消去)
 
 `EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー

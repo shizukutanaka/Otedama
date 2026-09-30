@@ -2541,6 +2541,36 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	_ = client.Close()
 }
 
+// TestStoreBoundedJob_BoundsOutstandingJobs pins the jobsCap bound: flooding
+// distinct job IDs must evict oldest-first while keeping the newest.
+func TestStoreBoundedJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for i := uint32(1); i <= jobsCap+10; i++ {
+		order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(jobs) != jobsCap {
+		t.Fatalf("len(jobs) = %d, want cap %d", len(jobs), jobsCap)
+	}
+	// FIFO: the first 10 IDs were evicted; the newest survive.
+	for i := uint32(1); i <= 10; i++ {
+		if _, ok := jobs[i]; ok {
+			t.Errorf("job %d should have been evicted (FIFO)", i)
+		}
+	}
+	for i := uint32(jobsCap + 1); i <= jobsCap+10; i++ {
+		if _, ok := jobs[i]; !ok {
+			t.Errorf("newest job %d should have survived", i)
+		}
+	}
+	// Re-inserting an existing ID must not grow the order slice.
+	before := len(order)
+	order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: jobsCap + 10})
+	if len(order) != before {
+		t.Errorf("re-insert grew order to %d, want %d", len(order), before)
+	}
+}
+
 func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
