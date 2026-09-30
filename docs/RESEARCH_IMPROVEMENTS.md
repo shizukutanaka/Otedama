@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 577 — file-write atomicity audit
+
+- `wallet.dat` writes are atomic: `os.CreateTemp` → write → Sync
+  → Rename inside the same directory (session 564 verified the
+  error paths close+remove on every failure branch).
+- `wallet.fingerprint` uses a plain `os.WriteFile` by explicit
+  design — the code documents it as best-effort: the fingerprint
+  is a UI convenience re-derivable from the seed, so a torn write
+  cannot corrupt state (the authoritative `wallet.dat` is atomic).
+- Remaining writes are conventional: systemd/launchd unit files
+  (install-time, non-secret, 0644) and the append-mode `--log-file`.
