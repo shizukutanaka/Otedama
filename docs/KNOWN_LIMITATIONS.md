@@ -256,9 +256,13 @@ branch of the static estimate is therefore unreachable today and exists only
 as forward-compatible scaffolding for a future GPU SHA256d driver.
 
 The remaining static input — the compile-time network-hashrate constant (≈ 1000 EH/s) —
-is addressed by a live difficulty feed, which remains a v3.1.0 item. That does not affect
-the relative arbitration accuracy on a given machine; it affects only the absolute
-satoshi/second numbers (which move primarily with BTC price anyway).
+was addressed by a live feed in session 266: `internal/rates.HashrateFetcher` polls
+mempool.space (`/api/v1/mining/hashrate/1d`, `currentHashrate`) and blockchain.info
+(`/q/hashrate`, GH/s), takes the median of in-band readings, and feeds
+`MiningProvider.NetworkHashrateFunc`. A fresh reading replaces the constant in the yield
+estimate; stale/absent readings fall back to it, so the compile-time constant remains as
+the offline path. That still leaves absolute satoshi/second numbers approximate — they
+move primarily with BTC price and pool-side difficulty anyway.
 
 ---
 
@@ -639,7 +643,23 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 385)
+
+**Resolution:** `internal/tui.Dashboard` now queries the kernel for the
+live terminal width on every render tick — `TIOCGWINSZ` via
+`golang.org/x/sys/unix` on Unix builds and `GetConsoleScreenBufferInfo`
+via `golang.org/x/sys/windows` on Windows — when the output writer is a
+real terminal file (`os.Stdout` in production). A failed or non-terminal
+query leaves the previous width standing (80 by default), so pipes,
+redirects, and test buffers behave exactly as before; `SetWidth` still
+pins a fixed width and disables detection for tests and embedders.
+`golang.org/x/sys` was promoted from indirect to direct dependency for
+this — BSD-licensed, Go-team maintained, already in the module graph
+via `golang.org/x/crypto`, so no new module entered the tree. The
+per-tick query also picks up terminal resizes mid-session without a
+SIGWINCH handler.
+
+<details><summary>Original entry</summary>
 
 **What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
 real terminal width, but no production call site ever calls it —
@@ -662,18 +682,7 @@ both lines now size their variable-length fields from the actual
 `cols` value, so this specific failure mode is closed regardless of
 whether width detection itself is ever wired in.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
-
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+</details>
 
 ---
 
