@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 564 — resource-acquisition/leak surface
+
+- Every acquisition site has a matched release: wallet temp file is
+  closed+removed on all error paths (and Close errors are checked
+  after Sync — fsync-complete), `resp.Body` deferred at every
+  `client.Do`, dialer conns closed after probes, `configfile.go`
+  defers `f.Close()`.
+- The one long-lived handle (`--log-file`'s `os.OpenFile`) is a
+  process-lifetime resource — intentionally held for the process,
+  reaped at exit (SIGTERM path verified in session 528).
