@@ -955,6 +955,32 @@ with its current status instead of rewriting the dated list. hal GPU
 sysfs enumeration audited clean (bounded reads, identity validation,
 documented SHA256d:false caps).
 
+## Session 465
+
+Corrected a false portability claim in GODEBUG_NOTES.md: it said the
+go/toolchain split "lets users with older toolchains still build" —
+but `toolchain go1.24.0` makes GOTOOLCHAIN=auto switch to 1.24, and
+under GOTOOLCHAIN=local the pinned `godebug tlsmlkem` fails to parse
+on older toolchains (the exact "unknown godebug" error seen on CI's 1.23.x
+legs). The note now states plainly that Go 1.24+ is required while
+the `go 1.22` line only governs language defaults. Audited clean:
+config.yaml.example covers every yaml field; docs/API.md's five
+missing OTEDAMA_ env vars are open PR #517's territory (not
+duplicated); ADR set has no other phantom references.
+
+## Session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正
+
+**Sweep.** `skills/` 配下の全 markdown を機械照合（コマンド・パス・ビルドタグの実在性、CI ワークフローとの機能一致）し、6件の stale 記述を発見・訂正。open #513 が担当した領域（phantom テスト対象・v4.0 スコープ記述）との重複なし。
+
+**発見（全件訂正、検証済み）。**
+- `skills/tdd.md` 3件: (a) ファズテスト「CI上で継続的に30秒から数分間実行」→ `.github/workflows/` に `fuzz` の参照ゼロ（test.yml は benchmark のみ）。`make fuzz` ローカル実行を正しく記述。(b) 統合テスト「`//go:build integration` タグで分離」→ 宣言ファイルゼロ。実際の区別は `testing.Short()` ゲート。(c) E2Eテスト「`//go:build e2e` タグ・`make test-e2e`」→ スイート未実装・ターゲット削除済み・タグ宣言なし。
+- `skills/security-audit.md` 3件: (a) ファズ「CIで継続的に実行」→ 同上。(b) govulncheck「CIで毎回実行」→ CI 非存在（Makefile `security`/`audit` ローカルターゲットのみ — session 482 の ROADMAP 訂正と同じ虚偽クラス）。(c) 「Web管理インターフェース（`web/`配下）」→ CLAUDE.md のアーキテクチャマップで「存在しないパス（作成禁止）」と明示される phantom 参照。
+- `skills/release-procedure.md` 2件: `otedama migrate-from-v2` phantom コマンド（#523 が SECURITY.md、#543 が Makefile で同クラスを修正した残件 — dispatch に存在せず）→ `docs/MIGRATING-FROM-V2.md` 手順に言い換え。「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
+**正しいと検証済みの記述（変更なし）。** CodeQL/Semgrep は security.yml に実在。カバレッジは test.yml が Codecov へアップロード（回帰警告は Codecov 側機能）。`make fuzz`/`make test-integration`/`make security`/`make audit` 全ターゲット実在。code-review.md・quality-pass-*.md・fuzz-runbook.md は s245/s253 訂正済み or スナップショット記録として正当。
+
+**帰納。** 同じ虚偽クラス（「X は CI で実行される」→ CI 非存在）が ROADMAP・tdd.md・security-audit.md の3箇所に分布 — ドキュメント記述の CI 実態照合は継続監査が必要。
+
 ## Session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正
 
 **Sweep.** `BENCHMARKS.md` の全クレームを `.github/workflows/test.yml` と実在の `func Benchmark` 一覧と照合し、4件の虚偽/phantom 記述を発見・訂正。
