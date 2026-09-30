@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 561 — type assertions + map-order determinism
+
+- Single-value type assertions `x.(T)`: zero panic-capable sites;
+  the only assertion is a `switch v := m.ID.(type)` type-switch
+  (stratumv1.go:397), which is safe by construction.
+- Map-iteration determinism: exposition rendering sorts both
+  entries (`slices.SortFunc` by name, metrics.go:271) and label
+  keys (`slices.Sort`, :339/:359) — /metrics output is byte-stable
+  across scrapes.
