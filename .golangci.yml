@@ -140,6 +140,13 @@ issues:
       linters:
         - goconst
 
+    # english_wordlist.go embeds the canonical BIP-39 English wordlist
+    # verbatim (its SHA-256 is integrity-checked at init); "artefact" etc.
+    # are wordlist entries, not prose, and must never be "corrected".
+    - path: internal/lightning/english_wordlist\.go
+      linters:
+        - misspell
+
 # Severity — which issues block the PR.
 severity:
   default-severity: warning
