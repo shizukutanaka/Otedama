@@ -17,6 +17,14 @@ dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監�
 記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
 文書化済み事項として再確認。
 
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
 ### 修正 (session 406)
 
 API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
