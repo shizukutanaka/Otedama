@@ -2316,6 +2316,9 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// bogusAccept emits a SubmitSharesSuccess with a never-sent
+	// LastSequenceNumber right after activation — a forged accept frame.
+	bogusAccept bool
 	// bogusReject makes serve() emit a SubmitSharesError for a
 	// SequenceNumber the client never used (future seq), right after
 	// activating the job — exercising the engine's bogus-seq guard.
@@ -2329,6 +2332,11 @@ func newResponsivePool(t *testing.T) *responsivePool {
 
 func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
 	t.Helper()
+	return newResponsivePoolOpts(t, bogusReject, false)
+}
+
+func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *responsivePool {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("responsivePool: listen: %v", err)
@@ -2339,6 +2347,7 @@ func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
 		addr:        ln.Addr().String(),
 		started:     make(chan struct{}),
 		bogusReject: bogusReject,
+		bogusAccept: bogusAccept,
 	}
 	go fp.serve()
 	return fp
@@ -2425,6 +2434,17 @@ func (fp *responsivePool) serve() {
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	if fp.bogusAccept {
+		// Acknowledge a sequence number the client never sent.
+		bogus := stratum.SubmitSharesSuccess{
+			ChannelID:          1,
+			LastSequenceNumber: 9999,
+			NewSubmitsAccepted: 1,
+		}
+		payload, _ = bogus.Encode()
+		fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+	}
 
 	if fp.bogusReject {
 		// Reject a SequenceNumber far beyond anything the client could
@@ -2671,6 +2691,79 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+func TestRunSessionV2_FutureSeqAcceptIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolOpts(t, false, true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log: func(_, msg string) {
+				mu.Lock()
+				logs = append(logs, msg)
+				mu.Unlock()
+			},
+		})
+	}()
+
+	// The forged accept must be dropped with the debug marker before any
+	// real share can be counted.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawBogus := false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "future seq 9999") {
+					sawBogus = true
+				}
+			}
+			mu.Unlock()
+			if sawBogus {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+	if !sawBogus {
+		t.Fatal("expected debug log for forged accept with future seq 9999")
+	}
+	if got := m.sharesAccepted.Value(); got != 0 {
+		t.Fatalf("sharesAccepted = %d, want 0 (forged accept must not credit)", got)
 	}
 }
 
