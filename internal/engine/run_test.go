@@ -2479,3 +2479,23 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
 	}
 }
+
+func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := newSubmitLimiter(ctx)
+	// Burst starts full; the (submitBurst+1)-th take without a tick fails.
+	for i := 0; i < submitBurst; i++ {
+		if !l.take() {
+			t.Fatalf("take %d/%d should succeed (burst full)", i+1, submitBurst)
+		}
+	}
+	if l.take() {
+		t.Fatal("take should fail once the burst is exhausted")
+	}
+	// After one refill interval a token is available again.
+	time.Sleep(submitRateInterval + 50*time.Millisecond)
+	if !l.take() {
+		t.Fatal("take should succeed after a refill tick")
+	}
+}
