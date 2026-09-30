@@ -23,6 +23,7 @@ type engineMetrics struct {
 	hashrate            *metrics.Gauge
 	sharesFound         *metrics.Counter
 	sharesSubmitted     *metrics.Counter
+	sharesSubmitDropped *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
@@ -172,8 +173,13 @@ type engineMetrics struct {
 
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	// rejectByReasonMu guards the map: V1 shares are submitted from
+	// per-share goroutines whose rejection path calls rejectReason, and
+	// updateShareRates reads the map from the stats loop — an unlocked
+	// map is a "concurrent map read/write" fatal under either pairing.
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -222,6 +228,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"shares_found_total: a share can be found by a worker but never "+
 				"submitted if its worker's share channel was full (a rate the "+
 				"engine only currently logs, as \"dropped N found share(s)\").",
+			nil),
+		sharesSubmitDropped: reg.NewCounter(
+			"otedama_shares_submit_dropped_total",
+			"Total found shares dropped by the submit rate cap before "+
+				"reaching the wire. A non-zero value means the pool's "+
+				"difficulty is so low that shares are produced faster "+
+				"than 8/s — normally only under a hostile or "+
+				"misconfigured mining.set_difficulty.",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",
@@ -448,6 +462,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
 	if c, ok := m.rejectByReason[category]; ok {
 		return c
 	}
@@ -572,10 +588,12 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		return rate, judged
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
+	m.rejectByReasonMu.Lock()
 	var stale uint64
 	if c, ok := m.rejectByReason["stale"]; ok {
 		stale = c.Value()
 	}
+	m.rejectByReasonMu.Unlock()
 	m.staleRate.Set(float64(stale) / float64(judged))
 	return rate, judged
 }

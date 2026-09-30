@@ -67,6 +67,29 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobsCap bounds the outstanding SV2 job map: a hostile or buggy pool that
+// floods distinct job IDs without rotating the tip would otherwise grow
+// memory without limit. 64 is far above legitimate churn (pools rarely hold
+// more than a handful of pending jobs). storeBoundedJob keeps insertion
+// order so eviction is FIFO — the newest jobs, most likely to be named by the
+// next SetNewPrevHash, survive.
+const jobsCap = 64
+
+// storeBoundedJob inserts j into jobs bounded at jobsCap, evicting the
+// oldest-inserted job IDs first; order tracks insertion order and the
+// returned slice is the updated order.
+func storeBoundedJob(jobs map[uint32]*stratum.NewMiningJob, order []uint32, j *stratum.NewMiningJob) []uint32 {
+	if _, ok := jobs[j.JobID]; !ok {
+		order = append(order, j.JobID)
+	}
+	jobs[j.JobID] = j
+	for len(order) > jobsCap {
+		delete(jobs, order[0])
+		order = order[1:]
+	}
+	return order
+}
+
 // Options configures a Run session.
 type Options struct {
 	Config config.Config
@@ -724,6 +747,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
 	const submitTimesCap = 1024
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -732,6 +758,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobOrder []uint32            // insertion order for jobsCap FIFO eviction
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -830,7 +857,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				prevLen := len(jobs)
+				jobOrder = storeBoundedJob(jobs, jobOrder, j)
+				if len(jobs) < prevLen {
+					opts.log("debug", fmt.Sprintf("engine: evicted oldest pending job (cap %d)", jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -861,8 +892,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobOrder = jobOrder[:0]
 				if named != nil {
 					jobs[p.JobID] = named
+					jobOrder = append(jobOrder, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime
@@ -906,7 +939,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
+				reason := poolproto.SanitizePoolText(pm.msg.SubmitSharesError.Error)
 				category, diagnosis := rejectClass(reason)
 				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
 					reason, diagnosis))
@@ -925,6 +958,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
+			}
+			if !submits.take() {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", "engine: share dropped by submit rate cap")
+				continue
 			}
 			sub := stratum.SubmitSharesStandard{
 				ChannelID:      chanID,
@@ -1025,6 +1065,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// no rejects, no disconnect, just nothing credited. Warn once per
 	// episode and re-arm when the interval recovers.
 	var starvedWarned bool
+	limiterCtx, stopLimiter := context.WithCancel(ctx)
+	defer stopLimiter()
+	submits := newSubmitLimiter(limiterCtx)
 
 	for {
 		select {
@@ -1128,6 +1171,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.
+			if !submits.take() {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", "engine: share dropped by submit rate cap")
+				continue
+			}
 			capturedShare := share
 			capturedSess := sess
 			if opts.m != nil {
@@ -1142,9 +1192,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
-					Nonce: capturedShare.Nonce,
-					NTime: capturedShare.NTime,
+					JobID:      fmt.Sprintf("%d", capturedShare.JobID),
+					Nonce:      capturedShare.Nonce,
+					NTime:      capturedShare.NTime,
+					ExtraNonce: capturedShare.ExtraNonce,
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
@@ -1163,9 +1214,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						opts.m.sharesAccepted.Inc()
 					}
 				} else {
-					category, diagnosis := rejectClass(result.Reason)
+					reason := poolproto.SanitizePoolText(result.Reason)
+					category, diagnosis := rejectClass(reason)
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
-						result.Reason, diagnosis))
+						reason, diagnosis))
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()
@@ -1370,8 +1422,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 			Time:       job.NTime,
 			Bits:       job.NBits,
 		},
-		NBits:  job.NBits,
-		Target: target,
+		NBits:      job.NBits,
+		Target:     target,
+		ExtraNonce: job.ExtraNonce,
 	}
 	for _, wr := range workers {
 		wr.SetWork(w)
@@ -1390,5 +1443,56 @@ func parseHost(url string) (string, error) {
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
 
 type fatalError struct{ msg string }
+
+// submitRateInterval / submitBurst bound the rate of share submissions
+// reaching the wire per pool session. Workers can find shares arbitrarily
+// fast when the pool's difficulty collapses (a hostile or misconfigured
+// mining.set_difficulty → 0); without a cap, every found share spawns a
+// Submit goroutine and a wire frame, flooding the pool and this process.
+// The cap is deliberately far above any honest pool's credit rate —
+// shares past it are stale by the time they would send anyway.
+const (
+	submitRateInterval = 125 * time.Millisecond // one token per tick: 8/s
+	submitBurst        = 32
+)
+
+// submitLimiter is a token bucket that refills at submitRateInterval up to
+// submitBurst. take() never blocks: no token means the share is dropped.
+type submitLimiter struct {
+	tokens chan struct{}
+}
+
+func newSubmitLimiter(ctx context.Context) *submitLimiter {
+	l := &submitLimiter{tokens: make(chan struct{}, submitBurst)}
+	// Start full: a normal trickle of shares must never wait for a tick.
+	for i := 0; i < submitBurst; i++ {
+		l.tokens <- struct{}{}
+	}
+	go func() {
+		t := time.NewTicker(submitRateInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				select {
+				case l.tokens <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return l
+}
+
+func (l *submitLimiter) take() bool {
+	select {
+	case <-l.tokens:
+		return true
+	default:
+		return false
+	}
+}
 
 func (e *fatalError) Error() string { return e.msg }
