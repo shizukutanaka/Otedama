@@ -19,6 +19,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   verified. Remaining items are owned by open PRs (non-finite env
   floats → #492; pool-URL host/port strictness → #486).
 
+### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
+
+**問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も
+切断もないまま収益が止まる——難易度飢餓と同型だが別経路。closed #396
+の未マージ修正を master へ再デリバー。
+
+**修正.** V1/V2 両経路で `jobStallWarnAfter`（10 分、テストでは縮小
+可能）を超えてジョブ未着が続くとエピソードごと一度だけ warn。カーテイル
+中は抑制。最初のジョブが一度も来ない場合も同じく検出（タイマーは
+セッション開始から起算）。
+
+### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
+
+**問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
+電気代割れの採掘を止める手段が `curtail_below_btc_usd` の手計算しか
+なかった。closed #373 の未マージ修正を master へ再デリバー。
+
+**修正.** `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐
+フロアを導出（powerWatts/1000 × price $/h → `SatsPerSecond` で sats/sec
+換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+`max(min_yield_sats_per_sec, floor)` を適用。新メトリクス
+`otedama_power_breakeven_floor_sats_per_second`（未設定時 0）。
+
+### 修正 (session 464)
+
+1. `internal/version` のデフォルト値が `v3.0.0-alpha.0-dev` で
+   VERSION ファイル（v3.0.0-alpha.1）とずれていた問題を修正 —
+   ldflags を介さない `go build`/`go install` ビルドが古い
+   バージョンを報告していた。Makefile の VERSION 欠損時
+   フォールバックも同値に揃えた。
+
 ### Fixed (session 523 — test-hygiene lint findings)
 
 - Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
