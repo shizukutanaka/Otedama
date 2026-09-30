@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 569 — any usage)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `any` appears only in V1
+  JSON-RPC wire fields (spec-mandated), `sync.Pool.New`, and a
+  generic constraint — zero loose-typing escapes internally.
+
 ### Documentation & audit (session 570 — enum exhaustiveness)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: all switches over the five
