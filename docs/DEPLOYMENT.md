@@ -165,7 +165,7 @@ docker run -d \
   --restart unless-stopped \
   -v otedama-data:/var/lib/otedama \
   -p 127.0.0.1:9090:9090 \
-  -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
+  -e OTEDAMA_BITCOIN_ADDRESS=<your-bitcoin-address> \
   -e OTEDAMA_DATA_DIR=/var/lib/otedama \
   ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1 \
   run --http-addr=0.0.0.0:9090
@@ -188,13 +188,23 @@ services:
       - run
       - --http-addr=0.0.0.0:9090
     environment:
-      OTEDAMA_BITCOIN_ADDRESS: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+      # Replace with YOUR address — the placeholder fails config
+      # validation loudly. (Previously this file shipped the real
+      # genesis-block coinbase address as the example; a verbatim copy
+      # would pass validation and send all rewards to an unspendable
+      # address. — session 500)
+      OTEDAMA_BITCOIN_ADDRESS: "<your-bitcoin-address>"
       OTEDAMA_LOG_FORMAT: json
       OTEDAMA_DATA_DIR: /var/lib/otedama
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
       - otedama-data:/var/lib/otedama
+    # `otedama doctor` exits 1 on warnings and 2 on failures, so a
+    # routine single-pool config (which warns on "Pool diversity")
+    # reports the container as unhealthy. That is intentional if you
+    # want warn-as-degraded; drop the healthcheck or gate on exit 2
+    # in an orchestrator if you only want hard failures.
     healthcheck:
       test: ["CMD", "/usr/local/bin/otedama", "doctor"]
       interval: 5m
@@ -298,7 +308,8 @@ metadata:
   name: otedama-secrets
 type: Opaque
 stringData:
-  bitcoin-address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+  # Replace with YOUR address — see the note in docker-compose.yaml above.
+  bitcoin-address: "<your-bitcoin-address>"
   wallet-passphrase: your-strong-passphrase-here
 ```
 
