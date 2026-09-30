@@ -6,6 +6,7 @@ package poolproto
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ type stubDialer struct {
 
 func (d *stubDialer) Protocol() ProtocolID { return d.id }
 
-func (d *stubDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *stubDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return nil, errors.New("stub: Dial not implemented")
 }
 
@@ -214,7 +215,7 @@ func TestRegistry_ConcurrentLookupSafe(t *testing.T) {
 func TestDialURL_UnknownSchemeReturnsError(t *testing.T) {
 	withTestRegistry(t)
 
-	_, err := DialURL(context.Background(), "ftp://nope", Credentials{})
+	_, err := DialURL(context.Background(), "ftp://nope", &Credentials{})
 	if !errors.Is(err, ErrUnknownProtocol) {
 		t.Errorf("err = %v, want ErrUnknownProtocol", err)
 	}
@@ -225,7 +226,7 @@ func TestDialURL_KnownSchemeNoDialerReturnsError(t *testing.T) {
 
 	// Scheme is recognized by FromURL but no dialer is registered.
 	_, err := DialURL(context.Background(),
-		"stratum+tcp://pool.example.com:3333", Credentials{})
+		"stratum+tcp://pool.example.com:3333", &Credentials{})
 	if !errors.Is(err, ErrUnknownProtocol) {
 		t.Errorf("err = %v, want ErrUnknownProtocol", err)
 	}
@@ -236,7 +237,7 @@ type dialFailingDialer struct{}
 
 func (d *dialFailingDialer) Protocol() ProtocolID { return ProtocolStratumV1 }
 
-func (d *dialFailingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *dialFailingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return nil, errors.New("simulated network error")
 }
 
@@ -251,7 +252,7 @@ func TestDialURL_DialFailurePropagates(t *testing.T) {
 
 	Register(&dialFailingDialer{})
 	_, err := DialURL(context.Background(),
-		"stratum+tcp://pool.example.com:3333", Credentials{})
+		"stratum+tcp://pool.example.com:3333", &Credentials{})
 	if err == nil {
 		t.Fatal("expected error from failing Dial")
 	}
@@ -267,7 +268,7 @@ type negotiateFailingDialer struct {
 
 func (d *negotiateFailingDialer) Protocol() ProtocolID { return ProtocolStratumV2 }
 
-func (d *negotiateFailingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *negotiateFailingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return &fakeConn{onClose: func() { d.closeCalled = true }}, nil
 }
 
@@ -290,7 +291,7 @@ func TestDialURL_NegotiateFailureClosesConnection(t *testing.T) {
 	Register(d)
 
 	_, err := DialURL(context.Background(),
-		"stratum+v2://pool.example.com:3336", Credentials{})
+		"stratum+v2://pool.example.com:3336", &Credentials{})
 	if err == nil {
 		t.Fatal("expected negotiation error")
 	}
@@ -317,7 +318,7 @@ type succeedingDialer struct {
 
 func (d *succeedingDialer) Protocol() ProtocolID { return ProtocolStratumV2 }
 
-func (d *succeedingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *succeedingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return &fakeConn{onClose: func() { d.closeCalled = true }}, nil
 }
 
@@ -333,7 +334,7 @@ func TestDialURL_SuccessReturnsSessionAndKeepsConnectionOpen(t *testing.T) {
 	Register(d)
 
 	sess, err := DialURL(context.Background(),
-		"stratum+v2://pool.example.com:3336", Credentials{})
+		"stratum+v2://pool.example.com:3336", &Credentials{})
 	if err != nil {
 		t.Fatalf("DialURL on a fully-succeeding dialer returned error: %v", err)
 	}
@@ -479,6 +480,57 @@ func TestStripScheme_ConsistentWithFromURL(t *testing.T) {
 		}
 		if FromURL(url) == ProtocolUnknown {
 			t.Errorf("FromURL(%q) = Unknown but StripScheme accepted it", url)
+		}
+	}
+}
+
+func TestSanitizePoolText_StripsControlChars(t *testing.T) {
+	got := SanitizePoolText("stale\x1b[2J\x1b[H\nforged line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "stale") || !strings.Contains(got, "forged line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizePoolText_PreservesUnicodeAndTruncates(t *testing.T) {
+	if got := SanitizePoolText("メンテナンス"); got != "メンテナンス" {
+		t.Errorf("unicode mangled: %q", got)
+	}
+	got := SanitizePoolText(strings.Repeat("x", maxPoolTextRunes*2))
+	if len([]rune(got)) != maxPoolTextRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxPoolTextRunes)
+	}
+}
+
+func TestSanitizePoolText_StripsC1AndDEL(t *testing.T) {
+	got := SanitizePoolText("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
+	}
+}
+
+// StripUserinfo must remove credentials from the authority section of a
+// pool URL for display, while leaving well-formed URLs untouched.
+func TestStripUserinfo(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"stratum+tcp://worker:secret@pool.example.com:3333", "stratum+tcp://pool.example.com:3333"},
+		{"stratum+v2://u@pool.example.com:34254", "stratum+v2://pool.example.com:34254"},
+		{"stratum+tcp://pool.example.com:3333", "stratum+tcp://pool.example.com:3333"},
+		{"stratum+tls://pool.example.com", "stratum+tls://pool.example.com"},
+		// No scheme: nothing recognized as userinfo — pass through.
+		{"pool.example.com:3333", "pool.example.com:3333"},
+		{"worker@example.com", "worker@example.com"},
+		// '@' after the first '/' is path content, not authority — leave it.
+		{"stratum+tcp://host:3333/a@b", "stratum+tcp://host:3333/a@b"},
+		// Multiple '@' — LastIndexByte removes everything up to the last one.
+		{"stratum+tcp://a@b@c:3333", "stratum+tcp://c:3333"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := StripUserinfo(c.in); got != c.want {
+			t.Errorf("StripUserinfo(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

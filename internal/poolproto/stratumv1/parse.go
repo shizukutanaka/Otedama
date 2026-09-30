@@ -15,11 +15,13 @@ package stratumv1
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -40,8 +42,9 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		merkleBranchHexs                                                         []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
@@ -49,9 +52,19 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — the session folds
+	// these into the job's MerkleRoot (see completeV1Job). Malformed hex
+	// degrades to empty parts, which completeV1Job treats as "pool-side
+	// merkle" (legacy pools that precompute it).
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[4], &merkleBranchHexs); err != nil {
+		return poolproto.Job{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -76,6 +89,17 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
+	if b, err := hex.DecodeString(coinb1Hex); err == nil {
+		job.Coinb1 = b
+	}
+	if b, err := hex.DecodeString(coinb2Hex); err == nil {
+		job.Coinb2 = b
+	}
+	for _, h := range merkleBranchHexs {
+		if b, err := hex.DecodeString(h); err == nil && len(b) == 32 {
+			job.MerkleBranch = append(job.MerkleBranch, b)
+		}
+	}
 	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
 		job.Version = uint32(v)
 	}
@@ -88,18 +112,36 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
 	}
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	// MerkleRoot is completed by the session (completeV1Job) once the
+	// negotiated extranonce1/2 are folded into the coinbase.
 	return job, nil
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+// Difficulty must be a positive, finite float: NaN/±Inf would poison the
+// share-target computation downstream, and d <= 0 collapses the target
+// to "accept every hash" — a share-flood vector on cleartext V1.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return 0, false
 	}
-	return p[0], true
+	d := p[0]
+	if d <= 0 || math.IsNaN(d) || math.IsInf(d, 0) {
+		return 0, false
+	}
+	return d, true
 }
+
+// maxExtranonce2Size bounds the pool-supplied extranonce2_size. The value
+// flows into strings.Repeat on every mining.submit, so an unbounded value
+// is a memory-exhaustion vector on cleartext V1 (hostile pool or MitM).
+// Real pools use 4–8; 64 leaves generous headroom for pool-side schemes
+// while capping the padding at 128 hex chars.
+const maxExtranonce2Size = 64
+
+// extranonce2SizeOK reports whether sz is a usable extranonce2_size.
+func extranonce2SizeOK(sz int) bool { return sz >= 0 && sz <= maxExtranonce2Size }
 
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int].
@@ -116,7 +158,34 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	if err := json.Unmarshal(p[1], &sz); err != nil {
 		return "", 0, false
 	}
+	if !extranonce2SizeOK(sz) {
+		return "", 0, false
+	}
 	return en1, sz, true
+}
+
+// maxNoticeRunes caps the length of a pool-sent notice. Notices end up
+// in the log (and potentially the TUI), so an unbounded pool string is a
+// log-flooding vector.
+const maxNoticeRunes = 256
+
+// sanitizeNotice removes control characters (C0, DEL, C1 — including
+// ANSI escape introducers) and truncates to maxNoticeRunes runes. The
+// text is pool-controlled; consumers write it to terminals and log
+// files, where escape sequences could manipulate the display or forge
+// log lines.
+func sanitizeNotice(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxNoticeRunes {
+		clean = string(runes[:maxNoticeRunes])
+	}
+	return clean
 }
 
 // parseShowMessage decodes a client.show_message notification.
@@ -127,7 +196,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return "", false
 	}
-	return p[0], true
+	return sanitizeNotice(p[0]), true
 }
 
 // reconnectDirective is a parsed client.reconnect notification.
@@ -196,9 +265,17 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
 	}
+	if en1 == "" {
+		return "", 0, errors.New("stratumv1: empty extranonce1")
+	}
 	en2SizeF, ok := arr[2].(float64)
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
+	}
+	// Validate on the float: int() truncation would let 64.5 or -0.5 pass
+	// the bounds check below as 64 or 0.
+	if en2SizeF != math.Trunc(en2SizeF) || en2SizeF < 0 || en2SizeF > maxExtranonce2Size {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range [0, %d]", en2SizeF, maxExtranonce2Size)
 	}
 	return en1, int(en2SizeF), nil
 }

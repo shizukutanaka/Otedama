@@ -280,7 +280,7 @@ func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
 	h := work.Header
 	for i := 0; i < b.N; i++ {
 		h.Nonce = uint32(i)
-		_ = HashHeader(h)
+		_ = HashHeader(&h)
 	}
 }
 
@@ -383,5 +383,103 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 	w := NewWorker(WorkerConfig{Threads: 1})
 	if got := w.DeviceID(); got != "" {
 		t.Errorf("DeviceID() = %q, want empty string", got)
+	}
+}
+
+// ----- Cross-worker nonce partitioning -----
+
+func TestWorker_NoncePartitionAcrossWorkers(t *testing.T) {
+	// Two workers configured the way startMinerWorkers configures a
+	// two-device rig: NonceOffset 0 and 1 with a shared NonceStep of 2.
+	// Every share nonce from worker 0 must be even, from worker 1 odd —
+	// the devices can never duplicate each other's hashes or earn
+	// "duplicate" pool rejects the way same-space grinding did.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	w0 := NewWorker(WorkerConfig{Threads: 1, NonceStep: 2, NonceOffset: 0, DeviceID: "dev-a"})
+	w1 := NewWorker(WorkerConfig{Threads: 1, NonceStep: 2, NonceOffset: 1, DeviceID: "dev-b"})
+	ch0, ch1 := w0.Start(ctx), w1.Start(ctx)
+	w0.SetWork(makeEasyWork())
+	w1.SetWork(makeEasyWork())
+
+	seen := map[uint32]string{}
+	for n := 0; n < 40; n++ {
+		for i, ch := range []<-chan Share{ch0, ch1} {
+			select {
+			case s, ok := <-ch:
+				if !ok {
+					t.Fatalf("worker %d channel closed early", i)
+				}
+				if prev, dup := seen[s.Nonce]; dup {
+					t.Fatalf("nonce %d produced by both %s and worker %d", s.Nonce, prev, i)
+				}
+				seen[s.Nonce] = s.DeviceID
+				if i == 0 && s.Nonce%2 != 0 {
+					t.Fatalf("worker 0 emitted odd nonce %d", s.Nonce)
+				}
+				if i == 1 && s.Nonce%2 != 1 {
+					t.Fatalf("worker 1 emitted even nonce %d", s.Nonce)
+				}
+			case <-ctx.Done():
+				t.Fatalf("timeout after %d seen nonces", len(seen))
+			}
+		}
+	}
+}
+
+// TestWorker_NonceWrapRollsNTime verifies that when a thread exhausts its
+// nonce range (uint32 wrap), the worker rolls the header timestamp forward
+// instead of re-hashing identical (header, nonce) pairs — which would only
+// reproduce shares the pool rejects as duplicates. A NonceStep of 2^31
+// wraps the nonce every other iteration, so the roll is observable without
+// grinding billions of hashes.
+func TestWorker_NonceWrapRollsNTime(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 1 << 31})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+
+	work := makeEasyWork()
+	baseTime := work.Header.Time
+	w.SetWork(work)
+
+	const want = 8
+	seen := make([]Share, 0, want)
+	for len(seen) < want {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				t.Fatalf("channel closed after %d shares", len(seen))
+			}
+			seen = append(seen, s)
+		case <-ctx.Done():
+			t.Fatalf("timeout after %d shares (wanted %d)", len(seen), want)
+		}
+	}
+	w.Stop()
+
+	// Later shares must carry a rolled-forward ntime — otherwise the
+	// wrap re-mined headers identical to earlier shares.
+	if seen[want-1].NTime <= baseTime {
+		t.Fatalf("share NTime never rolled past the job ntime: got %d, base %d", seen[want-1].NTime, baseTime)
+	}
+	// ntime is monotonically non-decreasing across the thread's output.
+	for i := 1; i < want; i++ {
+		if seen[i].NTime < seen[i-1].NTime {
+			t.Fatalf("NTime went backwards: share %d has %d < share %d's %d",
+				i, seen[i].NTime, i-1, seen[i-1].NTime)
+		}
+	}
+	// With step 2^31 the thread revisits nonce 0 — but only after a roll,
+	// so the (nonce, ntime) pair stays distinct.
+	type pair struct{ nonce, ntime uint32 }
+	uniq := make(map[pair]struct{}, want)
+	for _, s := range seen {
+		p := pair{s.Nonce, s.NTime}
+		if _, dup := uniq[p]; dup {
+			t.Fatalf("duplicate share (nonce=%d, ntime=%d) — roll did not happen before revisit", s.Nonce, s.NTime)
+		}
+		uniq[p] = struct{}{}
 	}
 }

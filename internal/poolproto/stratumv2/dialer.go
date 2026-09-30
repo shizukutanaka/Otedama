@@ -15,6 +15,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -48,20 +49,37 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	return poolproto.ProtocolStratumV2
 }
 
+// dialTimeout bounds one pool dial attempt — TCP connect — so failover
+// is not stalled by a blackhole endpoint when the caller's context
+// carries no deadline. Var (not const) so tests can shorten it.
+var dialTimeout = 15 * time.Second
+
 // Dial opens a TCP (or, when configured, TLS) connection to the pool.
-func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
+func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := poolproto.StripScheme(url)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: %w", err)
 	}
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
 	dialFn := d.dialFn
 	if dialFn == nil {
 		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+			if d.useTLS {
+				// A stratum+v2tls:// scheme must produce a certificate-verified
+				// TLS transport — never a silent plaintext downgrade. nil config
+				// = system roots, TLS 1.2+, ServerName from the dial address
+				// (stratum.DialTLS never falls back to plaintext).
+				return stratum.DialTLS(ctx, address, nil)
+			}
 			var dialer net.Dialer
 			return dialer.DialContext(ctx, "tcp", address)
 		}
 	}
-	raw, err := dialFn(ctx, address)
+	raw, err := dialFn(dctx, address)
+	if err != nil && errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("dial timeout after %s", dialTimeout)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
@@ -73,6 +91,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
+// handshakeTimeout bounds the whole Negotiate handshake. The steady-state
+// read loop is unblocked via Close()/ctx cancellation, but during the
+// handshake nothing closes the socket — a peer that accepts TCP yet never
+// answers SetupConnection would otherwise hang DialURL (and the engine's
+// reconnect loop inside it) forever.
+var handshakeTimeout = 15 * time.Second
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -80,6 +105,11 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if !ok {
 		return nil, fmt.Errorf("stratumv2: Negotiate received non-V2 connection: %T", c)
 	}
+
+	// Bound the handshake reads; cleared on return since the session read
+	// loop is governed by Close/ctx, not deadlines.
+	_ = conn.raw.SetReadDeadline(time.Now().Add(handshakeTimeout))
+	defer func() { _ = conn.raw.SetReadDeadline(time.Time{}) }()
 
 	dec := stratum.NewDecoder(conn.raw)
 
@@ -106,7 +136,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.SetupConnectionError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
 	}
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
@@ -130,7 +160,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.OpenMiningChannelError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during channel open", f.Header.MsgType)
@@ -172,6 +202,13 @@ func (c *connection) Close() error {
 
 // ----- session -----
 
+// pendingCap bounds the read loop's outstanding-job map: a hostile or buggy
+// pool flooding distinct job IDs without rotating the tip would otherwise
+// grow memory without limit. 64 is far above legitimate churn; eviction is
+// FIFO so the newest jobs — most likely named by the next SetNewPrevHash —
+// survive.
+const pendingCap = 64
+
 type session struct {
 	conn   *connection
 	dec    *stratum.Decoder
@@ -199,6 +236,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
+	var pendingOrder []uint32 // insertion order for pendingCap FIFO eviction
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
@@ -236,7 +274,14 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
+			if _, ok := pending[j.JobID]; !ok {
+				pendingOrder = append(pendingOrder, j.JobID)
+			}
 			pending[j.JobID] = j
+			for len(pendingOrder) > pendingCap {
+				delete(pending, pendingOrder[0])
+				pendingOrder = pendingOrder[1:]
+			}
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -251,8 +296,10 @@ func (s *session) readLoop(ctx context.Context) {
 			havePrev = true
 			named := pending[p.JobID]
 			pending = map[uint32]*stratum.NewMiningJob{}
+			pendingOrder = pendingOrder[:0]
 			if named != nil {
 				pending[p.JobID] = named
+				pendingOrder = append(pendingOrder, p.JobID)
 				ntime := p.MinNtime
 				if named.HasMinNtime && named.MinNtime > ntime {
 					ntime = named.MinNtime
@@ -320,6 +367,13 @@ type encodable interface {
 	Encode() ([]byte, error)
 }
 
+// writeTimeout bounds every write on the pool socket. Without a
+// deadline a pool that keeps the TCP connection open but stops reading
+// stalls the session loop on a full kernel send buffer — the V1 path
+// already applies the same bound (10s). Declared a var so tests can
+// shorten it.
+var writeTimeout = 10 * time.Second
+
 // sendMsg encodes, frames, and writes a Stratum V2 message. isChannel
 // sets the frame header's channel_msg bit — required for channel-scoped
 // messages (SubmitSharesStandard etc.), absent for connection-scoped
@@ -337,6 +391,7 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	_ = w.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}

@@ -125,6 +125,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "wallet":
+		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", helpFlag, "-h":
@@ -149,6 +151,7 @@ Commands:
   config     Inspect or validate the effective configuration.
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
+  wallet     Manage the Lightning wallet (verify, change-passphrase).
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 

@@ -123,6 +123,28 @@ gating or monitoring agents. Shape: `{"summary":{"passed","failed","warnings",
 
 The same exit code is mirrored in the JSON `exit_code` field.
 
+### `otedama wallet`
+
+Manage the Lightning wallet without starting the engine.
+
+- `otedama wallet verify [--data-dir path] [--config path]` — Check that a
+  written-down recovery phrase derives to the same seed as the stored wallet.
+  Reads the phrase from **stdin** (never argv — process lists leak it), validates
+  the BIP-39 checksum, and compares public fingerprints, so `wallet.dat` is
+  never decrypted. Set `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` if the wallet was
+  created with a BIP-39 "25th word". Exits 0 on match, 1 on mismatch or
+  invalid phrase. If `wallet.fingerprint` is absent, falls back to decrypting
+  `wallet.dat` — requires `OTEDAMA_WALLET_PASSPHRASE`.
+- `otedama wallet change-passphrase [--data-dir path] [--config path]` —
+  Re-encrypt `wallet.dat` under a new passphrase. Requires
+  `OTEDAMA_WALLET_PASSPHRASE` (current) and `OTEDAMA_WALLET_NEW_PASSPHRASE`
+  (new) — passphrases are never accepted on argv because `ps aux` exposes
+  them to every local process. Exits 0 on success; never creates a wallet —
+  missing `wallet.dat` is an error.
+
+The wallet directory resolves through the usual four layers
+(`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
+
 Suitable as a container healthcheck command:
 ```yaml
 healthcheck:
@@ -198,7 +220,8 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
-| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Consulted on first run (new wallet creation) and by `otedama wallet verify`. |
+| `OTEDAMA_WALLET_NEW_PASSPHRASE` | — | New passphrase for `otedama wallet change-passphrase`. Environment variable only — never accepted as a flag, so it cannot leak through process lists. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---
@@ -239,6 +262,7 @@ addresses) appear once their first event occurs.
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
+| `otedama_shares_submit_dropped_total` | counter | — | Found shares dropped by the submit rate cap (8/s, burst 32) before reaching the wire — normally only under a hostile `mining.set_difficulty`. |
 | `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
 | `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
 | `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |

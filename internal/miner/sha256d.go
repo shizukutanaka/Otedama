@@ -36,9 +36,9 @@ const HeaderSize = 80
 // little-endian wire format.
 //
 // Fields are stored in the order they appear on the wire so that
-// asBytes() can be a simple slice (not a marshaling call).
+// asBytes() can be a simple slice (not a marshalling call).
 //
-// Offsets (from Bitcoin's serialization format):
+// Offsets (from Bitcoin's serialisation format):
 //
 //	[0:4]   Version   uint32 LE
 //	[4:36]  PrevHash  [32]byte (LE, so already reversed vs RPC)
@@ -55,8 +55,8 @@ type Header struct {
 	Nonce      uint32
 }
 
-// Bytes serializes the header to its canonical 80-byte wire representation.
-func (h Header) Bytes() [HeaderSize]byte {
+// Bytes serialises the header to its canonical 80-byte wire representation.
+func (h *Header) Bytes() [HeaderSize]byte {
 	var b [HeaderSize]byte
 	binary.LittleEndian.PutUint32(b[0:4], h.Version)
 	copy(b[4:36], h.PrevHash[:])
@@ -68,7 +68,7 @@ func (h Header) Bytes() [HeaderSize]byte {
 }
 
 // ParseHeader decodes an 80-byte wire-format block header.
-func ParseHeader(b [HeaderSize]byte) Header {
+func ParseHeader(b *[HeaderSize]byte) Header {
 	var h Header
 	h.Version = binary.LittleEndian.Uint32(b[0:4])
 	copy(h.PrevHash[:], b[4:36])
@@ -109,9 +109,9 @@ func SHA256d(data []byte) Hash {
 	return sha256.Sum256(first[:])
 }
 
-// HashHeader computes SHA256d of the 80-byte serialized header.
+// HashHeader computes SHA256d of the 80-byte serialised header.
 // This is the core inner loop of Bitcoin mining.
-func HashHeader(h Header) Hash {
+func HashHeader(h *Header) Hash {
 	b := h.Bytes()
 	return SHA256d(b[:])
 }
@@ -153,7 +153,7 @@ func TargetFromNBits(nBits uint32) (Hash, error) {
 
 	// Build a *big.Int: mantissa * 2^(8*(exp-3))
 	v := new(big.Int).SetUint64(uint64(mant))
-	shift := uint(8 * (exp - 3)) //nolint:gosec // exp is an nBits exponent byte (3-255), shift <= 2016
+	shift := uint(8 * (exp - 3))
 	v.Lsh(v, shift)
 
 	// v.Bytes() is the big-endian magnitude. Place it big-endian first,
@@ -244,6 +244,28 @@ func TargetFromDifficulty(difficulty float64) (Hash, error) {
 		out[i] = be[31-i]
 	}
 	return out, nil
+}
+
+// DifficultyFromTarget is the inverse of TargetFromDifficulty: it maps a
+// 32-byte share target in the Hash type's little-endian order (MSB at index
+// 31) back to a Stratum difficulty, difficulty = diff1Target / target. A
+// zero target means no hash can ever satisfy it, so +Inf is returned —
+// callers surface that as "income is effectively zero". Targets above
+// diff1Target produce difficulties below 1, matching V1's fractional
+// difficulty convention.
+func DifficultyFromTarget(t Hash) float64 {
+	var be Hash
+	for i := 0; i < 32; i++ {
+		be[i] = t[31-i]
+	}
+	tgt := new(big.Int).SetBytes(be[:])
+	if tgt.Sign() <= 0 {
+		return math.Inf(1)
+	}
+	q := new(big.Float).SetPrec(128).SetInt(diff1Target)
+	q.Quo(q, new(big.Float).SetPrec(128).SetInt(tgt))
+	f, _ := q.Float64()
+	return f
 }
 
 // MeetsTarget reports whether the given hash value meets the difficulty

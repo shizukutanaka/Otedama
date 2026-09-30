@@ -560,3 +560,13 @@ func TestMnemonicEntropy_AllWordsReachable(t *testing.T) {
 		}
 	}
 }
+
+func TestUnmarshalEncryptedSeed_RejectsOversizedInput(t *testing.T) {
+	// A corrupt or adversarial wallet.dat must not drive an unbounded
+	// allocation: inputs over the 4 KiB cap are rejected outright.
+	buf := make([]byte, 5<<10)
+	buf[0] = currentEncryptedSeedVersion
+	if _, err := UnmarshalEncryptedSeed(buf); err == nil {
+		t.Fatal("UnmarshalEncryptedSeed must reject oversized input")
+	}
+}

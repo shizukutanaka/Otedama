@@ -21,17 +21,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // DefaultChecks returns the built-in check set for a config.
 // Additional checks can be appended by callers before running.
-const goosLinux = "linux"
-
-func DefaultChecks(cfg config.Config, configPath string) []Check {
+func DefaultChecks(cfg *config.Config, configPath string) []Check {
 	return []Check{
 		checkConfig(cfg, configPath),
 		checkBitcoinAddress(cfg.BitcoinAddress),
@@ -53,7 +53,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 	}
 }
 
-func checkConfig(cfg config.Config, path string) Check {
+func checkConfig(cfg *config.Config, path string) Check {
 	return Check{
 		Name: "Configuration",
 		Run: func(_ context.Context) Result {
@@ -126,7 +126,7 @@ func checkBitcoinAddress(addr string) Check {
 
 // addressKind returns a short human-readable label for the payout address
 // type so `doctor` confirms it understood the address — in particular that a
-// bech32m Taproot (bc1p…) address is recognized, not just bech32 v0 (bc1q…).
+// bech32m Taproot (bc1p…) address is recognised, not just bech32 v0 (bc1q…).
 func addressKind(addr string) string {
 	switch btccrypto.ClassifyAddress(strings.TrimSpace(addr)) {
 	case btccrypto.AddressP2PKH:
@@ -244,7 +244,7 @@ const (
 	walletFingerprintFile = "wallet.fingerprint"
 )
 
-// checkWallet verifies that the Lightning wallet is initialized and surfaces
+// checkWallet verifies that the Lightning wallet is initialised and surfaces
 // its public fingerprint so operators can cross-check against a hardware
 // wallet without exposing the seed. The fingerprint is a best-effort
 // convenience — its absence is non-fatal (it regenerates on next run).
@@ -261,7 +261,8 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+			winfo, err := os.Stat(walletPath)
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
@@ -275,6 +276,20 @@ func checkWallet(dataDir string) Check {
 				}
 			}
 
+			// The file itself must be owner-only: a wallet restored via
+			// scp/rsync or extracted from a backup tarball lands 0644,
+			// exposing the encrypted seed to other local users even though
+			// the enclosing directory check already covers fresh installs.
+			if runtime.GOOS != "windows" {
+				if perm := winfo.Mode().Perm(); perm&0o077 != 0 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("%s has permissions %04o (group/other readable)", walletPath, perm),
+						Fix:    fmt.Sprintf("run: chmod 0600 %s", walletPath),
+					}
+				}
+			}
+
 			// Wallet exists — read the public fingerprint file for display.
 			fpPath := filepath.Join(dir, walletFingerprintFile)
 			fp, err := os.ReadFile(fpPath)
@@ -285,6 +300,15 @@ func checkWallet(dataDir string) Check {
 				}
 			}
 			fingerprint := strings.TrimSpace(string(fp))
+			// The fingerprint is HMAC-SHA256(...)[:4] hex — 8 chars. Print it
+			// only when it has that shape: a truncated or corrupt fingerprint
+			// file could otherwise inject control characters into the report.
+			if !isFingerprint(fingerprint) {
+				return Result{
+					Status: StatusPass,
+					Detail: "initialized (fingerprint file malformed; re-run to regenerate)",
+				}
+			}
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("initialized, fingerprint: %s", fingerprint),
@@ -293,39 +317,100 @@ func checkWallet(dataDir string) Check {
 	}
 }
 
-func checkPoolReachability(cfg config.Config) Check {
+// maxReachabilityProbes caps how many configured pools are TCP-probed so a
+// very long pool list cannot turn doctor into a port scanner.
+const maxReachabilityProbes = 8
+
+func checkPoolReachability(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
 		Run: func(ctx context.Context) Result {
-			var url string
-			if len(cfg.Pools) > 0 {
-				url = cfg.Pools[0].URL
-			} else {
-				url = config.DefaultPoolURL
+			var urls []string
+			for _, p := range cfg.Pools {
+				urls = append(urls, p.URL)
 			}
-			host := stripScheme(url)
-			if host == "" {
+			if len(urls) == 0 {
+				urls = []string{config.DefaultPoolURL}
+			}
+			if len(urls) > maxReachabilityProbes {
+				urls = urls[:maxReachabilityProbes]
+			}
+
+			type probe struct {
+				host    string
+				latency time.Duration
+				err     error
+				badURL  string
+			}
+			results := make([]probe, len(urls))
+			var wg sync.WaitGroup
+			for i, u := range urls {
+				host := stripScheme(poolproto.StripUserinfo(u))
+				if host == "" {
+					results[i].badURL = poolproto.StripUserinfo(u)
+					continue
+				}
+				results[i].host = host
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					d := net.Dialer{Timeout: 5 * time.Second}
+					start := time.Now()
+					conn, err := d.DialContext(ctx, "tcp", results[idx].host)
+					if err != nil {
+						results[idx].err = err
+						return
+					}
+					_ = conn.Close()
+					results[idx].latency = time.Since(start).Round(time.Millisecond)
+				}(i)
+			}
+			wg.Wait()
+
+			var reachable, unreachable, unparseable []string
+			for _, r := range results {
+				switch {
+				case r.badURL != "":
+					unparseable = append(unparseable, r.badURL)
+				case r.err != nil:
+					unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
+				default:
+					reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
+				}
+			}
+
+			switch {
+			case len(reachable) == 0 && len(unreachable) == 0:
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot parse pool URL %q", url),
+					Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
 					Fix:    "check the pool URL in config.yaml",
 				}
-			}
-			d := net.Dialer{Timeout: 5 * time.Second}
-			start := time.Now()
-			conn, err := d.DialContext(ctx, "tcp", host)
-			if err != nil {
+			case len(reachable) == 0:
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("%s: %v", host, err),
+					Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
 					Fix:    "check internet connection or try a different pool",
 				}
-			}
-			_ = conn.Close()
-			latency := time.Since(start).Round(time.Millisecond)
-			return Result{
-				Status: StatusPass,
-				Detail: fmt.Sprintf("%s (%s)", host, latency),
+			case len(unreachable) > 0 || len(unparseable) > 0:
+				var parts []string
+				if len(unreachable) > 0 {
+					parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
+				}
+				if len(unparseable) > 0 {
+					parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
+				}
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
+						len(reachable), len(urls), strings.Join(reachable, ", "), strings.Join(parts, "; ")),
+					Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
+				}
+			default:
+				return Result{
+					Status: StatusPass,
+					Detail: strings.Join(reachable, ", "),
+				}
 			}
 		},
 	}
@@ -336,7 +421,7 @@ func checkPoolReachability(cfg config.Config) Check {
 // point of failure: if it goes down, mining stops until the operator
 // manually updates the config. Two or more pools give the reconnect loop
 // a failover target without human intervention.
-func checkPoolDiversity(cfg config.Config) Check {
+func checkPoolDiversity(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool diversity",
 		Run: func(_ context.Context) Result {
@@ -352,7 +437,7 @@ func checkPoolDiversity(cfg config.Config) Check {
 			if n == 1 {
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", cfg.Pools[0].URL),
+					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", poolproto.StripUserinfo(cfg.Pools[0].URL)),
 					Fix:    "add a second pool under 'pools:' in config.yaml; mining stops if this pool goes down",
 				}
 			}
@@ -366,7 +451,7 @@ func checkPoolDiversity(cfg config.Config) Check {
 
 // poolIPResolver resolves a host (or host:port) to its IP addresses.
 // Overridable in tests so checkPoolEndpointDiversity does not hit real DNS.
-// Defaults to the system resolver, honoring the check's context deadline.
+// Defaults to the system resolver, honouring the check's context deadline.
 var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
 	h := host
 	if hh, _, err := net.SplitHostPort(host); err == nil {
@@ -386,7 +471,7 @@ var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
 // dataset, which Otedama does not bundle; sharing a resolved IP is a strong,
 // dependency-free centralisation signal that covers the common misconfig
 // (two hostnames that are CNAMEs/round-robin for the same pool node).
-func checkPoolEndpointDiversity(cfg config.Config) Check {
+func checkPoolEndpointDiversity(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool endpoint diversity",
 		Run: func(ctx context.Context) Result {
@@ -408,7 +493,7 @@ func checkPoolEndpointDiversity(cfg config.Config) Check {
 				}
 				resolved++
 				for _, ip := range ips {
-					ipToPools[ip] = appendUnique(ipToPools[ip], p.URL)
+					ipToPools[ip] = appendUnique(ipToPools[ip], poolproto.StripUserinfo(p.URL))
 				}
 			}
 			if resolved < 2 {
@@ -460,7 +545,7 @@ var gpuDRMPath = "/sys/class/drm"
 // redirect every payout to their own address — a well-known stratum-hijacking
 // attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
 // which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
-func checkPoolEncryption(cfg config.Config) Check {
+func checkPoolEncryption(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
@@ -471,7 +556,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 			var plaintext []string
 			for _, p := range cfg.Pools {
 				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
+					plaintext = append(plaintext, stripScheme(poolproto.StripUserinfo(p.URL)))
 				}
 			}
 			if len(plaintext) > 0 {
@@ -496,7 +581,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 // (where it would then fail confusingly for the private-CA pool it was meant to
 // trust). The PEM is parsed with the same x509.CertPool.AppendCertsFromPEM the
 // dialer uses, so doctor and the live path agree on what "valid" means.
-func checkPoolTLSCA(cfg config.Config) Check {
+func checkPoolTLSCA(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool TLS CA files",
 		Run: func(_ context.Context) Result {
@@ -506,13 +591,13 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					continue
 				}
 				configured++
-				// tls_ca_file is only honored for stratum+tls:// (V1 over TLS);
+				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
 				// for any other scheme it is silently ignored at runtime.
 				if !strings.HasPrefix(p.URL, "stratum+tls://") {
 					return Result{
 						Status: StatusWarn,
-						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honors it; it will be ignored",
-							stripScheme(p.URL)),
+						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+							stripScheme(poolproto.StripUserinfo(p.URL))),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
 				}
@@ -550,7 +635,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 // a "half-configured feature" that silently does nothing the operator expects.
 // This is the cross-field-intent perspective: do these values, together, achieve
 // what the operator apparently wanted?
-func checkPowerEconomics(cfg config.Config) Check {
+func checkPowerEconomics(cfg *config.Config) Check {
 	return Check{
 		Name: "Power & cost config",
 		Run: func(_ context.Context) Result {
@@ -622,7 +707,7 @@ func checkEnvVars() Check {
 // "too high" threshold. Instead it points the operator at the observable that
 // settles the question — the otedama_devices_idle gauge — which reports how
 // many devices the floor actually idled each arbitration cycle.
-func checkProfitabilityFloor(cfg config.Config) Check {
+func checkProfitabilityFloor(cfg *config.Config) Check {
 	return Check{
 		Name: "Profitability floor",
 		Run: func(_ context.Context) Result {
@@ -644,7 +729,7 @@ func checkProfitabilityFloor(cfg config.Config) Check {
 	}
 }
 
-func checkPayoutScheme(cfg config.Config) Check {
+func checkPayoutScheme(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool payout schemes",
 		Run: func(_ context.Context) Result {
@@ -657,7 +742,7 @@ func checkPayoutScheme(cfg config.Config) Check {
 			for _, p := range cfg.Pools {
 				host := stripScheme(p.URL)
 				if host == "" {
-					host = p.URL
+					host = poolproto.StripUserinfo(p.URL)
 				}
 				switch p.PayoutScheme {
 				case "fpps":
@@ -696,7 +781,7 @@ func checkHardware() Check {
 			fix := ""
 
 			// On Linux, see if /sys/class/drm exposes a GPU.
-			if runtime.GOOS == goosLinux {
+			if runtime.GOOS == "linux" {
 				if entries, err := os.ReadDir(gpuDRMPath); err == nil {
 					var gpus int
 					for _, e := range entries {
@@ -755,8 +840,18 @@ func checkNetwork() Check {
 var clockSkewProbeURL = "https://api.coinbase.com/v2/time"
 
 // clockSkewHTTPClient is the HTTP client used by checkClockSkew. Nil means
-// use http.DefaultClient. Tests replace this with a fake-server client.
+// use clockSkewDefaultClient. Tests replace this with a fake-server client.
 var clockSkewHTTPClient *http.Client
+
+// clockSkewDefaultClient is used when clockSkewHTTPClient is nil. Like the
+// rate fetcher, it refuses to follow redirects: the probe target is a
+// hardcoded HTTPS endpoint, so a redirect can only be an https→http
+// downgrade leaking the request and feeding the check an attacker Date.
+var clockSkewDefaultClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return fmt.Errorf("doctor: redirects are not followed")
+	},
+}
 
 // clockSkewWarnSecs is the skew magnitude at which we warn; beyond this TLS
 // certificate validation windows, mining nTime fields, and rate-freshness
@@ -775,7 +870,7 @@ func checkClockSkew() Check {
 			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, http.NoBody)
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, nil)
 			if err != nil {
 				return Result{
 					Status: StatusWarn,
@@ -787,7 +882,7 @@ func checkClockSkew() Check {
 
 			client := clockSkewHTTPClient
 			if client == nil {
-				client = http.DefaultClient
+				client = clockSkewDefaultClient
 			}
 			resp, err := client.Do(req)
 			if err != nil {
@@ -834,7 +929,7 @@ func checkClockSkew() Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (threshold %.0f s)", skew, clockSkewFailSecs),
 					Fix: fmt.Sprintf(
-						"synchronize your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
+						"synchronise your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
 							"`w32tm /resync` on Windows). Skew >%.0f s breaks TLS certificate "+
 							"validation and mining nTime checks.", clockSkewFailSecs,
 					),
@@ -843,7 +938,7 @@ func checkClockSkew() Check {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (warn threshold %.0f s)", skew, clockSkewWarnSecs),
-					Fix:    "synchronize your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
+					Fix:    "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
 				}
 			default:
 				return Result{
@@ -898,6 +993,20 @@ func isBech32Char(c rune) bool {
 func isBase58Char(c rune) bool {
 	const charset = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 	return strings.ContainsRune(charset, c)
+}
+
+// isFingerprint reports whether s has the shape the wallet writes into
+// wallet.fingerprint: 8 lowercase hex chars (HMAC-SHA256(...)[:4]).
+func isFingerprint(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for _, c := range s {
+		if !('0' <= c && c <= '9') && !('a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func maskAddress(s string) string {

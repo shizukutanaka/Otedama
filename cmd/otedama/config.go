@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 const (
@@ -53,7 +54,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
 
 	if f.jsonOut {
-		return writeConfigJSON(stdout, stderr, cfg, origins, f.showOrigin)
+		return writeConfigJSON(stdout, stderr, &cfg, origins, f.showOrigin)
 	}
 
 	// tag returns " [layer]" when --origin is active, otherwise empty.
@@ -91,7 +92,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintf(stdout, "pools:           %d configured%s\n", len(cfg.Pools), tag(origins.Pools))
 		for i, p := range cfg.Pools {
-			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(p.URL))
+			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(poolproto.StripUserinfo(p.URL)))
 		}
 	}
 	return exitOK
@@ -105,10 +106,10 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 // --origin information. JSON encoding escapes control characters natively, so
 // the safeDisplay terminal-sanitisation used by the text view is unnecessary
 // here (a consumer parses the bytes; it does not echo them to a terminal).
-func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config.Origins, withOrigins bool) int {
+func writeConfigJSON(stdout, stderr io.Writer, cfg *config.Config, origins config.Origins, withOrigins bool) int {
 	pools := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		pools = append(pools, p.URL)
+		pools = append(pools, poolproto.StripUserinfo(p.URL))
 	}
 	doc := struct {
 		BitcoinAddress           string            `json:"bitcoin_address"`
@@ -183,7 +184,7 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	for _, w := range config.EnvWarnings(nil) {
 		fmt.Fprintf(stderr, "config: warning: %s\n", w)
 	}
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return exitConfig

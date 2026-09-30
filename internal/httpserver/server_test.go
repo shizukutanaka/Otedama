@@ -279,7 +279,7 @@ func TestContextCancellation_TriggersShutdown(t *testing.T) {
 	// After shutdown, new requests should fail.
 	resp, err := http.Get("http://127.0.0.1:19810/healthz")
 	if err == nil {
-		_ = resp.Body.Close()
+		resp.Body.Close()
 		t.Error("server still accepting connections after ctx cancel")
 	}
 }

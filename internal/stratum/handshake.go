@@ -42,8 +42,8 @@ type SetupConnection struct {
 	DeviceID        string // STR0_255
 }
 
-// Encode serializes the message into a payload byte slice.
-func (m SetupConnection) Encode() ([]byte, error) {
+// Encode serialises the message into a payload byte slice.
+func (m *SetupConnection) Encode() ([]byte, error) {
 	b := make([]byte, 0, 32)
 	b = append(b, byte(m.Protocol))
 	b = appendU16LE(b, m.MinVersion)
@@ -97,7 +97,7 @@ type SetupConnectionSuccess struct {
 	Flags       uint32
 }
 
-// Encode serializes SetupConnectionSuccess.
+// Encode serialises SetupConnectionSuccess.
 func (m SetupConnectionSuccess) Encode() ([]byte, error) {
 	buf := make([]byte, 6)
 	binary.LittleEndian.PutUint16(buf[0:2], m.UsedVersion)
@@ -126,7 +126,7 @@ type SetupConnectionError struct {
 	Error string // STR0_255: human-readable reason
 }
 
-// Encode serializes SetupConnectionError.
+// Encode serialises SetupConnectionError.
 func (m SetupConnectionError) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 8), m.Flags)
 	return appendStr0_255(b, m.Error)
@@ -165,7 +165,7 @@ type OpenMiningChannel struct {
 	NominalHashrate float32 // H/s, informational
 }
 
-// Encode serializes OpenMiningChannel.
+// Encode serialises OpenMiningChannel.
 func (m OpenMiningChannel) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 16), m.ReqID)
 	b, err := appendStr0_255(b, m.User)
@@ -216,7 +216,7 @@ type OpenMiningChannelSuccess struct {
 	ExtraNonce2Size uint16
 }
 
-// Encode serializes OpenMiningChannelSuccess.
+// Encode serialises OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
 	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
 	b = appendU32LE(b, m.ReqID)
@@ -265,7 +265,7 @@ type OpenMiningChannelError struct {
 	Error string // STR0_255
 }
 
-// Encode serializes OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
+// Encode serialises OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
 func (m OpenMiningChannelError) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 8), m.ReqID)
 	return appendStr0_255(b, m.Error)

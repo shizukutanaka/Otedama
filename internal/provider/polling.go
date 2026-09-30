@@ -97,9 +97,9 @@ func (p *pollingProvider) Stop() {
 // is full so the freshest estimate always wins rather than blocking the
 // loop. It returns false if ctx was canceled before the quote could be
 // sent.
-func (p *pollingProvider) sendQuote(ctx context.Context, q Quote) bool {
+func (p *pollingProvider) sendQuote(ctx context.Context, q *Quote) bool {
 	select {
-	case p.quoteCh <- q:
+	case p.quoteCh <- *q:
 		return true
 	case <-ctx.Done():
 		return false
@@ -110,7 +110,7 @@ func (p *pollingProvider) sendQuote(ctx context.Context, q Quote) bool {
 		default:
 		}
 		select {
-		case p.quoteCh <- q:
+		case p.quoteCh <- *q:
 			return true
 		case <-ctx.Done():
 			return false

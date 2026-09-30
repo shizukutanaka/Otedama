@@ -136,6 +136,46 @@ loop:
 	}
 }
 
+// TestMiningProvider_LiveNetworkHashrate pins the KNOWN_LIMITATIONS §7
+// wiring: a fresh NetworkHashrateFunc reading replaces the compile-time
+// 1e21 H/s constant in the yield estimate; a stale or nil source keeps
+// the constant.
+func TestMiningProvider_LiveNetworkHashrate(t *testing.T) {
+	devices := []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+
+	readQuote := func(t *testing.T, p *MiningProvider) Quote {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := p.Start(ctx, devices); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		defer p.Stop()
+		select {
+		case q := <-p.Quotes():
+			return q
+		case <-ctx.Done():
+			t.Fatal("no quote within 2s")
+			return Quote{}
+		}
+	}
+
+	live := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	live.NetworkHashrateFunc = func() (float64, bool) { return 5e20, true } // half the constant → double yield
+	liveQ := readQuote(t, live)
+
+	stale := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	stale.NetworkHashrateFunc = func() (float64, bool) { return 5e20, false } // stale → constant path
+	staleQ := readQuote(t, stale)
+
+	if liveQ.Yield.SatsPerSecond != 2*staleQ.Yield.SatsPerSecond {
+		t.Errorf("live hashrate yield %e, want exactly 2× the constant-path yield %e",
+			liveQ.Yield.SatsPerSecond, staleQ.Yield.SatsPerSecond)
+	}
+}
+
 func TestMiningProvider_SkipsNonSHA256dDevices(t *testing.T) {
 	// A device with SHA256d=false must not receive a mining quote.
 	rates := StaticRateSource{Rate: 95000}
@@ -382,7 +422,7 @@ func TestPollingLoop_RepublishesOnTicker(t *testing.T) {
 
 func TestPollingProvider_ParentContextCancelTerminatesLoop(t *testing.T) {
 	// A provider is started under a parent context (in production, the engine's
-	// context). Canceling that parent — WITHOUT calling Stop() — must make the
+	// context). Cancelling that parent — WITHOUT calling Stop() — must make the
 	// loop goroutine exit and close the quote channel. Every other test drives
 	// shutdown via Stop(); this covers the equally important path where the
 	// owning context dies first, which is the classic goroutine-leak scenario:
@@ -480,7 +520,7 @@ func TestMiningProvider_Publish_FallsBackWhenHashrateFuncReturnsZero(t *testing.
 }
 
 func TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic(t *testing.T) {
-	// HashrateFunc returns 0 for an unrecognized device ID — publish() must
+	// HashrateFunc returns 0 for an unrecognised device ID — publish() must
 	// fall back to the static estimate rather than producing zero yield.
 	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
 	p.HashrateFunc = func(id string) float64 { return 0 } // unknown → 0
@@ -501,7 +541,7 @@ func TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic(t *testing.
 
 func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	// sendQuote must report failure (not block) when the context is already
-	// canceled and the channel is full, so the publish loop exits promptly
+	// cancelled and the channel is full, so the publish loop exits promptly
 	// on shutdown. With a full channel the buffered send blocks, so the
 	// ready ctx.Done() case is selected and sendQuote returns false.
 	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
@@ -510,7 +550,7 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if p.sendQuote(ctx, Quote{ProviderID: "new"}) {
-		t.Error("sendQuote returned true on a canceled context; should report failure")
+	if p.sendQuote(ctx, &Quote{ProviderID: "new"}) {
+		t.Error("sendQuote returned true on a cancelled context; should report failure")
 	}
 }

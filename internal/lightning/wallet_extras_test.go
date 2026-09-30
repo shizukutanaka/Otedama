@@ -104,6 +104,63 @@ func TestWalletManager_FingerprintIsStableAcrossLoad(t *testing.T) {
 	}
 }
 
+// TestWalletManager_RestoreRegeneratesFingerprintFile covers the backup
+// path in DEPLOYMENT.md, which copies only wallet.dat: reopening a wallet
+// whose sidecar wallet.fingerprint is missing must recreate it so the
+// public-fingerprint check (e.g. `otedama wallet verify`) still works.
+func TestWalletManager_RestoreRegeneratesFingerprintFile(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewEnglishWordList()
+
+	wm1, err := NewWalletManager(dir, "pass", nil, wl)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	fp := wm1.Fingerprint()
+
+	if err := os.Remove(FingerprintFilePath(dir)); err != nil {
+		t.Fatalf("remove fingerprint sidecar: %v", err)
+	}
+	wm2, err := NewWalletManager(dir, "pass", nil, wl)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := os.ReadFile(FingerprintFilePath(dir))
+	if err != nil {
+		t.Fatalf("fingerprint file should be regenerated: %v", err)
+	}
+	if string(got) != wm2.Fingerprint() || string(got) != fp {
+		t.Errorf("regenerated fingerprint = %q, want %q", got, fp)
+	}
+}
+
+// TestWalletManager_RestoreNeverOverwritesFingerprintFile pins the
+// complement: a fingerprint file that already exists — even if its
+// contents disagree with wallet.dat — must be left alone. Overwriting
+// would silently mask tamper or a botched restore.
+func TestWalletManager_RestoreNeverOverwritesFingerprintFile(t *testing.T) {
+	dir := t.TempDir()
+	wl, _ := NewEnglishWordList()
+
+	if _, err := NewWalletManager(dir, "pass", nil, wl); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	const sentinel = "deadbeef"
+	if err := os.WriteFile(FingerprintFilePath(dir), []byte(sentinel), 0o600); err != nil {
+		t.Fatalf("seed wrong fingerprint: %v", err)
+	}
+	if _, err := NewWalletManager(dir, "pass", nil, wl); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := os.ReadFile(FingerprintFilePath(dir))
+	if err != nil {
+		t.Fatalf("read fingerprint: %v", err)
+	}
+	if string(got) != sentinel {
+		t.Errorf("existing fingerprint file was overwritten: got %q, want %q", got, sentinel)
+	}
+}
+
 // ============================================================================
 // WalletManager file layout
 // ============================================================================
