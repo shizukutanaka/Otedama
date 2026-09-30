@@ -953,6 +953,44 @@ is distinct from open #497 (which detects the real terminal width) —
 that PR tells the dashboard the width; this fix makes it lay out
 correctly at whatever width it has.
 
+## Session 318 — honor pool-requested reconnect wait (re-delivers closed #388/#413)
+
+**Finding [OBSERVED — code-verified].** `client.reconnect`/
+`mining.reconnect` `wait_seconds` was parsed and recorded but never
+applied — a dead write; pools asking for drain time before reconnect got
+an immediate re-dial.
+
+**Fix [OBSERVED].** New `poolproto.ReconnectWaiter` interface + V1
+`ReconnectWait()` clamped to [0, 300 s]; `runSessionV1` waits
+ctx-cancellably before erroring out to the reconnect loop. Host:Port
+still deliberately not followed (redirect defence).
+
+**Tests [OBSERVED].** Session-close + wait-clamp cases green.
+
+## Session 512 — hal.Identity.Validate whitespace coverage + miner/hal complete
+
+**Bug (doc-vs-impl contract).** `hal.Identity.Validate` documented "no
+whitespace" for IDs but only rejected `' '`, `'\t'`, `'\n'` — `'\r'`,
+`'\v'`, `'\f'`, and all non-ASCII whitespace (U+00A0, U+2000–U+200A,
+U+3000, …) passed. Fixed with `unicode.IsSpace`; the ID is echoed into
+log lines (`Identity.String`) and used as a metrics device label, where
+whitespace/control characters corrupt output or split label values.
+Regression cases added for `\r`, `\v`, `\f`, and U+00A0.
+
+**Audit milestones.** `internal/miner` and `internal/hal` are now read
+end-to-end. `sha256d.go`: nBits decode rejects negative-mantissa bit,
+exp<3, zero mantissa, and >256-bit targets; `TargetFromDifficulty`
+rejects NaN/≤0/±Inf and uses 256-bit big.Float division; share target
+and hash share one little-endian layout so `LessOrEqual` is direct.
+`worker.go` grind tail: non-blocking share send with drop counter,
+atomic counters — clean; the only residual is the nonce-wrap/ntime-roll
+item owned by open PR #482. `hal`: Registry is RWMutex-guarded with a
+sorted snapshot; Detect fans out per-driver goroutines on a buffered
+results channel (no leak on ctx cancel), validates every returned
+Identity, and returns partial results + ctx.Err on cancel — clean.
+
+**Sources:** repo code only (audit session).
+
 ## Session 394 — bounded --log-file growth
 
 [FIXED — session 394] **Log-file rotation** (`cmd/otedama/logfile.go`): `--log-file` was an unbounded `O_APPEND` writer — a miner left running for months grew its audit log without limit, and no rotation existed (not in KNOWN_LIMITATIONS either). `cappedLogFile` rotates at 32 MiB to a single `path.old` backup (total ≤ ~64 MiB), preserves the 0600 mode, appends across restarts, and on a failed rotate falls back to the existing file rather than dropping writes. Tests: rotation at cap, total-disk bound, single-backup invariant, append-reopen, mode 0600 — race clean.
