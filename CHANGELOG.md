@@ -15,6 +15,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は警告して続行（存在時の不一致は依然 fatal）。裸バイナリは tar 展開をスキップして直接インストール。
 - ドキュメントのセキュリティ過大記載を訂正: THREAT_MODEL は「リリース成果物は cosign 署名済み」「`-trimpath` による再現ビルド」「GitHub Actions は全て SHA ピン留め」を主張していたが、いずれも実装なし（release.yml に cosign なし、`-trimpath` なし、ldflags がビルド時刻を含むため再現不可、全 workflow が `@vN` タグ参照）。実態を正確に記述し、SHA ピン留めと Sigstore 署名公開をハードニング項目として明記。AUDIT_CHECKLIST の item 11/13/17/22 も同様に修正（scrypt N=131072、wallet.dat の atomic write、cosign 未配線、SHA ピン未適用）。
 
+### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)
+
+**問題.** プール/MitM が難易度 0 を割当てると share-target が巨大化し、
+ワーカーが全 nonce で「シェア成立」→ submit 嵐（帯域・CPU DoS）になった。
+closed #402 の未マージ修正を master へ再デリバー。
+
+**修正.** 両 submit パスにトークンバケット（8/s + burst 32）を導入し、
+超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
+SPECIFICATION/API/THREAT_MODEL 同期済み。
+
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
 ### Fixed (session 348 — プール通知サニタイズ)
 
 `client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
