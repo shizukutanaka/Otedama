@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -159,6 +161,23 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 	_, ok := parseDifficulty(json.RawMessage(`not json`))
 	if ok {
 		t.Error("malformed input should be !ok")
+	}
+}
+
+func TestParseDifficulty_NonPositive(t *testing.T) {
+	// d <= 0 collapses the share target to "accept every hash" — a pool
+	// (or MitM on cleartext V1) setting it floods the submit path.
+	for _, raw := range []string{`[0]`, `[-1.5]`, `[-0.0]`, `[1e999]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) should be !ok", raw)
+		}
+	}
+	// Fractional and very small positive difficulties stay valid
+	// (ESP-Miner #1594/#1779 show real pools use them).
+	for _, raw := range []string{`[0.5]`, `[0.001]`, `[5e-324]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); !ok {
+			t.Errorf("parseDifficulty(%s) should be ok", raw)
+		}
 	}
 }
 
@@ -1926,5 +1945,143 @@ func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
 	sess.pendingMu.Unlock()
 	if n != 0 {
 		t.Errorf("pending map has %d entries after timeout, want 0", n)
+	}
+}
+
+func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
+	sess := makeBareSess()
+	sess.extranonce1 = "c0ffee01"
+	sess.extranonce2Size = 4
+
+	notify := func(id string) poolproto.Job {
+		sess.dispatch([]byte(fmt.Sprintf(
+			`{"method":"mining.notify","params":[%q,`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",`+
+				`"ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000",`+
+				`[],"00000002","1d00ffff","68d36c5e",true]}`, id)))
+		select {
+		case j := <-sess.jobsCh:
+			return j
+		default:
+			t.Fatal("notify did not enqueue a job")
+			return poolproto.Job{}
+		}
+	}
+
+	j1 := notify("1")
+	if j1.MerkleRoot == ([32]byte{}) {
+		t.Fatal("MerkleRoot not computed — coinbase fold did not run")
+	}
+	if len(j1.ExtraNonce) != 4 || hex.EncodeToString(j1.ExtraNonce) != "00000001" {
+		t.Fatalf("ExtraNonce = %x, want 00000001", j1.ExtraNonce)
+	}
+
+	j2 := notify("2")
+	if j2.MerkleRoot == j1.MerkleRoot {
+		t.Fatal("consecutive jobs share a merkle root — en2 did not roll")
+	}
+	if hex.EncodeToString(j2.ExtraNonce) != "00000002" {
+		t.Fatalf("job 2 ExtraNonce = %x, want 00000002", j2.ExtraNonce)
+	}
+
+	// Verify the fold end-to-end: merkle == dsha(coinb1|en1|en2|coinb2)
+	// with an empty branch list.
+	en1, _ := hex.DecodeString(sess.extranonce1)
+	coinb1, _ := hex.DecodeString("0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	coinb2, _ := hex.DecodeString("ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000")
+	want := btccrypto.Hash256(append(append(append(append([]byte{}, coinb1...), en1...), j1.ExtraNonce...), coinb2...))
+	if j1.MerkleRoot != want {
+		t.Fatalf("MerkleRoot = %x, want %x", j1.MerkleRoot, want)
+	}
+}
+
+func TestCompleteV1Job_SkipsWithoutParts(t *testing.T) {
+	sess := makeBareSess()
+	// No negotiated extranonces: notify arrives "unprepared".
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","aa","bb",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	j := <-sess.jobsCh
+	if j.MerkleRoot != ([32]byte{}) {
+		t.Errorf("MerkleRoot = %x, want zero (no negotiated en1)", j.MerkleRoot)
+	}
+}
+
+// ============================================================================
+// extranonce2_size bounds — a hostile/MitM pool could request a huge
+// padding size that strings.Repeat would turn into gigabytes per submit.
+// ============================================================================
+
+func TestParseSetExtranonce_SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`["abc", 0]`, true},
+		{`["abc", 4]`, true},
+		{`["abc", 64]`, true},
+		{`["abc", 65]`, false},
+		{`["abc", -1]`, false},
+		{`["abc", 1073741824]`, false},
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
+			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
+		}
+	}
+}
+
+func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		sz   float64
+		want bool
+	}{
+		{0, true},
+		{8, true},
+		{64, true},
+		{65, false},
+		{-1, false},
+		{1e9, false},
+		// Fractional values must not pass via int() truncation.
+		{64.5, false},
+		{-0.5, false},
+		{4.5, false},
+	} {
+		result := []any{[]any{}, "abc", tc.sz}
+		_, _, err := parseSubscribeResult(result)
+		if (err == nil) != tc.want {
+			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
+		}
+	}
+}
+
+func TestSanitizeNotice_StripsControlChars(t *testing.T) {
+	// ANSI escape sequence + newline that would forge a log line.
+	got := sanitizeNotice("maintenance\x1b[2J\x1b[H\nforged log line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "maintenance") || !strings.Contains(got, "forged log line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizeNotice_PreservesUnicode(t *testing.T) {
+	got := sanitizeNotice("メンテナンス 10分後")
+	if got != "メンテナンス 10分後" {
+		t.Errorf("unicode text mangled: %q", got)
+	}
+}
+
+func TestSanitizeNotice_TruncatesLongNotices(t *testing.T) {
+	long := strings.Repeat("x", maxNoticeRunes*2)
+	got := sanitizeNotice(long)
+	if len([]rune(got)) != maxNoticeRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxNoticeRunes)
+	}
+}
+
+func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
+	got := sanitizeNotice("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }
