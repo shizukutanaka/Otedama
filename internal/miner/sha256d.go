@@ -246,6 +246,28 @@ func TargetFromDifficulty(difficulty float64) (Hash, error) {
 	return out, nil
 }
 
+// DifficultyFromTarget is the inverse of TargetFromDifficulty: it maps a
+// 32-byte share target in the Hash type's little-endian order (MSB at index
+// 31) back to a Stratum difficulty, difficulty = diff1Target / target. A
+// zero target means no hash can ever satisfy it, so +Inf is returned —
+// callers surface that as "income is effectively zero". Targets above
+// diff1Target produce difficulties below 1, matching V1's fractional
+// difficulty convention.
+func DifficultyFromTarget(t Hash) float64 {
+	var be Hash
+	for i := 0; i < 32; i++ {
+		be[i] = t[31-i]
+	}
+	tgt := new(big.Int).SetBytes(be[:])
+	if tgt.Sign() <= 0 {
+		return math.Inf(1)
+	}
+	q := new(big.Float).SetPrec(128).SetInt(diff1Target)
+	q.Quo(q, new(big.Float).SetPrec(128).SetInt(tgt))
+	f, _ := q.Float64()
+	return f
+}
+
 // MeetsTarget reports whether the given hash value meets the difficulty
 // target represented by nBits.
 func MeetsTarget(hash Hash, nBits uint32) (bool, error) {
