@@ -979,6 +979,24 @@ runReconnectLoop).
   gauge shipped in session 54 and is catalogued in SPECIFICATION §6;
   corrected.
 
+## Session 326 — hygiene sweep verdicts (govulncheck + deadcode)
+
+**govulncheck (go1.26.8) [OBSERVED — ran live].** 0 reachable
+vulnerabilities; 22 module-level advisories in the require graph, all
+in code paths Otedama does not call (same pattern as prior sessions).
+
+**deadcode ./... [OBSERVED — ran live].** Every hit is intentional
+public-ish API surface on internal packages (btccrypto helpers,
+clock.Fake test utilities, i18n catalogue helpers, lightning
+WordList/MnemonicToEntropy, httpserver.Addr/ServeError) — used by tests
+or reserved for in-flight v4.0 scope. Judged not-deletable; recorded so
+the sweep doesn't re-flag them as findings.
+
+**Coverage sweep [OBSERVED].** Server→client input surface, worker nonce
+partitioning, provider quotes (stale-pruned at 3 min), metrics label
+cardinality (fixed enums), config/env parsing, wallet KDF constants,
+HTTP server timeouts — all verified bounded/safe on master.
+
 ## Session 328 — remaining surface verdicts
 
 **mining.set_version_mask [OBSERVED].** Ignored server→client
