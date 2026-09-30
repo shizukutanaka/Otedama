@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 549 — nolint suppression sweep: all justified
+
+- 12 `//nolint` directives in the whole tree — none unexplained:
+  - `httpserver/server.go`: `//nolint:gosec` on the deliberate
+    `net/http/pprof` import — explicitly NOT a blank import; the
+    handlers are wired to the custom mux so nothing lands on
+    DefaultServeMux (comment documents the intent).
+  - `tui/dashboard.go`: `//nolint:errcheck` on the final
+    `io.WriteString` to the terminal — the error is unactionable
+    (a closed tty has no recovery path at render flush).
+  - 10 `//nolint:errcheck` in tests — fixture writes/probes
+    (ReadFrame discards, garbage-byte conn.Write, error-path
+    Detect calls); the standard test-only errcheck exemption.
+- Zero broad suppressions: no `//nolint` without a named linter,
+  no package-level exemptions.
