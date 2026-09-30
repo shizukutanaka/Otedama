@@ -625,3 +625,16 @@ Two more mechanical axes verified by site inspection:
 | S | TLS configuration — `InsecureSkipVerify`, weak `MinVersion`, SNI not derived from the dial address — on the `stratum+tls://` and `stratum+v2tls://` paths. | ✅ Clean: `InsecureSkipVerify` appears nowhere; both dialers pin `MinVersion: TLS1.2`, leave `ServerName` empty so crypto/tls fills it from the actual dial address, use `tls.Dialer` so the handshake completes (and verification failures surface) before first write with no plaintext fallback. `TLSConfigWithExtraCAs`/`tlsConfigWithExtraCAs` add a private-CA bundle *on top of* system roots — verification stays enabled; a nil/empty bundle yields the secure default. `doctor` pre-validates the PEM with the same `AppendCertsFromPEM` path. |
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 594 update — stdlib-modernization leftovers + error-sentinel sweep
+
+Two more mechanical axes verified by site inspection:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| L | Modernization leftovers after the session-537 `slices` pass: manual map-clear loops (`for k := range m { delete(m,k) }` → `clear`), `HasPrefix`+slice pairs (→ `strings.Cut*`), hand-rolled min/max (→ builtins). | ✅ Clean: no whole-map clear loop exists (all `delete` sites are selective single-key expiry — `pending`, `submitTimes`, stale stream entries); every `HasPrefix`/`HasSuffix` call is a pure check with no following slice-off; no hand-rolled min/max remains. The tree is fully on current stdlib idiom. |
+| M,S | `err == sentinel` direct equality on the check side misses wrapped errors (a `fmt.Errorf("…: %w", sentinel)` passes by the guard) — the wrap-penetration bug class. | ✅ Clean: the only `==` sentinel comparison in the tree is `err == flag.ErrHelp`, which is the flag package's own documented idiom (flag.Parse returns it unwrapped). All other error checks are `err != nil` or `errors.Is`/`errors.As` (post-#526). |
+
+All 24 packages build, vet, and test green.
