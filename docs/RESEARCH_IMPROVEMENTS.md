@@ -947,6 +947,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 **発見（1件対応）。**
 - **`go.mod` に依存根拠コメントが皆無** → CLAUDE.md 外部依存管理ルール違反状態を修正: `x/crypto`（scrypt — ウォレット KDF、BSD-3-Clause、ADR-003 予算内）と `gopkg.in/yaml.v3`（YAML デコーダ、MIT/Apache、上流 archived → go.yaml.in 移行は別途追跡中 ※open #444）に記録。`x/crypto` の実使用箇所は scrypt 単一と確認、`go mod verify` 緑。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
