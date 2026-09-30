@@ -16,6 +16,13 @@ pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
 WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
 quoteCh 置換 caveat は未到達パスとして文書化。
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### セキュリティ (session 407)
 
 VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
