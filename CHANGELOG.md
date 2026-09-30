@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 398)
+
+`FuzzMessageRoundTrip` を追加 — SV2 steady-state メッセージ6種（NewMiningJob /
+SetNewPrevHash / SetTarget / SubmitSharesStandard / SubmitSharesSuccess /
+SubmitSharesError）のエンコード方向を検証: Encode 不敗・decode 完全一致・
+再エンコード byte 一致（canonical-form 安定性）。decode 側 fuzz（#479）の補完として
+双方向のプロパティカバレッジを完成。
+
 ### テスト (session 389)
 
 - `internal/miner` に `FuzzTargetFromNBits`/`FuzzTargetFromDifficulty`/`FuzzTargetFromDifficultyMonotonic` を追加 — プール供給の nBits/難易度変換の不変条件（受理値は正ターゲット・再エンコード往復・ゼロハッシュ恒真・単調性、不正値はエラー）をランダム検証。

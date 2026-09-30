@@ -940,6 +940,21 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 398 — SV2 encode-side round-trip fuzz
+
+**`FuzzMessageRoundTrip` [FIXED — coverage gap].** The six steady-state
+mining-channel messages (`NewMiningJob`, `SetNewPrevHash`, `SetTarget`,
+`SubmitSharesStandard`, `SubmitSharesSuccess`, `SubmitSharesError`)
+previously had decode-only fuzzers (#479): arbitrary bytes never wedge
+the parser, but nothing proved the encode direction is correct or
+canonical. The new fuzzer builds every message from fuzz input and
+asserts three invariants per type: Encode never fails, Decode of the
+output returns an identical value, and re-encoding is byte-identical
+(canonical-form stability in both directions). 60 s / 8.7 M execs clean
+(`internal/stratum/roundtrip_fuzz_test.go`). With this, both directions
+of every SV2 message type Otedama emits or consumes have property
+coverage.
+
 ## Session 389 — fuzz coverage for target bitmath + numeric env resolution
 
 [FIXED — session 389] **Target-math fuzzers** (`internal/miner/fuzz_test.go`): `TargetFromNBits` and `TargetFromDifficulty` convert pool-supplied wire values into the 256-bit targets shares are compared against — until now covered only by fixed vectors. `FuzzTargetFromNBits` asserts: never panic; accepted inputs produce a positive target; `TargetFromNBits(NBitsFromTarget(t))` reproduces the identical target (value round-trip, since re-encoding may pick a non-canonical nBits); the all-zero hash meets every valid target. `FuzzTargetFromDifficulty` asserts invalid difficulties (NaN/±Inf/≤0) always error and accepted ones produce positive targets. `FuzzTargetFromDifficultyMonotonic` asserts d1<d2 ⟹ target1≥target2 (weak monotonicity under float truncation). ~41M execs total, zero violations.
