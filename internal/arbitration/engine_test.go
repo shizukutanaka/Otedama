@@ -89,6 +89,25 @@ func TestDecide_RejectsNegativeHysteresis(t *testing.T) {
 	}
 }
 
+// Non-finite hysteresis/min-yield values must be rejected: NaN slips past
+// a bare `< 0` check (NaN < 0 is false) and would silently disable
+// hysteresis (NaN threshold is never met); +Inf would freeze the incumbent
+// forever; NaN min-yield silently disables the floor (y < NaN is false).
+func TestDecide_RejectsNonFiniteMargins(t *testing.T) {
+	for name, in := range map[string]Input{
+		"nan-hysteresis":  {HysteresisMargin: math.NaN()},
+		"inf-hysteresis":  {HysteresisMargin: math.Inf(1)},
+		"-inf-hysteresis": {HysteresisMargin: math.Inf(-1)},
+		"nan-minyield":    {MinYieldSatsPerSec: math.NaN()},
+		"inf-minyield":    {MinYieldSatsPerSec: math.Inf(1)},
+		"-inf-minyield":   {MinYieldSatsPerSec: math.Inf(-1)},
+	} {
+		if _, err := Decide(in); err == nil {
+			t.Errorf("%s: Decide must reject non-finite margins", name)
+		}
+	}
+}
+
 func TestDecide_RejectsDuplicateDeviceIDs(t *testing.T) {
 	devs := []DeviceRef{
 		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
