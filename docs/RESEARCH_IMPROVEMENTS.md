@@ -952,6 +952,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** 行2-10/14-30 の残クレーム（vet/staticcheck クリーン・SPDX・go mod verify・Dependabot・wallet 0600・AES-256-GCM・Noise NX・ChaCha20-Poly1305・ADR/COC/SECURITY.md 存在）は実装と一致。行22 の scrypt 行（N=32768 記載・実際は N=2^17=131072・seedstore.go 所在）は虚偽だが closed #485 の担当域のため未修正として記録のみ。検証スクリプトは `|| true` で tolerant 設計、妥当。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**

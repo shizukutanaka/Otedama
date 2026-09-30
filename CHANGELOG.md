@@ -16,6 +16,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * 行11「SHA pinning」・行13「cosign 署名済み」→ 両方現状 fails と明記（uses: は全てタグ参照、release.yml は goreleaser 未呼出）。
 * CI gate 節を実態に書換 — 独立した `go vet`/`staticcheck`/`govulncheck`/5-OS ビルド行列は非存在（govet+staticcheck は golangci-lint 内で実行）、nightly ファズ・ベンチマーク比較ジョブも非存在。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
