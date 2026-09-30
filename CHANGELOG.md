@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 318 — client.reconnect の wait_seconds を尊重)
+
+**問題.** `client.reconnect`/`mining.reconnect` の `wait_seconds` は
+記録のみで適用されない dead write だった。closed #388/#413 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.ReconnectWaiter` インターフェース + V1
+`ReconnectWait()`（[0,300s] クランプ）を追加し、`runSessionV1` の
+終了経路で ctx キャンセル可能に適用。Host:Port は従来どおり
+非追従（リダイレクト防御）。
+
 ### Fixed (session 512 — hal.Identity.Validate whitespace coverage)
 
 - **`Identity.Validate` now rejects all Unicode whitespace, matching its
