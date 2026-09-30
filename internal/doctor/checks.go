@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
@@ -219,7 +220,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -260,7 +261,8 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+			winfo, err := os.Stat(walletPath)
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
@@ -274,6 +276,20 @@ func checkWallet(dataDir string) Check {
 				}
 			}
 
+			// The file itself must be owner-only: a wallet restored via
+			// scp/rsync or extracted from a backup tarball lands 0644,
+			// exposing the encrypted seed to other local users even though
+			// the enclosing directory check already covers fresh installs.
+			if runtime.GOOS != "windows" {
+				if perm := winfo.Mode().Perm(); perm&0o077 != 0 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("%s has permissions %04o (group/other readable)", walletPath, perm),
+						Fix:    fmt.Sprintf("run: chmod 0600 %s", walletPath),
+					}
+				}
+			}
+
 			// Wallet exists — read the public fingerprint file for display.
 			fpPath := filepath.Join(dir, walletFingerprintFile)
 			fp, err := os.ReadFile(fpPath)
@@ -284,6 +300,15 @@ func checkWallet(dataDir string) Check {
 				}
 			}
 			fingerprint := strings.TrimSpace(string(fp))
+			// The fingerprint is HMAC-SHA256(...)[:4] hex — 8 chars. Print it
+			// only when it has that shape: a truncated or corrupt fingerprint
+			// file could otherwise inject control characters into the report.
+			if !isFingerprint(fingerprint) {
+				return Result{
+					Status: StatusPass,
+					Detail: "initialized (fingerprint file malformed; re-run to regenerate)",
+				}
+			}
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("initialized, fingerprint: %s", fingerprint),
@@ -292,39 +317,100 @@ func checkWallet(dataDir string) Check {
 	}
 }
 
+// maxReachabilityProbes caps how many configured pools are TCP-probed so a
+// very long pool list cannot turn doctor into a port scanner.
+const maxReachabilityProbes = 8
+
 func checkPoolReachability(cfg config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
 		Run: func(ctx context.Context) Result {
-			var url string
-			if len(cfg.Pools) > 0 {
-				url = cfg.Pools[0].URL
-			} else {
-				url = config.DefaultPoolURL
+			var urls []string
+			for _, p := range cfg.Pools {
+				urls = append(urls, p.URL)
 			}
-			host := stripScheme(url)
-			if host == "" {
+			if len(urls) == 0 {
+				urls = []string{config.DefaultPoolURL}
+			}
+			if len(urls) > maxReachabilityProbes {
+				urls = urls[:maxReachabilityProbes]
+			}
+
+			type probe struct {
+				host    string
+				latency time.Duration
+				err     error
+				badURL  string
+			}
+			results := make([]probe, len(urls))
+			var wg sync.WaitGroup
+			for i, u := range urls {
+				host := stripScheme(poolproto.StripUserinfo(u))
+				if host == "" {
+					results[i].badURL = poolproto.StripUserinfo(u)
+					continue
+				}
+				results[i].host = host
+				wg.Add(1)
+				go func(idx int) {
+					defer wg.Done()
+					d := net.Dialer{Timeout: 5 * time.Second}
+					start := time.Now()
+					conn, err := d.DialContext(ctx, "tcp", results[idx].host)
+					if err != nil {
+						results[idx].err = err
+						return
+					}
+					_ = conn.Close()
+					results[idx].latency = time.Since(start).Round(time.Millisecond)
+				}(i)
+			}
+			wg.Wait()
+
+			var reachable, unreachable, unparseable []string
+			for _, r := range results {
+				switch {
+				case r.badURL != "":
+					unparseable = append(unparseable, r.badURL)
+				case r.err != nil:
+					unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
+				default:
+					reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
+				}
+			}
+
+			switch {
+			case len(reachable) == 0 && len(unreachable) == 0:
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot parse pool URL %q", poolproto.StripUserinfo(url)),
+					Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
 					Fix:    "check the pool URL in config.yaml",
 				}
-			}
-			d := net.Dialer{Timeout: 5 * time.Second}
-			start := time.Now()
-			conn, err := d.DialContext(ctx, "tcp", host)
-			if err != nil {
+			case len(reachable) == 0:
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("%s: %v", host, err),
+					Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
 					Fix:    "check internet connection or try a different pool",
 				}
-			}
-			_ = conn.Close()
-			latency := time.Since(start).Round(time.Millisecond)
-			return Result{
-				Status: StatusPass,
-				Detail: fmt.Sprintf("%s (%s)", host, latency),
+			case len(unreachable) > 0 || len(unparseable) > 0:
+				var parts []string
+				if len(unreachable) > 0 {
+					parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
+				}
+				if len(unparseable) > 0 {
+					parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
+				}
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
+						len(reachable), len(urls), strings.Join(reachable, ", "), strings.Join(parts, "; ")),
+					Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
+				}
+			default:
+				return Result{
+					Status: StatusPass,
+					Detail: strings.Join(reachable, ", "),
+				}
 			}
 		},
 	}
@@ -905,6 +991,20 @@ func isBech32Char(c rune) bool {
 func isBase58Char(c rune) bool {
 	const charset = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 	return strings.ContainsRune(charset, c)
+}
+
+// isFingerprint reports whether s has the shape the wallet writes into
+// wallet.fingerprint: 8 lowercase hex chars (HMAC-SHA256(...)[:4]).
+func isFingerprint(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for _, c := range s {
+		if !('0' <= c && c <= '9') && !('a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func maskAddress(s string) string {
