@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 551 — bounded base58 decode)
+
+- `btccrypto.ValidateBase58Address` now rejects inputs over 64
+  chars before `base58Decode`'s O(n²) big.Int loop runs (real
+  Base58Check addresses are 26–34 chars). Zero `regexp` in
+  non-test code; `TargetFromNBits` confirmed bounded (≤255B
+  intermediate) — recorded in `docs/RESEARCH_IMPROVEMENTS.md`.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
