@@ -949,6 +949,18 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
 
+## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
+credited without checking `LastSequenceNumber` — a bogus success frame
+with an unsent seq inflated the acceptance rate and settled latency
+stats it never earned (mirror of the reject-side fix, session-277/#389).
+
+**Fix [OBSERVED].** Frames with `LastSequenceNumber > seqNum` drop at
+debug level — no acceptance credit, no latency settle.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`.
+
 ## Session 331 — non-finite arbitration parameters (real fix)
 
 **NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
