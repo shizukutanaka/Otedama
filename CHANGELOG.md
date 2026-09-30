@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 315 — SV2 submit インフライト深さゲージ)
+
+**追加.** `otedama_shares_submit_in_flight` ゲージを新設——`submitTimes`
+の未判定深さ（submit→ack のペンディング数）を 30s ティックで公開。
+ESP-Miner v2.15.0 の「pending SV2 shares」ダッシュボードと同じ観測面:
+持続的に増える深さはプールの ack 遅延・停止を意味する。
+V1 は同期 submit のため常に 0。SPECIFICATION §6 カタログ行を追加済み。
+
 ### テスト (session 388)
 
 - `internal/arbitration` に `FuzzDecide` プロパティテストを追加 — Decide の文書化済み不変条件（デバイス割当の全単射・ソート順、互換ストリーム限定、TotalYield の総和一致、ForegoneSatsPerSec 非負、決定性、MaximizeEarnings 無ヒステリシス時のグリーディ最適性）をランダム入力で検証。従来は「プロパティテストで検証済み」との記載のみで実物が存在しなかったギャップを解消（90秒・1350万 exec でクリーン）。

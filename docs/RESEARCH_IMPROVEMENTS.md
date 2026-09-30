@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 315 — submit in-flight depth gauge (ESP-Miner v2.15.0 pending-shares parity)
+
+**Finding [FETCHED — bitaxeorg/ESP-Miner v2.15.0 release notes, 2026-08-21].**
+ESP-Miner added "Show pending SV2 shares on the dashboard" (#1735) —
+exposing submit→ack in-flight depth as a first-class operational signal.
+
+**Fix [OBSERVED].** New `otedama_shares_submit_in_flight` gauge publishes
+`len(submitTimes)` on the 30 s stats tick (V2 path; V1 submits
+synchronously and stays 0). SPECIFICATION §6 catalogue row added —
+`TestMetricsDocumentedInSpecification` green. Also audited [OBSERVED]:
+V1 fractional difficulty + negative/zero difficulty are already handled
+(`[]float64` parse + `TargetFromDifficulty` `>0`/IsInf guard).
+
 ## Session 388 — arbitration property tests + ecosystem re-check
 
 [FETCHED — 2026-09-25] Stratum V2 SRI: v1.12.0 (2026-09-17) remains the latest release — channels_sv2 hardening pass, codec_sv2/framing_sv2 refactor (Frame enum → MessageFrame/SerializedFrame), BIP323 adaptations, AES-256-GCM dropped from noise_sv2 leaving ChaCha20-Poly1305 sole cipher. All mapped onto Otedama in earlier sessions (this client never implemented AES-256-GCM; framing is Otedama's own). ESP-Miner v2.15.3 (2026-09-20) remains latest; no new stratum-facing changes to chase.
