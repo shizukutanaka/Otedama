@@ -950,6 +950,30 @@ drop-in: only the two import sites changed (cmd/otedama/configfile.go,
 internal/config/config_file_test.go). Re-delivers the dep-swap portion
 of closed #367.
 
+## Session 391 — fuzz for the config-file decode boundary
+
+[FIXED — session 391] **YAML config-file fuzz** (`cmd/otedama/fuzz_test.go`): `loadConfigFile` turns arbitrary on-disk bytes into a `config.Config` — the last input-facing boundary without fuzz coverage. `FuzzLoadConfigFile` writes each input to a temp file and asserts the decode+`KnownFields`+`Validate` path returns without panic on non-UTF8 bytes, deep nesting, self-referential aliases, binary junk, and unknown-field documents. 98K execs clean (slower rate is per-exec file I/O by design — the load path is file-backed). With this landed plus #478/#479/#481/#499/#500, every untrusted-input surface — V1 wire, SV2 frames and typed messages, payout addresses, pool difficulty/nBits, numeric env vars, arbitration inputs, and config files — has fuzz or property coverage.
+
+[AUDITED — clean] Session-level sweep recorded: all packages 92–99% statement coverage (≥90% bar met); zero TODO/FIXME/`unsafe` in non-test code; hot paths benchmarked.
+
+## Session 498 — config.yaml.example の虚偽クレーム訂正 + コメント文言再検証
+
+**Sweep.** `config.yaml.example`（~190行の説明コメント全部）を `internal/config`・`internal/engine`・`internal/i18n` と再照合（field 網羅性は session 465 で clean 確認済み、本ラウンドは「コメントの挙動記述」）。
+
+**発見（1件訂正）。**
+- **「pools が空なら built-in recommended pool list（V2 優先・0% fee）を使用」→ 虚偽**: `config.go` の PoolConfig コメントが明示する通りキュレーション済みリストは**存在せず**、単一 `DefaultPoolURL`（slushpool V2）へのフォールバックのみ — failover したいユーザーは明示列挙が必要と訂正（ドキュメント側が「ある」と言い、コード側が「ない」と書いている典型的二重記述乖離）。
+
+**検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
+
+## Session 501 — .golangci.yml 非推奨キー移行 + run.go バージョン訂正 + govulncheck clean
+
+**Sweep.** (a) ルート直下の未精読ファイル（.editorconfig・CODEOWNERS・LICENSE 著作権行・NOTICE）→ 全て正確。(b) `golangci-lint config verify` で schema 検証 → 3件の不整合を発見。(c) `govulncheck -mode=source ./...` → **0 reachable vulns**（依存内22件は未到達 — yaml.v3/x/crypto とも import 経路が脆弱コードに触れない）。
+
+**発見（1件修正 — 設定ファイルの陳腐化）。**
+- **`run.skip-dirs` / `output.format` が deprecated**（v1.64 系で警告＋`config verify` が schema 拒否）→ `issues.exclude-dirs` / `output.formats`（array form）へ移行。併せて `run.go: "1.22"` を実効要件の `"1.24"` に訂正 — 「Go 1.22 記述」クラスの6箇所目（AUDIT_CHECKLIST・README・CONTRIBUTING・GODEBUG_NOTES・BENCHMARKS に続く）。検証: `config verify` exit 0・`run` で警告ゼロ。
+
+**検証済み・変更なし。** LICENSE 著作権行（Monu (shizukutanaka) 記入済み）・CODEOWNERS の全パターン（noise* 2ルール含め実パス解決）・.editorconfig・service.go/version.go の CLI 実装。
+
 ## Session 392 — fuzz for the BIP-39 restore boundary
 
 [FIXED — session 392] **BIP-39 mnemonic parse fuzz** (`internal/lightning/fuzz_test.go`): `MnemonicToEntropy` consumes operator-typed word sequences on the wallet-restore path — the last untrusted-input parser without fuzz coverage. Two fuzzers: `FuzzMnemonicToEntropy` (1.5M execs) asserts arbitrary word slices — wrong counts, unknown words, case-mismatch, empty strings — always error rather than panic, and any accepted mnemonic re-encodes identically; `FuzzMnemonicRoundtrip` (3.0M execs) asserts `EntropyToMnemonic` → `MnemonicToEntropy` is bit-exact across all five legal entropy sizes, pinning the checksum math.

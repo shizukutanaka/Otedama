@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 `go.yaml.in/yaml/v3` v3.0.5 へ移行。API 互換のためコード変更は
 import パスのみ（configfile.go / config_file_test.go）。
 
+### テスト (session 391)
+
+- `cmd/otedama` に `FuzzLoadConfigFile` を追加 — 任意バイト列の YAML 設定ファイルがロード経路で panic/ハングせず、デコード失敗は常に「警告 + 空 Config」へ縮退することを検証（非UTF8・深いネスト・alias・バイナリ・未知フィールドを含む入力、98K exec でクリーン）。これで非信頼入力を受ける全パーサ/境界に fuzz または property カバレッジが揃った。
+
 ### テスト (session 392)
 
 - `internal/lightning` に BIP-39 パース境界の fuzz を追加 — `FuzzMnemonicToEntropy` は任意の語列（不正な語数・未知語・大文字・空文字・チェックサム破損）で panic せず常にエラー、受理した語列は再エンコードが一致することを検証（150万 exec クリーン）。`FuzzMnemonicRoundtrip` は全合法エントロピー長（16–32B）でエンコード→デコードが bit-exact に往復することを検証（300万 exec クリーン）。ウォレット復元の入力境界をカバー。
