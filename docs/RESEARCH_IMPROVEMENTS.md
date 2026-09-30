@@ -949,6 +949,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** スキーム一覧 4種（validSchemes と一致）・payout_scheme 4値・`user` 既定= bitcoin_address・worker name 既定= hostname・言語一覧（10 言語カタログと一致）・failover「全 pool 試行後に backoff」（run.go:462-469 と一致）・endpoint 一覧（/metrics /healthz /readyz /）・hysteresis/curtail/min_yield/power 系の説明 — 全て実装と一致。エコシステム再照合: SRI/sv2-spec に新規リリース差分なし。
 
+## Session 374 — config-layer pool URL validation hardening
+
+[AUDITED — clean] `config show`/`config validate` output: passphrases are
+flag/env-only (never stored in Config), and pool URLs carry no credentials,
+so no secret can leak through the config-inspection path. `configfile.go`
+is read-only (os.Open; no write path).
+
+[FIXED] `validatePoolURL` accepted any non-empty string after a recognised
+scheme — `stratum+tcp://pool` (no port; dialer always fails since no
+default port exists), `:99999` out-of-range ports, `user:pass@host`
+userinfo, `host:3333/path` trailing paths all passed `config validate`
+and failed only at first dial. Now the remainder must parse as
+`host:port` via `net.SplitHostPort` with a numeric port in 1-65535 and
+no userinfo/path/whitespace. Pools are config-file-only (no env/flag
+path), so the one validation site covers the entire surface.
+
 ## Session 310 — validate SubmitSharesSuccess.LastSequenceNumber before crediting (re-delivers closed #403)
 
 **Finding [OBSERVED — code-verified].** SV2 `SubmitSharesSuccess` was
