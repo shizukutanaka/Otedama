@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 565 — atomic API)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all `sync/atomic` uses are the
+  typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
+  386-misalignment panic class is absent.
+
 ### Documentation & audit (session 566 — JSON/YAML decode)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
