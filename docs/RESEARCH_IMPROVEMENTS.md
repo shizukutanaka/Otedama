@@ -940,6 +940,17 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 508 — quality-pass 指示書の実測値更新（3件）＋ ellswift 出荷状況再検証
+
+**Sweep.** docs/skills/コメント内全 URL 抽出 → 実在性棚卸し（otedama.io は除去済み記録のみ残存・issues#2/#3 実在・badge は #575 担当域）の後、未精読だった `skills/quality-pass-{sonnet,opus}.md` を精読。
+
+**対応（3件 — 実測値更新）。**
+1. カバレッジ「lightning 91.2%」→ **実測 92.0%**（`go test -cover` で7パッケージ検証、全域 ≥90%: engine 93.8・config 94.7・miner 96.2・doctor 96.6・stratum 97.9・arbitration 100）— 両ファイル更新。
+2. opus の CI ピン「Go 1.23.x/1.21」→ ci.yml 実マトリクスは **1.22.x/1.23.x**（env GO_VERSION 1.23.x）。
+3. opus の「コードは1.24.7でgreen」→ go1.26.8 で全テスト green を実測し更新。
+
+**検証 clean**: ellswift 出荷状況 — decred secp256k1/v4・btcec/v2 共に release 版に ellswift 未含有（btcsuite/btcd#2219 は 2025-06 に closed-unmerged、v2_transport フォークのみ）→ opus の「監査済み Go 実装非存在」主張は依然正確。URL 棚卸しで otedama.io の live 参照なし。
+
 ## Session 511 — internal/engine fully read; first production JDP block
 
 **Audit milestone.** This session completes the end-to-end read of every
