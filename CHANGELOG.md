@@ -17,6 +17,16 @@ API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATI
 `OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
 修正 — config.yaml キー名と有効化されるメトリクスを明記。
 
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
 ### Fixed (session 331 — 非有限な裁定パラメータの拒否)
 
 `arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
