@@ -952,3 +952,26 @@ pool-controlled and flowed unbounded into `strings.Repeat` on every
 `Submit`. THREAT_MODEL documents the threat and residual.
 
 **Tests [OBSERVED].** Boundary unit tests on both entry points.
+
+## Session 342 — service-definition injection via control characters
+
+**Unit-file directive injection [FIXED].** `quoteToken` quoted values on
+whitespace/quotes but passed control characters raw: a flag value
+containing a literal newline (`--data-dir`, `--config`, payout flags —
+reachable from CLI, env, or a poisoned config file) broke out of the
+systemd `ExecStart=`/`ReadWritePaths=` lines into a new unit directive —
+e.g. `\nProtectHome=false` silently removed the sandbox, or
+`ExecStartPost=` ran an arbitrary command. Now any rune < 0x20 or 0x7f
+triggers `%q` quoting, which escapes it to `\\n` inside the token.
+launchd was already safe (argv slice + XML escape); Windows sc.exe
+binPath= shares `serviceArgs` so it inherits the fix. Same for the
+`%q`-inside-quotes caveat: systemd does not unescape Go `\uXXXX`, so a
+path mixing spaces with non-printable bytes quotes correctly for the
+file but resolves differently — recorded, not exploitable.
+
+**Daemon surface audit [AUDITED — hardened].** Verified already-clean:
+launchd XML escaping (`xmlEscape` covers the five specials),
+LaunchAgent log path moved off world-readable `/tmp` to
+`~/Library/Logs`, `ProtectHome=read-only` + `ReadWritePaths` carve-out,
+`NoNewPrivileges`, `PrivateTmp`, user-scope units (no root), Windows
+`binPath=` quoting.
