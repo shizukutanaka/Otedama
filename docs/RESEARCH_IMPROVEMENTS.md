@@ -962,6 +962,32 @@ RestartSec=10s, hardening directives) match `daemon/service.go`'s
 generated unit; solo-operations.md's goreleaser excerpt is illustrative
 and its cosign/SBOM steps do exist (superset in the real file).
 
+## Session 351 — handshake-error sanitization + surfaced channel rejections
+
+**SetupConnectionError injection [FIXED].** The pool's error string was
+concatenated raw into `fatalError` and logged via `session ended: %v` —
+the same escape/newline injection class as the reject reasons. Now
+`%q`-quoted, which escapes control bytes. The same treatment was
+applied to `OpenMiningChannelError`: its reason string was previously
+dropped entirely ("channel open failed" with no detail) — it now
+surfaces the pool's reason, quoted, and classifies the rejection as
+fatal (consistent with a refused setup — failover to the next pool
+rather than a same-pool retry).
+
+## Session 295 — publish V2 share-target difficulty + starvation warn (re-delivers closed #395)
+
+**Finding [OBSERVED — code-verified].** `publishDifficulty` ran only in the
+V1 stats tick: V2 sessions never updated `otedama_pool_difficulty` and never
+emitted the starvation warn — the V1/V2 observability paths were asymmetric.
+
+**Fix [OBSERVED].** `miner.DifficultyFromTarget` converts the V2 share target
+(a raw U256 from OpenMiningChannelSuccess/SetTarget) into a Stratum
+difficulty (diff1Target / target; zero target → +Inf). The V2 stats tick
+publishes it and runs the same >3600s starvation tripwire as V1.
+
+**Tests [OBSERVED].** `DifficultyFromTarget` unit table (diff1 → 1.0,
+halving, zero → +Inf); V2 stats tick publishes; warn fires once per episode.
+
 ## Session 390 — wallet temp-file sweep + save() failure-path tests
 
 [FIXED — session 390] **Stale wallet temp files swept at startup** (`internal/lightning/wallet.go`): `save()`'s atomic write (CreateTemp → write → fsync → chmod → rename) leaves a `.wallet-*.tmp` file behind if the process is killed mid-write or a late step fails. Nothing ever removed them, so every failed save accumulated a permanent ciphertext fragment in the data dir — confusing operators and backup tooling. `sweepStaleTempFiles` runs once in `NewWalletManager` after `MkdirAll` and removes only files older than `staleTempMaxAge` (1 min): a live save holds its tmp for milliseconds, so the age gate both guarantees the file is abandoned and prevents unlinking a temp file mid-write in a second process sharing the data dir. Best-effort — a sweep error never blocks startup. Changes in `internal/lightning` are CODEOWNERS-reviewed per repo policy.
