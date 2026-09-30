@@ -940,6 +940,12 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 394 — bounded --log-file growth
+
+[FIXED — session 394] **Log-file rotation** (`cmd/otedama/logfile.go`): `--log-file` was an unbounded `O_APPEND` writer — a miner left running for months grew its audit log without limit, and no rotation existed (not in KNOWN_LIMITATIONS either). `cappedLogFile` rotates at 32 MiB to a single `path.old` backup (total ≤ ~64 MiB), preserves the 0600 mode, appends across restarts, and on a failed rotate falls back to the existing file rather than dropping writes. Tests: rotation at cap, total-disk bound, single-backup invariant, append-reopen, mode 0600 — race clean.
+
+[AUDITED — clean] Remaining low-coverage spots verified benign: `config.DefaultDataDir` (per-OS branches), `miner.HasWork` (trivial exported getter), `doctor.checkHardware` (Linux sysfs path is darwin-skipped), `lightning save()` (covered by open #501).
+
 ## Session 321 — count pool-reported batch accepts (re-delivers closed #386/#400/#410)
 
 **Finding [OBSERVED — code-verified].** `SubmitSharesSuccess` credited

@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 394)
+
+- `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
+
 ### Fixed (session 321 — SV2 バッチ受理数の正しい計上)
 
 **問題.** `SubmitSharesSuccess` の受理を常に +1 で数えていた——
