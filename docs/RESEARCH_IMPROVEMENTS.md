@@ -940,6 +940,17 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正
+
+**Sweep.** `docs/SUSTAINABILITY.md`（193行）全文精読 — 10年戦略書の「実装状況」欄を go.mod・`.goreleaser.yaml`・`internal/poolproto/`・`.github/workflows/`・ルートファイル群と照合。
+
+**発見（3件訂正、全て「実装済み」の過剰/陳腐申告）。**
+- §2「`internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ」→ 陳腐: `stratumv1/`・`stratumv2/` 両 dialer が実在し V1 セッションは engine で稼働中（session 482 の ROADMAP 訂正と同ドリフト）。
+- §5「SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み」→ 虚偽: Dependabot のみ実装済み。全 `uses:` はタグ/ブランチ参照で SHA pin ゼロ、`release.yml` は goreleaser/cosign 未呼出で `signs:` は dead config（session 479-480,488-489 と同クラス）。
+- §10「SECURITY.md と LEGAL.md は v3.1.0 スコープ」→ 半陳腐: SECURITY.md は作成済み（残る v3.1.0 項目は LEGAL.md のみ）。
+
+**検証済み・変更なし。** §1 godebug 3 knob・go.mod/toolchain 記述、§3 subsidy 式・witness dispatch、§4 btccrypto 抽象化済み、§6 MAINTAINERS/GOVERNANCE/Dependabot 存在、§7 metrics+http-addr 実装済み、§8 goreleaser matrix、§9 ファズ2件実在（FuzzDecodeHeader/FuzzDecoder_ReadFrame）、§10 Apache+DCO+AI clause 実在 — 全て一致。「CI で 60秒 fuzz」等は実装状況でなく判断（将来計画）欄のため保留。
+
 ## Session 491 — docs/KNOWN_LIMITATIONS.md 再検証 clean + docs/TROUBLESHOOTING.md の phantom 2件を訂正
 
 **Sweep.** `docs/KNOWN_LIMITATIONS.md`（746行・帳簿本体）の未解決項目を全数再照合 + `docs/TROUBLESHOOTING.md`（228行）の非フラグ節を初全文精読。

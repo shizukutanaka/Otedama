@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
+
+* §2・§5 の実装状況は master 側で同内容の訂正が先に着地済みのため重複追記せず。
+* §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
+
 ### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
 
 * 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
