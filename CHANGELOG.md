@@ -20,6 +20,16 @@ BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 
 decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
 エコシステム不変（SRI v1.12.0）。
 
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
 ### 修正 (session 408)
 
 MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
