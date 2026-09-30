@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 555 — recorded audit-ledger items re-verified as deliberate
+
+- `shortenURL` returning the over-budget original when maxLen<4
+  is a *test-pinned* design choice (formatters_test.go:81 — "return
+  the original rather than panic"), and unreachable in practice:
+  the only caller floors urlBudget at 8. Deliberate, not a defect.
+- The `metricKey` `,`/`=` collision recorded in session 519 stays
+  unreachable: no producer emits those bytes in a label name
+  (isValidLabelName rejects both anyway at registration).
+- Exposition label values and HELP text are escaped
+  (`escapeLabel` handles `\`, `"`, newline; `escapeHelp` handles
+  `\`, newline) — the earlier "unescaped label injection" axis is
+  also clean.
