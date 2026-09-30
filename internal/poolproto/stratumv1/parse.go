@@ -53,9 +53,11 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		return poolproto.Job{}, err
 	}
 	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — the session folds
-	// these into the job's MerkleRoot (see completeV1Job). Malformed hex
-	// degrades to empty parts, which completeV1Job treats as "pool-side
-	// merkle" (legacy pools that precompute it).
+	// these into the job's MerkleRoot (see completeV1Job). V1 notify has
+	// no pool-supplied merkle field, so malformed hex is fatal: an empty
+	// coinb or dropped branch yields a wrong root and every share fails
+	// self-verification — silent wasted work. (The "pool-side merkle"
+	// path on poolproto.Job is the V2 NewMiningJob wire field, not V1.)
 	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -89,16 +91,21 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	if b, err := hex.DecodeString(coinb1Hex); err == nil {
-		job.Coinb1 = b
+	b, err := hex.DecodeString(coinb1Hex)
+	if err != nil || len(b) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb1: malformed or empty")
 	}
-	if b, err := hex.DecodeString(coinb2Hex); err == nil {
-		job.Coinb2 = b
+	job.Coinb1 = b
+	if b, err = hex.DecodeString(coinb2Hex); err != nil || len(b) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb2: malformed or empty")
 	}
+	job.Coinb2 = b
 	for _, h := range merkleBranchHexs {
-		if b, err := hex.DecodeString(h); err == nil && len(b) == 32 {
-			job.MerkleBranch = append(job.MerkleBranch, b)
+		b, err := hex.DecodeString(h)
+		if err != nil || len(b) != 32 {
+			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch: malformed or wrong length")
 		}
+		job.MerkleBranch = append(job.MerkleBranch, b)
 	}
 	// Header fields are required: a malformed value would zero-fill and
 	// produce a job whose every share fails self-verification — silent
