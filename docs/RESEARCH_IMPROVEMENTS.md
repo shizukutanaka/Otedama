@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 536 — extended vet analyzers: nilness + shadow
+
+`nilness` (x/tools, go1.26.8): zero findings across the whole tree —
+no impossible-nil or nil-deref paths.
+`shadow`: 13 findings, all the `if err := f(); err != nil` idiom —
+each inner `err` is scoped to the `if` and checked immediately; the
+outer `err` continues to be read afterward (wallet.go:136,
+handshake.go:243, engine/run.go:1212, stratumv1/dialer.go:67,
+stratumv2/dialer.go:121 — all verified benign, no dropped errors).
+Standard vet's `loopclosure`/`unusedresult`/`atomicalign` already
+run clean via `go vet ./...`. No action needed.
