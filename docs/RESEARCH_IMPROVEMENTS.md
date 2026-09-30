@@ -999,6 +999,22 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 *検証: go build ./...、go test ./...（全24 pkg green）、go vet クリーン、
 golangci-lint 350→65 件（残りは hugeParam/gocyclo のみ）。*
 
+## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
+
+**Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
+while keeping the connection open starves revenue identically to extreme
+difficulty — but with no rejects, no disconnect, and no metric edge. The
+clock starts at session start so a pool that never sends a first job is
+equally covered.
+
+**Fix [OBSERVED].** `jobStallWarnAfter` (10 min, var for tests) — on each
+stats tick, if `time.Since(lastJobAt) > jobStallWarnAfter` and not
+curtailed, warn once per episode (`jobStarvedWarned`), re-arming when jobs
+resume. Wired on both V1 and V2 paths.
+
+**Tests [OBSERVED].** `TestRunSession_JobStallWarnsOnce` + V1 variant —
+silent fake pool past the threshold logs exactly one warn.
+
 ## Session 304 — power-breakeven yield floor for arbitration (re-delivers closed #373)
 
 **Finding [OBSERVED — code-verified].** `power_watts` and

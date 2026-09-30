@@ -69,6 +69,12 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobStallWarnAfter is how long the engine tolerates a connected pool not
+// delivering any job before warning once per episode — a silent pool starves
+// revenue the same way extreme difficulty does, but without rejects. It is a
+// var (not const) so tests can shrink it to milliseconds.
+var jobStallWarnAfter = 10 * time.Minute
+
 // poolDialTimeout bounds a single pool dial attempt — TCP connect for
 // plaintext, connect + TLS handshake for TLS schemes. A blackholed
 // endpoint without it stalls each failover hop for the OS connect
@@ -845,6 +851,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	var hashWindow hashrateWindow
 	// Accumulate productive (actually-hashing) time for effective-uptime accounting.
 	var uptime uptimeAccountant
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
 	// Tripwire for pool-assigned difficulty starving share production.
 	var starvedWarned bool
 
@@ -974,6 +985,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				} else {
 					starvedWarned = false
 				}
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
@@ -1006,6 +1029,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
+				lastJobAt = time.Now()
 				prevLen := len(jobs)
 				jobOrder = storeBoundedJob(jobs, jobOrder, j)
 				if len(jobs) < prevLen {
@@ -1271,6 +1295,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
 	// Starvation tripwire: a pool-assigned difficulty so high that the
 	// expected share interval exceeds an hour starves income silently —
 	// no rejects, no disconnect, just nothing credited. Warn once per
@@ -1348,6 +1377,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
 				if iv := opts.m.estimatedShareIntervalSeconds.Value(); iv > 3600 {
 					if !starvedWarned {
 						starvedWarned = true
@@ -1404,6 +1445,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 			}
+			lastJobAt = time.Now()
 
 		case share, ok := <-opts.merged:
 			if !ok {

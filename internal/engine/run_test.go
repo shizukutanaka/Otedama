@@ -2927,6 +2927,93 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 }
 
+// TestRunSession_JobStallWarnsOnce exercises the silent-pool tripwire on the
+// V2 path: after the pool's one job, silence past jobStallWarnAfter must
+// produce exactly one warning per episode no matter how many ticks run.
+func TestRunSession_JobStallWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	old := jobStallWarnAfter
+	jobStallWarnAfter = 50 * time.Millisecond
+	defer func() { jobStallWarnAfter = old }()
+
+	fp := newResponsivePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	time.Sleep(200 * time.Millisecond) // several more ticks — once-per-episode is the assertion
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var stallWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "no new job") {
+			stallWarns++
+		}
+	}
+	if stallWarns == 0 {
+		t.Errorf("silent-pool warning never fired; warns=%v", warns)
+	}
+	if stallWarns > 1 {
+		t.Errorf("silent-pool warning fired %d times, want once per episode", stallWarns)
+	}
+}
+
 // TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
 // tripwire: a near-impossible share target must produce exactly one warning
 // per episode no matter how many stats ticks run.
