@@ -93,12 +93,19 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+// Difficulty must be a positive, finite float: NaN/±Inf would poison the
+// share-target computation downstream, and d <= 0 collapses the target
+// to "accept every hash" — a share-flood vector on cleartext V1.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return 0, false
 	}
-	return p[0], true
+	d := p[0]
+	if d <= 0 || math.IsNaN(d) || math.IsInf(d, 0) {
+		return 0, false
+	}
+	return d, true
 }
 
 // maxExtranonce2Size bounds the pool-supplied extranonce2_size. The value

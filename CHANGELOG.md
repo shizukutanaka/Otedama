@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 344 — 非正 difficulty の拒否)
+
+`mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に
+拒否するよう修正。従来は無検証で格納され、シェアターゲットが
+「全ハッシュ受理」に縮退して submit フラッドが可能だった
+（平文 V1 上の MitM/悪意プール）。
+
 ### Security (session 316 — extranonce2_size の境界化（平文 V1 のメモリ DoS 対策）)
 
 **問題.** `mining.subscribe`/`mining.set_extranonce` の

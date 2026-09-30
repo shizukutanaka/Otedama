@@ -162,6 +162,23 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 	}
 }
 
+func TestParseDifficulty_NonPositive(t *testing.T) {
+	// d <= 0 collapses the share target to "accept every hash" — a pool
+	// (or MitM on cleartext V1) setting it floods the submit path.
+	for _, raw := range []string{`[0]`, `[-1.5]`, `[-0.0]`, `[1e999]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) should be !ok", raw)
+		}
+	}
+	// Fractional and very small positive difficulties stay valid
+	// (ESP-Miner #1594/#1779 show real pools use them).
+	for _, raw := range []string{`[0.5]`, `[0.001]`, `[5e-324]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); !ok {
+			t.Errorf("parseDifficulty(%s) should be ok", raw)
+		}
+	}
+}
+
 // ============================================================================
 // parseSetExtranonce
 // ============================================================================
