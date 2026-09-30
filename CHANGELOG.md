@@ -22,6 +22,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### 修正 (session 409)
+
+SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
+チェックサムは config 読み込み時に実際に検証される（旧記述は
+「未検証」と誤記）、`tls_ca_file` は `stratum+v2tls://` にも適用。
+`validateBitcoinAddress`・`TLSCAFile` の古い godoc も同様に訂正。
+
+### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
+
+**問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
+超える場合、reject も切断もないまま収益が実質ゼロになる——オペレータに
+気づかれない飢餓。closed #394 の未マージ修正を master へ再デリバー。
+
+**修正.** V1 統計ティックで `estimatedShareIntervalSeconds` > 3600 のとき
+エピソードごと一度だけ warn を出し、間隔が回復したら再アームする。
+
+### 修正 (session 377)
+
+- `make fuzz` が機能していなかった問題を修正 — `go list` の出力はインポートパスであり `{}/*.go` グロブがファイルシステム上のディレクトリに一致せずループが常に空回りしていた。ファイルシステムから fuzz テストを発見し、ターゲット毎に `-fuzz=^Name$` で30秒実行するよう変更（1パッケージ複数 fuzz 関数での "matches more than one" 失敗も解消）。
+
 ### 修正 (session 426 — .gitignore の v2 遺構除去)
 
 - 存在しないツリーを対象とする8セクションを削除: `web/`（Node.js 系 —
