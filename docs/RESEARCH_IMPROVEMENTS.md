@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 319 — doctor audits wallet.dat file mode (re-delivers closed #381/#414)
+
+**Finding [OBSERVED — code-verified].** The wallet-permission audit
+checked only the containing directory; a wallet restored via scp/rsync
+or unpacked from a tarball lands 0644 inside a correctly-moded 0700
+directory, silently exposing the encrypted seed.
+
+**Fix [OBSERVED].** `doctor` now audits `wallet.dat`'s own file mode and
+warns with a `chmod 0600` remediation (Unix-only; Windows builds report
+N/A as before).
+
+**Tests [OBSERVED].** Mode-audit cases green.
+
 ## Session 358 — engine V2 handshake deadline
 
 **Live V2 handshake had no read bound [FIXED].** The engine's inline
