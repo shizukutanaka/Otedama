@@ -959,6 +959,95 @@ CATEGORY_AUDIT session-250 で「実在・低重要度・deferred」と記録さ
 マージされた場合 `knownSubcommands` への追記が必要（#529 側で対応可、
 または本 PR マージ後の一行フォローアップ）。
 
+## Session 396 — fuzz for the SV2 handshake decoders
+
+[FIXED — session 396] **Handshake-decoder fuzz** (`internal/stratum/handshake_fuzz_test.go`): `FuzzHandshakeDecoders` covers the five connection-phase decoders — the first wire bytes a pool controls after TCP accept (`SetupConnection`/`+Success`/`+Error`, `OpenMiningChannel`/`+Success`). Real `Encode()` outputs seed the corpus so mutations start past the length guards into the STR0_255/B0_255 field reads. `OpenMiningChannelSuccess` additionally asserts decode→encode→decode is stable (8.1M execs clean). With #479's steady-state decoders, every SV2 server→client message type has fuzz coverage.
+
+[AUDITED — clean] `decode→encode` for a leniently-decoded `Extranonce` >32B correctly fails strict `appendB0_32` (documented Postel asymmetry) — verified by the round-trip guard.
+
+## Session 413 — cross-reference sweep + dependabot dead key [FIXED]
+
+**CODEOWNERS sample in solo-operations.md listed nonexistent paths
+[FIXED].** §7.1's sample claimed `/internal/security/` and
+`/internal/auth/` rules — both are CLAUDE.md forbidden paths that
+don't exist and would never match anything. Replaced with the real
+`.github/CODEOWNERS` contents (lightning/btccrypto/poolproto/
+stratum-noise rules) plus a note explaining why those paths are
+absent.
+
+**Dead Dependabot key removed [FIXED].** `.github/dependabot.yml`'s
+github-actions section had an `automerge: [dependency-type: direct]`
+block — `automerge` is not a Dependabot option; GitHub silently
+ignores unknown keys, so the config implied auto-merge that never
+happened. Replaced with a comment pointing at the real mechanism
+(repo auto-merge + `gh pr merge --auto` / merge queue).
+
+**§-number cross-reference audit — clean:** every
+`KNOWN_LIMITATIONS §N` reference in code/docs resolves correctly,
+including the resolved entries (all carry "resolved session NNN"
+annotations); `runSessionV1` V1-via-poolproto vs V2-inline split
+matches §3's resolution wording; DEPLOYMENT.md command/flag/path
+references all exist; README badges/links valid.
+
+## Session 415 — Lint-debt cleanup: 350 → 65 findings [LINT]
+
+**動機.** `.golangci.yml` は errcheck・errorlint・gosec・gocritic・misspell
+(locale: US)・gofumpt・prealloc・goconst・unparam・dogsled・nilerr 等を必須と
+明記しているが、CI の Lint ジョブは setup 段階で常に失敗しており債務が不可視
+だった。手元で golangci-lint v1.64.8 を実行すると ~350 件。このセッションで
+機械的・意味的修正を一括適用した。
+
+**適用した修正（全てリポジトリ自身の lint 設定が要求する規則）.**
+
+- **gofumpt -extra（21ファイル）**: `0600`→`0o600` 8進リテラル、var グループ化、
+  composite literal の整形。
+- **misspell（locale US、~140件）**: コメント・godoc の英英式綴りを米式へ
+  （sanitises→sanitizes、recognises→recognizes、behaviour→behavior 等）。
+  i18n メッセージカタログと BIP-39 英語ワードリストは**除外** — カタログは
+  非英語文字列を破壊し、ワードリストの `artefact` は正規データ（SHA-256 の
+  init 時整合チェックが実際に検出した）。`english_wordlist.go` を misspell
+  対象から exclude-rules で恒久的に除外。
+- **errorlint**: `err == flag.ErrHelp` / `err == io.EOF` / `err != context.Canceled`
+  の等価比較を `errors.Is` へ（cmd/otedama ×4、configfile、coverage_test、
+  metrics_test、noise_test 群）。`isFatal` の型アサートを `errors.As` へ —
+  **これは意味変更を伴う**: ラップされた fatalError が従来「非 fatal＝無限再試行」
+  だったのを正しく fatal 判定へ（テストが将来の移行を明記していたため期待値を更新）。
+  `fmt.Errorf("%w: %v", a, b)` → 複数 `%w`。
+- **unparam**: `parseReconnect` の常に true の ok 戻り値を除去、`pruneStaleStreams`
+  の冗長 ttl パラメータを除去（呼び出し側・テスト3箇所を追従）。
+- **unused**: `remoteStatic` フィールド（noise.go）・テスト専用 `parseFloat` を削除。
+- **prealloc**: 8箇所のスライスに容量ヒント（arbitration candidates、setup workers、
+  metrics entries 等）。
+- **goconst**: 本番側の繰り返しリテラルを定数化（`helpFlag`/`displayDefault`、
+  `logLevelInfo`/`logFormatText`、daemon/doctor の `goosLinux` 等）。テスト内
+  リテラルは .golangci.yml 既存の除外方針どおり据え置き。
+- **gocritic（機械的なもの）**: 空の else/fallthrough 除去、unnecessaryDefer
+  （return 直前の defer → 直接呼出）、builtinShadow（`cap` パラメータ）、
+  stringXbytes、emptyStringTest（`len(name)==0`→`name==""`）、appendAssign、
+  ifElseChain→switch（wallet.go）、httpNoBody、emptyFallthrough。
+- **dogsled**: 3連ブランク代入を `_ = ferr` パターンへ。
+- **SA9003**: 空の許容ブランチを `t.Log`/コメントで明示。
+- **bodyclose**: テストの `http.Get` レスポンスボディを Close。
+- **gosec G306**: systemd unit / launchd plist の 0644 → 0600（serviceArgs を
+  埋め込むため厳格化が安全側）。
+- **gosec G115 ×18**: 全サイトを個別検証し、有界変換（5/8ビット群、BIP-39 チェック
+  サム bit、nBits 指数、maxNoiseFrame 検査済み ciphertext 長等）に根拠コメント付き
+  `//nolint:gosec` を付与。uintID は負値でも unmatched key 化するのみで安全。
+- **sprintfQuotedString**: `sc.exe` の `"%s"` と Prometheus ラベル `"%s"` は %q の
+  Go エスケープで意味が変わるため `//nolint:gocritic` と根拠を記録。
+
+**意図的に残した判定（65件）.**
+- **hugeParam ×53**: `Decide(in Input)` 等の値渡しは純粋関数の意図的設計で、
+  ポインタ化はシグネチャ・全呼出し・テストを巻き込む。単独 PR での判断が適切。
+- **gocyclo ×12**: chooseForDevice、ResolveWithOrigins、run 系等の分解は
+  振る舞いリスクを伴うリファクタ — 個別対応。
+
+**残課題.** CI の Lint ジョブ自体が setup（Go バージョン固定）で壊れており、
+債務の可視化には workflow 修正が別途必要。
+
+*検証: go build ./...、go test ./...（全24 pkg green）、go vet クリーン、
+golangci-lint 350→65 件（残りは hugeParam/gocyclo のみ）。*
+
 ## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
 
 **Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
