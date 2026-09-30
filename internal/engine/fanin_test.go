@@ -77,7 +77,7 @@ func TestFanIn_ClosesOutputWhenAllInputsClosed(t *testing.T) {
 	}
 }
 
-// TestFanIn_RespectsContextCancellation verifies that cancelling ctx
+// TestFanIn_RespectsContextCancellation verifies that canceling ctx
 // stops the fan-in goroutines even if inputs never close.
 func TestFanIn_RespectsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
