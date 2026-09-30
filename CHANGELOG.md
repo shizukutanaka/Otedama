@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 523 — test-hygiene lint findings)
+
+- Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
+  (unused linter finding).
+- Closed the response body on the success path of the post-shutdown
+  probe in `internal/httpserver/server_test.go` (bodyclose finding).
+- Verified the remaining golangci-lint output maps to the open #526–#528
+  refactor family or documented false positives; govulncheck remains
+  zero-reachable under go1.26.8.
+
 ### テスト (session 367 — SV2 メッセージ decode fuzz)
 
 SV2 型付きメッセージデコーダ6種と STR0_255/B0_255/U16/U32 ワイヤ
