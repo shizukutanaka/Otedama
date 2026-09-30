@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Performance (session 543 — sync.Pool wiring)
+
+- `internal/stratum/noise.go`: hkdf2/hkdf3 now call the pooled
+  `hmacSHA256Pooled` — eliminates ~12 discarded sha256 hasher
+  allocations per Noise handshake (reconnect-heavy fleets). The
+  unpooled `hmacSHA256` remains the test reference.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
