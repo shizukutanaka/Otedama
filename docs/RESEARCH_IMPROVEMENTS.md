@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 534 — escape analysis: hot path clean
+
+`go build -gcflags='-m'` on `internal/miner`: every heap escape is on
+a cold path — `diff1Target` (package-init big.Int), error-string
+literals in `NBitsFromTarget`/`TargetFromDifficulty` (invalid-input
+paths only), `&Worker{}`/`wg` (once per construction/Start).
+`TargetFromDifficulty` allocates `big.Float` per call but runs once
+per `mining.set_difficulty`, not per hash. The grind loop itself is
+allocation-free, consistent with `BenchmarkHashHeader` 0 allocs/op.
+No action needed; recorded as an audit verdict.
