@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 575 — slice-growth surface
+
+- 94 `append` sites; **zero in the grind/hot loop**
+  (`internal/miner` and `internal/stratum` frame encode are
+  append-free per hash — the 0-alloc benchmark, sessions 529/545).
+  All growth is on cold, bounded-size paths: message encoding
+  (≤~1KB frames), config validation, device discovery, doctor
+  checks, metrics snapshot — where capacity hints would only add
+  noise. Carmack's profile-first rule: no unprofiled pre-sizing.
