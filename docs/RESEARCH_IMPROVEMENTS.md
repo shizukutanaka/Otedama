@@ -946,6 +946,36 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 400 — provider liveness gap (surfaced) + publish() audit
+
+**Mining yield quoted while pool is down [🟡 SURFACED — needs design
+decision, not a silent fix].** `MiningProvider.publish` emits full
+expected yield for every SHA256d device regardless of pool session
+state — there is no connectivity input on the provider. During a
+reconnect gap or total failover exhaustion, arbitration keeps devices
+assigned to "mining" at positive yield rather than re-routing them to
+AI/compute providers.
+
+No electricity is wasted — workers whose job queue is empty sit in the
+10 ms idle loop and burn nothing — so this is an opportunity-cost gap
+(AI yield forgone during long outages), not a power bug. The fix is a
+design choice: (a) `poolConnectionState` gauge already tracks
+connectivity, so a `HealthyFunc`/`ConnectedFunc` on MiningProvider
+could zero the mining yield while disconnected; (b) hysteresis already
+suppresses thrash for short outages; (c) product rule question — should
+a disconnected pool keep devices "reserved" for mining anyway (faster
+resume, no AI churn)? Recording per CLAUDE.md's requirement→design
+workflow rather than coding it unilaterally.
+
+**`publish()` math [AUDITED — correct].** sats/sec = deviceHashrate /
+networkHashrate × blockReward / 600 s × 1e8, ×0.99 for pool fee;
+confidence 0.95 fresh rate / 0.7 stale; `rate <= 0` falls back to a
+documented 95 k USD estimate. BTC/USD intentionally does not scale the
+sats-denominated yield (`_ = rate` is a deliberate placeholder for a
+future USD display, flagged in the comment). Live `HashrateFunc` beats
+static per-family estimate when > 0; static constants documented in
+KNOWN_LIMITATIONS §7.
+
 ## Session 401 — seedstore.go audit; per-file sweep complete
 
 **`internal/lightning/seedstore.go` [AUDITED — clean]** — the last file
