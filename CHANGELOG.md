@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 390)
+
+- save() のクラッシュ/失敗で残った `.wallet-*.tmp` がデータディレクトリに永久蓄積していた問題を修正 — NewWalletManager 起動時に mtime が1分超の古い temp ファイルのみ掃除（インフライトの save() や他プロセスの新規 tmp は保全、best-effort で起動を阻害しない）。併せて `save()` の失敗経路（暗号化エラー・書き込み不可ディレクトリ・tmp 残留なし）のテストを追加。
+
 ### Added (session 320 — ライブ・ネットワークハッシュレートフィード)
 
 **問題.** マイニング収益推定はコンパイル時定数（1e21 H/s）を使っていた
