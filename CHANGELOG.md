@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * `BenchmarkDecoder_ReadFrame` の再現コマンド → 関数非実在のため、その throughput 表は未検証の推定値と明示。
 * 「Go 1.22 で計測」の表記に、現 master は Go ≥1.24 必須（`godebug tlsmlkem`）の注意書きを追加。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
