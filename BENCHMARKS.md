@@ -32,6 +32,7 @@ mining-related performance.
 |------------------------|------------------|--------------------------------|
 | AMD Ryzen 9 7950X (1 thread) | ~2.5 MH/s  | AES-NI + SHA-NI auto-used      |
 | Apple M2 Pro (1 thread)      | ~1.9 MH/s  | ARM SHA extensions             |
+| Apple M4 (1 thread)          | ~8.9 MH/s  | ARM SHA extensions; measured ~112 ns/op under go1.27.1 on a virtualized M4 (session 529) |
 | Intel i7-12700K (1 thread)   | ~2.1 MH/s  | AVX2 + SHA-NI                  |
 | Raspberry Pi 5 (1 thread)    | ~0.3 MH/s  | No SHA extensions in stdlib    |
 
@@ -66,7 +67,7 @@ Scaling is near-linear because SHA-256d is embarrassingly parallel
 with per-thread nonce spaces. Sub-linear scaling above core count
 reflects hyperthread contention on L2/L3 caches, not Otedama overhead.
 
-## Stratum V2 frame decode (fuzz-verified)
+## Stratum V2 frame decode
 
 The framing layer must process frames as fast as the network can
 deliver them. A slow decoder becomes a DoS vector.
@@ -85,10 +86,16 @@ rule and should be replaced once a decoder benchmark lands). The
 statement that the decoder "is fuzzed continuously in CI" was also
 incorrect — CI has no fuzz job (`make fuzz` is a local target);
 `FuzzDecoder_ReadFrame` exists but runs only on local invocations.
+*(Unverified estimates — no decode benchmark exists in the tree yet;
+the figures above are targets, not measurements. `FuzzDecoder_ReadFrame`
+exists and passes under `go test -fuzz`, but no CI job runs it — see
+KNOWN_LIMITATIONS §13.)*
 *Numbers predate the committed benchmark set — no `BenchmarkDecoder_*`
 exists in the tree yet, so these figures are currently indicative rather
 than reproducible.*
 
+**Correctness:** the decoder is covered by `FuzzDecoder_ReadFrame`
+(run locally — no continuous CI fuzzing today).
 **Correctness:** `FuzzDecoder_ReadFrame` covers the decode boundary; run
 it locally (`go test -fuzz=FuzzDecoder_ReadFrame ./internal/stratum/`) —
 no fuzz job runs in CI yet.
