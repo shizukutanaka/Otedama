@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 519 — rule-3 duplication ledger)
+
+- Recorded two candidates in `docs/CATEGORY_AUDIT.md` (not fixed —
+  consolidation is a contract decision): `tui` truncator family
+  (`truncateToBudget` hard-cuts vs `shortenURL` returns over-limit
+  intact at budget <4, Issue #3 class) and `metrics.metricKey`
+  label-value `,`/`=` collision (latent; unreachable from today's
+  producers but live on the API surface).
+
 ### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
 
 - Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
