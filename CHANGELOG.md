@@ -16,16 +16,6 @@ SV2 型付きメッセージデコーダ6種と STR0_255/B0_255/U16/U32 ワイ�
 プリミティブに fuzz カバレッジを追加（270万 exec クリーン）。
 短いペイロードの境界契約を単体テストでも固定。
 
-### 修正 (session 416 — lint 債務フォローアップ: hugeParam クラス全滅)
-
-- 内部 API の大きい構造体 (80–200B: `Config`, `Stats`, `Job`, `Input`,
-  `Credentials`, `SetupConnection` 等) を値渡しからポインタ渡しへ一括変換 —
-  gocritic `hugeParam` 53件全て解消。ホットパスの `HashHeader`(nonce 毎),
-  `Decide`, `sendQuote`, TUI 描画経路を含む。
-- チャネル (`jobsCh`, `updateCh`, `quoteCh`) は意図的に値意味論を維持 —
-  送受境界でのみポインタ化し、プロデューサ/コンシューマ間のエイリアシングを回避。
-- `Decide` に nil `Input` ガードを追加。
-
 ### 修正 (session 409)
 
 SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
