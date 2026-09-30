@@ -940,6 +940,38 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 375 — release-supply-chain claims audit + install.sh fix
+
+[FETCHED] Ecosystem: SRI v1.12.0 (2026-09-17, freedom.tech release notes) —
+deep hardening pass on channels_sv2, codec/framing refactor, **bounded job
+storage** (same class as Otedama's open PR #429), consensus-defect coinbase
+fixes, BIP323 adaptations, AES-256-GCM removed from noise_sv2 leaving
+ChaCha20-Poly1305 the sole cipher. ESP-Miner v2.15.3 (2026-09-20 prerelease;
+v2.15.2 added BM1372/BM1373). No Otedama action — the coinbase defects live
+in the pool-side reconstruction Otedama deliberately does not perform (V1
+coinbase handling is the open #391/#417 thread).
+
+[FIXED] `install.sh` could not download any release the repo actually
+produces: it hardcoded the goreleaser asset name
+(`otedama_<ver>_<os>_<arch>.tar.gz`) while release.yml emits
+`otedama-<os>-<arch>.tar.gz` and ci-cd.yml emits a bare binary. The
+checksums download was a hard `die`, yet release.yml never publishes
+checksums. Now tries all three asset names, accepts either checksum file
+name, still refuses (dies) when none is published unless
+--skip-verify is given, and installs bare binaries
+without tar extraction. `bash -n` clean.
+
+[FIXED] Documentation overclaimed supply-chain mitigations that do not
+exist on master: THREAT_MODEL asserted cosign-signed release artifacts,
+`-trimpath` reproducible builds, and SHA-pinned Actions — release.yml has
+no cosign step, no `-trimpath`, embeds `BuildTime` (inherently
+non-reproducible), and all 8 workflows use `@vN` tags (0/168 `uses:`
+SHA-pinned). AUDIT_CHECKLIST rows 11/13/17/22 corrected to match reality
+(including the session-373 scrypt N=2^17 and seedstore.go fixes, which
+returned to master when PR #485 was closed unmerged). The checklist's own
+rule — a failing row means "open a security advisory" — is served better
+by marking rows as gaps than by claiming mitigations that are absent.
+
 ## Session 307 — per-session submit rate cap stops difficulty→0 share floods (re-delivers closed #402)
 
 **Finding [OBSERVED — code-verified].** A pool (or MitM on cleartext V1)
