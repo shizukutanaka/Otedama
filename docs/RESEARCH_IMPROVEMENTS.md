@@ -953,7 +953,7 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 THREAT_MODEL contained zero FIPS content. Added a Posture notes
 section to THREAT_MODEL carrying the actual rationale (Noise NX's
 ChaCha20-Poly1305 is not FIPS-listed; wallet-at-rest AES-256-GCM is;
-`fips140=on` would break pool connections).
+`fips140=on` does not make that transport FIPS-validated).
 
 **Audited — clean:** GODEBUG_NOTES knob inventory matches go.mod's
 godebug block exactly (panicnil=0/randautoseed=1/tlsmlkem=1), its
