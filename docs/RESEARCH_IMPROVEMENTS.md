@@ -950,6 +950,26 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **検証済み・変更なし。** Dockerfile: `golang:1.24-alpine`（実効要件と一致）・ldflags が正しい `internal/version.{Version,Commit,BuildDate}` シンボル（release.yml の間違った `main.*` と対照的）・NOTICE+LICENSE 同梱・nonroot uid 65532・`VOLUME /var/lib/otedama`・`EXPOSE 0`・`CMD ["run","--help"]` — 全て正確（ci.yml docker-verify の失敗は §13 記録済みのジョブ側欠陥で Dockerfile 側の問題ではない）。`.dockerignore` 非実在（COPY . . が .git 等を context に含めるが動作上無害 — open #530 担当域）。
 
+## Session 379 — reconnect-loop + docs/config-surface audit
+
+[FIXED] `runReconnectLoop` never reset its exponential backoff after a
+successful session: `backoff` doubled on every failure and was capped at
+64s, but a session that connected, mined for hours, then dropped still
+waited out whatever the backoff had grown to from earlier failed hops.
+`connectedThisAttempt` (set from `onConnected`) now resets it to
+`reconnectBackoffInitial`, placed before the failover branches and log
+lines so both the immediate-retry path and the "reconnecting in %v"
+message report the post-reset delay. New `dropAfterHandshakePool` fake +
+`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` verify the
+delay stays at 1s across repeated established-then-dropped sessions.
+
+[AUDITED — clean] `config.yaml.example` documents every Config field
+(all 17 yaml keys incl. pool sub-fields `tls_ca_file`, `payout_scheme`);
+Dockerfile is minimal (distroless nonroot, CGO_ENABLED=0, -trimpath,
+ldflags version injection, /LICENSE + /NOTICE copied, VOLUME /var/lib/
+otedama matching docs/DEPLOYMENT.md, EXPOSE 0); cmd wrappers
+(version/completion/doctor/main/service) are thin and correct.
+
 ## Session 399 — cross-worker nonce-space partition
 
 **Duplicate grinding across devices [FIXED].** Every `miner.Worker`
