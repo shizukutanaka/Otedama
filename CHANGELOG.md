@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
+
+- **Core-path audit surface complete.** `internal/arbitration`,
+  `internal/logger`, and `internal/version` read end-to-end, finishing
+  the non-test sweep of the core packages (engine, miner, hal,
+  arbitration, logger, version) started in session 509. Verdicts:
+  arbitration `Decide` is deterministic (sorted device order, duplicate-
+  ID rejection, policy-space hysteresis, full-device assignment
+  coverage); logger's default singleton is race-free via
+  `atomic.Pointer` with nil-safe `IntoContext`/`SetDefault`; version's
+  ldflags layout matches the documented defaults. The only residual
+  class — non-finite arbitration inputs — is already owned by open PRs
+  #437 and #443.
+
 ### Documentation & audit (session 514 — provider/daemon read; toolchain current)
 
 - **`internal/provider` + `internal/daemon` read end-to-end.** Verdicts:
