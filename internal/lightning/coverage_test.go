@@ -101,8 +101,10 @@ func TestEntropyToMnemonic_InvalidEntropy(t *testing.T) {
 // ============================================================================
 
 func TestMnemonicToEntropy_NilWordList(t *testing.T) {
-	m := Mnemonic{"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-		"abandon", "abandon", "abandon", "abandon", "abandon", "about"}
+	m := Mnemonic{
+		"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+		"abandon", "abandon", "abandon", "abandon", "abandon", "about",
+	}
 	if _, err := MnemonicToEntropy(m, nil); err == nil {
 		t.Error("MnemonicToEntropy: expected error for nil wordlist")
 	}
@@ -172,7 +174,7 @@ func TestNewWalletManager_MkdirAllError(t *testing.T) {
 	home := t.TempDir()
 	// Create a FILE where a sub-directory must be created; MkdirAll fails.
 	blockingFile := filepath.Join(home, "sub")
-	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(blockingFile, []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	wl, _ := NewEnglishWordList()
@@ -256,7 +258,7 @@ func TestSave_RenameError_TargetIsDirectory(t *testing.T) {
 
 	// Place a directory at the wallet.dat location so os.Rename fails.
 	finalPath := filepath.Join(dir, walletFile)
-	if err := os.MkdirAll(finalPath, 0700); err != nil {
+	if err := os.MkdirAll(finalPath, 0o700); err != nil {
 		t.Fatalf("setup: mkdir at wallet.dat location: %v", err)
 	}
 
@@ -344,7 +346,7 @@ func TestChangePassphrase_UnmarshalError(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	// Write garbage shorter than the 29-byte minimum so UnmarshalEncryptedSeed fails.
-	if err := os.WriteFile(filepath.Join(dir, walletFile), []byte("bad"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFile), []byte("bad"), 0o600); err != nil {
 		t.Fatalf("corrupt: %v", err)
 	}
 	if err := wm.ChangePassphrase("pass", "new", nil); err == nil {
