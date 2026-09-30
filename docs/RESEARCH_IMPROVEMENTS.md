@@ -940,6 +940,24 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 337 — SV2 channel_id validation + protocol-surface audit
+
+**Foreign-channel frames [FIXED].** The live V2 loop processed
+channel-scoped frames without checking `channel_id` against the
+channel opened in handshake. A confused or hostile pool could mutate
+`jobs`/prevHash/`shareTarget` via frames for a channel Otedama never
+opened. `channelIDOf` extracts the id from the five channel-scoped
+types; mismatches drop with a warn. Non-channel frames pass through.
+**Message surface [AUDITED — clean].** Standard-channel message set is
+complete (SetupConnection*/OpenMiningChannel*/NewMiningJob/
+SetNewPrevHash/SetTarget/SubmitShares*); extended-channel and unknown
+types land in `Message.Unknown` without error. `Decoder.MaxFrameSize`
+bounds every frame at 16 MiB — matching SRI — so a peer announcing a
+max-U24 payload cannot force an oversized allocation. The
+`internal/poolproto/stratumv2` adapter's `channel_id`/pending-map gaps
+are moot: it is not the live V2 path (its own comment + KNOWN_LIMITATIONS
+§3), and pending-map bounding ships separately in #429.
+
 ## Session 317 — bound outstanding V2 job maps (re-delivers closed #385/#397/#412)
 
 **Finding [OBSERVED — code-verified].** Two SV2 maps were unbounded: the
