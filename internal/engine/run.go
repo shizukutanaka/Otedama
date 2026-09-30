@@ -1287,6 +1287,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 		case job, ok := <-sess.Jobs():
 			if !ok {
+				// A pool that sent client.reconnect/mining.reconnect may
+				// have asked for a pause before we reconnect; honor the
+				// (already-clamped) delay. Capped by ReconnectWait itself
+				// and cancellable via ctx, so shutdown stays instant.
+				if rw, isWaiter := sess.(poolproto.ReconnectWaiter); isWaiter {
+					if w := rw.ReconnectWait(); w > 0 {
+						opts.log("info", fmt.Sprintf("engine: pool requested %s reconnect delay", w))
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-time.After(w):
+						}
+					}
+				}
 				return fmt.Errorf("engine: pool closed connection")
 			}
 			// While curtailed, keep workers idle and ignore the job (see the
