@@ -940,6 +940,19 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 543 — sync.Pool wiring: Noise handshake hashers
+
+`noise_pool.go` shipped a correctness-tested `hmacSHA256Pooled`
+that the file itself documented as "not yet wired" — hkdf2/hkdf3
+still called the unpooled `hmacSHA256`, allocating ~12 hasher
+objects per handshake. Wired hkdf2 (3 calls) and hkdf3 (4 calls)
+to the pooled variant; the unpooled `hmacSHA256` remains as the
+test reference implementation. Equivalence is covered by the
+existing pooled-vs-reference test matrix; `go test -race
+./internal/stratum/` green. Frame-codec `make([]byte)` calls are
+per-message (share/notify rate), not per-hash — pooling there
+would not pay; recorded as reviewed-and-skipped.
+
 ## Session 398 — SV2 encode-side round-trip fuzz
 
 **`FuzzMessageRoundTrip` [FIXED — coverage gap].** The six steady-state
