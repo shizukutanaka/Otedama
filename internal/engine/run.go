@@ -857,8 +857,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			// Channel-scoped frames must name our channel. A frame
 			// addressed to a different channel would corrupt job,
-			// prev-hash, or share-target state.
-			if cid, ok := channelIDOf(pm.msg); ok && cid != chanID {
+			// prev-hash, or share-target state. SetNewPrevHash is
+			// exempt: SV2 lets the pool address it to the group
+			// channel our standard channel belongs to, whose ID the
+			// handshake does not expose.
+			if cid, ok := channelIDOf(pm.msg); ok && cid != chanID && pm.msg.SetNewPrevHash == nil {
 				opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
 				continue
 			}
