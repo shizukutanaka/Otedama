@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 576 — environment-variable surface audit
+
+- Every `os.Getenv`/`LookupEnv` call sits in one of three
+  sanctioned places: inside the config layer's own env stage
+  (config.go:371/464), the documented `OTEDAMA_*` API surface
+  (`OTEDAMA_WALLET_PASSPHRASE`, `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`,
+  `OTEDAMA_CONFIG`), or OS-convention vars (`APPDATA`,
+  `XDG_DATA_HOME`, LANG/LC via `DetectLangFromEnv(os.Getenv)`).
+- The injectable `env`/`getenv` parameters exist precisely so
+  tests substitute a fake env map — no env reads bypass the seam.
+  Zero env leakage outside the 4-layer system.
