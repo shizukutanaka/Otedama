@@ -1177,7 +1177,7 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
 					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+					`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}()
@@ -1255,7 +1255,7 @@ func fakeV1PoolHighDiff(t *testing.T) string {
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"1",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		// Stay connected so the stats ticker keeps firing.
 		time.Sleep(10 * time.Second)
 	}()
@@ -2456,7 +2456,7 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 

@@ -138,6 +138,69 @@ func TestParseNotify_MalformedJSON(t *testing.T) {
 }
 
 // ============================================================================
+// parseNotify — malformed required fields (fail closed)
+// ============================================================================
+
+// A notify whose required fields fail to decode must be rejected:
+// a zero-filled or partially-degraded job produces shares that all
+// fail self-verification — silent wasted work. V1 has no pool-side
+// merkle path (that field exists only on the V2 NewMiningJob wire).
+func TestParseNotify_MalformedRequiredFields(t *testing.T) {
+	prev := `"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"`
+	base := func(p1, p2, p3, p4, p5, p6, p7 string) json.RawMessage {
+		return json.RawMessage(`["60",` + p1 + `,` + p2 + `,` + p3 + `,` + p4 + `,` + p5 + `,` + p6 + `,` + p7 + `,true]`)
+	}
+	cases := map[string]json.RawMessage{
+		"prevhash bad hex":      base(`"zz"`, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"prevhash short":        base(`"01"`, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb1 bad hex":        base(prev, `"zz"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb1 empty":          base(prev, `""`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb2 bad hex":        base(prev, `"01"`, `"zz"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb2 empty":          base(prev, `"01"`, `""`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"merkle bad hex":        base(prev, `"01"`, `"ff"`, `["zz"]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"merkle wrong length":   base(prev, `"01"`, `"ff"`, `["aabb"]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"version bad hex":       base(prev, `"01"`, `"ff"`, `[]`, `"gg"`, `"1d00ffff"`, `"68d36c5e"`),
+		"nbits bad hex":         base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"xx"`, `"68d36c5e"`),
+		"ntime bad hex":         base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"zz"`),
+		"ntime too wide (>32b)": base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"1ffffffff"`),
+	}
+	for name, raw := range cases {
+		if _, err := parseNotify(raw); err == nil {
+			t.Errorf("%s: expected parseNotify error, got nil", name)
+		}
+	}
+	// Fully well-formed params still parse.
+	if _, err := parseNotify(base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`)); err != nil {
+		t.Fatalf("well-formed fixture should parse: %v", err)
+	}
+}
+
+// extranonce1 must be non-empty valid hex and extranonce2_size must be
+// > 0 at both entry points — completeV1Job silently skips the job
+// otherwise (zero MerkleRoot → every share self-verifies invalid).
+func TestExtranonce_ParseBoundaries(t *testing.T) {
+	for _, raw := range []string{
+		`["zz", 4]`,   // non-hex en1
+		`["abc", 4]`,  // odd-length en1
+		`["", 4]`,     // empty en1
+		`["dead", 0]`, // en2_size 0 — completeV1Job requires sz > 0
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(raw)); ok {
+			t.Errorf("parseSetExtranonce(%s) ok=true, want false", raw)
+		}
+	}
+	for _, result := range []any{
+		[]any{[]any{}, "zz", float64(4)},       // non-hex en1
+		[]any{[]any{}, "abc", float64(4)},      // odd-length en1
+		[]any{[]any{}, "deadbeef", float64(0)}, // en2_size 0
+	} {
+		if _, _, err := parseSubscribeResult(result); err == nil {
+			t.Errorf("parseSubscribeResult(%v) err=nil, want error", result)
+		}
+	}
+}
+
+// ============================================================================
 // parseDifficulty
 // ============================================================================
 
@@ -1377,15 +1440,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"deadbeef01",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
@@ -1550,7 +1613,7 @@ func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
 		defer serverConn.Close()
 		r := bufio.NewReader(serverConn)
 		_, _ = r.ReadString('\n') // subscribe
-		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"abc",4]],"error":null}`+"\n")
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"deadbeef",4]],"error":null}`+"\n")
 		// Oops — that subscribe result is malformed (len=1), so the test below
 		// verifies that a minimal valid result still works. Let's fix it:
 		// We'll just read the authorize line but not respond (simulate immediate
@@ -2058,12 +2121,12 @@ func TestParseSetExtranonce_SizeBounds(t *testing.T) {
 		raw  string
 		want bool
 	}{
-		{`["abc", 0]`, true},
-		{`["abc", 4]`, true},
-		{`["abc", 64]`, true},
-		{`["abc", 65]`, false},
-		{`["abc", -1]`, false},
-		{`["abc", 1073741824]`, false},
+		{`["ab", 0]`, false},
+		{`["ab", 4]`, true},
+		{`["ab", 64]`, true},
+		{`["ab", 65]`, false},
+		{`["ab", -1]`, false},
+		{`["ab", 1073741824]`, false},
 	} {
 		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
 			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
@@ -2076,7 +2139,7 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		sz   float64
 		want bool
 	}{
-		{0, true},
+		{0, false},
 		{8, true},
 		{64, true},
 		{65, false},
@@ -2087,7 +2150,7 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		{-0.5, false},
 		{4.5, false},
 	} {
-		result := []any{[]any{}, "abc", tc.sz}
+		result := []any{[]any{}, "ab", tc.sz}
 		_, _, err := parseSubscribeResult(result)
 		if (err == nil) != tc.want {
 			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
