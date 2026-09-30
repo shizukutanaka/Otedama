@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
 * 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
 
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
 ### 修正 (session 399)
 
 マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
