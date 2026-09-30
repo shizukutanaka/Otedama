@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 322 — SV2 canonical reject コードの明示分類)
+
+**問題.** `rejectClass` が標準 `SubmitSharesError` コードを部分一致
+ヒューリスティックのみで処理し、`invalid-job-id`/`invalid-channel-id`
+が `hardware` に誤分類されていた（本来は stale 系）。closed
+#387/#399/#409 の未マージ修正を master へ再デリバー。
+
+**修正.** 標準コードを部分一致の前に明示分類: invalid-* → stale 系、
+`difficulty-too-low` → difficulty（従来の other から改善、
+benign-retarget 経路にも乗る）。
+
 ### 修正 (session 370 — ntime roll)
 
 nonce 空間枯渇時にヘッダ時刻をロール前進 — 同一 (header, nonce) の
