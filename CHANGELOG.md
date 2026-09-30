@@ -21,6 +21,20 @@ AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安
 Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
 報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
 
+### 修正 (session 411)
+
+GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
+しなかった問題を修正 — FIPS 140-3 の非対応理由（Noise NX の
+ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
+を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
+go.mod と完全整合を確認済み。
+
+### 修正 (session 412)
+
+SECURITY.md の非実在コマンド `otedama migrate-from-v2` への言及を
+`docs/MIGRATING-FROM-V2.md` への誘導に訂正。ADR-006/010/011・
+SECURITY.md のスコープ節は実装と整合を確認済み。
+
 ### 修正 (session 414)
 
 competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
