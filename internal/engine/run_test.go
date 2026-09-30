@@ -1625,7 +1625,22 @@ func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 		t.Fatal("precondition failed: no 24-word phrase was printed")
 	}
 
-	joined := strings.Join(logs, "\n")
+	// The fixed wallet-setup messages are constant strings that already
+	// contain BIP-39 vocabulary ("phrase" in "recovery phrase", "wallet",
+	// "created", ...): a random 24-word draw colliding with that prose is
+	// a false positive, not a leak — the messages carry no mnemonic
+	// content. Strip the static lines so only dynamic log content is
+	// scanned; a genuine leak reproduces mnemonic words in messages that
+	// interpolate them.
+	var dynamic []string
+	for _, line := range logs {
+		if line == "wallet: new wallet created — back up your recovery phrase" ||
+			strings.HasPrefix(line, "wallet: fingerprint ") {
+			continue
+		}
+		dynamic = append(dynamic, line)
+	}
+	joined := strings.Join(dynamic, "\n")
 	for _, word := range strings.Fields(phraseLine) {
 		// Match whole words only: BIP-39 words are common English and
 		// could otherwise collide with substrings of ordinary log prose.

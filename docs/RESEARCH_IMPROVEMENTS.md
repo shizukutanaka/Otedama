@@ -962,6 +962,51 @@ RestartSec=10s, hardening directives) match `daemon/service.go`'s
 generated unit; solo-operations.md's goreleaser excerpt is illustrative
 and its cosign/SBOM steps do exist (superset in the real file).
 
+## Session 372 — argv secret hygiene + residual audits
+
+**[FIXED] argv passphrase warning.** `--wallet-passphrase` /
+`--wallet-mnemonic-passphrase` place the wallet passphrase in the
+process list (`/proc/<pid>/cmdline`, `ps aux`) — readable by every
+process on the host. Docs already prefer the OTEDAMA_WALLET_*_ env
+vars (THREAT_MODEL §Information-disclosure); `run` now emits a stderr
+warning when either flag is explicitly given (fs.Visit tracking), so
+the guidance reaches operators who never read the docs. The env-var
+path and `config show`/`validate` do not warn.
+
+**Audited clean.** curtailment gate (stale/failed price holds last
+trusted state — never curtails or resumes on untrusted data);
+TargetFromNBits (negative mantissa / exp<3 / zero mantissa / >256-bit
+overflow all rejected); hashrateWindow / uptime / sats accountants
+(dt≤0, counter reset, productive gating all guarded); SV2
+SetNewPrevHash future-job activation (unknown job → workers paused).
+
+## Session 381 — re-delivery of #484 (argv secret hygiene)
+
+[FIXED — re-delivery] Cherry-picked closed-unmerged #484 (session 372)
+unchanged onto current master: `--wallet-passphrase` /
+`--wallet-mnemonic-passphrase` on argv now emit a stderr warning
+(fs.Visit-tracked, so env/config paths stay silent) pointing at the
+OTEDAMA_WALLET_*_PASSPHRASE environment variables — argv is world-
+readable via /proc/<pid>/cmdline. The session-372 audit verdicts
+(curtailment gate, TargetFromNBits edges, stats accountants, SV2
+SetNewPrevHash pause) arrive with it.
+
+## Session 393 — non-loopback HTTP listener warning
+
+[FIXED — session 393] **`--http-addr` non-loopback warning** (`cmd/otedama/run.go`): a metrics listener bound to `0.0.0.0`/`::`/LAN addresses (share counts, hashrate telemetry, `/healthz` presence) exposed itself silently — only a pprof-enabled bind was ever flagged (open PR #453). `startHTTPServer` now warns on stderr for any non-loopback bind, and names pprof profile exposure explicitly when `--pprof` is on. Supersedes #453's narrower warning (identical `isLoopbackAddr` helper, wider trigger). Tests: address table (v4/v6/hostname/bare/empty), warn-on-0.0.0.0 with and without pprof, silent-on-loopback.
+
+[AUDITED — clean] Ecosystem re-check: SRI v1.12.0 (2026-09-17) remains latest — AES-256-GCM drop, codec refactor, BIP323 adaptations confirmed unchanged since session 388; sv2-apps v0.4.0. Coverage sweep of low spots: `config.DefaultDataDir` (platform branches), `miner.HasWork` (trivial exported getter), `doctor.checkHardware` (sysfs/darwin-limited) — all verified benign or already covered by open PRs (#501 for `lightning save()`).
+
+## Session 385 — TUI terminal-width auto-detection
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 (2026-09-17) and ESP-Miner v2.15.3 (2026-09-20) remain latest — no drift since session 383. ESP-Miner 2.15.2/3 changes are firmware UX (AxeOS embedding, BM1372/73 support, WiFi reconnect storms) — nothing touching the stratum protocol surface Otedama speaks.
+
+[FIXED] **TUI rendered at a fixed 80 columns; the real terminal width was never detected** (`internal/tui`, `docs/KNOWN_LIMITATIONS.md` §15 → RESOLVED). `Dashboard.SetWidth` existed as an injection seam but no production caller used it, so every real run rendered 80 columns regardless of terminal size — on a narrower terminal each frame wrapped a row and broke the overwrite-in-place repaint model. The render loop now queries the kernel each tick: `unix.IoctlGetWinsize(fd, TIOCGWINSZ)` on Unix builds, `windows.GetConsoleScreenBufferInfo` on Windows, stub on other platforms. Per-tick querying also picks up resizes without a SIGWINCH handler. Non-terminal writers (pipes, test buffers), failed queries, and degenerate widths (<40) keep the previous value; `SetWidth` pins a width and disables detection. `golang.org/x/sys` promoted indirect→direct with rationale comment in go.mod (per CLAUDE.md dependency policy: BSD license, Go-team maintained, already in the graph via x/crypto — zero new modules).
+
+[AUDITED — clean] Closing the loop on the remaining unaudited leaf packages: `internal/logger` (atomic default pointer, nil-safe SetDefault, conservative ParseLevel), `internal/clock` (Fake/System trivial), `internal/version` (ldflags vars only), `internal/i18n` `DetectLang`/`DetectLangFromEnv` (fail-safe English fallback, POSIX precedence order), `cmd/otedama` flag parsing (help-vs-error routing, `--` handling), env-var binding (`EnvWarnings` for malformed numerics + enum validation), engine failover ordering (pool-first, address rotation only while never-connected, capped backoff, masked addresses in logs), `maskAddr` short-string safety. Every package under `internal/` + `cmd/` now has at least one recorded audit verdict across sessions.
+
+[FIXED — session 385, second commit] **Probabilistic flake in `TestSetupWallet_MnemonicNeverReachesLogger`** (`internal/engine/run_test.go`): the whole-word leak scan ran against every captured log line including the two constant wallet-setup messages that already contain BIP-39 vocabulary ("recovery phrase", "wallet", "created") — a random 24-word draw colliding with that prose false-positived. The scan now strips the known-static lines and checks only dynamic log content; a real leak still trips it. Re-delivers the applicable half of closed #371 (its `atomic.Bool` half targeted `responsivePool` fields that exist only on the in-flight #447 branch — applied there directly as a follow-up commit instead).
+
 ## Session 351 — handshake-error sanitization + surfaced channel rejections
 
 **SetupConnectionError injection [FIXED].** The pool's error string was
