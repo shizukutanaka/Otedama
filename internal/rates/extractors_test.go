@@ -186,14 +186,15 @@ func TestFetchOne_IncludesUserAgent(t *testing.T) {
 		URL:     srv.URL,
 		extract: func([]byte) (float64, error) { return 1.0, nil },
 	}
-	_, _, _ = f.fetchOne(context.Background(), src)
+	_, _, ferr := f.fetchOne(context.Background(), src)
+	_ = ferr
 
 	if gotUA == "" {
 		t.Error("fetchOne should set User-Agent header")
 	}
 	// Per implementation: "Otedama/3.0.0-alpha (non-custodial mining)"
 	if gotUA == "Go-http-client/1.1" {
-		t.Errorf("User-Agent is default Go UA %q; should be customised", gotUA)
+		t.Errorf("User-Agent is default Go UA %q; should be customized", gotUA)
 	}
 }
 
@@ -248,7 +249,8 @@ func TestFetchOne_LimitsResponseSize(t *testing.T) {
 			return 0, nil
 		},
 	}
-	_, _, _ = f.fetchOne(context.Background(), src)
+	_, _, ferr := f.fetchOne(context.Background(), src)
+	_ = ferr
 }
 
 // ============================================================================
