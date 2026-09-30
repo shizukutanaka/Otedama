@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 311 — SubmitSharesError の未送信シーケンス棄却)
+
+**問題.** SV2 の SubmitSharesError がシーケンス未検証で受理され、
+未送信 seq の偽 reject フレームが reject 率を水増しできた
+（curtailment 悪用）。closed #404 の未マージ修正を master へ再デリバー。
+
+**修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
+受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
+
 ### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
 
 価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、

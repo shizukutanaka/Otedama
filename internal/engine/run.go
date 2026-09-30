@@ -984,7 +984,26 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := poolproto.SanitizePoolText(pm.msg.SubmitSharesError.Error)
+				e := pm.msg.SubmitSharesError
+				if e.SequenceNumber > seqNum {
+					// The pool rejected a submit that never happened —
+					// SV2 assigns one response per SequenceNumber, so a
+					// seq beyond what we sent is unambiguously bogus.
+					// A hostile pool could otherwise inflate the reject
+					// rate and trip the curtailment gate at will.
+					opts.log("debug", fmt.Sprintf(
+						"engine: share reject with future seq %d ignored (sent %d)",
+						e.SequenceNumber, seqNum))
+					continue
+				}
+				// Settle the outstanding submit if still tracked: an
+				// error is the share's final response too, and leaving
+				// the entry would leak it until some later success.
+				if sent, ok := submitTimes[e.SequenceNumber]; ok {
+					latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
+					delete(submitTimes, e.SequenceNumber)
+				}
+				reason := poolproto.SanitizePoolText(e.Error)
 				category, diagnosis := rejectClass(reason)
 				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
 					reason, diagnosis))

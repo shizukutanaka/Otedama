@@ -940,6 +940,18 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 311 — drop SubmitSharesError frames with unsent sequence numbers (re-delivers closed #404)
+
+**Finding [OBSERVED — code-verified].** SV2 `SubmitSharesError` was
+counted without checking the sequence number — a forged reject frame
+with an unsent seq inflated the reject rate, feeding curtailment.
+
+**Fix [OBSERVED].** Frames with `SequenceNumber > seqNum` drop at debug
+level; error responses for real seqs still settle `submitTimes` and run
+reject classification.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqRejectIgnored`.
+
 ## Session 366 — rates NaN injection + parser fuzz
 
 **Fixed [FIXED — real reachable bug].** `strconv.ParseFloat` accepts the
