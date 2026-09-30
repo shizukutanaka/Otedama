@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 559 — channel-close ownership / send-on-closed panic surface
+
+- All 12 `close(ch)` sites verified: producer-owns-close or
+  `wg.Wait()`-then-close (the canonical fan-in/worker shutdown
+  pattern). Worker.Start's `close(shares)` runs only after every
+  grind goroutine exits.
+- stratumv1's `pending` response channels are buffered (cap 1, one
+  response per id), so `dispatch`'s `ch <-` can never wedge the
+  readLoop; delete-before-close under `pendingMu` makes
+  double-close impossible (`cancelPending` only sees live entries).
