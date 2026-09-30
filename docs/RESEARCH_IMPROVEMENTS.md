@@ -959,6 +959,39 @@ hand-rolled compression function, which CLAUDE.md forbids
 (no custom crypto — audited libraries only). Recorded with the
 measured headroom so the constraint-vs-payoff trade is explicit.
 
+## Session 565 — atomic API surface
+
+- All `sync/atomic` usage is the typed Go-1.19+ API:
+  `atomic.Uint64` (8), `atomic.Bool` (7), `atomic.Pointer[T]` (4),
+  `atomic.Int64` (1). Zero legacy `atomic.AddInt64(&field)`-style
+  calls — so the 386-misalignment panic class (64-bit atomics on
+  unaligned fields) is structurally absent; the typed API
+  guarantees alignment internally.
+
+## Session 566 — JSON/YAML decode boundary
+
+- Every `json.Unmarshal` takes a `&`-pointer and checks its error;
+  every `json.Marshal` checks `err`. The only two ignored results
+  are the documented best-effort tolerations in parse.go:164/176
+  ("tolerate non-string" — deliberate lenient parsing for pool
+  quirks), each carrying an inline justification comment.
+- yaml: the config-file decode uses `yaml.NewDecoder` with
+  `KnownFields(true)` (unknown keys rejected), checks `Decode`'s
+  error, and treats io.EOF as "use defaults" — the fuzz target for
+  this boundary exists (session 391).
+
+## Session 567 — package-init surface
+
+- `func init()` exists in exactly four files:
+  - `lightning/english_wordlist.go` — splits the embedded BIP-39
+    wordlist and **panics at startup** if the count is not 2048 or
+    the SHA-256 doesn't match — fail-fast integrity self-check.
+  - `btccrypto/secp256k1.go`, `stratumv1` and `stratumv2` dialer
+    registration — the canonical `init()` plugin-registry pattern,
+    each paired with compile-time `var _ Interface =` assertions.
+- No init performs I/O, spawns goroutines, or mutates shared state
+  beyond registration — all are idempotent and order-independent.
+
 ## Session 568 — recover() + goroutine-spawn audit
 
 - Zero `recover()` calls in non-test code: no panic-swallowing
