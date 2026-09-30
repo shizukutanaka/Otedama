@@ -34,6 +34,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -637,6 +638,23 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// NaN/±Inf must be rejected explicitly: comparisons like `x < 0` are
+	// false for NaN, so a non-finite value would otherwise sail through
+	// every range check and poison the arbitration math downstream.
+	for _, f := range []struct {
+		name  string
+		value float64
+	}{
+		{"arbitration_hysteresis_pct", c.ArbitrationHysteresisPct},
+		{"curtail_below_btc_usd", c.CurtailBelowBTCUSD},
+		{"min_yield_sats_per_sec", c.MinYieldSatsPerSec},
+		{"power_watts", c.PowerWatts},
+		{"electricity_price_per_kwh", c.ElectricityPricePerKWh},
+	} {
+		if math.IsNaN(f.value) || math.IsInf(f.value, 0) {
+			issues = append(issues, fmt.Sprintf("%s must be a finite number", f.name))
+		}
+	}
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
