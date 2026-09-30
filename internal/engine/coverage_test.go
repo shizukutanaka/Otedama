@@ -1185,6 +1185,45 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 	return ln.Addr().String()
 }
 
+// fakeV1PoolSilent completes the V1 handshake then holds the connection open
+// without ever sending a job — used to exercise the silent-pool tripwire,
+// which requires the session to stay alive past jobStallWarnAfter.
+func fakeV1PoolSilent(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolSilent listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		// Same handshake trio as fakeV1Pool.
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Hold the connection open without sending a job; drain until the
+		// engine disconnects so the goroutine exits on test teardown.
+		for {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
 // fakeV1PoolHighDiff is fakeV1Pool plus a mining.set_difficulty of 1e15 —
 // large enough that the expected share interval exceeds the 1-hour
 // starvation tripwire at any CPU hashrate.
@@ -2510,6 +2549,91 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_JobStallWarnsOnce exercises the same silent-pool tripwire
+// on the V1 path: a connected pool that never sends a job must warn exactly
+// once per episode.
+func TestRunSessionV1_JobStallWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	old := jobStallWarnAfter
+	jobStallWarnAfter = 50 * time.Millisecond
+	defer func() { jobStallWarnAfter = old }()
+
+	poolURL := "stratum+tcp://" + fakeV1PoolSilent(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  poolURL,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var stallWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "no new job") {
+			stallWarns++
+		}
+	}
+	if stallWarns == 0 {
+		t.Errorf("silent-pool warning never fired; warns=%v", warns)
+	}
+	if stallWarns > 1 {
+		t.Errorf("silent-pool warning fired %d times, want once per episode", stallWarns)
 	}
 }
 

@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
+
+**問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も
+切断もないまま収益が止まる——難易度飢餓と同型だが別経路。closed #396
+の未マージ修正を master へ再デリバー。
+
+**修正.** V1/V2 両経路で `jobStallWarnAfter`（10 分、テストでは縮小
+可能）を超えてジョブ未着が続くとエピソードごと一度だけ warn。カーテイル
+中は抑制。最初のジョブが一度も来ない場合も同じく検出（タイマーは
+セッション開始から起算）。
+
 ### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
 
 **問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
