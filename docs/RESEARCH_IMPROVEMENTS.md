@@ -957,6 +957,20 @@ network adversary disruption, vs pool-side DoS):
   allocators) reviewed — tangential to the current provider layer
   (simulated); noted for future arbitration work only.
 
+## Session 524 — golangci-lint version divergence recorded
+
+Recorded in KNOWN_LIMITATIONS §13 (CI-workflow ledger):
+
+- **Three different pins**: `ci.yml` curl-installs `v1.55.2`;
+  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3`; local tooling
+  is `v1.64.8`. Upstream is at `v2.13.x` — v2.13.0 added go1.27
+  support (needed locally since go1.27.1's export data exceeds
+  v1.64.8's typecheck decoder; run under `GOTOOLCHAIN=go1.26.8`).
+- Upgrading implies a v2 config migration of `.golangci.yml` plus
+  bumping both CI pin sites — maintainer-owned (workflow files).
+- Repo's GitHub Issues #2/#3 (duplication ledger links) re-checked:
+  still open, status unchanged.
+
 ## Session 526 — in-tree fuzz targets smoke-verified
 
 CI has no fuzz job (recorded in KNOWN_LIMITATIONS §13), so the two
