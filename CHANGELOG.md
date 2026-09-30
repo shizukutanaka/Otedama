@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 568 — recover/spawn)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
+  code (no panic-swallowing surface); 20 spawn sites match the
+  session-553 leak-coverage map.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
