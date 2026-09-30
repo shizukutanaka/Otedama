@@ -957,6 +957,102 @@ surface (everything prior was library-level testing):
 
 The documented CLI contract holds end-to-end on the built artifact.
 
+## Session 331 — non-finite arbitration parameters (real fix)
+
+**NaN/Inf hysteresis & floor slip past validation [OBSERVED + FIXED].**
+`strconv.ParseFloat` accepts `nan`/`inf`, and YAML accepts `.nan`/`.inf`
+literals, so `arbitration_hysteresis_pct` or `min_yield_sats_per_sec`
+could carry non-finite values into `Decide`. The `< 0` guards don't
+catch NaN: a NaN margin silently disables hysteresis (NaN threshold
+never satisfied → switch on any improvement), +Inf freezes the
+incumbent stream permanently, NaN floor silently disables the
+min-yield gate. `Decide` now rejects non-finite values outright — the
+engine logs a warn per cycle instead of silently misbehaving. Follow-up
+in the same class as the s325 `Yield.Effective()` NaN collapse.
+`TestDecide_RejectsNonFiniteMargins` covers all six cases.
+
+## Session 378 — doctor check-suite audit
+
+[FIXED] `checkPoolReachability` probed only `Pools[0]`: a dead
+secondary/tertiary pool — the exact thing `checkPoolDiversity` pushes
+operators to configure — was never tested until a real failover. The
+check now probes every configured pool concurrently (bounded at 8, 5s
+dial timeout each, caller ctx honoured): all reachable → Pass; any
+unreachable or unparseable → Warn naming them; zero reachable → Fail.
+
+[FIXED] `checkWallet` embedded the `wallet.fingerprint` file content in
+the report verbatim. A corrupt or tampered file could inject control
+characters into doctor output. The fingerprint is now printed only when
+it matches the shape the wallet writes (8 lowercase hex chars —
+`HMAC-SHA256("otedama-fingerprint-v1", seed)[:4]`); otherwise the check
+reports the file as malformed instead of echoing it.
+
+[AUDITED — clean] The remaining 15 checks: bounded timeouts on every
+network probe (5s pool dial, 3s 1.1.1.1, 5s clock skew incl. bounded
+body drain for keep-alive reuse), address checksums verified for both
+primary and failover lists, data-dir permission warning, pool
+encryption/CA/diversity/scheme checks, env-var lint, profitability
+floor advisory. Results are indexed back into report order, so output
+is deterministic despite concurrent execution.
+
+## Session 371 — unimplemented schemes + live V2 dial bound
+
+**[FIXED] Unimplemented scheme fail-fast.** `datum://` is recognised by
+`poolproto.FromURL` (ADR-009, OCEAN's SV1-transport variant) but has no
+implementation — it previously fell through to the plaintext SV2 branch
+and emitted binary V2 frames to a pool expecting DATUM, surfacing only
+as a confusing connect/handshake timeout. `runSession` now rejects any
+protocol that is not V1-family/V2 with a named error; regular (non-fatal)
+error so pool failover still rotates past the unusable entry to
+configured alternatives.
+
+**[FIXED] Live V2 dial bound.** The engine's inline V2 path dialled with
+a bare `net.Dialer` (and `stratum.DialTLS` for v2tls) — no connect
+timeout, so a blackholed endpoint stalled each failover hop for the OS
+TCP timeout (~127s on Linux). `poolDialTimeout` (15s, test-overridable
+var) now bounds the TCP connect; for `stratum+v2tls://` a derived ctx
+bounds connect + TLS handshake together.
+
+## Session 345 — per-attempt dial timeout on pool connections
+
+**Blackhole dial stall [FIXED].** Both dialers called `DialContext` with
+only the caller's context — which the engine session loop supplies
+without a deadline — so a pool endpoint that swallows SYNs stalled each
+failover hop for the OS TCP default (~127 s on Linux). Both `Dial`
+implementations now wrap the attempt in a 15 s `dialTimeout` (covers the
+TLS handshake on `stratum+tls://`), report it as a clear "dial timeout"
+error, and keep the caller's deadline when it is tighter. `TestDialer_
+DialTimeout` covers both protocols via a dialFn that blocks on ctx.
+
+**Credentials-in-URL audit [AUDITED — clean].** `Credentials` are passed
+separately from the pool URL; `StripScheme`/`DialURL` never splice user
+material into URLs, so dial errors that embed the URL cannot leak a
+password. Userinfo in a pool URL (`stratum+tcp://u:p@host`) is not
+parsed — it reaches the resolver as literal text and fails fast.
+
+## Session 314 — roll stale pool ntime forward to wall clock (SRI 1.12.0 nTime-bound lesson)
+
+**Finding [FETCHED — freedom.tech SRI 1.12.0 release notes, 2026-09-17].**
+`channels_sv2` now enforces `min_ntime`/`nTime` bounds on share
+validation across all channel types: shares stamped with an aging ntime
+get rejected once they fall outside the pool's window.
+
+**Fix [OBSERVED].** New `rollNTime()` in run.go: `updateWork` (V2) and
+`applyJob` (V1) roll a stale declared ntime forward to `time.Now()`;
+a future ntime stays verbatim (rolling down would undershoot min_ntime —
+itself a reject). Submission echoes `Header.Time`, so the submitted nTime
+always matches the hashed header.
+
+**Tests [OBSERVED].** `TestRollNTime` — stale→now, future→verbatim,
+now→unchanged.
+
+**Other SRI 1.12.0 notes audited [FETCHED].** noise_sv2 dropped
+AES-256-GCM (ChaCha20-Poly1305 sole cipher) — Otedama's noise stack is
+already ChaChaPoly-only, no action. Coinbase defects (undersized BIP141
+parts, scriptSig serialization) are server-side taker paths — not a
+client concern. ESP-Miner v2.15.x continues (v2.15.3); its SV2
+"pending shares" dashboard maps to our `shares_pending` gauges.
+
 ## Session 387 — first-run wallet backup verification re-delivery
 
 [FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
