@@ -23,6 +23,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
   2026; 1.26.5–1.26.8 carried security fixes).
 
+### Documentation & audit (session 515 — metrics/clock/tui read)
+
+- **`internal/metrics`, `internal/clock`, `internal/tui` read
+  end-to-end.** Verdicts: metric cross-type collisions panic at
+  registration (one bad name would silently kill the whole scrape);
+  exposition escaping, NaN/±Inf rendering, and deterministic ordering
+  correct; Fake clock's non-monotonic contract documented; Dashboard
+  Start/Stop atomics + WaitGroup ordering close the writer race they
+  describe; `truncateVisible` correctly preserves ANSI state. Two
+  residuals recorded without code change: `metricKey`'s unescaped
+  label-value serialization (needs a `,`/`=` in a device ID — today's
+  producers can't emit one) and a `truncateToBudget`/`shortenURL`
+  duplication candidate for the Issue ledger.
+
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
 ### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
 
 - **`go test -race ./...` green on all 23 packages** (go1.26.8);

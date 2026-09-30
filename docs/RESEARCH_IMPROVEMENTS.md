@@ -973,6 +973,69 @@ patch — the repo's `GOTOOLCHAIN=go1.26.8` pin already tracks it. Minor
 revisions 1.26.5–1.26.8 shipped security fixes across crypto/tls, x509,
 net/http and the go command; no action beyond confirming the pin.
 
+## Session 515 — metrics + clock + tui fully read
+
+**Audit milestones.** `internal/metrics` (both files), `internal/clock`,
+and `internal/tui` read end-to-end.
+
+**metrics verdicts.** Registry is RWMutex-guarded; counter/gauge
+cross-type name collisions panic at registration with a documented
+severity rationale (one bad name discards the whole Prometheus scrape).
+Exposition is sorted and deterministic; `escapeLabel`/`escapeHelp` cover
+the format's real specials; `formatFloat` renders NaN/±Inf canonically.
+Noted residual (recorded, not fixed): `metricKey` serializes label
+values without escaping `,`/`=`, so two distinct (name, labels) pairs
+could collide into one series key — requires a device ID containing `,`
+or `=`, which today's ID producers ("cpu-0", "gpu-<render-node>") cannot
+emit; worth revisiting if a user-controlled ID source ever lands.
+`RuntimeCollector`'s PauseTotalNs/GCCPUFraction are deprecated-but-still-
+populated MemStats fields — fine on go1.26.8.
+
+**clock verdicts.** Fake is RWMutex-guarded; Set/Advance deliberately
+allow backwards time with a documented non-monotonicity contract.
+Compile-time interface checks present. Clean.
+
+**tui verdicts.** Start/Stop are atomic-gated and Stop waits on the
+render-loop WaitGroup before writing to the (non-concurrent) writer —
+the race it documents is genuinely closed. `writeLine` truncates then
+pads to cols, keeping the cursor-home repaint model; `truncateVisible`
+preserves in-flight ANSI and appends reset. Two non-blocking findings
+(recorded, no code change): `truncateToBudget` and `shortenURL` are two
+near-identical truncators — a duplication candidate to file as an Issue
+per the dedupe convention, not fix inline; and the `⏸`/`⚠` badges in
+miningLine count as width-1 under `visibleLen` but render width-2 —
+self-consistent across frames since truncation uses the same count, so
+the residual is at most a one-column flicker on narrow terminals, not
+repaint corruption.
+
+## Session 516 — doctor + config read; full-tree audit complete
+
+**Audit milestone — full coverage.** With `internal/doctor`
+(doctor.go + checks.go) and `internal/config` (config.go) read
+end-to-end this session, every non-test `.go` file in the repository has
+now been read line-by-line across sessions 509–516 (plus the earlier
+CODEOWNERS-area sweeps): engine, miner, hal, arbitration, logger,
+version, provider, daemon, metrics, clock, tui, doctor, config, stratum,
+poolproto (V1+V2), lightning, btccrypto, rates, httpserver, i18n, cmd.
+
+**doctor verdicts.** All 17 checks (matching the architecture map's
+"17 並行ヘルスチェック") verified: concurrent runner preserves curated
+result order by index; exit codes 0/1/2 mirror correctly into JSON;
+clock-skew check drains a bounded 8 KB body so keep-alive reuse cannot
+become an unbounded read; `maskAddress`, charset helpers, tls_ca_file
+scheme-scoping, endpoint-diversity DNS check all sound. Per-pool probing
+remains open-PR-owned (#490).
+
+**config verdicts.** Four-layer resolution and Origins tracking are
+complete and consistent (all 14 fields); `numericEnvVars` is the single
+source the applier and warner share so they cannot drift;
+`DefaultDataDir` platform paths match the doc comment; `Validate`
+aggregates issues in one pass. Two residual items already owned by open
+PRs, recorded not re-delivered: non-finite env values parse as floats
+and pass Validate's `< 0`/`>= 1` guards (open #492 re-delivery), and
+pool-URL validation stops at scheme+non-empty host (open #486's
+host:port/userinfo tightening).
+
 ## Session 517 — test-code audit pass + ecosystem recheck
 
 **Test-suite mechanical audit.** All 33 K lines of `*_test.go` swept:
