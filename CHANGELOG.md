@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 553 — leak coverage)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: 10 goroutine-spawning packages
+  mapped — rates has NumGoroutine leak tests; stratumv2's
+  readLoop exit is proven via the jobsCh-close contract; the
+  adapter pending-map bound stays with open #377-family PRs.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
