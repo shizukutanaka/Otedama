@@ -99,10 +99,12 @@ scheduler does not yield to other processes the way OS processes do.
 
 ### Fix
 
-Limit the number of mining threads:
+Limit the CPU cores Go runs goroutines on — `GOMAXPROCS` caps how many
+grinding threads execute in parallel (workers spawn one per
+`runtime.NumCPU()`, but at most `GOMAXPROCS` run at once):
 
 ```bash
-otedama run --bitcoin-address bc1q... --worker-threads 4
+GOMAXPROCS=4 otedama run --bitcoin-address bc1q...
 ```
 
 Or set a CPU limit at the OS level:
