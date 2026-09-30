@@ -768,8 +768,18 @@ func checkNetwork() Check {
 var clockSkewProbeURL = "https://api.coinbase.com/v2/time"
 
 // clockSkewHTTPClient is the HTTP client used by checkClockSkew. Nil means
-// use http.DefaultClient. Tests replace this with a fake-server client.
+// use clockSkewDefaultClient. Tests replace this with a fake-server client.
 var clockSkewHTTPClient *http.Client
+
+// clockSkewDefaultClient is used when clockSkewHTTPClient is nil. Like the
+// rate fetcher, it refuses to follow redirects: the probe target is a
+// hardcoded HTTPS endpoint, so a redirect can only be an https→http
+// downgrade leaking the request and feeding the check an attacker Date.
+var clockSkewDefaultClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return fmt.Errorf("doctor: redirects are not followed")
+	},
+}
 
 // clockSkewWarnSecs is the skew magnitude at which we warn; beyond this TLS
 // certificate validation windows, mining nTime fields, and rate-freshness
@@ -800,7 +810,7 @@ func checkClockSkew() Check {
 
 			client := clockSkewHTTPClient
 			if client == nil {
-				client = http.DefaultClient
+				client = clockSkewDefaultClient
 			}
 			resp, err := client.Do(req)
 			if err != nil {
