@@ -940,6 +940,30 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 413 — cross-reference sweep + dependabot dead key [FIXED]
+
+**CODEOWNERS sample in solo-operations.md listed nonexistent paths
+[FIXED].** §7.1's sample claimed `/internal/security/` and
+`/internal/auth/` rules — both are CLAUDE.md forbidden paths that
+don't exist and would never match anything. Replaced with the real
+`.github/CODEOWNERS` contents (lightning/btccrypto/poolproto/
+stratum-noise rules) plus a note explaining why those paths are
+absent.
+
+**Dead Dependabot key removed [FIXED].** `.github/dependabot.yml`'s
+github-actions section had an `automerge: [dependency-type: direct]`
+block — `automerge` is not a Dependabot option; GitHub silently
+ignores unknown keys, so the config implied auto-merge that never
+happened. Replaced with a comment pointing at the real mechanism
+(repo auto-merge + `gh pr merge --auto` / merge queue).
+
+**§-number cross-reference audit — clean:** every
+`KNOWN_LIMITATIONS §N` reference in code/docs resolves correctly,
+including the resolved entries (all carry "resolved session NNN"
+annotations); `runSessionV1` V1-via-poolproto vs V2-inline split
+matches §3's resolution wording; DEPLOYMENT.md command/flag/path
+references all exist; README badges/links valid.
+
 ## Session 415 — Lint-debt cleanup: 350 → 65 findings [LINT]
 
 **動機.** `.golangci.yml` は errcheck・errorlint・gosec・gocritic・misspell
