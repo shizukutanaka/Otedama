@@ -958,6 +958,64 @@ non-stationarity grounding + Sliding-Window TS (A8), and ROSS in refs.
 Cat-4 #9 left open on purpose — pools never report credited blocks, so the
 written action is infeasible; recorded as such.
 
+## Session 346 — ecosystem re-check + wallet/metrics audit verdicts
+
+**Ecosystem [FETCHED].** No drift since session 344: SRI v1.12.0 remains
+the latest release (Sep 17); ESP-Miner v2.15.3 (Sep 20) is a
+prerelease-scoped UI warning fix with no stratum changes. SRI v1.11.1's
+"do not round up SV1 difficulties" fix was verified against our client
+path: `TargetFromDifficulty` divides `diff1Target` by the pool value
+with 256-bit `big.Float` precision and truncates — never rounds up.
+A difficulty so small the target exceeds 256 bits returns an error, and
+`v1JobTarget` then falls back to the nBits block target (the strictly
+harder bound — fails safe toward starvation, never toward
+accept-everything).
+
+**Audit verdicts [AUDITED — clean].**
+
+- `stratumv1.parseAddress` returns the host:port remainder unvalidated,
+  but malformed values fail fast in the (now 15 s-bounded) dial — a
+  config-error surface, not an injection path; credentials are passed
+  separately and never spliced into the URL, so URL-bearing errors
+  cannot leak a password.
+- `btccrypto.ValidateAddress` verifies the checksum (bech32/bech32m or
+  Base58Check) and is enforced on every pool payout address at config
+  load — a mistyped address fails startup rather than mining to a dead
+  destination.
+- `hashrateWindow.observe` saturates: a counter reset on reconnect
+  yields rate 0, never negative or NaN; the first sample only primes.
+- `printRecoveryPhrase` writes the mnemonic exclusively to
+  `opts.Output` (stdout on first run) — it is never passed to the
+  logger; wallet.dat stores only the encrypted seed.
+
+## Session 347 — provider/engine/worker audit verdicts (all clean)
+
+**Provider quote path [AUDITED — clean].** Both providers are local
+simulators — no network fetch: `ai_inference` quotes the midpoint of the
+configured USD/hour range, `mining` computes yield from the static
+network-hashrate constant (the live feed remains on open PR #432). No
+response-size or redirect concerns apply; quote channels are buffered
+(32/16) so a stalled consumer cannot wedge the publisher.
+
+**Engine session loops [AUDITED — clean].** Every `for/select` in
+`run.go` honors `ctx.Done()`; the reconnect backoff uses
+`time.NewTimer`+`Stop` so shutdown does not linger; the V2 read
+goroutine checks ctx on every send and closes `inCh` on exit — no spin,
+no goroutine leak on teardown.
+
+**Worker nonce space [AUDITED — clean].** Threads partition the 32-bit
+nonce space by `threadID + k*Threads` (NonceStep defaults to Threads, so
+sequences are disjoint); a new job resets the counter rather than
+exhausting the space. uint32 wrap re-hashes old nonces, which is the
+accepted stratum behavior — a fresh job or an extranonce roll
+supersedes long before exhaustion at any real hashrate.
+
+**SV2 frame bound [AUDITED — clean].** `Decoder.ReadFrame` enforces
+`MaxFrameSize` (default 16 MiB, SRI-aligned) *before* allocating the
+payload buffer — a malicious length header cannot force a large
+allocation. Already covered by the v1.12.0-alignment pass; re-verified
+on master this session.
+
 ## Session 352 — wallet-write, TUI, doctor audit verdicts (all clean)
 
 **Wallet save path [AUDITED — hardened].** `wallet.dat` is written via
