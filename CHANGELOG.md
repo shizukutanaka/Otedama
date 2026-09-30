@@ -19,6 +19,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 **修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
 受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
 
+### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
+
+価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、
+`strconv.ParseFloat` が受理し sanity band を通過して BTC/USD に NaN が
+混入する経路を遮断（extractor 層の `parseRate` で非有限値を拒否 +
+band を否定形 in-range 判定に変更し将来のソースでも fail-closed）。
+`parseSubscribeResult` が空 extranonce1 を受理する問題を修正
+（fuzzer が発見）。V1 JSON-RPC dispatcher と subscribe 応答に
+fuzz カバレッジを追加（350万+ exec クリーン）。
+
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
+### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
+
+**問題.** `wallet.dat` の権限監査はディレクトリのみで、
+scp/rsync 復元や tarball 展開で 0700 ディレクトリ内に 0644 で
+置かれた暗号化シードファイルを見逃していた。closed #381/#414 の
+未マージ修正を master へ再デリバー。
+
+**修正.** doctor が wallet.dat 自身のモードを監査し、`chmod 0600` の
+修正手順とともに警告（Unix のみ）。
+
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
 ### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
 
 **問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
