@@ -940,6 +940,23 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 343 — HTTP client redirect refusal
+
+**Redirect downgrade [FIXED].** The rate fetcher's `http.Client` and the
+doctor clock-skew probe (which used `http.DefaultClient`) followed
+redirects by default — including https→http downgrades. All rate sources
+and the clock probe are hardcoded HTTPS endpoints, so a redirect can only
+be hostile: a network attacker 302-ing a price source to a cleartext
+endpoint could inject a manipulated BTC/USD into the arbitration median.
+`CheckRedirect` now refuses all redirects on both clients. (A legitimately
+moved API would fail loudly and the median falls back to the remaining
+sources — the correct degradation.)
+
+**Rates surface audit [AUDITED — clean].** Verified bounded before this
+round: 10s client timeout, 64KiB `LimitReader`, implausible-reading
+exclusion from the median, per-source health accounting, skew measured
+from the `Date` header, body drained for keep-alive reuse.
+
 ## Session 348 — pool-notice sanitization + config-write audit
 
 **Terminal-escape injection via client.show_message [FIXED].**

@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
 ### Fixed (session 348 — プール通知サニタイズ)
 
 `client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
