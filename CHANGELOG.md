@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 569 — any usage)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `any` appears only in V1
+  JSON-RPC wire fields (spec-mandated), `sync.Pool.New`, and a
+  generic constraint — zero loose-typing escapes internally.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
