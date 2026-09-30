@@ -42,10 +42,11 @@ godebug (
 
 **Why split `go` from `toolchain`:** the `go 1.22` directive declares
 the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **minimum build toolchain** — Go refuses
-to build a module whose toolchain line exceeds the local version,
-and `godebug tlsmlkem` additionally fails to parse under toolchains
-older than 1.24. So despite `go 1.22`, **Go 1.24+ is required to
+`toolchain go1.24.0` is the **preferred build toolchain** — with the
+default `GOTOOLCHAIN=auto`, an older Go (1.21+) downloads go1.24.0
+automatically; under `GOTOOLCHAIN=local` the line is ignored, and the
+pinned `godebug tlsmlkem` then fails to parse on toolchains older
+than 1.24. So despite `go 1.22`, **Go 1.24+ is required to
 build Otedama**; the `go` line governs language defaults, not the
 minimum toolchain.
 

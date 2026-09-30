@@ -13,8 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### 修正 (session 465)
 
 1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
-   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0` と
-   `godebug tlsmlkem` の両方が Go 1.24+ を必須にするため、実際の
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0`
+   （GOTOOLCHAIN=auto で 1.24 へ自動切替）と `godebug tlsmlkem`
+   （1.24 未満ではパース不能）により実質 Go 1.24+ が必要なため、実際の
    最小ツールチェーン要件を明記。
 
 ### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
