@@ -976,6 +976,111 @@ accept-everything).
   `opts.Output` (stdout on first run) — it is never passed to the
   logger; wallet.dat stores only the encrypted seed.
 
+## Session 364 — wire-format + shutdown verdicts
+
+**V1 share serialization [AUDITED — correct].** `mining.submit` emits
+ntime and nonce as `%08x` big-endian hex — the stratum convention —
+while `Header.Bytes()` hashes the little-endian field order Bitcoin
+requires. The two representations are consistent: the share the pool
+verifies reconstructs the same 80-byte header. `extranonce2` is
+raw-hex (verbatim bytes the pool split off), correct per spec.
+
+**Shutdown path [AUDITED — complete].** `signal.NotifyContext`
+(Interrupt + SIGTERM) → engine ctx → `defer conn.Close()` unblocks
+`ReadFrame`/`call` waits → workers' inner ctx cancels → providers'
+Stop is deferred after engine exit. Every blocking surface audited in
+s354–s358 reaches a ctx or conn close; no orphaned goroutine survives
+a clean shutdown.
+
+## Session 397 — transport + fan-in + encode-side verdicts
+
+**V1 outbound request side [AUDITED — clean].** `authorize`/`subscribe`/
+`mining.submit` marshal operator-controlled fields only (worker name,
+password, job params); the pending-RPC map evicts entries on every exit
+path (response, timeout, ctx cancel, conn close) — audited in s355 and
+re-verified. `buildSubmit` hex-encodes fixed-width integers; no pool
+string is ever reflected outbound.
+
+**V1 `readLine` [AUDITED — 64 KiB bound].** `bufio.Reader.ReadSlice` +
+`ErrBufferFull` cut-off; the returned slice is copied out of the ring
+buffer so a no-newline pool line can never grow memory (the old
+`ReadBytes` path accumulated unboundedly — fixed earlier, confirmed).
+
+**TLS dialers [AUDITED — hardened].** Both `stratum.DialTLS` and
+`stratumv1.dialTLS` share the same shape: `MinVersion: TLS1.2`,
+verification always on, `ServerName` auto-filled by `crypto/tls` from the
+dial address (documented in both files), `tlsConfigWithExtraCAs` for
+private-CA pools, never a plaintext fallback. `tls.Dialer.DialContext`
+completes the handshake inside the call, so a verification failure is a
+dial error, not a first-write surprise.
+
+**`engine.fanIn` [AUDITED — leak-free].** Both merge helpers select on
+`ctx.Done()` on *both* the input receive and the output send — a stuck
+producer cannot pin the goroutine or keep `out` open after cancel; the
+closer goroutine exits on `wg.Wait()`. Buffer is `bufFactor×N` capped at
+64 — bounded regardless of worker/provider count.
+
+**`hal` sysfs reads [AUDITED — safe].** `inferModel`/`readSysFile` read
+kernel-generated sysfs attributes only (behind the DAC wall), trim
+whitespace, and never numeric-parse untrusted input — there is no parser
+surface here to fuzz.
+
+**BIP-39 wordlist [VERIFIED — integrity-checked].** The embedded
+2048-word English list is split at init and pinned by a SHA-256 check —
+corruption fails closed (panic at init) rather than silently mis-encoding
+entropy.
+
+**SV2 `ExtraNonce2Size` [AUDITED — decoded but unconsumed].**
+`OpenMiningChannelSuccess.Extranonce`/`ExtraNonce2Size` decode correctly
+(lenient `getB0_255`, spec is `B0_32` — Postel asymmetry documented at
+handshake.go:246) but the value is not yet consumed by the live engine
+submit path — `SubmitSharesStandard` on master carries
+channel/seq/job/nonce/ntime/nversion only. Full coinbase/extranonce
+assembly is the documented protocol-completeness gap, not a memory
+safety issue; deliberately left for the v3.1.0 work rather than a
+hard-fail on >0, which would break every existing SV2 connection.
+
+**`detectDevices` tail coverage [AUDITED — unreachable without refactor].**
+The uncovered ~30% is the concrete-driver registration failure paths —
+`cpuDriver{}`/`GPULinuxDriver` `Register` cannot fail without fault
+injection; testing it would require an interface seam that exists only
+for the test. Recorded, not padded.
+
+**Ecosystem [RE-VERIFIED — unchanged].** SRI v1.12.0 (2026-09-17) remains
+the latest SRI release: the `noise_sv2` 2.0.0 AES-256-GCM drop and the
+codec/framing split do not change any live Otedama path — the in-process
+Noise surface stays the documented alpha stub (KNOWN_LIMITATIONS §2).
+
+## Session 400 — provider liveness gap (surfaced) + publish() audit
+
+**Mining yield quoted while pool is down [🟡 SURFACED — needs design
+decision, not a silent fix].** `MiningProvider.publish` emits full
+expected yield for every SHA256d device regardless of pool session
+state — there is no connectivity input on the provider. During a
+reconnect gap or total failover exhaustion, arbitration keeps devices
+assigned to "mining" at positive yield rather than re-routing them to
+AI/compute providers.
+
+No electricity is wasted — workers whose job queue is empty sit in the
+10 ms idle loop and burn nothing — so this is an opportunity-cost gap
+(AI yield forgone during long outages), not a power bug. The fix is a
+design choice: (a) `poolConnectionState` gauge already tracks
+connectivity, so a `HealthyFunc`/`ConnectedFunc` on MiningProvider
+could zero the mining yield while disconnected; (b) hysteresis already
+suppresses thrash for short outages; (c) product rule question — should
+a disconnected pool keep devices "reserved" for mining anyway (faster
+resume, no AI churn)? Recording per CLAUDE.md's requirement→design
+workflow rather than coding it unilaterally.
+
+**`publish()` math [AUDITED — correct].** sats/sec = deviceHashrate /
+networkHashrate × blockReward / 600 s × 1e8, ×0.99 for pool fee;
+confidence 0.95 fresh rate / 0.7 stale; `rate <= 0` falls back to a
+documented 95 k USD estimate. BTC/USD intentionally does not scale the
+sats-denominated yield (`_ = rate` is a deliberate placeholder for a
+future USD display, flagged in the comment). Live `HashrateFunc` beats
+static per-family estimate when > 0; static constants documented in
+KNOWN_LIMITATIONS §7.
+
 ## Session 401 — seedstore.go audit; per-file sweep complete
 
 **`internal/lightning/seedstore.go` [AUDITED — clean]** — the last file
