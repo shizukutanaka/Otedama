@@ -61,7 +61,11 @@ func base58Decode(s string) ([]byte, error) {
 // Inputs that are not legacy base58 (bech32 "bc1…", empty, or not starting with
 // '1'/'3') return ErrNotBase58 so callers can fall back to their own handling.
 func ValidateBase58Address(addr string) (AddressType, error) {
-	if addr == "" ||
+	// Legitimate Base58Check addresses are 26–34 characters; cap well above
+	// that to keep base58Decode's O(n²) big.Int loop bounded on malformed
+	// input without rejecting any real address.
+	const maxBase58Len = 64
+	if addr == "" || len(addr) > maxBase58Len ||
 		strings.HasPrefix(addr, "bc1") || strings.HasPrefix(addr, "BC1") ||
 		(!strings.HasPrefix(addr, "1") && !strings.HasPrefix(addr, "3")) {
 		return AddressUnknown, ErrNotBase58

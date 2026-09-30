@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +64,8 @@ func TestValidateBase58Address_NotBase58ReturnsSentinel(t *testing.T) {
 		"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", // bech32
 		"",
 		"xyz",
+		strings.Repeat("1", 65), // over the 64-char cap — must short-circuit before decode
+		strings.Repeat("3", 65),
 	} {
 		_, err := ValidateBase58Address(a)
 		if !errors.Is(err, ErrNotBase58) {
