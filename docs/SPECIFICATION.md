@@ -32,6 +32,8 @@ otedama <command> [flags]
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
 | `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
 | `doctor` | Run self-diagnostic checks. |
+| `wallet verify` | Verify a written-down recovery phrase against the stored wallet by public fingerprint — reads the phrase from stdin, never decrypts `wallet.dat`. |
+| `wallet change-passphrase` | Re-encrypt `wallet.dat` under a new passphrase; both passphrases come from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE`, never argv. |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |
 
@@ -57,13 +59,13 @@ its default, and its validation rule:
 
 | YAML key | Env var | Default | Validation |
 |---|---|---|---|
-| `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | plausible mainnet address (see §3.3) |
-| `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a plausible mainnet address |
+| `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | valid mainnet address, checksum verified (see §3.3) |
+| `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a valid mainnet address, checksum verified |
 | `pools[].url` | — (file only) | built-in recommendations | supported scheme + non-empty host (§3.3) |
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
-| `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured only for `stratum+tls://` |
+| `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured for `stratum+tls://` and `stratum+v2tls://` |
 | `workers.name` | — (file only) | `""` | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
 | `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
@@ -90,8 +92,8 @@ log/language/data-dir/power/arbitration fields. A malformed numeric env var
 ### 3.3 Validation rules
 
 At least one payout address is required (primary or a backup); every address
-must be a plausible mainnet address (length 26–90, prefix `1`/`3`/`bc1`;
-checksum is *not* verified here). Each `pools[].url` must use a supported scheme
+must be a valid mainnet address (length 26–90, prefix `1`/`3`/`bc1`, and the
+checksum is verified — bech32/bech32m or Base58Check — at config load). Each `pools[].url` must use a supported scheme
 (`stratum+tcp|tls|v2|v2tls://`) with a non-empty host. The numeric fields are
 range-checked per the table above. An empty/comments-only file is valid
 (defaults apply).
