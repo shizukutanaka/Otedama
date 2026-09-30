@@ -962,6 +962,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// "acceptable" band (industry guidance: >1% reject ≈
 				// <99% acceptance warrants attention).
 				rate, judged := opts.m.updateShareRates()
+				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
@@ -1229,6 +1230,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 						delete(submitTargets, seq)
 					}
 				}
+			}
+			if opts.m != nil {
+				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
 			}
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
 		}
