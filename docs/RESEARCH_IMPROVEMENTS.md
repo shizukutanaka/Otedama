@@ -940,6 +940,16 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 492 — GOVERNANCE.md の誤記2件を訂正 + CODE_OF_CONDUCT・パス参照棚卸し clean
+
+**Sweep.** `GOVERNANCE.md`（159行）・`CODE_OF_CONDUCT.md`（117行）全文精読 + 全 markdown（433件のバッククォートパス参照）の非実在ファイル棚卸し。
+
+**発見（2件訂正）。**
+- 「Auto-mergeable if **Renovate** patch update」→ 実際の設定済み bot は Dependabot（`.github/dependabot.yml` — renovate 設定は一切非実在、サーバーサイド automerge は GH-actions bump 用に設定済み）。
+- Phase-1 の bus-factor 緩和に「**Sigstore 鍵なし署名**（長命シークレットなし）」→ session 480 検証済みの通り `.goreleaser.yaml` の cosign `signs:` は dead config（release.yml が goreleaser を一切呼ばない）— 署名される成果物は存在せず、緩和は succession plan のみ。
+
+**検証済み・変更なし。** CODE_OF_CONDUCT は標準 Contributor Covenant 2.1＋正しい Security Advisories 報告 URL で clean。CODEOWNERS（lightning/noise* カバー）・MAINTAINERS.md の succession plan・ADR append-only 方針は実体と一致。パス参照棚卸し: `config.yaml`/`test.yml` 言及は全て正当（非実在を論じる文脈 or 実在）— 新規 phantom パス参照なし。
+
 ## Session 493 — README.md の phantom/陳腐クレーム4件を訂正
 
 **Sweep.** `README.md`（157行・バッジ〜フッター全節）を実コード・リモートブランチ・release.yml と照合。
