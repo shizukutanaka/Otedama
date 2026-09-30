@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 414)
+
+competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
+ウォレット生成・プール自動選択を「実装済み」風の記述から v4.0 構想/
+ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
+`config.DefaultPoolURL` 単一フォールバック）を明記。
+
 ### Docs (session 437 — ADR-011 依存先の上流進展を Erratum 2 として記録)
 
 - `docs/adr/ADR-011`: Erratum 2 追記 — `btcsuite/btcd/btcec/v2@v2.5.0`

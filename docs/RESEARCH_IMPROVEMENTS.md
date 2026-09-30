@@ -946,6 +946,26 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 414 — competitive-analysis present-tense overclaims [FIXED]
+
+**Present-tense claims corrected to roadmap scope [FIXED].**
+`docs/competitive-analysis.md` described three features as shipped
+design: (1) "プール自動選択（Stratum V2対応プール優先）" — the actual
+default is a single constant `config.DefaultPoolURL`
+(stratum+v2 Slushpool), not pool-list auto-selection; (2) "ZKP認証により…
+数学的に証明" — ZKP auth does not exist (v4.0-scoped per CLAUDE.md; no ADR
+covers it); (3) "LDKバインディングを使い Lightning Wallet
+自動生成" — no LDK binding exists; the shipped wallet is BIP-39 local
+store (AES-256-GCM + scrypt). Each is now qualified as implemented vs
+proposed without rewriting the market analysis.
+
+**Audited clean:** CATEGORY_AUDIT.md is a historical record (all rows
+✅-resolved); ADR index status markers consistent with each ADR header
+(ADR-002 "partially superseded" annotation correct); DEPLOYMENT.md
+service-install flags (`--config`, `--data-dir`) and Docker/compose
+`--http-addr` usage all real; i18n claims ~10 languages — actual
+catalogue has ar/de/en/es/fi/fr/ja/ko/pt/ru/zh (claim accurate).
+
 ## Session 437 — ADR-011 依存先の上流進展: btcec/v2 が ellswift を同梱 [RESEARCH]
 
 - **発見**: `github.com/btcsuite/btcd/btcec/v2@v2.5.0`（2026-05-15,
