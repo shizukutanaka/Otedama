@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 589 — AEAD nonce reuse audit
+
+- The sole `cipher.NewGCM`+`Seal` site is `lightning/seedstore.go`:
+  every `EncryptSeed` call generates a fresh 12-byte nonce and a
+  fresh salt (→ a fresh scrypt-derived key) from `crypto/rand` —
+  nonce reuse is impossible even across saves of the same seed.
+- Plaintext and derived key are `zeroBytes`-cleared on return;
+  an empty passphrase is rejected so a scrypt-empty-string key
+  is never produced. Noise protocol nonces are sequence-driven
+  inside the audited Noise NX implementation.
