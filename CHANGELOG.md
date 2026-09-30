@@ -18,6 +18,13 @@ ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
 整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
 （ライブラリ crate は stratum-mining/stratum に残留）。
 
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
 ### 監査判定 (session 356 — hal/V1 ディスパッチ)
 
 GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
