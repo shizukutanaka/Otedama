@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 582 — network dial/deadline audit
+
+- Bounded: doctor TCP probes (`net.Dialer{Timeout: 5s/3s}`),
+  V1 post-connect deadlines (`SetReadDeadline` 5m,
+  `SetWriteDeadline` 10s at stratumv1:166/436 and engine
+  run.go:1251).
+- The poolproto dials (`var dialer net.Dialer` + `DialContext`)
+  inherit the caller's ctx — bounding the *initial* pool
+  connection is the domain of open PR #457 (15s bound) and the V2
+  handshake bound of closed PR #470; not re-delivered here.
+- The TLS path (`tls.Dialer.DialContext`) blocks through the
+  handshake inside the same ctx — no extra deadline needed beyond
+  the caller's.
