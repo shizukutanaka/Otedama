@@ -939,3 +939,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 545 — pprof: hot loop is ~100% FIPS SHA-256
+
+`go test -bench=BenchmarkHashHeader -benchmem -memprofile
+-cpuprofile`: 105.3 ns/op, **0 B/op 0 allocs/op** — and
+`alloc_space` shows zero bytes attributable to HashHeader itself
+(every byte is test-harness/pprof machinery). CPU: 98.5% of
+samples inside `HashHeader` → `crypto/internal/fips140/sha256`
+(go1.27 routes crypto/sha256 through the FIPS-validated
+implementation, matching the FIPS posture in GODEBUG_NOTES).
+
+Optimization analyzed and rejected: the classic mining midstate
+trick (header bytes 0–63 are constant per job → precompute the
+SHA-256 state after block 1, compress only block 2 per nonce)
+would cut ~1 of 3 compressions (~25–30% of hash cost). Go stdlib
+exposes no midstate/partial-compression API; the only path is a
+hand-rolled compression function, which CLAUDE.md forbids
+(no custom crypto — audited libraries only). Recorded with the
+measured headroom so the constraint-vs-payoff trade is explicit.
