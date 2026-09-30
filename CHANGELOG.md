@@ -12,8 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
 
-* §2「poolproto はインターフェース層のみ・SV1/SV2 は v3.2.0 スコープ」→ 両 dialer 実装済み、V1 は engine 稼働中。
-* §5「SHA pinning + cosign signing は v3.0.0-alpha で実装済み」→ Dependabot のみ実装済み（SHA pin ゼロ、cosign は dead config）。
+* §2・§5 の実装状況は master 側で同内容の訂正が先に着地済みのため重複追記せず。
 * §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
 
 ### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
