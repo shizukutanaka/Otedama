@@ -614,6 +614,71 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 518, September 2026)
+
+Two specification-level developments since the production-JDP evidence
+recorded in this ADR:
+
+- **sv2-spec PR #194 merged (2026-06-16): "allow implementations to use
+  error codes for automated actions."** The Mining Protocol spec now
+  explicitly blesses acting on `SubmitSharesError`/`OpenMiningChannelError`
+  error codes programmatically — the upstream justification for Otedama's
+  canonical reject-code classification (mapping standardized codes to
+  reject families before substring heuristics, in flight since session
+  257's open PRs). Error-code-driven behaviour is now spec-sanctioned,
+  not an implementation liberty.
+- **sv2-spec PRs #202 and #203 (open): a non-custodial pool-payouts
+  extension for JDP.** Two competing designs — #202's request/response
+  payout-set flow vs #203's push-based approach that avoids the
+  declaration RTT — are converging on letting a miner declare its own
+  payout outputs inside a Job Declaration, closing the last custody gap
+  in the SV2 stack (today even a JDP pool assembles the coinbase). This
+  is directly on Otedama's sovereignty axis: when it lands, a
+  miner-declared template can carry the miner's own payout outputs, so
+  `payout_scheme: tides` ceases to be the only non-custodial payout
+  option. Track both PRs; whichever merges defines the wire format a
+  future `internal/btcnode` JDC would need.
+
+---
+
+## Ecosystem update (session 520, September 2026)
+
+- **Upstream now ships an orchestrated JDP stack (`stratum-mining/sv2-ui`).**
+  A Docker-based setup wizard + monitoring dashboard that composes the
+  Translator Proxy, the JDC, and Bitcoin Core IPC (30.x/31.x) into solo,
+  pool-JD, and sovereign-solo deployments. The "hand-assembled stack"
+  gap this ADR prices into the effort estimate is closing upstream: a
+  future Otedama JDC integration can target the same component set
+  sv2-ui orchestrates rather than bespoke wiring.
+- **Go 1.27 released (August 2026); repo verified green under
+  go1.27.1.** `go test ./...` passes on all 23 packages under
+  go1.27.1; no stdlib symbols newer than the `go 1.22` directive are
+  used, so 1.27's new default `stdversion` vet check is clean, and the
+  godebug block parses under 1.27's rule accepting removed GODEBUG
+  settings at their final values. The toolchain-pin bump itself remains
+  owned by the closed-PR line (#369) and is not re-delivered here.
+
+---
+
+## Ecosystem update (session 521, September 2026)
+
+- **Adoption trajectory:** third-party trackers put SV2 transport at an
+  estimated 15–20% of network hashrate in early 2026 (mostly for
+  encryption alone), with the SRI working group projecting 40–60% by
+  end of 2026 as V2-capable firmware becomes the ASIC default — a
+  forecast, not a measurement. The seven-pool working-group commitment
+  (May 2026) remains the load-bearing datapoint.
+- **Repository landscape clarified:** `stratum-mining/stratum` (SRI
+  monorepo, Rust) and `stratum-mining/sv2-apps` (application layer —
+  translator, JDC, sv2-ui) coexist; the JD tooling referenced by this
+  ADR lives in sv2-apps.
+- **Community pattern noted:** `cbyam/solo-pool-rs` auto-detects
+  SV1-vs-SV2 per connection on a single listen port from the first
+  frame byte — an existence proof that the two protocols can share a
+  transport surface, should Otedama ever expose a listening endpoint.
+
+---
+
 ## Ecosystem update (session 530, September 2026)
 
 Two sv2-spec merges since the last pass:
