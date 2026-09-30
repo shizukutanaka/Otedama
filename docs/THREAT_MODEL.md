@@ -245,6 +245,27 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A hostile or misconfigured pool drives difficulty to ~0
+(`mining.set_difficulty` / `SetTarget`), so workers produce shares at
+hardware speed and every share becomes a wire submission — a submit
+flood that wastes this host's CPU/network and can get the account
+rate-limited or banned pool-side.
+
+**Mitigation:** A per-session token bucket (`submitLimiter`) admits at
+most 8 submits/s with a burst of 32; excess shares are dropped before
+they reach the wire and counted on `otedama_shares_submit_dropped_total`.
+The cap is set far above any honest pool's credit rate, and shares that
+would pass it are stale by the time they could send, so the drop loses
+nothing real.
+
+**Residual risk:** The cap bounds the wire rate but not the wasted
+hashing itself — workers still burn cycles producing un-creditable
+shares at difficulty ~0. The session-270 starvation tripwire (warn when
+expected share interval > 1 h) covers the opposite pole; a
+difficulty-floor disconnect is the documented next step.
+
+---
+
 **Threat:** A hostile pool or a MitM on cleartext Stratum V1 sets
 `extranonce2_size` to a huge value at `mining.subscribe` or via a
 mid-session `mining.set_extranonce`. The field flows into

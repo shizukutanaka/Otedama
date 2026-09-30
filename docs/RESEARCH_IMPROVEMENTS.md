@@ -940,6 +940,20 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 307 — per-session submit rate cap stops difficulty→0 share floods (re-delivers closed #402)
+
+**Finding [OBSERVED — code-verified].** A pool (or MitM on cleartext V1)
+assigning difficulty≈0 makes every nonce a "valid share" — the workers flood
+submit, a bandwidth/CPU DoS the capped share channel alone doesn't bound at
+the *protocol* layer.
+
+**Fix [OBSERVED].** A token bucket (8/s refill, burst 32) on both submit
+paths; excess shares drop and count into `otedama_shares_submit_dropped_total`.
+SPECIFICATION §6 catalogue + API.md row + THREAT_MODEL entry synced.
+
+**Tests [OBSERVED].** `TestSubmitLimiter_BurstThenRefill` — burst exhausts
+the bucket, drops count, refill resumes submits.
+
 ## Session 343 — HTTP client redirect refusal
 
 **Redirect downgrade [FIXED].** The rate fetcher's `http.Client` and the

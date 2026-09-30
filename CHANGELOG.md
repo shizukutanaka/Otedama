@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)
+
+**問題.** プール/MitM が難易度 0 を割当てると share-target が巨大化し、
+ワーカーが全 nonce で「シェア成立」→ submit 嵐（帯域・CPU DoS）になった。
+closed #402 の未マージ修正を master へ再デリバー。
+
+**修正.** 両 submit パスにトークンバケット（8/s + burst 32）を導入し、
+超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
+SPECIFICATION/API/THREAT_MODEL 同期済み。
+
 ### Security (session 343 — HTTP リダイレクト拒否)
 
 価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
