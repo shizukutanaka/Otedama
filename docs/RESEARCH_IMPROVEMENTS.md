@@ -940,6 +940,22 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 355 — V1 RPC-call wait timeout
+
+**Goroutine/pending leak on a silent pool [FIXED].** `session.call`
+waited on `respCh` or `ctx.Done()` only. A pool that keeps TCP alive
+but stops answering (wedged server, silent failure) left the waiting
+goroutine and its `pending[id]` entry forever — V1 submits run one
+goroutine per share, so the leak compounded at the share rate for the
+session's whole life. `callTimeout = 60s` (var, test-overridable) now
+bounds the wait: on expiry the pending entry is deleted and the caller
+gets a "timed out" error, which the submit goroutine logs and exits.
+
+**Remaining in-flight state [AUDITED — bounded].** `submitTimes`
+(1024-cap oldest-evict) and the `jobsCh`/`noticeCh` buffers (8 each,
+drop-oldest) are bounded on master; the V2 engine `jobs` map remains
+bounded only on open PR #397/#429 — not re-implemented here.
+
 ## Session 340 — BIP-39 intermediate-buffer zeroization
 
 **Secret-material wipe [FIXED].** `EntropyToMnemonic` and

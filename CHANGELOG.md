@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
 ### Fixed (session 340 — シード派生の中間バッファ消去)
 
 `EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
