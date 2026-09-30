@@ -19,6 +19,86 @@ solo-operations.md の CODEOWNERS サンプルが非実在パス
 存在しないオプション — 自動マージは発動していなかった）を除去し
 実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
 
+### 修正 (session 426 — .gitignore の v2 遺構除去)
+
+- 存在しないツリーを対象とする8セクションを削除: `web/`（Node.js 系 —
+  CLAUDE.md の作成禁止パス）、`scripts/`（Python 系）、docs サイト生成物
+  （.docusaurus/.vuepress — SSG 未導入）、Lightning ノードファイル
+  （channel.db/neutrino.db/lnd.conf — `internal/lightning` は BIP-39 シード
+  保管庫でありノードではない）、Bitcoin Core データ（プール接続のみ）、
+  docker-compose override（compose ファイル自体が非存在）、v2 クリーンアップ
+  残骸（fix_*.sh）、マイニングキャッシュ（work-cache/ 等 — 生成コード無し）。
+- 死んだ許可リスト項目 `!config.production.yaml` / `!SHA256SUMS.example` を
+  削除（`SHA256SUMS*` グロブは release ジョブの生成物なので維持 —
+  session 429 で復元）。
+- 実際に生成される全て（wallet.dat、config.yaml、coverage、prof、リリース
+  アーカイブ、ビルドバイナリ）は引き続き除外済み。
+
+### 修正 (session 428 — 監査文書の検証済み虚偽記述を訂正)
+
+- `BENCHMARKS.md`: 「>5% リグレッションで CI 失敗」は未実装（CI は実行+
+  アーティファクト保存のみ）— 実態に訂正し、未コミットの
+  `BenchmarkDecoder_ReadFrame` 参照と「CI で継続 fuzz」記述も訂正。
+- `AUDIT_CHECKLIST.md` 項目11/13: 「全 action SHA-pin」「cosign 署名済み」の
+  検証欄は虚偽（全 `uses:` がタグ参照、trivy-action は `@master` 追尾、
+  release.yml は署名非生成）— Gap 表記に訂正。
+- `SUSTAINABILITY.md` 実装状況: §2 SV1/SV2「v3.2.0 スコープ」→ 実装済み、
+  §5 「SHA pinning + cosign 実装済み」→ 未実施、に訂正。
+
+### 修正 (session 429 — Makefile の幻影ターゲットと未ガードツール)
+
+- `make migrate-from-v2` が非実在サブコマンド `otedama migrate-from-v2`
+  への手順を echo — docs/MIGRATING-FROM-V2.md への誘導に置き換え。
+- `make security` / `make licenses` が gosec・govulncheck・go-licenses を
+  未ガードで呼び未導入環境で即失敗 — `audit` ターゲットと同じ
+  「未導入なら install 手順を表示してスキップ」パターンに統一。
+- `SHA256SUMS*` グロブを復元 — release ジョブが `artifacts/*/SHA256SUMS`
+  を生成するため除去は誤り（Devin Review 指摘）。
+
+### 修正 (session 430 — v2 時代のエージェント許可ファイルを untrack)
+
+- 追跡されていた `.claude/settings.local.json`（v2 の木を対象とする
+  ~100件の許可エントリ — `internal/mining`・`internal/pool`・
+  `cmd/demo`・WSL パス・ethereum 依存等、全て非実在）を削除し
+  gitignore に追加 — settings.local.json は規約上マシンローカル。
+
+### 修正 (session 431 — Dockerfile の無効宣言とビルドコンテキスト)
+
+- `EXPOSE 0` を削除 — 0 は有効ポート宣言ではなく（Podman は build を
+  拒否）、`--http-addr` は固定ポートではないため EXPOSE 自体不要。
+- `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
+  `config.yaml` 等を build context にアップロードしていた問題を解消。
+
+### 修正 (session 432 — ROADMAP のステータスドリフト)
+
+- `ROADMAP.md`: 「Stratum V1 互換の追加」は実装済み（stratumv1 ダイアラ
+  + `runSessionV1`）、「engine → poolproto 統合」と「poolproto 完全
+  分離」は V1 経路で完了・V2 配線が残件 — 完了/部分完了マークに訂正。
+- `internal/engine/run.go`: 「V2 poolproto ダイアラ Step 3b 待ち」の
+  コメントは陳腐（§3 resolved・Step 3b 完了済み、ダイアラ存在）—
+  実態（engine 配線が残件）に訂正。
+
+### 修正 (session 433 — CATEGORY_AUDIT バックログの陳腐行)
+
+- `docs/CATEGORY_AUDIT.md`: deferred/flagged 行を master と再照合し
+  3件を解決済みに更新 — Windows `Status()`（sc.exe query 実装済み）、
+  `sc.exe binPath=` quoting（serviceArgv 再設計で解消）、
+  `MaxTargetNBits`（spec 照合済み・意図的非実装として文書化）、
+  DATUM 現在形誤記（"is planned" 表記へ訂正済み・§14 で開示済み）。
+  さらに `DispatchFrame` decode error の「無言 continue」記述も陳腐
+  と訂正 — 実際は `engine: pool read` でセッション死亡する fail-fast
+  （提案の debug ログより厳格）。
+
+### テスト (session 369 — btccrypto fuzz)
+
+payout アドレスの bech32/bech32m + Base58Check バリデータに fuzz 追加
+（140万 exec クリーン）。wallet.dat scrypt パラメータがコンパイル時
+定数であること（ファイル経由の KDF DoS 不可）を監査済みと記録。
+
+### 修正 (session 376)
+
+- `.goreleaser.yaml` のリリースノート本文が存在しない `docs/verify-release.md` を参照し、チェックサムファイル名も `checksums.txt`（実際の生成名は `otedama_<ver>_checksums.txt`）と不一致だった点を修正 — リンクは絶対 URL で `docs/DEPLOYMENT.md` へ。
+
 ### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
 
 - `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
