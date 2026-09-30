@@ -505,3 +505,42 @@ func TestVisibleLen_IncompleteEscapeAtEnd(t *testing.T) {
 		t.Errorf("visibleLen on truncated escape = %d", got)
 	}
 }
+
+// TestDashboard_PoolLine_StatusColumnAligned pins padToVisibleWidth: fmt's
+// %-Ns pads by rune count, so a field carrying ANSI escapes was under-padded
+// and the connection status drifted left by the escape length. The status
+// must land at the same visible column regardless of escapes.
+func TestDashboard_PoolLine_StatusColumnAligned(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	const cols = 60
+	line := d.poolLine(Stats{
+		PoolURL:   "stratum+v2://a.co:3336",
+		Connected: true,
+	}, cols)
+	// Find where "✓" first appears in visible terms.
+	if got := strings.Index(line, "✓"); got < 0 {
+		t.Fatalf("status missing: %q", line)
+	}
+	// Walk visibleLen up to the ✓: prefix "  Pool: " (8) + urlBudget
+	// (cols-8-len("✓ connected")-2) + 2-space gap.
+	urlBudget := cols - len("  Pool: ") - len("✓ connected") - 2
+	want := len("  Pool: ") + urlBudget + 2
+	vis := visibleLen(line[:strings.Index(line, "✓")])
+	if vis != want {
+		t.Errorf("status column = %d visible chars, want %d: %q", vis, want, line)
+	}
+}
+
+func TestPadToVisibleWidth(t *testing.T) {
+	if got := padToVisibleWidth("ab", 5); got != "ab   " {
+		t.Errorf("plain pad: %q", got)
+	}
+	esc := dim + "ab" + reset // escapes must not count as width
+	if got := padToVisibleWidth(esc, 5); visibleLen(got) != 5 {
+		t.Errorf("escaped pad visible width = %d, want 5: %q", visibleLen(got), got)
+	}
+	if got := padToVisibleWidth("abcdef", 3); got != "abcdef" {
+		t.Errorf("over-wide stays uncut: %q", got)
+	}
+}
