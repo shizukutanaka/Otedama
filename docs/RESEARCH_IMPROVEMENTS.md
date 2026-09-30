@@ -899,25 +899,29 @@ month, so the discipline matters.
 
 ## Highest-leverage next actions (cross-category synthesis)
 
-Ranked by impact on the path to a real v3.1.0:
+Ranked by impact on the path to a real v3.1.0 — **status updated session
+463** (the original list predates the sessions that shipped several items):
 
-1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
-   channel; library identified, licence compatible. Needs an ADR for the
-   dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
+1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — **open**. The Noise NX handshake
+   still stubs secp256k1+ElligatorSwift with P-256 (`internal/stratum/noise.go`);
+   scheduled for v3.1.0, needs an ADR for the dependency decision.
+2. **engine→poolproto wiring (Cat 2 #8)** — **partly done**. V1 sessions
+   route through `poolproto.DialURL` in `internal/engine/run.go`; the V2 path
+   still uses inline framing — bridging the stratumv2 dialer into the session
+   loop is pending (see the `runSession` doc comment).
 3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
-   — small, high-value observability win that directly reflects miner
-   profitability and needs no new dependency.
-4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
-   placeholder; larger effort, external API.
-5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable.
+   — **done**. `otedama_reject_rate` plus per-category reject counters
+   (`otedama_shares_rejected_by_reason_total`,
+   stale/duplicate/difficulty/hardware/other) live in
+   `internal/engine/metrics.go`.
+4. **Real Akash REST (Cat 5 #1)** — **open**. The provider is still the
+   simulated AkashProvider; external-API work.
+5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — **done**.
+   `otedama_submit_latency_milliseconds` (seq→ack RTT) and the connection/
+   rate-source gauges are registered in `internal/engine/metrics.go`.
 
-Items 3 and 5 are the cheapest real-code wins with no dependency or
-external-API risk, and are the natural next implementation targets after the
-research-only passes.
+Items 3 and 5 were shipped in the intervening sessions; the remaining open
+items are 1, 4, and the V2 half of 2.
 
 ---
 
@@ -970,6 +974,43 @@ panic paths.
 
 **internal/provider [OBSERVED].** quoteCh buffered 16; no unbounded
 map/state on quote arrival.
+
+## Session 463
+
+Audited the stale "Highest-leverage next actions" tail list against
+current master — items 3 (reject classification + metric) and 5
+(submit-latency + pool-state gauges) have shipped since it was written,
+item 2 (engine→poolproto wiring) is done for V1 only, items 1 (secp256k1,
+v3.1.0 scope) and 4 (real Akash REST) remain open. Annotated each entry
+with its current status instead of rewriting the dated list. hal GPU
+sysfs enumeration audited clean (bounded reads, identity validation,
+documented SHA256d:false caps).
+
+## Session 465
+
+Corrected a false portability claim in GODEBUG_NOTES.md: it said the
+go/toolchain split "lets users with older toolchains still build" —
+but `toolchain go1.24.0` makes GOTOOLCHAIN=auto switch to 1.24, and
+under GOTOOLCHAIN=local the pinned `godebug tlsmlkem` fails to parse
+on older toolchains (the exact "unknown godebug" error seen on CI's 1.23.x
+legs). The note now states plainly that Go 1.24+ is required while
+the `go 1.22` line only governs language defaults. Audited clean:
+config.yaml.example covers every yaml field; docs/API.md's five
+missing OTEDAMA_ env vars are open PR #517's territory (not
+duplicated); ADR set has no other phantom references.
+
+## Session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正
+
+**Sweep.** `skills/` 配下の全 markdown を機械照合（コマンド・パス・ビルドタグの実在性、CI ワークフローとの機能一致）し、6件の stale 記述を発見・訂正。open #513 が担当した領域（phantom テスト対象・v4.0 スコープ記述）との重複なし。
+
+**発見（全件訂正、検証済み）。**
+- `skills/tdd.md` 3件: (a) ファズテスト「CI上で継続的に30秒から数分間実行」→ `.github/workflows/` に `fuzz` の参照ゼロ（test.yml は benchmark のみ）。`make fuzz` ローカル実行を正しく記述。(b) 統合テスト「`//go:build integration` タグで分離」→ 宣言ファイルゼロ。実際の区別は `testing.Short()` ゲート。(c) E2Eテスト「`//go:build e2e` タグ・`make test-e2e`」→ スイート未実装・ターゲット削除済み・タグ宣言なし。
+- `skills/security-audit.md` 3件: (a) ファズ「CIで継続的に実行」→ 同上。(b) govulncheck「CIで毎回実行」→ CI 非存在（Makefile `security`/`audit` ローカルターゲットのみ — session 482 の ROADMAP 訂正と同じ虚偽クラス）。(c) 「Web管理インターフェース（`web/`配下）」→ CLAUDE.md のアーキテクチャマップで「存在しないパス（作成禁止）」と明示される phantom 参照。
+- `skills/release-procedure.md` 2件: `otedama migrate-from-v2` phantom コマンド（#523 が SECURITY.md、#543 が Makefile で同クラスを修正した残件 — dispatch に存在せず）→ `docs/MIGRATING-FROM-V2.md` 手順に言い換え。「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
+**正しいと検証済みの記述（変更なし）。** CodeQL/Semgrep は security.yml に実在。カバレッジは test.yml が Codecov へアップロード（回帰警告は Codecov 側機能）。`make fuzz`/`make test-integration`/`make security`/`make audit` 全ターゲット実在。code-review.md・quality-pass-*.md・fuzz-runbook.md は s245/s253 訂正済み or スナップショット記録として正当。
+
+**帰納。** 同じ虚偽クラス（「X は CI で実行される」→ CI 非存在）が ROADMAP・tdd.md・security-audit.md の3箇所に分布 — ドキュメント記述の CI 実態照合は継続監査が必要。
 
 ## Session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正
 
