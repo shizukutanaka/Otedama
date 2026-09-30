@@ -43,6 +43,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // WalletManager handles the secure creation and retrieval of the
@@ -126,6 +127,7 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, fmt.Errorf("lightning: create data dir %q: %w", dataDir, err)
 	}
+	sweepStaleTempFiles(dataDir)
 
 	wm := &WalletManager{dataDir: dataDir, wordList: wordList}
 
@@ -220,6 +222,33 @@ func (wm *WalletManager) loadExisting(passphrase string) error {
 	}
 	wm.seed = seed
 	return nil
+}
+
+// staleTempMaxAge bounds how old a leftover ".wallet-*.tmp" file must
+// be before startup sweeps it. A live save() holds its temp file for
+// milliseconds, so anything older than a minute is abandoned by a
+// crashed or failed write; removing only aged files also keeps the
+// sweep from unlinking a temp file mid-write in a second process that
+// shares the data dir.
+const staleTempMaxAge = time.Minute
+
+// sweepStaleTempFiles removes ".wallet-*.tmp" files older than
+// staleTempMaxAge left behind by a save() that was killed between
+// CreateTemp and Rename. Without the sweep they would accumulate
+// forever; their contents are ciphertext, but cruft in the data dir
+// confuses operators and backup tooling. Best-effort: a sweep failure
+// must never block wallet startup.
+func sweepStaleTempFiles(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, ".wallet-*.tmp"))
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleTempMaxAge)
+	for _, p := range matches {
+		if info, err := os.Stat(p); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(p)
+		}
+	}
 }
 
 // save encrypts seed and atomically writes it to wallet.dat.
