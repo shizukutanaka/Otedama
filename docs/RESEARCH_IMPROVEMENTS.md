@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 548 — metric naming + i18n completeness: conformant
+
+- All 40 emitted `otedama_*` series conform to Prometheus
+  conventions: every monotonic counter ends `_total`; gauges carry
+  unit suffixes (`_seconds`, `_watts`, `_usd_per_hour`,
+  `_sats_per_second`, `_hashes_per_second`); ratios use `_rate`.
+  `otedama_hashrate_hps` exists only as a synthetic test name —
+  the production series is `otedama_hashrate_hashes_per_second`
+  (no duplicate emission).
+- i18n completeness is already fully test-automated:
+  `TestAllLanguages_CoverAllEnglishIDs`,
+  `PlaceholdersMatchEnglish`, `TemplatesParse`, `NoEmptyMessages`,
+  `RenderingWorks_AllLanguages` — every MessageID present in all
+  10 catalogs with matching placeholders and parseable templates.
+  No gap to record.
