@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 369 — btccrypto fuzz)
+
+payout アドレスの bech32/bech32m + Base58Check バリデータに fuzz 追加
+（140万 exec クリーン）。wallet.dat scrypt パラメータがコンパイル時
+定数であること（ファイル経由の KDF DoS 不可）を監査済みと記録。
+
 ### 修正 (session 376)
 
 - `.goreleaser.yaml` のリリースノート本文が存在しない `docs/verify-release.md` を参照し、チェックサムファイル名も `checksums.txt`（実際の生成名は `otedama_<ver>_checksums.txt`）と不一致だった点を修正 — リンクは絶対 URL で `docs/DEPLOYMENT.md` へ。
