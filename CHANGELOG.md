@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
+
+- **`internal/engine` audit surface complete.** All six non-test files
+  (run.go, arbitrate.go, metrics.go, stats.go, setup.go, fanin.go) have
+  now been read end-to-end across sessions 509–511: every goroutine
+  spawn site audited for shared-state access; the only findings were the
+  `rejectByReason` map race (fixed session 509, PR #591) and the
+  arbitration-pause flap (fixed session 510, PR #592). `miner.Worker`'s
+  SetWork↔grind path verified race-free (mutex + workVer generation
+  counter); `LatencyTracker`, `HashrateMonitor`, the V1/V2 session-loop
+  state maps, `fanIn`, and `arbitration.Decide`'s full-device assignment
+  coverage all verified correct.
+- **ADR-009 ecosystem update:** recorded the first known production
+  Stratum V2 Job-Declaration block — mainnet block 955,318, mined by
+  DMND for GoMining on June 25–26, 2026 (verified against DMND's
+  announcement and Bitcoin Magazine). Miner-declared templates are now
+  proven in production, strengthening the ADR's "Why now" premise.
+
 ### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
 
 - **Core-path audit surface complete.** `internal/arbitration`,

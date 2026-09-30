@@ -940,6 +940,35 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 511 — internal/engine fully read; first production JDP block
+
+**Audit milestone.** This session completes the end-to-end read of every
+non-test file in `internal/engine` (run.go 1434 lines, arbitrate.go,
+metrics.go, stats.go, setup.go, fanin.go), closing the shared-state sweep
+started in session 509. Verdicts: `miner.Worker`'s SetWork↔grind path is
+race-free by design (mutex + workVer generation counter — grinding
+threads copy job pointer + version under lock and detect changes between
+nonce batches); `LatencyTracker` is mutex-guarded for concurrent
+record/quantile; `HashrateMonitor` and the session-loop maps (jobs,
+submitTimes, prevHash/active state) are correctly loop-local; `fanIn`
+drains ctx-awarely; `arbitration.Decide` emits an assignment for every
+input device, so the session-510 paused set is fully refreshed each
+cycle — no stale marks can outlive their device. The only findings in the
+package were the two already shipped: `rejectByReason` map race (session
+509, PR #591) and the arbitration-pause flap (session 510, PR #592).
+
+**Ecosystem — ADR-009 update.** DMND mined mainnet block 955,318 for
+GoMining on June 25–26, 2026 — the first known production block built
+via Stratum V2 Job Declaration with a *miner-declared* template (the
+template carried GoMining's own GoBTC Pay transactions). Verified against
+DMND's announcement and Bitcoin Magazine. JDP is now production-proven
+end-to-end; recorded in ADR-009's new Ecosystem-update section.
+
+**ESP-Miner watch.** v2.15.2 (9/18) added BM1372/BM1373 ASIC support;
+v2.15.3 (9/20) derives low-frequency warnings from device presets. No
+actionable delta for Otedama's HAL (sysfs driver only, no ASIC bus code)
+— recorded for the drift log.
+
 ## Session 513 — arbitration + logger + version fully read; core audit complete
 
 **Audit milestones.** With this session's reads of `internal/arbitration`
