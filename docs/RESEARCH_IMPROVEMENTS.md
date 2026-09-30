@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 553 — goroutine-leak coverage map
+
+- 10 packages spawn goroutines (rates, hal, doctor, provider,
+  stratumv1, stratumv2, httpserver, engine×2, miner).
+- Dependency-free NumGoroutine leak tests exist for `rates`
+  (fetcher_test.go:1095 — samples goroutine count before/after
+  ctx cancel).
+- `stratumv2` session's single readLoop goroutine is
+  close-verified: `TestSession_Close_ClosesJobsChannel` proves
+  exit because `close(jobsCh)` is deferred inside the loop —
+  the channel closing IS the goroutine having returned. The
+  conn.Close → ReadFrame error → return path is complete.
+- Recorded, not re-delivered: the adapter's `pending` job map
+  grows per distinct job_id between SetNewPrevHash frames — the
+  same bound class owned by open PRs #377/#385/#412/#429.
