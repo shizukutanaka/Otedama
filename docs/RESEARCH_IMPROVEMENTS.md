@@ -954,6 +954,133 @@ sort or poison the total.
 
 **Tests [OBSERVED].** Five new table cases (NaN/±Inf on both fields).
 
+## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
+
+**Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
+socket with no `SetWriteDeadline`. A pool that keeps the TCP connection
+open but stops reading leaves a blocked `Write` once the kernel send
+buffer fills — the whole V2 runSession stalls silently: no jobs
+processed, no shares out. V1 already bounds writes at 10 s; the V2 path
+had no equivalent.
+
+**Fix [OBSERVED].** `writeTimeout` (10 s, matching V1) applied via
+`SetWriteDeadline` inside `sendMsg`, covering SetupConnection,
+OpenMiningChannel, and every SubmitSharesStandard write.
+
+**Tests [OBSERVED].** `TestSendMsg_WriteDeadline` writes to an unread
+net.Pipe with a shortened timeout and asserts a prompt i/o timeout.
+
+## Session 333 — wallet.dat size bound (real fix)
+
+**UnmarshalEncryptedSeed unbounded alloc [OBSERVED + FIXED].** The
+parser `make([]byte, len(b)-29)`'d whatever `os.ReadFile` returned —
+a corrupt or oversized wallet.dat forced a matching allocation. The
+v1 payload is exactly 80 bytes (64-byte seed + 16-byte tag); added a
+4 KiB cap (generous headroom for future versions) at the single parse
+choke point both loadExisting and ChangePassphrase flow through.
+Test: `TestUnmarshalEncryptedSeed_RejectsOversizedInput`. Touches
+internal/lightning — fund-adjacent, CODEOWNERS review applies.
+
+## Session 305 — reconstruct coinbase/merkle per job so V1 shares are verifiable (re-delivers closed #401)
+
+**Finding [OBSERVED — code-verified].** V1 jobs dropped the coinbase parts
+(coinb1‖en1‖en2‖coinb2) and merkle branch after parsing — shares couldn't be
+verified locally before submit; an invalid share was only discoverable via
+pool reject.
+
+**Fix [OBSERVED].** `poolproto.Job` gains `ExtraNonce`/`Coinb1`/`Coinb2`/
+`MerkleBranch` (V1-only; empty for V2). `miner.Work`/`Share` gain
+`ExtraNonce`. A per-session `en2Counter` (big-endian counter at the field
+tail) plus `completeV1Job()` folds the coinbase (`btccrypto.Hash256`) and
+per-branch `Hash256(merkle‖branch)` at dispatch time.
+
+**Tests [OBSERVED].** stratumv1 en2-counter + coinbase-fold cases; engine
+dispatch threading.
+
+## Session 349 — pool-text sanitization at the log boundary
+
+**Reject-reason escape injection [FIXED].** Session 348 sanitized
+`client.show_message` at the V1 parser; the same vector reached the log
+through the two share-reject paths: V2 `SubmitSharesError.Error`
+(STR0_255, bounded but raw) logged at `run.go`, and V1's
+`ShareResult.Reason` (`fmt.Sprintf("%v", errResult)` — the pool's whole
+JSON error object, potentially longer). New `poolproto.SanitizePoolText`
+strips all Unicode control characters (C0/DEL/C1, including ANSI escape
+introducers) and truncates to 256 runes; applied to `reason` at both
+engine log sites *before* classification (canonical reject codes are
+ASCII, so stripping cannot change the match).
+
+**Job-ID strings in errors [AUDITED — clean].** `applyJob` embeds the
+pool's JobID with `%q`, which escapes control bytes — no injection.
+
+**Escalation boundary [AUDITED — clean].** Shares rejected via the
+protocol error surface stay inside the loop; the engine only escalates
+to reconnect on transport errors, so a hostile reject reason cannot
+liveness-abort the session.
+
+## Session 375 — release-supply-chain claims audit + install.sh fix
+
+[FETCHED] Ecosystem: SRI v1.12.0 (2026-09-17, freedom.tech release notes) —
+deep hardening pass on channels_sv2, codec/framing refactor, **bounded job
+storage** (same class as Otedama's open PR #429), consensus-defect coinbase
+fixes, BIP323 adaptations, AES-256-GCM removed from noise_sv2 leaving
+ChaCha20-Poly1305 the sole cipher. ESP-Miner v2.15.3 (2026-09-20 prerelease;
+v2.15.2 added BM1372/BM1373). No Otedama action — the coinbase defects live
+in the pool-side reconstruction Otedama deliberately does not perform (V1
+coinbase handling is the open #391/#417 thread).
+
+[FIXED] `install.sh` could not download any release the repo actually
+produces: it hardcoded the goreleaser asset name
+(`otedama_<ver>_<os>_<arch>.tar.gz`) while release.yml emits
+`otedama-<os>-<arch>.tar.gz` and ci-cd.yml emits a bare binary. The
+checksums download was a hard `die`, yet release.yml never publishes
+checksums. Now tries all three asset names, accepts either checksum file
+name, still refuses (dies) when none is published unless
+--skip-verify is given, and installs bare binaries
+without tar extraction. `bash -n` clean.
+
+[FIXED] Documentation overclaimed supply-chain mitigations that do not
+exist on master: THREAT_MODEL asserted cosign-signed release artifacts,
+`-trimpath` reproducible builds, and SHA-pinned Actions — release.yml has
+no cosign step, no `-trimpath`, embeds `BuildTime` (inherently
+non-reproducible), and all 8 workflows use `@vN` tags (0/168 `uses:`
+SHA-pinned). AUDIT_CHECKLIST rows 11/13/17/22 corrected to match reality
+(including the session-373 scrypt N=2^17 and seedstore.go fixes, which
+returned to master when PR #485 was closed unmerged). The checklist's own
+rule — a failing row means "open a security advisory" — is served better
+by marking rows as gaps than by claiming mitigations that are absent.
+
+## Session 307 — per-session submit rate cap stops difficulty→0 share floods (re-delivers closed #402)
+
+**Finding [OBSERVED — code-verified].** A pool (or MitM on cleartext V1)
+assigning difficulty≈0 makes every nonce a "valid share" — the workers flood
+submit, a bandwidth/CPU DoS the capped share channel alone doesn't bound at
+the *protocol* layer.
+
+**Fix [OBSERVED].** A token bucket (8/s refill, burst 32) on both submit
+paths; excess shares drop and count into `otedama_shares_submit_dropped_total`.
+SPECIFICATION §6 catalogue + API.md row + THREAT_MODEL entry synced.
+
+**Tests [OBSERVED].** `TestSubmitLimiter_BurstThenRefill` — burst exhausts
+the bucket, drops count, refill resumes submits.
+
+## Session 343 — HTTP client redirect refusal
+
+**Redirect downgrade [FIXED].** The rate fetcher's `http.Client` and the
+doctor clock-skew probe (which used `http.DefaultClient`) followed
+redirects by default — including https→http downgrades. All rate sources
+and the clock probe are hardcoded HTTPS endpoints, so a redirect can only
+be hostile: a network attacker 302-ing a price source to a cleartext
+endpoint could inject a manipulated BTC/USD into the arbitration median.
+`CheckRedirect` now refuses all redirects on both clients. (A legitimately
+moved API would fail loudly and the median falls back to the remaining
+sources — the correct degradation.)
+
+**Rates surface audit [AUDITED — clean].** Verified bounded before this
+round: 10s client timeout, 64KiB `LimitReader`, implausible-reading
+exclusion from the median, per-source health accounting, skew measured
+from the `Date` header, body drained for keep-alive reuse.
+
 ## Session 348 — pool-notice sanitization + config-write audit
 
 **Terminal-escape injection via client.show_message [FIXED].**
