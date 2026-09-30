@@ -24,6 +24,26 @@ parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチ�
 hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
 案件として記録。
 
+### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
+
+**問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
+電気代割れの採掘を止める手段が `curtail_below_btc_usd` の手計算しか
+なかった。closed #373 の未マージ修正を master へ再デリバー。
+
+**修正.** `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐
+フロアを導出（powerWatts/1000 × price $/h → `SatsPerSecond` で sats/sec
+換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+`max(min_yield_sats_per_sec, floor)` を適用。新メトリクス
+`otedama_power_breakeven_floor_sats_per_second`（未設定時 0）。
+
+### 修正 (session 464)
+
+1. `internal/version` のデフォルト値が `v3.0.0-alpha.0-dev` で
+   VERSION ファイル（v3.0.0-alpha.1）とずれていた問題を修正 —
+   ldflags を介さない `go build`/`go install` ビルドが古い
+   バージョンを報告していた。Makefile の VERSION 欠損時
+   フォールバックも同値に揃えた。
+
 ### Fixed (session 523 — test-hygiene lint findings)
 
 - Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
