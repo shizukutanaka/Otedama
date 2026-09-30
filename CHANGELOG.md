@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 405)
+
+`.goreleaser.yaml` の実在しないパス2件を修正 — アーカイブ同梱 glob
+`docs/locales/*.toml`（i18n は `internal/i18n/messages/` の Go ソース
+内蔵で当該ディレクトリなし、全リリースで空一致）と、リリース本文の
+死リンク `docs/verify-release.md`（正しくは `VERIFY.md`）。
+
 ### セキュリティ (session 372 — argv パスフレーズ警告)
 
 `--wallet-passphrase` / `--wallet-mnemonic-passphrase` をフラグ経由で
