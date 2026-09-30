@@ -19,6 +19,13 @@ SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
 根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
 当方クライアント側バウンドで既にミラー済み。
 
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
 ### 監査判定 (session 356 — hal/V1 ディスパッチ)
 
 GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
