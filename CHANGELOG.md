@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 314 — stale ntime を現在時刻へロール（SRI 1.12.0 nTime 境界対応）)
+
+**問題.** V1 `mining.notify` の ntime・V2 の min_ntime/SetNewPrevHash ntime が
+検証なしにブロックヘッダへ直行し、ジョブが古くなるほど提出シェアの
+タイムスタンプが陳腐化。SRI 1.12.0（2026-09-17）が min_ntime/nTime
+境界のシェア検証を全チャネル型で強制したため、stale ntime のシェアは
+サーバーで一律拒否＝ハッシュレートの空費。
+
+**修正.** `rollNTime()` で stale な宣言 ntime をローカル時刻へ前倒し
+（ntime rolling は標準的マイナー挙動で実効 nonce 空間の一部）。
+未来 ntime は min_ntime 下限として原文のまま保持——現在時刻への
+丸め込みは逆に reject になるため。
+
 ### 新機能 (session 387)
 
 - 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)

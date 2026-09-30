@@ -940,6 +940,29 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 314 — roll stale pool ntime forward to wall clock (SRI 1.12.0 nTime-bound lesson)
+
+**Finding [FETCHED — freedom.tech SRI 1.12.0 release notes, 2026-09-17].**
+`channels_sv2` now enforces `min_ntime`/`nTime` bounds on share
+validation across all channel types: shares stamped with an aging ntime
+get rejected once they fall outside the pool's window.
+
+**Fix [OBSERVED].** New `rollNTime()` in run.go: `updateWork` (V2) and
+`applyJob` (V1) roll a stale declared ntime forward to `time.Now()`;
+a future ntime stays verbatim (rolling down would undershoot min_ntime —
+itself a reject). Submission echoes `Header.Time`, so the submitted nTime
+always matches the hashed header.
+
+**Tests [OBSERVED].** `TestRollNTime` — stale→now, future→verbatim,
+now→unchanged.
+
+**Other SRI 1.12.0 notes audited [FETCHED].** noise_sv2 dropped
+AES-256-GCM (ChaCha20-Poly1305 sole cipher) — Otedama's noise stack is
+already ChaChaPoly-only, no action. Coinbase defects (undersized BIP141
+parts, scriptSig serialization) are server-side taker paths — not a
+client concern. ESP-Miner v2.15.x continues (v2.15.3); its SV2
+"pending shares" dashboard maps to our `shares_pending` gauges.
+
 ## Session 387 — first-run wallet backup verification re-delivery
 
 [FIXED — re-delivered] **First-run wallet backup verification** (`internal/engine/setup.go`, `internal/engine/run.go`, `internal/engine/run_test.go`), cherry-picked from closed #379: after the one-time recovery-phrase display, interactive terminals get a 3-position re-entry check drawn from crypto/rand — wrong or blank answers print a loud NOT-verified warning and log a warn, never a false pass; the phrase is never re-shown (the shown-once contract stands). Gated by `stdinIsTerminal` (*os.File + ModeCharDevice) so systemd/docker/piped stdin never see a prompt; `Options.Input io.Reader` (default os.Stdin) lets embedders drive or suppress the flow. For a non-custodial wallet, an unverified backup is the dominant fund-loss path — the software cannot detect a lost wallet.dat, so the backup step must prove the phrase left the screen.
