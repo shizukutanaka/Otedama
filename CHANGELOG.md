@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 581 — HTTP timeouts)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: rates client 10s, doctor
+  probe 5s ctx-scoped, httpserver sets all four server timeouts
+  — zero unbounded HTTP waits.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
