@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -1904,6 +1906,103 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	}
 	if len(sess.noticeCh) != 0 {
 		t.Error("unknown method enqueued a notice")
+	}
+}
+
+func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
+	old := callTimeout
+	callTimeout = 50 * time.Millisecond
+	defer func() { callTimeout = old }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Server drains the request but never responds.
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+	}()
+
+	start := time.Now()
+	_, err := sess.call(context.Background(), 7, "mining.submit", nil)
+	if err == nil {
+		t.Fatal("call should return timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("err = %v, want timeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("call blocked %v, want <5s", elapsed)
+	}
+	// Pending entry must be released, not leaked.
+	sess.pendingMu.Lock()
+	n := len(sess.pending)
+	sess.pendingMu.Unlock()
+	if n != 0 {
+		t.Errorf("pending map has %d entries after timeout, want 0", n)
+	}
+}
+
+func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
+	sess := makeBareSess()
+	sess.extranonce1 = "c0ffee01"
+	sess.extranonce2Size = 4
+
+	notify := func(id string) poolproto.Job {
+		sess.dispatch([]byte(fmt.Sprintf(
+			`{"method":"mining.notify","params":[%q,`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",`+
+				`"ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000",`+
+				`[],"00000002","1d00ffff","68d36c5e",true]}`, id)))
+		select {
+		case j := <-sess.jobsCh:
+			return j
+		default:
+			t.Fatal("notify did not enqueue a job")
+			return poolproto.Job{}
+		}
+	}
+
+	j1 := notify("1")
+	if j1.MerkleRoot == ([32]byte{}) {
+		t.Fatal("MerkleRoot not computed — coinbase fold did not run")
+	}
+	if len(j1.ExtraNonce) != 4 || hex.EncodeToString(j1.ExtraNonce) != "00000001" {
+		t.Fatalf("ExtraNonce = %x, want 00000001", j1.ExtraNonce)
+	}
+
+	j2 := notify("2")
+	if j2.MerkleRoot == j1.MerkleRoot {
+		t.Fatal("consecutive jobs share a merkle root — en2 did not roll")
+	}
+	if hex.EncodeToString(j2.ExtraNonce) != "00000002" {
+		t.Fatalf("job 2 ExtraNonce = %x, want 00000002", j2.ExtraNonce)
+	}
+
+	// Verify the fold end-to-end: merkle == dsha(coinb1|en1|en2|coinb2)
+	// with an empty branch list.
+	en1, _ := hex.DecodeString(sess.extranonce1)
+	coinb1, _ := hex.DecodeString("0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	coinb2, _ := hex.DecodeString("ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000")
+	want := btccrypto.Hash256(append(append(append(append([]byte{}, coinb1...), en1...), j1.ExtraNonce...), coinb2...))
+	if j1.MerkleRoot != want {
+		t.Fatalf("MerkleRoot = %x, want %x", j1.MerkleRoot, want)
+	}
+}
+
+func TestCompleteV1Job_SkipsWithoutParts(t *testing.T) {
+	sess := makeBareSess()
+	// No negotiated extranonces: notify arrives "unprepared".
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","aa","bb",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	j := <-sess.jobsCh
+	if j.MerkleRoot != ([32]byte{}) {
+		t.Errorf("MerkleRoot = %x, want zero (no negotiated en1)", j.MerkleRoot)
 	}
 }
 
