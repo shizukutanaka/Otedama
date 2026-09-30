@@ -287,8 +287,8 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 			if s.NVersion != 0x20000004 {
 				t.Errorf("submitted NVersion = 0x%08X, want 0x20000004 (the job's version)", s.NVersion)
 			}
-			if s.NTime != 0x60000000 {
-				t.Errorf("submitted NTime = 0x%08X, want 0x60000000 (SetNewPrevHash min_ntime)", s.NTime)
+			if s.NTime < 0x60000000 {
+				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash min_ntime floor; stale values roll forward — see rollNTime)", s.NTime)
 			}
 			if s.JobID != 1 {
 				t.Errorf("submitted JobID = %d, want 1", s.JobID)
@@ -331,14 +331,14 @@ func TestDefaultPoolURL_UsesConfiguredPool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://custom.pool:3336"}},
 	}
-	got := defaultPoolURL(cfg)
+	got := defaultPoolURL(&cfg)
 	if got != "stratum+v2://custom.pool:3336" {
 		t.Errorf("got %q, want custom pool", got)
 	}
 }
 
 func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
-	got := defaultPoolURL(config.Config{})
+	got := defaultPoolURL(&config.Config{})
 	if got == "" {
 		t.Error("default pool URL is empty")
 	}
@@ -377,7 +377,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
 
 	select {
 	case s := <-shares:
@@ -387,8 +387,8 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		if s.Version != 0x20000004 {
 			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
 		}
-		if s.NTime != 0x60000000 {
-			t.Errorf("share NTime = 0x%08X, want 0x60000000", s.NTime)
+		if s.NTime < 0x60000000 {
+			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (min_ntime floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
 		}
 	case <-ctx.Done():
 		t.Fatal("no share within 3s at the easiest share target — share target not honored")
@@ -405,7 +405,7 @@ func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
 	var prevHash [32]byte
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	updateWork([]*miner.Worker{w}, nil, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, nil, &job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,8 +457,35 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
+	}
+}
+
+func TestRollNTime(t *testing.T) {
+	now := uint32(time.Now().Unix())
+	for _, tc := range []struct {
+		name     string
+		declared uint32
+		wantAt   string // "now" | "declared"
+	}{
+		{"stale ntime rolls forward to now", now - 3600, "now"},
+		{"future ntime kept verbatim (min_ntime floor)", now + 3600, "declared"},
+		{"exactly now unchanged", now, "declared"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rollNTime(tc.declared)
+			switch tc.wantAt {
+			case "now":
+				if got < now {
+					t.Errorf("rollNTime(%d) = %d, want >= now=%d", tc.declared, got, now)
+				}
+			case "declared":
+				if got != tc.declared {
+					t.Errorf("rollNTime(%d) = %d, want %d", tc.declared, got, tc.declared)
+				}
+			}
+		})
 	}
 }
 
@@ -514,8 +541,68 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
+// ----- transitionReject / v1ShareTarget: benign retarget rejects (ESP-Miner #212) -----
+
+func TestV1ShareTarget(t *testing.T) {
+	// difficulty 0 means no mining.set_difficulty has been seen yet — the
+	// pool's current target epoch cannot be established.
+	if _, ok := v1ShareTarget(0); ok {
+		t.Error("v1ShareTarget(0): ok = true, want false")
+	}
+	if _, ok := v1ShareTarget(-1); ok {
+		t.Error("v1ShareTarget(-1): ok = true, want false")
+	}
+	const d = 0.001
+	got, ok := v1ShareTarget(d)
+	if !ok {
+		t.Fatalf("v1ShareTarget(%v): ok = false, want true", d)
+	}
+	want, err := miner.TargetFromDifficulty(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("v1ShareTarget(%v) = %x, want %x", d, got, want)
+	}
+}
+
+func TestTransitionReject(t *testing.T) {
+	oldT, err := miner.TargetFromDifficulty(0.001) // easy epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	newT, err := miner.TargetFromDifficulty(1000) // harder epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldT == newT {
+		t.Fatal("test targets unexpectedly equal")
+	}
+	tests := []struct {
+		name     string
+		category string
+		issued   miner.Hash
+		current  miner.Hash
+		want     bool
+	}{
+		{"retarget while in flight", "difficulty", oldT, newT, true},
+		{"same epoch is a real reject", "difficulty", oldT, oldT, false},
+		{"stale is never a transition", "stale", oldT, newT, false},
+		{"duplicate is never a transition", "duplicate", oldT, newT, false},
+		{"hardware is never a transition", "hardware", oldT, newT, false},
+		{"other is never a transition", "other", oldT, newT, false},
+		{"zero issued target ineligible", "difficulty", miner.Hash{}, newT, false},
+	}
+	for _, tt := range tests {
+		if got := transitionReject(tt.category, tt.issued, tt.current); got != tt.want {
+			t.Errorf("%s: transitionReject(%q, ...) = %v, want %v",
+				tt.name, tt.category, got, tt.want)
+		}
+	}
+}
+
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
-	urls := poolURLs(config.Config{})
+	urls := poolURLs(&config.Config{})
 	if len(urls) != 1 {
 		t.Fatalf("empty config: got %d URLs, want 1 default", len(urls))
 	}
@@ -532,7 +619,7 @@ func TestPoolURLs_PreservesOrder(t *testing.T) {
 			{URL: "stratum+tcp://backup2.example.com:3333"},
 		},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 3 {
 		t.Fatalf("got %d URLs, want 3", len(urls))
 	}
@@ -553,7 +640,7 @@ func TestPoolURLs_SinglePool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://only.example.com:3336"}},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 1 || urls[0] != "stratum+v2://only.example.com:3336" {
 		t.Errorf("single pool: got %v", urls)
 	}
@@ -742,6 +829,12 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// Canonical SV2 SubmitSharesError codes (sv2-spec MiningProtocol):
+		// "invalid-job-id"/"invalid-channel-id" are stale-class, NOT hardware.
+		{"stale-share", "stale", "stale"},
+		{"invalid-job-id", "stale", "stale"},
+		{"invalid-channel-id", "stale", "stale"},
+		{"difficulty-too-low", "difficulty", "difficulty"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)
@@ -859,7 +952,7 @@ func TestPayoutAddresses_PrimaryFirstThenList(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"bc1qbackup100000000000000000000000000000", "bc1qbackup200000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	want := []string{
 		"bc1qprimary00000000000000000000000000000",
 		"bc1qbackup100000000000000000000000000000",
@@ -880,7 +973,7 @@ func TestPayoutAddresses_DedupAndSkipEmpty(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"", "bc1qprimary00000000000000000000000000000", "bc1qbackup100000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	// primary + one unique backup; empty and duplicate-of-primary dropped.
 	if len(got) != 2 {
 		t.Fatalf("got %d addresses, want 2 (dedup + skip empty): %v", len(got), got)
@@ -894,7 +987,7 @@ func TestPayoutAddresses_ListOnlyNoPrimary(t *testing.T) {
 	cfg := config.Config{
 		BitcoinAddresses: []string{"bc1qonly000000000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	if len(got) != 1 || got[0] != "bc1qonly000000000000000000000000000000000" {
 		t.Fatalf("list-only config: got %v, want single backup as the active address", got)
 	}
@@ -1216,7 +1309,7 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		updateWork(opts.workers, nil, job, 0, prevHash, 0x207fffff, 0x60000000, target)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -1270,6 +1363,42 @@ func TestUpdateLiveness_CurtailedReportsHealthyAndDoesNotStall(t *testing.T) {
 	}
 }
 
+func TestUpdateLiveness_AllArbPausedReportsHealthyAndDoesNotStall(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	paused := &pauseSet{}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-a"})
+	paused.Pause("dev-a") // the only worker is arbitration-paused (yield floor)
+	opts := sessionOpts{m: m, arbPaused: paused, workers: []*miner.Worker{w}}
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	// The worker is intentionally idle, so hashrate is 0 every tick — this
+	// must not be read as a fault, same as curtailment.
+	for i := 0; i < 5; i++ {
+		if stalled := opts.updateLiveness(hashMon, 0); stalled {
+			t.Fatalf("sample %d: reported stalled while every worker is arbitration-paused", i)
+		}
+	}
+	if hashMon.Stalled() {
+		t.Error("stall monitor advanced to stalled while arbitration-paused (would emit a false warning)")
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Errorf("otedama_up = %v while arbitration-paused, want 1 (healthy/paused)", got)
+	}
+
+	// A partially-paused set is still a real stall: another device is
+	// nominally mining, so 0 total hashrate means fault.
+	paused.Resume("dev-a")
+	paused.Pause("dev-b") // not among workers
+	var stalled bool
+	for i := 0; i < 3; i++ {
+		stalled = opts.updateLiveness(hashMon, 0)
+	}
+	if !stalled {
+		t.Error("expected a fault stall once a worker is no longer arbitration-paused")
+	}
+}
+
 func TestUpdateLiveness_NotCurtailedZeroHashrateStalls(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1311,7 +1440,7 @@ func TestSetupWallet_EmptyPassphraseReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "", Config: config.Config{DataDir: "/tmp"}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty passphrase = %q, want empty", fp)
 	}
@@ -1325,7 +1454,7 @@ func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "correct-horse-battery-staple", Config: config.Config{DataDir: ""}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty DataDir = %q, want empty", fp)
 	}
@@ -1343,7 +1472,7 @@ func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple",
 		Config:           config.Config{DataDir: "/dev/null/impossible"},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with unwritable DataDir = %q, want empty", fp)
 	}
@@ -1367,7 +1496,7 @@ func TestSetupWallet_NewWalletReturnsFingerprint(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: dir},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp == "" {
 		t.Error("setupWallet should return a non-empty fingerprint for a new wallet")
 	}
@@ -1404,7 +1533,7 @@ func TestSetupWallet_NewWalletPrintsRecoveryPhrase(t *testing.T) {
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
 	}
-	fp := setupWallet(opts, func(_, _ string) {})
+	fp := setupWallet(&opts, func(_, _ string) {})
 	if fp == "" {
 		t.Fatal("setupWallet returned an empty fingerprint for a new wallet")
 	}
@@ -1448,7 +1577,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	nop := func(_, _ string) {}
 
 	var first bytes.Buffer
-	fp1 := setupWallet(Options{
+	fp1 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &first,
@@ -1458,7 +1587,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	}
 
 	var second bytes.Buffer
-	fp2 := setupWallet(Options{
+	fp2 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &second,
@@ -1479,7 +1608,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 	var out bytes.Buffer
 	var logs []string
-	setupWallet(Options{
+	setupWallet(&Options{
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
@@ -1496,7 +1625,22 @@ func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 		t.Fatal("precondition failed: no 24-word phrase was printed")
 	}
 
-	joined := strings.Join(logs, "\n")
+	// The fixed wallet-setup messages are constant strings that already
+	// contain BIP-39 vocabulary ("phrase" in "recovery phrase", "wallet",
+	// "created", ...): a random 24-word draw colliding with that prose is
+	// a false positive, not a leak — the messages carry no mnemonic
+	// content. Strip the static lines so only dynamic log content is
+	// scanned; a genuine leak reproduces mnemonic words in messages that
+	// interpolate them.
+	var dynamic []string
+	for _, line := range logs {
+		if line == "wallet: new wallet created — back up your recovery phrase" ||
+			strings.HasPrefix(line, "wallet: fingerprint ") {
+			continue
+		}
+		dynamic = append(dynamic, line)
+	}
+	joined := strings.Join(dynamic, "\n")
 	for _, word := range strings.Fields(phraseLine) {
 		// Match whole words only: BIP-39 words are common English and
 		// could otherwise collide with substrings of ordinary log prose.
@@ -1518,6 +1662,138 @@ func TestPrintRecoveryPhrase_NoOutputCases(t *testing.T) {
 	printRecoveryPhrase(&out, nil, "deadbeef")
 	if out.Len() != 0 {
 		t.Errorf("empty mnemonic should print nothing; got %q", out.String())
+	}
+}
+
+// TestPrintRecoveryPhrase_PointsToWalletVerify guards the one place users
+// ever see their phrase: the banner must name the command that checks a
+// written-down backup, or `otedama wallet verify` stays undiscoverable at
+// the exact moment it is needed.
+func TestPrintRecoveryPhrase_PointsToWalletVerify(t *testing.T) {
+	var out bytes.Buffer
+	printRecoveryPhrase(&out, lightning.Mnemonic{"abandon", "ability"}, "deadbeef")
+	if !strings.Contains(out.String(), "otedama wallet verify") {
+		t.Errorf("recovery-phrase banner should point at `otedama wallet verify`; got:\n%s", out.String())
+	}
+}
+
+// ============================================================================
+// first-run backup verification (Cat-8 #8)
+// ============================================================================
+
+func TestStdinIsTerminal_NonFile(t *testing.T) {
+	if stdinIsTerminal(bytes.NewBufferString("word\n")) {
+		t.Error("bytes.Buffer is not a terminal — prompt must not appear")
+	}
+	if stdinIsTerminal(nil) {
+		t.Error("nil reader is not a terminal")
+	}
+}
+
+func TestPickWordPositions(t *testing.T) {
+	for trial := 0; trial < 200; trial++ {
+		pos := pickWordPositions(24, backupCheckCount)
+		if len(pos) != backupCheckCount {
+			t.Fatalf("len = %d, want %d", len(pos), backupCheckCount)
+		}
+		seen := map[int]bool{}
+		prev := -1
+		for _, p := range pos {
+			if p < 0 || p >= 24 {
+				t.Fatalf("position %d out of range [0,24)", p)
+			}
+			if seen[p] {
+				t.Fatalf("duplicate position %d", p)
+			}
+			if p <= prev {
+				t.Fatalf("positions not ascending: %v", pos)
+			}
+			seen[p] = true
+			prev = p
+		}
+	}
+	// k >= n returns every index.
+	if got := pickWordPositions(3, 5); len(got) != 3 {
+		t.Errorf("pickWordPositions(3,5) len = %d, want 3", len(got))
+	}
+	if got := pickWordPositions(0, 3); got != nil {
+		t.Errorf("pickWordPositions(0,3) = %v, want nil", got)
+	}
+}
+
+// TestVerifyBackupPhrase exercises the prompt over an in-memory stdin:
+// correct re-entry passes, a wrong word fails, and a blank answer is a
+// "not backed up" fail rather than a false pass.
+func TestVerifyBackupPhrase(t *testing.T) {
+	words := []string{
+		"abandon", "ability", "able", "about", "above", "absent",
+		"absorb", "abstract", "absurd", "abuse", "access", "accident",
+	}
+	mnemonic := lightning.Mnemonic(words)
+
+	// Deterministic positions (the live path draws them from crypto/rand):
+	// feed the exact correct answers, including mixed case and padding.
+	var out bytes.Buffer
+	in := bytes.Buffer{}
+	for _, pos := range []int{2, 7, 10} {
+		in.WriteString("  " + strings.ToUpper(words[pos]) + " \n")
+	}
+	if !verifyBackupPositions(&in, &out, mnemonic, []int{2, 7, 10}) {
+		t.Error("correct answers should verify; output:\n" + out.String())
+	}
+	if !strings.Contains(out.String(), "Backup verified") {
+		t.Errorf("expected success notice; got:\n%s", out.String())
+	}
+}
+
+// Wrong-word and blank-answer paths must both report NOT verified.
+func TestVerifyBackupPhrase_Failures(t *testing.T) {
+	mnemonic := lightning.Mnemonic{"alpha", "beta", "gamma", "delta"}
+	positions := []int{0, 1, 3}
+
+	var out bytes.Buffer
+	in := bytes.Buffer{}
+	for range positions {
+		in.WriteString("wrong\n")
+	}
+	if verifyBackupPositions(&in, &out, mnemonic, positions) {
+		t.Error("wrong answers should fail verification")
+	}
+	if !strings.Contains(out.String(), "NOT verified") {
+		t.Errorf("expected failure warning; got:\n%s", out.String())
+	}
+
+	out.Reset()
+	in.Reset()
+	for range positions {
+		in.WriteString("\n") // a blank line counts as not backed up
+	}
+	if verifyBackupPositions(&in, &out, mnemonic, positions) {
+		t.Error("blank answers should fail verification, not silently pass")
+	}
+
+	// An out-of-range position must fail closed, not panic.
+	out.Reset()
+	in.Reset()
+	if verifyBackupPositions(&in, &out, mnemonic, []int{99}) {
+		t.Error("out-of-range position should fail closed")
+	}
+}
+
+// A nil writer, empty mnemonic, or empty position list must not panic
+// or block on stdin.
+func TestVerifyBackupPhrase_Guards(t *testing.T) {
+	var in bytes.Buffer
+	if verifyBackupPhrase(&in, nil, lightning.Mnemonic{"x"}) {
+		t.Error("nil writer should fail closed")
+	}
+	var out bytes.Buffer
+	if verifyBackupPhrase(&in, &out, nil) {
+		t.Error("empty mnemonic should fail closed")
+	}
+	out.Reset()
+	if verifyBackupPositions(&in, &out, lightning.Mnemonic{"x"}, nil) {
+		t.Error("empty positions should fail closed")
 	}
 }
 
@@ -2129,23 +2405,69 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 // until the client disconnects, which allows multiple stats-tick cycles to
 // run inside runSession.
 type responsivePool struct {
-	t       *testing.T
-	ln      net.Listener
-	addr    string
-	started chan struct{}
+	t           *testing.T
+	ln          net.Listener
+	addr        string
+	started     chan struct{}
+	shareTarget [32]byte
+	// retargetRejects changes the share policy to the ESP-Miner #212
+	// scenario: the first submitted share gets a SetTarget (new, still
+	// easy epoch) followed by SubmitSharesError("Above target") — a
+	// mid-flight retarget reject; every later share is accepted.
+	//
+	// The flag is atomic: tests arm it after construction while serve()
+	// is already running on its own goroutine, so a plain bool write
+	// would race that read.
+	retargetRejects atomic.Bool
+	// bogusAccept emits a SubmitSharesSuccess with a never-sent
+	// LastSequenceNumber right after activation — a forged accept frame.
+	bogusAccept bool
+	// bogusReject makes serve() emit a SubmitSharesError for a
+	// SequenceNumber the client never used (future seq), right after
+	// activating the job — exercising the engine's bogus-seq guard.
+	bogusReject bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
+	t.Helper()
+	return newResponsivePoolOpt(t, false)
+}
+
+// newResponsivePoolT lets a test pick the channel's share target: all-0xFF
+// is trivially easy, while a near-zero target starves share production.
+func newResponsivePoolT(t *testing.T, shareTarget [32]byte) *responsivePool {
+	t.Helper()
+	return newResponsivePoolFull(t, false, false, shareTarget)
+}
+
+func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
+	t.Helper()
+	return newResponsivePoolOpts(t, bogusReject, false)
+}
+
+func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *responsivePool {
+	t.Helper()
+	var easy [32]byte
+	for i := range easy {
+		easy[i] = 0xFF
+	}
+	return newResponsivePoolFull(t, bogusReject, bogusAccept, easy)
+}
+
+func newResponsivePoolFull(t *testing.T, bogusReject, bogusAccept bool, shareTarget [32]byte) *responsivePool {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("responsivePool: listen: %v", err)
 	}
 	fp := &responsivePool{
-		t:       t,
-		ln:      ln,
-		addr:    ln.Addr().String(),
-		started: make(chan struct{}),
+		t:           t,
+		ln:          ln,
+		addr:        ln.Addr().String(),
+		started:     make(chan struct{}),
+		shareTarget: shareTarget,
+		bogusReject: bogusReject,
+		bogusAccept: bogusAccept,
 	}
 	go fp.serve()
 	return fp
@@ -2196,14 +2518,12 @@ func (fp *responsivePool) serve() {
 		return
 	}
 
-	// Send OpenMiningChannelSuccess with all-0xFF target (trivially easy)
+	// Send OpenMiningChannelSuccess with the pool's configured share target.
 	omcSucc := stratum.OpenMiningChannelSuccess{
 		ReqID:           omc.ReqID,
 		ChannelID:       1,
 		ExtraNonce2Size: 4,
-	}
-	for i := range omcSucc.Target {
-		omcSucc.Target[i] = 0xFF
+		Target:          fp.shareTarget,
 	}
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
@@ -2233,6 +2553,30 @@ func (fp *responsivePool) serve() {
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
 
+	if fp.bogusAccept {
+		// Acknowledge a sequence number the client never sent.
+		bogus := stratum.SubmitSharesSuccess{
+			ChannelID:          1,
+			LastSequenceNumber: 9999,
+			NewSubmitsAccepted: 1,
+		}
+		payload, _ = bogus.Encode()
+		fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+	}
+
+	if fp.bogusReject {
+		// Reject a SequenceNumber far beyond anything the client could
+		// have sent. A hostile pool can inject these freely; the engine
+		// must not count them.
+		resp := stratum.SubmitSharesError{
+			ChannelID:      1,
+			SequenceNumber: 9999,
+			Error:          "low-difficulty share",
+		}
+		payload, _ = resp.Encode()
+		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
+
 	// Read shares and respond accordingly
 	shareCount := 0
 	for {
@@ -2249,6 +2593,39 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
+		if fp.retargetRejects.Load() {
+			if shareCount == 1 {
+				// ESP-Miner #212: retarget mid-flight, then reject the
+				// share that was ground under the superseded target. The
+				// new epoch stays nearly-max so workers keep producing
+				// shares under it.
+				st := stratum.SetTarget{ChannelID: share.ChannelID}
+				for i := range st.MaxTarget {
+					st.MaxTarget[i] = 0xFE
+				}
+				payload, _ = st.Encode()
+				fp.emit(conn, stratum.MsgSetTarget, true, payload)
+
+				resp := stratum.SubmitSharesError{
+					ChannelID:      share.ChannelID,
+					SequenceNumber: share.SequenceNumber,
+					Error:          "Above target",
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			} else {
+				// Every share after the retarget reject is accepted, so
+				// the only reject in the whole session is the benign one.
+				resp := stratum.SubmitSharesSuccess{
+					ChannelID:          share.ChannelID,
+					LastSequenceNumber: share.SequenceNumber,
+					NewSubmitsAccepted: 1,
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+			}
+			continue
+		}
 		switch shareCount {
 		case 1:
 			// First share: acknowledge. Exercises SubmitSharesSuccess handler
@@ -2381,6 +2758,88 @@ waitLoop:
 	}
 }
 
+// TestRunSession_RetargetRejectExcludedFromRejectRate exercises the
+// ESP-Miner #212 benign-reject path end to end over a real SV2 session:
+// the pool retargets the channel while a share is in flight, then rejects
+// it as "Above target". The reject must appear only in the per-reason
+// breakdown as "difficulty-transition" and never in the reject-rate
+// counters, while every later share (ground under the new epoch) is
+// accepted — so sharesRejected stays exactly 0 for the whole session.
+func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	fp.retargetRejects.Store(true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Poll for the deterministic signals: the transition counter becoming
+	// nonzero proves the #212 path ran, and a subsequent accepted share
+	// proves the session kept mining under the new epoch.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	transitionObserved, acceptedObserved := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.rejectReason("difficulty-transition").Value() > 0 {
+				transitionObserved = true
+			}
+			if m.sharesAccepted.Value() > 0 {
+				acceptedObserved = true
+			}
+			if transitionObserved && acceptedObserved {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !transitionObserved {
+		t.Error("difficulty-transition counter stayed 0; mid-flight retarget path not exercised")
+	}
+	if !acceptedObserved {
+		t.Error("sharesAccepted stayed 0; session did not keep mining under the new epoch")
+	}
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — benign retarget rejects must not enter the reject-rate counters", got)
+	}
+	if got := m.rejectReason("difficulty").Value(); got != 0 {
+		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
+	}
+}
+
 // TestRunSession_CurtailmentSilencesJob verifies that when the curtailment
 // gate is raised a received pool job is not forwarded to workers: the session
 // loop logs a debug "ignored (curtailed)" message instead of calling updateWork.
@@ -2465,6 +2924,509 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
+// tripwire: a near-impossible share target must produce exactly one warning
+// per episode no matter how many stats ticks run.
+func TestRunSession_StarvationWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// Tiny share target — only hash value 0 or 1 can ever satisfy it, so
+	// the implied share difficulty is astronomical and no share is found.
+	var starved [32]byte
+	starved[0] = 0x01
+	fp := newResponsivePoolT(t, starved)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	// First warn should appear quickly once a tick observes the huge
+	// estimated interval; let many more ticks run to prove it stays once.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	// A few hundred ms of extra ticks — warn-once is the assertion.
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var starveWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "between shares") {
+			starveWarns++
+		}
+	}
+	if starveWarns == 0 {
+		t.Errorf("starvation warning never fired; warns=%v", warns)
+	}
+	if starveWarns > 1 {
+		t.Errorf("starvation warning fired %d times, want once per episode", starveWarns)
+	}
+}
+
+// TestRunSession_BatchAcceptCreditsPoolCount verifies the fix that credits
+// SubmitSharesSuccess.NewSubmitsAccepted (the pool-reported batch count)
+// instead of +1 per message: a pool that batch-acknowledges 3 shares in one
+// message must move sharesAccepted by 3.
+func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().String()
+
+	poolDone := make(chan struct{})
+	go func() {
+		defer close(poolDone)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+		emit := func(msgType uint8, isChannel bool, payload []byte) {
+			f, err := stratum.WrapMessage(msgType, isChannel, payload)
+			if err != nil {
+				return
+			}
+			data, err := stratum.EncodeFrame(f)
+			if err != nil {
+				return
+			}
+			conn.Write(data) //nolint:errcheck
+		}
+
+		if _, err = dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		emit(stratum.MsgSetupConnectionSuccess, false, payload)
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+		if err != nil {
+			return
+		}
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range omcSucc.Target {
+			omcSucc.Target[i] = 0xFF
+		}
+		payload, _ = omcSucc.Encode()
+		emit(stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+		payload, _ = job.Encode()
+		emit(stratum.MsgNewMiningJob, true, payload)
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		payload, _ = prev.Encode()
+		emit(stratum.MsgSetNewPrevHash, true, payload)
+
+		// Third submit: batch-acknowledge all THREE shares in one message
+		// — the counter must credit 3 even though only one ack arrives.
+		// Keep reading afterwards: closing the conn right after the ack
+		// races the client's delivery of that frame.
+		acked := false
+		submits := 0
+		for {
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+			f, err = dec.ReadFrame()
+			if err != nil {
+				return
+			}
+			if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+				continue
+			}
+			share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+			if err != nil || acked {
+				continue
+			}
+			if submits++; submits < 3 {
+				continue
+			}
+			acked = true
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 3,
+			}
+			payload, _ = resp.Encode()
+			emit(stratum.MsgSubmitSharesSuccess, true, payload)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  "stratum+v2://" + addr,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			if v := m.sharesAccepted.Value(); v >= 3 {
+				cancel()
+				<-runDone
+				if v != 3 {
+					t.Fatalf("sharesAccepted = %v, want exactly 3 (one batch-ack of 3)", v)
+				}
+				return
+			}
+		case <-deadline:
+			cancel()
+			<-runDone
+			t.Fatalf("timed out; sharesAccepted=%v sharesSubmitted=%v",
+				m.sharesAccepted.Value(), m.sharesSubmitted.Value())
+		}
+	}
+}
+
+func TestRunSessionV2_FutureSeqAcceptIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolOpts(t, false, true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log: func(_, msg string) {
+				mu.Lock()
+				logs = append(logs, msg)
+				mu.Unlock()
+			},
+		})
+	}()
+
+	// The forged accept must be dropped with the debug marker before any
+	// real share can be counted.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawBogus := false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "future seq 9999") {
+					sawBogus = true
+				}
+			}
+			mu.Unlock()
+			if sawBogus {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+	if !sawBogus {
+		t.Fatal("expected debug log for forged accept with future seq 9999")
+	}
+	if got := m.sharesAccepted.Value(); got != 0 {
+		t.Fatalf("sharesAccepted = %d, want 0 (forged accept must not credit)", got)
+	}
+}
+
+// TestRunSessionV2_FutureSeqRejectIgnored verifies that a SubmitSharesError
+// carrying a SequenceNumber beyond anything the client sent is dropped at
+// debug level and never reaches sharesRejected — SV2 assigns one response
+// per seq, so a future seq is unambiguously bogus, and counting it would
+// let a hostile pool inflate the reject rate and trip curtailment at will.
+func TestRunSessionV2_FutureSeqRejectIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolOpt(t, true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, level+" "+msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        logf,
+		})
+	}()
+
+	// The deterministic signals: the bogus frame produces a "future seq"
+	// debug line, and the pool's genuine reject of share 2 must still
+	// register exactly once (rejects aren't silently swallowed wholesale).
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawBogus, sawRealReject := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "future seq 9999") {
+					sawBogus = true
+				}
+			}
+			mu.Unlock()
+			if m.sharesRejected.Value() > 0 {
+				sawRealReject = true
+			}
+			if sawBogus && sawRealReject {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !sawBogus {
+		t.Error("bogus future-seq reject was not observed/dropped via debug log")
+	}
+	if !sawRealReject {
+		t.Error("genuine reject (share 2) was not counted — guard swallowed real errors")
+	}
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want exactly 1 (bogus seq 9999 must not count)", got)
+	}
+}
+
+// TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
+// the TCP connection but never answers SetupConnection makes handshake
+// return within handshakeTimeout instead of blocking forever.
+func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	client, server := net.Pipe()
+	defer server.Close()
+	// Drain reads but never respond — the peer is alive yet silent.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	dec := stratum.NewDecoder(client)
+	start := time.Now()
+	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	if err == nil {
+		t.Fatal("handshake should fail against a silent peer")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("handshake blocked %v, want <5s", elapsed)
+	}
+}
+
+// TestHandshake_DeadlineCleared verifies the handshake deadline is
+// removed on return so steady-state session reads stay unbounded.
+func TestHandshake_DeadlineCleared(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+
+	go func() {
+		// Answer SetupConnection and OpenMiningChannel minimally.
+		dec := stratum.NewDecoder(server)
+		_, _ = dec.ReadFrame()
+		payload, _ := (&stratum.SetupConnectionSuccess{UsedVersion: 2}).Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+		_, _ = dec.ReadFrame()
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 3}
+		payload, _ = omcSucc.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+	}()
+
+	dec := stratum.NewDecoder(client)
+	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 3 {
+		t.Errorf("chanID = %d, want 3", chanID)
+	}
+	// Post-handshake reads must not inherit the deadline: a blocking read
+	// with no incoming frame should still be blocked after ~150ms.
+	go func() {
+		_, _ = dec.ReadFrame()
+	}()
+	select {
+	case <-time.After(150 * time.Millisecond):
+		// success: read is still blocked (no deadline fired)
+	}
+	_ = client.Close()
+}
+
+// TestStoreBoundedJob_BoundsOutstandingJobs pins the jobsCap bound: flooding
+// distinct job IDs must evict oldest-first while keeping the newest.
+func TestStoreBoundedJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for i := uint32(1); i <= jobsCap+10; i++ {
+		order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(jobs) != jobsCap {
+		t.Fatalf("len(jobs) = %d, want cap %d", len(jobs), jobsCap)
+	}
+	// FIFO: the first 10 IDs were evicted; the newest survive.
+	for i := uint32(1); i <= 10; i++ {
+		if _, ok := jobs[i]; ok {
+			t.Errorf("job %d should have been evicted (FIFO)", i)
+		}
+	}
+	for i := uint32(jobsCap + 1); i <= jobsCap+10; i++ {
+		if _, ok := jobs[i]; !ok {
+			t.Errorf("newest job %d should have survived", i)
+		}
+	}
+	// Re-inserting an existing ID must not grow the order slice.
+	before := len(order)
+	order = storeBoundedJob(jobs, order, &stratum.NewMiningJob{JobID: jobsCap + 10})
+	if len(order) != before {
+		t.Errorf("re-insert grew order to %d, want %d", len(order), before)
 	}
 }
 
