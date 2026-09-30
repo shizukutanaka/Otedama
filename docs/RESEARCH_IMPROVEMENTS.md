@@ -953,8 +953,8 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 design: (1) "プール自動選択（Stratum V2対応プール優先）" — the actual
 default is a single constant `config.DefaultPoolURL`
 (stratum+v2 Slushpool), not pool-list auto-selection; (2) "ZKP認証により…
-数学的に証明" — ZKP auth does not exist (v4.0-scoped per CLAUDE.md /
-ADR-007 Proposed); (3) "LDKバインディングを使い Lightning Wallet
+数学的に証明" — ZKP auth does not exist (v4.0-scoped per CLAUDE.md; no ADR
+covers it); (3) "LDKバインディングを使い Lightning Wallet
 自動生成" — no LDK binding exists; the shipped wallet is BIP-39 local
 store (AES-256-GCM + scrypt). Each is now qualified as implemented vs
 proposed without rewriting the market analysis.
