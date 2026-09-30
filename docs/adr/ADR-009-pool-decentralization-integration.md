@@ -633,6 +633,59 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 530, September 2026)
+
+Two sv2-spec merges since the last pass:
+
+- **#230 merged (2026-09-10): the Noise certificate `version` field is
+  now normative** — `version` MUST be 0, and the initiator MUST reject
+  a certificate whose version it does not support (closes #229: the
+  field previously had no defined value and implementations
+  disagreed). Otedama's `internal/stratum/noise*.go` does not yet
+  parse the responder certificate at all (responder authentication is
+  a recorded gap — KNOWN_LIMITATIONS §2 / ADR-009 errata), so this is
+  a forward requirement: when certificate validation lands, it must
+  include the `version == 0` check-and-reject, not just signature
+  verification. Also clarified: the authority-key base58 prefix
+  versions only the key encoding, unrelated to the cert `version`.
+- **#233 merged (2026-09-23):** upstream added `AGENTS.md` conventions
+  for coding agents — meta, no protocol impact.
+
+---
+
+## Ecosystem update (session 542, September 2026)
+
+sv2-spec merged four relevant PRs since the last ecosystem check:
+
+- **#220 (merged 2026-09-08):** fixed the Noise Act 2 message length
+  to 234 bytes and added the `ELLSWIFT_PUBKEY` type alias. This is a
+  wire-level normative fix: the responder's second handshake message
+  is exactly 234 bytes. Otedama's `noise.go` `ReadMessage2` currently
+  accepts any payload >= 32 bytes (lenient, plus the P-256 probes
+  tracked in KNOWN_LIMITATIONS §2). Conformance requirement recorded:
+  when the Noise path is completed per §2, Act 2 MUST be validated at
+  exactly 234 bytes.
+- **#221 (merged 2026-09-12):** dropped the Lightning-borrowed "Act"
+  terminology from the Noise section in favor of Noise-framework
+  "steps", and made the implicit trailing payload explicit in the
+  pattern notation. Documentation-only; no behavior change.
+- **#224 (merged 2026-09-22):** editorial cleanup (wording, typos,
+  wrong references, diagrams). No normative changes.
+- **#209 (merged 2026-08-20):** added explicit prohibitions — a pool
+  MUST NOT reuse an active `job_id`, and `SetNewPrevHash` MUST NOT
+  reference a job the client has never received. Otedama conformance
+  verified: `engine/run.go` already pauses hashing and warns on an
+  unknown-job SetNewPrevHash (defensive handling beyond the spec
+  minimum); duplicate `job_id` is last-wins in the job map, which is
+  a safe defensive choice against a MUST-NOT violation.
+
+SRI remains at v1.11.1 (2026-07-22). Notable fix in that patch:
+`stratum_translation` no longer rounds up SV1 difficulty values
+during conversion (#2227) — more accurate target calculation when
+bridging V1 miners to V2 pools. Otedama computes targets with
+big.Int exact math (`sha256d.go`), so the upstream rounding class
+does not apply; verified no analogous round-up in `TargetFromDifficulty`.
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):
