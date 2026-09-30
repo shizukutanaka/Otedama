@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 534 — escape analysis)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-gcflags=-m` sweep — every heap
+  escape is on a cold path (package init, invalid-input errors,
+  construction); the grind loop is allocation-free, matching the
+  benchmark's 0 allocs/op.
+
 ### Documentation & audit (session 535 — flake sweep)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
