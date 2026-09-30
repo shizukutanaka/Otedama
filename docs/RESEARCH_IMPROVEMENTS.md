@@ -940,6 +940,39 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
+
+**Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
+while keeping the connection open starves revenue identically to extreme
+difficulty — but with no rejects, no disconnect, and no metric edge. The
+clock starts at session start so a pool that never sends a first job is
+equally covered.
+
+**Fix [OBSERVED].** `jobStallWarnAfter` (10 min, var for tests) — on each
+stats tick, if `time.Since(lastJobAt) > jobStallWarnAfter` and not
+curtailed, warn once per episode (`jobStarvedWarned`), re-arming when jobs
+resume. Wired on both V1 and V2 paths.
+
+**Tests [OBSERVED].** `TestRunSession_JobStallWarnsOnce` + V1 variant —
+silent fake pool past the threshold logs exactly one warn.
+
+## Session 304 — power-breakeven yield floor for arbitration (re-delivers closed #373)
+
+**Finding [OBSERVED — code-verified].** `power_watts` and
+`electricity_price_per_kwh` were metrics-only — below-breakeven mining could
+only be stopped via a hand-computed `curtail_below_btc_usd`. This is the
+constraint half of the bi-criteria bandit formulation (arXiv:2503.12285).
+
+**Fix [OBSERVED].** `arbitrationLoopOpts.powerFloor()` derives a per-device
+breakeven floor: powerWatts/1000 × price $/h → `provider.SatsPerSecond` →
+split evenly across managed devices. The arbitration loop applies
+`max(min_yield, floor)` each round — the constraint tracks BTC price moves
+automatically. New metric `otedama_power_breakeven_floor_sats_per_second`
+(0 when unconfigured). SPECIFICATION §3.1/§6 synced.
+
+**Tests [OBSERVED].** `TestArbitrationLoopOpts_PowerFloor` (six invalid-input
+cases + arithmetic + even-split) + `TestRunArbitrationLoop_PowerFloorIdlesDevice`.
+
 ## Session 464
 
 Version-source drift fixed: the VERSION file reads
