@@ -952,6 +952,14 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **正しいと検証済みの記述（変更なし）。** `service install` の `--config`/`--data-dir` フラグ実在、systemd unit の hardening 項目（NoNewPrivileges/ProtectHome=read-only/PrivateTmp/Restart=on-failure/RestartSec=10s）・`~/.config/systemd/user/` パス・launchd `~/Library/LaunchAgents/com.otedama.daemon.plist`+KeepAlive+即時 load・Windows `DisplayName=Otedama Mining Service`+`start=auto`（+install 時 start 追加は #552）・全6メトリクス名（SPECIFICATION §6 と一致）・`--log-format=json`・ENTRYPOINT `/usr/local/bin/otedama`（healthcheck パス整合）・NOTICE の依存列挙（go.mod と完全一致）・dependabot docker エコシステム存在。
 
+## Session 383 — SV2 nominal_hashrate seeding
+
+[FETCHED] Ecosystem re-check: SRI v1.12.0 line and ESP-Miner v2.15.x line unchanged this round; no new upstream protocol changes to absorb.
+
+[FIXED] **engine `handshake` declared `nominal_hashrate ≈ 0`** (`internal/engine/run.go`, `setup.go`): the value was summed from `w.Stats().HashRate`, which is always ~0 at handshake time because no job has been hashed yet. Pools use `nominal_hashrate` to seed variable difficulty, so a 0 declaration mis-seeds vardiff for real hardware. Fix: compute a capability-based nominal estimate in `Run` (per-worker sum of `provider.DefaultHashrates` over each worker's device family, via `nominalMiningHashrate`), thread it through `reconnectOpts`/`sessionOpts`, and declare it whenever the live rate is non-positive. On reconnect the live rate wins, reflecting sustained throughput. Tests: `TestHandshake_DeclaresNominalHashrateWhenWorkersCold` (net.Pipe server asserts the declared float) and `TestNominalMiningHashrate`.
+
+[AUDITED — clean] SV2 `DispatchFrame` (messages.go:406-483): every known msg type decodes or errors (error → session drop → reconnect); unknown types become `UnknownMessage` and are ignored; the 16 MiB frame cap is enforced in `ReadFrame` before allocation.
+
 ## Session 374 — config-layer pool URL validation hardening
 
 [AUDITED — clean] `config show`/`config validate` output: passphrases are
