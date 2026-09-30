@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 539 — dependency & import-boundary audit
+
+`go mod verify`: all modules verified — module-cache integrity
+clean. External dep surface is exactly two modules (`x/crypto`
+chacha20/chacha20poly1305/scrypt/pbkdf2 for Noise + wallet KDF;
+`yaml.v3` for config), both already documented in go.mod comments.
+
+Import graph verified as a proper DAG matching CLAUDE.md's
+architecture map: 13 leaf packages with zero internal imports;
+`arbitration→hal`, `provider→hal`, `config→btccrypto`,
+`daemon→config`, `doctor→{btccrypto,config}`, `httpserver→metrics`,
+`stratumv1→poolproto`, `stratumv2→{poolproto,stratum}`; `engine` is
+the sole aggregator and `cmd/otedama` wires the entrypoint. No
+upward imports, no cycles, no forbidden paths.
