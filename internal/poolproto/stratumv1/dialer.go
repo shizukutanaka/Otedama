@@ -161,7 +161,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	en1, en2Size, err := parseSubscribeResult(resp.result)
 	if err != nil {
 		_ = sess.Close()
-		return nil, fmt.Errorf("%w: %v", poolproto.ErrHandshakeFailed, err)
+		return nil, fmt.Errorf("%w: %w", poolproto.ErrHandshakeFailed, err)
 	}
 	sess.extranonce1.Store(&en1)
 	sess.extranonce2Size.Store(int64(en2Size))
