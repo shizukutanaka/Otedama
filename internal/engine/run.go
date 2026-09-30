@@ -68,6 +68,12 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// poolDialTimeout bounds a single pool dial attempt — TCP connect for
+// plaintext, connect + TLS handshake for TLS schemes. A blackholed
+// endpoint without it stalls each failover hop for the OS connect
+// timeout (~127s on Linux). Var so tests can shrink it.
+var poolDialTimeout = 15 * time.Second
+
 // jobsCap bounds the outstanding SV2 job map: a hostile or buggy pool that
 // floods distinct job IDs without rotating the tip would otherwise grow
 // memory without limit. 64 is far above legitimate churn (pools rarely hold
@@ -679,6 +685,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
 		return runSessionV1(ctx, opts)
 	}
+	// Schemes poolproto recognises but Otedama does not implement —
+	// currently datum:// (ADR-009, OCEAN's SV1-transport variant) — must
+	// fail fast here rather than fall through to the plaintext SV2 dial
+	// and speak binary V2 frames to a pool expecting a different
+	// protocol, which only surfaces as a confusing connect/handshake
+	// timeout.
+	if proto != poolproto.ProtocolStratumV2 && proto != poolproto.ProtocolStratumV2TLS {
+		return fmt.Errorf("engine: pool URL %q has unsupported protocol %q "+
+			"(supported schemes: stratum+tcp://, stratum+tls://, stratum+v2://, stratum+v2tls://; "+
+			"datum:// is recognised but not implemented — ADR-009)",
+			opts.poolURL, proto)
+	}
 
 	host, err := parseHost(opts.poolURL)
 	if err != nil {
@@ -702,7 +720,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				tlsCfg = cfg
 			}
 		}
-		conn, err = stratum.DialTLS(ctx, host, tlsCfg)
+		// Bound the TCP connect + TLS handshake so a blackholed endpoint
+		// cannot hold the failover hop hostage (same 15s bound the
+		// poolproto dialers and the V2 handshake deadline use).
+		dialCtx, dialCancel := context.WithTimeout(ctx, poolDialTimeout)
+		conn, err = stratum.DialTLS(dialCtx, host, tlsCfg)
+		dialCancel()
 		if err != nil {
 			return fmt.Errorf("engine: TLS dial %s: %w", host, err)
 		}
@@ -716,6 +739,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
 			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
 		var d net.Dialer
+		d.Timeout = poolDialTimeout
 		conn, err = d.DialContext(ctx, "tcp", host)
 		if err != nil {
 			return fmt.Errorf("engine: dial %s: %w", host, err)
@@ -1439,7 +1463,7 @@ func updateWork(workers []*miner.Worker, paused *pauseSet, job *stratum.NewMinin
 			Version:    job.Version,
 			PrevHash:   prevHash,
 			MerkleRoot: job.MerkleRoot,
-			Time:       ntime,
+			Time:       rollNTime(ntime),
 			Bits:       prevNBits,
 		},
 		NBits:  prevNBits,
@@ -1508,7 +1532,7 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job poolproto.Job, chan
 		ChannelID: chanID,
 		Header: miner.Header{
 			MerkleRoot: job.MerkleRoot,
-			Time:       job.NTime,
+			Time:       rollNTime(job.NTime),
 			Bits:       job.NBits,
 		},
 		NBits:      job.NBits,
@@ -1522,6 +1546,21 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job poolproto.Job, chan
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// rollNTime rolls a stale pool-declared ntime forward to the local wall
+// clock. SRI 1.12.0 tightened share validation to enforce min_ntime/nTime
+// bounds on every channel type: a share stamped with the job's original
+// (aging) ntime lands outside the pool's acceptance window once the job
+// has been grinding for a while — a guaranteed reject that burns
+// hashrate for nothing. Rolling ntime forward is standard miner
+// behaviour (it is part of the effective nonce space); a future ntime
+// is kept verbatim since undershooting min_ntime is itself a reject.
+func rollNTime(declared uint32) uint32 {
+	if now := uint32(time.Now().Unix()); declared < now {
+		return now
+	}
+	return declared
 }
 
 func parseHost(url string) (string, error) {
