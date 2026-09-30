@@ -17,6 +17,14 @@ TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨し�
 `GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
 フラグ参照は実装と整合（監査 clean）。
 
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist は master 側（session 485）で注記済みのため変更なし。
+
 ### セキュリティ (session 410)
 
 THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
