@@ -67,6 +67,29 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobsCap bounds the outstanding SV2 job map: a hostile or buggy pool that
+// floods distinct job IDs without rotating the tip would otherwise grow
+// memory without limit. 64 is far above legitimate churn (pools rarely hold
+// more than a handful of pending jobs). storeBoundedJob keeps insertion
+// order so eviction is FIFO — the newest jobs, most likely to be named by the
+// next SetNewPrevHash, survive.
+const jobsCap = 64
+
+// storeBoundedJob inserts j into jobs bounded at jobsCap, evicting the
+// oldest-inserted job IDs first; order tracks insertion order and the
+// returned slice is the updated order.
+func storeBoundedJob(jobs map[uint32]*stratum.NewMiningJob, order []uint32, j *stratum.NewMiningJob) []uint32 {
+	if _, ok := jobs[j.JobID]; !ok {
+		order = append(order, j.JobID)
+	}
+	jobs[j.JobID] = j
+	for len(order) > jobsCap {
+		delete(jobs, order[0])
+		order = order[1:]
+	}
+	return order
+}
+
 // Options configures a Run session.
 type Options struct {
 	Config config.Config
@@ -735,6 +758,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobOrder []uint32            // insertion order for jobsCap FIFO eviction
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -831,9 +855,23 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
+			// Channel-scoped frames must name our channel. A frame
+			// addressed to a different channel would corrupt job,
+			// prev-hash, or share-target state. SetNewPrevHash is
+			// exempt: SV2 lets the pool address it to the group
+			// channel our standard channel belongs to, whose ID the
+			// handshake does not expose.
+			if cid, ok := channelIDOf(pm.msg); ok && cid != chanID && pm.msg.SetNewPrevHash == nil {
+				opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
+				continue
+			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				prevLen := len(jobs)
+				jobOrder = storeBoundedJob(jobs, jobOrder, j)
+				if len(jobs) < prevLen {
+					opts.log("debug", fmt.Sprintf("engine: evicted oldest pending job (cap %d)", jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -864,8 +902,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobOrder = jobOrder[:0]
 				if named != nil {
 					jobs[p.JobID] = named
+					jobOrder = append(jobOrder, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime
@@ -1192,8 +1232,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // workers must grind to: it is far easier than the block target, and a hash
 // meeting it is exactly what the pool credits. A zero target means the pool
 // did not assign one; the caller falls back to the block target.
+// handshakeTimeout bounds the SV2 SetupConnection + OpenMiningChannel
+// exchange. Var so tests can shrink it.
+var handshakeTimeout = 15 * time.Second
+
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	// Bound the entire handshake: a peer that accepts the connection but
+	// never answers SetupConnection would otherwise hold the failover
+	// loop forever. The deadline is cleared before returning so the
+	// session's steady-state reads are unbounded.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
@@ -1252,6 +1302,25 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 }
 
 // ----- Shared helpers -----
+
+// channelIDOf reports the channel_id carried by a channel-scoped SV2
+// message. ok is false for frames with no channel field (unknown or
+// connection-scoped types), which callers should let through.
+func channelIDOf(m stratum.Message) (uint32, bool) {
+	switch {
+	case m.NewMiningJob != nil:
+		return m.NewMiningJob.ChannelID, true
+	case m.SetNewPrevHash != nil:
+		return m.SetNewPrevHash.ChannelID, true
+	case m.SetTarget != nil:
+		return m.SetTarget.ChannelID, true
+	case m.SubmitSharesSuccess != nil:
+		return m.SubmitSharesSuccess.ChannelID, true
+	case m.SubmitSharesError != nil:
+		return m.SubmitSharesError.ChannelID, true
+	}
+	return 0, false
+}
 
 type encodable interface{ Encode() ([]byte, error) }
 
