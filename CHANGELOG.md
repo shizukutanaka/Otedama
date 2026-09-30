@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 521 — ecosystem recheck)
+
+- ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
+  40–60% by end-2026), `stratum` vs `sv2-apps` repo landscape
+  clarified, single-port SV1/SV2 auto-detection pattern noted.
+  Japanese-source recheck: no drift.
+
 ### Documentation & audit (session 522 — EROSION threat modeled)
 
 - `docs/THREAT_MODEL.md`: added the missing network-adversary DoS

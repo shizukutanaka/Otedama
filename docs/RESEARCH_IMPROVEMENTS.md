@@ -940,6 +940,18 @@ prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
 
+## Session 521 — ecosystem recheck: SV2 trajectory, repo landscape
+
+- SV2 transport ~15–20% of hashrate early 2026 (estimate); SRI WG
+  projects 40–60% by end-2026 (forecast). 7-pool WG commitment remains
+  the load-bearing datapoint — recorded in ADR-009.
+- `stratum-mining/stratum` (SRI monorepo) and `stratum-mining/sv2-apps`
+  (translator/JDC/sv2-ui) coexist — JD tooling lives in sv2-apps.
+- `cbyam/solo-pool-rs` demonstrates single-port SV1/SV2 auto-detection
+  from the first frame byte.
+- Japanese-source recheck (Qiita/Zenn): no new mining-protocol or
+  arbitration content — coverage gap persists, no drift.
+
 ## Session 522 — EROSION network-adversary threat modeled
 
 Recorded in THREAT_MODEL's DoS section (a class previously unmodeled —
