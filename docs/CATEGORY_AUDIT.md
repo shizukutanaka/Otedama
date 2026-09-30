@@ -641,6 +641,28 @@ decision, not a mechanical dedupe).
 
 ---
 
+## Session 597 update — V2 handshake strictness + service-definition audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | V2 Noise `readMessage2` soft-degrade — the `err == nil` try-encodings chain (65B uncompressed → 33B compressed → 32B x-only fallback) accepts an arbitrary 32-byte payload as the responder key. | ✅ Deferred (fund-critical, alpha stub): the fallback is a documented P-256 stub simplification; a bogus "key" yields a wrong shared secret and the handshake fails at AEAD verification anyway (fail-eventually, never silently accepted). Any change belongs in the Noise NX secp256k1 migration, which is CODEOWNERS-reviewed by rule — not this sweep. |
+| S | Service-definition injection — pool URL / config path / binary path breaking out of `ExecStart=` or plist `<string>` into a new directive (systemd `;`/newline, plist `</string>`). | ✅ Clean: `quoteToken` escapes whitespace+quotes+control chars on every ExecStart token (the literal-newline → new-directive class is covered); plist uses `serviceArgv` as discrete `<string>` elements with `xmlEscape`; Windows sc.exe binaryPath is os.Executable-derived (operator input, not attacker input). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 598 update — metrics-cardinality + stale-share semantics audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | Prometheus label cardinality — a label whose values come from pool-controlled or device-controlled strings explodes series count (memory + scrape cost). | ✅ Clean: every label value is bounded — `reason` ∈ 5 fixed categories from `rejectClass` ("stale"/"difficulty"/"duplicate"/"hardware"/"other"; canonical SV2 codes checked before substring heuristics), `device` bounded by hardware count, `address` bounded to the configured failover list, `status`/`quantile`/buildInfo are fixed enums. No pool string reaches a label. |
+| S | V1 `Submit` lacks a client-side staleness check — a share for a job purged by `clean_jobs` is sent anyway. | ✅ By protocol: pools expect and reject stale shares by design (`stale-share` is a canonical SV2 code; V1 pools reject with a stale reason). Client-side pre-checking saves nothing — the worker's share was already computed; the pool-side reject is the correctness boundary. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 591 update — test-goroutine assertions + filesystem-path hygiene sweep
 
 Two mechanical axes not covered by the earlier lint/race/concurrency
