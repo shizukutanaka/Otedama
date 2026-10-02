@@ -743,3 +743,35 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 615 update — interface-equality panic + range-pointer audit
+
+**interface `==` panic** — comparing two interface values with `==`
+panics at runtime when both dynamic types are uncomparable (the
+"comparing uncomparable type" panic — a defect hiding behind
+seemingly-safe `err1 == err2`). Verified: every error comparison is
+against `nil` (the only universal-safe operand) or the sentinel
+`flag.ErrHelp` (pointer identity — always comparable). No
+interface-vs-interface `==` anywhere; no `any`-typed comparisons at
+all. Zero panic sites.
+
+**`&rangeVar` capture** — taking the address of a range variable
+hands out a pointer to the iteration copy, not the element (pre-1.22
+it aliased all iterations; post-1.22 each iteration is fresh, but the
+pointer still refers to a copy — writes via it never reach the
+container). Verified: the only stored pointer is `merged[s.ID] = &cp`
+at arbitrate.go:323 — `cp` is an explicit deep-copy of the map's
+stream (`cp := s` with `YieldPerDevice` re-allocated), so storing its
+address is the documented intent. `m.X = &v` sites in
+DispatchFrame store fresh per-case decode results — each `v` is a
+distinct allocation scoped to its case. `chooseForDevice(&p)` passes
+a copy by pointer for read-only use — never stored. Zero defects.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | interface `==` uncomparable panic | Absent — all comparisons vs nil or pointer-sentinel |
+| M | `&rangeVar` stale-copy pointer | Absent — only the deliberate deep-copy is stored |
+
+All packages build, vet, and test green.
