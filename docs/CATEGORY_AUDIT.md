@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 648 update — duration-unit + discarded-return audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `time.Duration(x)` unit confusion — nanoseconds vs seconds/milliseconds misinterpreted produces 10^9× off-by-scale timeouts (the duration-unit class). | ✅ Clean: all 3 conversions are typed correctly (`UnixNano` delta, `p50*float64(time.Millisecond)`, `Wait seconds * time.Second`); every literal is `N * time.Unit`. |
+| M | `_ =` discarded returns silently dropping errors a caller could act on (the discarded-error class). | ✅ Clean: every site is an intentional decision — best-effort teardown (`systemctl disable`, `sc.exe stop`, service unload), fire-and-forget deadline sets and Body.Close drains, client-tolerant health-endpoint writes, and the `BTCUSDRate` soft-degrade. No actionable error is discarded. |
+
+All packages build, vet, and test green.
