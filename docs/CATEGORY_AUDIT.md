@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 625 update — sync.Map + unchecked-Sscanf audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `sync.Map` misuse (mixed key types, Range-snapshot iteration, missing "zero value ready" contract) — the map-substitution bug class. | ✅ Clean: the tree's only `sync.Map` is `pauseSet` (arbitrate.go) — fixed `string→struct{}` key/value shape, single-writer (arbitration loop) with pool-dispatch readers, `Load`-only reads (no `Range`), zero value documented as ready-to-use. Canonical form; a mutex+map would add nothing but a second lock discipline to audit. |
+| M | `fmt.Sscanf` with discarded error (`_, _ =`) — malformed input silently yields a zero destination (silent zero-value class, cf. session 604). | ✅ Benign-by-contract: the sole unchecked site is `parseJobID` (dialer.go:401), whose own table test documents `"bad"→0` deliberately. In the V2 flow `sub.JobID` is always `FormatUint`-derived, so malformed input is unreachable; even if reached, `JobID=0` is a *valid* wire value — the pool rejects the share as unknown/stale job, i.e. fail-safe rather than silent credit. The engine-side `Sscanf` (run.go:1781) is checked and fails the job loudly. |
+
+All packages build, vet, and test green.
