@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 641 update — Split-index + io.Pipe audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `strings.Split` followed by fixed-position indexing — a repeated or missing separator yields fewer parts and an index panic (the split-index class). | ✅ Clean: only 2 `Split` sites exist, neither indexes — `gpu_linux` iterates lines with `CutPrefix` per line, the BIP-39 wordlist consumes the whole slice. All key=value / scheme extraction uses `Cut*`/`CutPrefix` (comma-ok). |
+| M | `io.Pipe` misuse — close semantics and writer-blocked-forever when the reader exits early (the pipe-ownership class). | ✅ Absent: zero `io.Pipe` sites — streaming is direct conn/reader based. |
+
+All packages build, vet, and test green.
