@@ -454,6 +454,10 @@ Recorded, not fixed (rule 3; consolidation is a layering decision):
   designates `internal/btccrypto` as the Bitcoin abstraction home, so a
   future `btccrypto.ValidateMainnetAddress` could be the single source —
   an architecture decision, deferred.
+- ✅ Resolved: the decision landed as `btccrypto.ValidateAddress` — the
+  unified dispatcher over bech32/bech32m/Base58Check (`bech32.go`); every
+  validator call site (config file check, doctor payout/failover probes)
+  routes through it. No charset-level duplication remains.
 
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
@@ -578,7 +582,7 @@ the binary and driving real invocations, not just reading source.
 | S,E | TUI wrote raw ANSI escape codes to stdout unconditionally — redirecting output (`> log.txt`, `\| tee`, any non-interactive capture) produced an unreadable, ever-growing stream of cursor-control noise instead of logs. No TTY detection existed anywhere in the codebase. | ✅ Fixed: `cmd/otedama/run.go` `isTerminal` (stdlib-only, `os.ModeCharDevice`) auto-disables the TUI when stdout is not a terminal; `--no-tui` still works as an explicit override. Tests: `TestIsTerminal_*`. |
 | M,S | `otedama service install` (a first-class, documented workflow) produces a unit that runs with the TUI on and no `--log-file` — since a service never has a controlling terminal, this meant `journalctl`/launchd logs filled with ANSI noise forever while the structured logger was silently discarded (`logger.Discard()`). No flag existed to fix this short of hand-editing the generated unit. | ✅ Fixed as a side effect of the TTY-detection fix above: systemd/launchd capture stdout as a non-TTY pipe, so `isTerminal` now auto-flips to `--no-tui` behavior for every service-managed run, and `buildLogger` falls through to its plain-stdout branch — real structured logs now reach `journalctl`/the launchd log file with zero additional flags needed. |
 | S | `poolLine`/`miningLine` truncated the pool URL and share-count fields using **fixed** budgets (hardcoded 40 / 20 chars) independent of the actual configured `cols`. At the documented 40-column minimum, the connection-status text ("✓ connected"/"✗ disconnected") — the single most important field on the line — could be truncated away entirely by `writeLine`'s right-side cut before it was ever reached. | ✅ Fixed: both functions now take `cols` and compute the variable-length field's budget from it (`cols - fixed-overhead`), with status placed so it is never the part that gets cut. Test: `TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth`. |
-| S | Package doc claimed terminal width is "detected at startup via TIOCGWINSZ (Unix) or GetConsoleScreenBufferInfo (Windows)"; `SetWidth` exists but is called only from test files — every real invocation renders at the hardcoded 80-column default regardless of actual terminal size. | ⏸ Deferred (doc corrected to state the gap honestly; disclosed as KNOWN_LIMITATIONS §15). Needs a maintainer decision: add `golang.org/x/term` as a new direct dependency (exception to ADR-003's zero-dependency stance) vs. hand-roll per-platform syscalls via the already-indirect `golang.org/x/sys`. |
+| S | Package doc claimed terminal width is "detected at startup via TIOCGWINSZ (Unix) or GetConsoleScreenBufferInfo (Windows)"; `SetWidth` exists but is called only from test files — every real invocation renders at the hardcoded 80-column default regardless of actual terminal size. | ✅ Resolved (session 385): the decision landed as hand-rolled per-platform syscalls via the already-direct `golang.org/x/sys` dep — `width_unix.go` `unix.IoctlGetWinsize(TIOCGWINSZ)`, `width_windows.go` `GetConsoleScreenBufferInfo`; `detectWidth` refreshes `d.cols` each render tick and `SetWidth` pins it for tests/embedders. KNOWN_LIMITATIONS §15 marked resolved. |
 | L | `config show --help` / `config validate --help` printed `Usage of run:` (the shared `flag.FlagSet`'s hardcoded name) and dumped all 15 `run` flags, more than a third of which are no-ops for those two subcommands (`--dry-run`, `--no-tui`, `--pprof`, `--wallet-passphrase`, `--wallet-mnemonic-passphrase`, `--log-file`). | ✅ Fixed: `parseRunFlags` now takes a `name` parameter (each of the 3 call sites passes its real command name), and every run-only flag's help text is prefixed `(run only)`, matching the existing `(config show only)` convention already used for `--origin`/`--json`. |
 | L | No typo tolerance / "did you mean" for subcommands (`otedama rnu` → generic "unknown subcommand" + full usage dump). | ✅ Fixed (session 434): `suggestSubcommand` offers the nearest subcommand at Levenshtein distance ≤ 2 on stderr; exit 64 unchanged. |
 
@@ -741,5 +745,16 @@ All 24 packages build, vet, and test green.
 | P | V1 `en2` rollover: `en2Counter` provides uniqueness only within the 2^(8·sz) space the pool assigns — a long-lived session on a small `extranonce2_size` (e.g. sz=1 → 256 jobs) could repeat a coinbase and draw "duplicate" rejects. | ✅ Bounded-benign: the field IS the nonce space — no client-side construction can extend it; the bound is pool-controlled, sessions cycle en1 on reconnect, and sv2-spec practice is sz≥4. Noted, not fixed. |
 | P | `Submit`'s en2 pad-zero branch is reachable only when extranonces were never negotiated — post-#677 the subscribe boundary requires valid en1 + en2_size>0 or the session fails. | ✅ Benign dead fallback: kept as defensive padding; unreachable through the negotiated path. |
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 639 update — ledger-staleness sweep
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Deferred ledger rows that later resolutions never amended — a stale "⏸ deferred" stays indistinguishable from an open item. | ✅ **2 stale rows amended in place**: the TUI terminal-width row (resolved session 385 — `detectWidth` per render tick via `x/sys`, §15 marked resolved) and the address-validator dedup row (resolved — `btccrypto.ValidateAddress` is the single source). |
+| M | Remaining deferred rows re-verified against current code: passphrase-string immutability (Go semantics, unchanged), `clock.Clock` test-only gap (rates/providers still use `time.Now()`, unchanged), Noise `readMessage2` soft-degrade (still the documented P-256 stub, secp256k1 migration pending — correctly stays deferred). | ✅ Accurate as-is. |
 
 All packages build, vet, and test green.
