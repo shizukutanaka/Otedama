@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 631 update — library-exit + HTTP-body audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M,S | `os.Exit`/`log.Fatal*` inside `internal/` — a library path that kills the embedding process mid-defer (the library-exit class: skipped cleanup, no error propagation to the caller). | ✅ Clean: zero `os.Exit`/`log.Fatal*` call sites in `internal/` — the only hit is a doc comment describing the `os.Exit(report.ExitCode())` contract, whose exit decision lives in `cmd/otedama`. Every library error propagates (session 568). |
+| M | `http.Response.Body` left unclosed/undrained — connection leak and keep-alive abandonment (under HTTP/2, spurious RST_STREAM) — the response-lifecycle class. | ✅ Clean: all 3 `client.Do` sites (`doctor` clock probe, `rates` hashrate, `rates` fetcher) `defer resp.Body.Close()` after the err check, with bounded drains for keep-alive (8 KiB discard on the probe, `maxHashrateBody` on non-200). The doctor site documents the drain-then-close requirement explicitly. |
+
+All packages build, vet, and test green.
