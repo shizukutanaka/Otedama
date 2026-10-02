@@ -824,3 +824,47 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+---
+
+## Session-606 ecosystem update (2026-10-02)
+
+**sv2-spec #234 (open)** — adds §4.8 "Key Management and Rotation",
+the spec's first normative text on which key is which. It formally
+splits two roles the old text conflated: the **Authority Key** (long-
+lived trust anchor, reaches the client out-of-band, optionally embedded
+in the mining URL — note the PR drops the "Pool" qualifier because
+JDS/TDS/local proxies hold authority keys too) vs the **server static
+Noise key** (short-lived, freely rotatable, authenticated by an
+authority-signed CERTIFICATE). §4.8.3 states the validity window is
+checked at handshake time and an established session need NOT be
+terminated when `not_valid_after` passes — there is no mid-session
+re-certification mechanism. Otedama conformance note (for when server
+authentication lands): the current `noise.go` NX implementation is
+the alpha P-256 stub and performs **no** certificate parsing —
+`ReadMessage2` consumes only the ephemeral key and never reads the
+encrypted static key + signature block (tracked in KNOWN_LIMITATIONS
+§2 and session-597's deferral to the secp256k1 migration). When that
+work happens it must (a) pin the authority key supplied via the
+`stratum+v2://` URL, (b) verify the authority signature over the
+static key + validity window **at handshake only**, matching §4.8.3,
+and (c) treat static-key rotation as transparent to the session.
+
+**sv2-apps (upstream SRI applications):**
+- **#881 (open, WIP)** — implements `handle_push_solution` on
+  `jd_server_sv2` + `bitcoin_core_sv2`: a Job Declarator Server that
+  accepts miner-pushed block solutions. This is the piece ADR-009
+  phase 2's JDC would submit through; worth tracking to completion.
+- **#878 (merged)** — `stratum-apps` now rejects empty coinbase
+  reward scripts. Upstream moving to fail-closed validation, matching
+  Otedama's session-595 direction (reject malformed pool input rather
+  than degrade to zero-filled work).
+- **#875 (merged)** — all SRI crates merged into a single cargo
+  workspace; repository layout for reference-implementation reading
+  has changed (crate paths moved under `sv2-apps/`).
+- **#883 (open)** — example configs now pay the mainnet coinbase
+  reward to an SRI community multisig, making the upstream reference
+  pool explicitly fee-transparent by default.
+
+**SRI** remains at v1.12.0 (2026-09-17) — no new release since the
+session-600 check.
