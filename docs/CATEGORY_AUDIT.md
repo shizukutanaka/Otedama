@@ -743,3 +743,28 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 617 update — strings.Replace count + regexp audit
+
+**strings.Replace n-count** — `Replace(s, old, new, n)` with
+`n < occurrences` silently leaves later occurrences un-replaced
+(partial-substitution corruption). Verified: the only replacement
+site is `strings.ReplaceAll` at bundle.go:119 (BCP-47 `_`→`-` tag
+normalization) — ReplaceAll has no count semantics; zero
+`strings.Replace`/`bytes.Replace` calls exist. Class absent.
+
+**regexp** — a regex compiled from untrusted input panics under
+`MustCompile` or, worse, admits ReDoS (catastrophic backtracking on
+pool-supplied strings). Verified: zero `regexp.` references in
+production code — all wire validation is hand-rolled byte/char
+checks (stratumv1 parse, bech32, config validators). The entire
+class is structurally absent.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | strings.Replace partial substitution | Absent — only ReplaceAll for BCP-47 normalization |
+| S | regexp on untrusted input (MustCompile panic / ReDoS) | Absent — no regexp usage at all |
+
+All packages build, vet, and test green.
