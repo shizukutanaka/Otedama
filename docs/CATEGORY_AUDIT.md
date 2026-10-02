@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 640 update — typed-nil + signal-channel audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Typed-nil through an interface — a `(*T)(nil)` returned where the type is an interface survives `x != nil` and nil-derefs downstream (the typed-nil class). | ✅ Clean: zero `(*T)(nil)` returns into interface types — the only `(*X)(nil)` forms are the compile-time satisfaction assertions (`var _ Provider = (*MiningProvider)(nil)`). Interface-returning error paths use untyped `nil` (`DialURL` → `Session`, driver `Lookup` → `Dialer`); `Enumerate`/`Detect` return nil *slices*, which are nil-safe. |
+| M,S | `signal.Notify` on an unbuffered channel — a second signal arriving before the handler reads is dropped. | ✅ Absent: no raw `signal.Notify` — the only use is `signal.NotifyContext` (run.go:208, canonical; internally buffered correctly). |
+
+All packages build, vet, and test green.
