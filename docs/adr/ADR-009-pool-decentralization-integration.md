@@ -824,3 +824,58 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-621 ecosystem update (2026-10-02)
+
+**sv2-spec normative batch merged 2026-10-01** — five clarification
+PRs landed together, tightening semantics without wire changes:
+
+- **#228 field renames (soft-breaking)**: `UpdateChannel.maximum_target`
+  → `max_target` (client-requested cap), `SetTarget.maximum_target` →
+  `target` (server operating value), `min_ntime` → `ntime_start` in
+  NewMiningJob/NewExtendedMiningJob/SetNewPrevHash/SetCustomMiningJob
+  plus TDP `header_timestamp` → `ntime_start`, TDP SubmitSolution
+  `header_timestamp`/`header_nonce` → `ntime`/`nonce`, JDP `prev hash`
+  → `prev_hash`. Wire unchanged; names now encode cap-vs-operating and
+  start-vs-minimum semantics. Otedama divergence: fields are
+  `MaxTarget`, `MinNtime`/`HasMinNtime` — docs-level naming drift vs
+  current spec; wire/protocol unaffected. If conformance polishing is
+  desired, rename to match spec (`Target`, `NtimeStart`) — not urgent.
+- **#226 min_ntime→ntime_start + share validation rules**: codifies
+  that a share whose `ntime` is below the job's `ntime_start` is
+  rejected server-side (it is the *pool's* share-validation minimum,
+  not the consensus minimum). Otedama emit() already guarantees
+  `ntime ≥ min_ntime` — consistent with the normative rule.
+- **#225 SetupConnection validation rules + flag semantics** and
+  **#223 protocol-version semantics**: tightened handshake-state
+  requirements; Otedama sends/accepts standard flags — no action.
+- **#227 spec-gaps normative clarifications** (27 comments): batch of
+  explicit rules closing previously-ambiguous cases.
+- **#221 noise: drop the Act** (merged 2026-09-12): removes the Noise
+  "Act" ceremony terminology from the spec text; wire unchanged.
+
+**sv2-spec #209 (merged 2026-08-20)** — the `job_id`-collision +
+`SetNewPrevHash`-unknown-job prohibitions recorded as open at
+session-542 have landed; Otedama already drops foreign-channel frames
+(session-337) and bounds job maps.
+
+**sv2-spec #234 (open, renamed)** — now "document authority key
+management and rotation"; TheBlueMatt LGTM with nits, still open,
+cross-referenced by #124 (key/certificate handling doc). The §4.8
+requirements from session-606 stand unchanged: pin the authority key
+from the `stratum+v2` URL, verify the authority signature at
+handshake time only (established sessions need not terminate at
+`not_valid_after`), tolerate transparent static-key rotation.
+Otedama's alpha P-256 Noise stub still performs no certificate
+parsing — the documented conformance gap is unchanged.
+
+**SRI** — v1.12.0 remains the latest tag (2026-09-17, bare tag; the
+newest GitHub Release object is still v1.11.1). No newer release
+since session-606.
+
+**sv2-apps activity** — #310 adapts apps to new extranonce APIs;
+#247 (draft) adds tProxy fallbacks after upstream
+`SetExtranoncePrefix` (directly relevant to Otedama's session-599
+extranonce-chain handling); #326 adds JD mining-mode negotiation
+integration tests; #304 migrates the pool to dashmap; #414 bumps
+stratum-core. The open sv2-apps set stands at 17 PRs.
