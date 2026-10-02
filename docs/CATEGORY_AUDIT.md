@@ -743,3 +743,50 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 607 update — copy() silent truncation + append shared-backing audit
+
+Completed the io-contract trilogy (after session-602 short-read and
+session-603 partial-write) with the remaining two silent-failure
+builtins: `copy()` truncates to `min(len(dst), len(src))` without an
+error return, and `append()` on a slice with spare capacity writes
+into the shared backing array, mutating any other live view.
+
+**copy() — all 33 production sites verified.**
+
+| Pattern | Sites | Verdict |
+|---|---|---|
+| Fixed 32-byte fields (SHA-256d headers, SV2 messages, Noise keys) | sha256d.go:62-75, messages.go ×5, noise.go:189-205 | Exact-fit |
+| Length-bound-then-pad (`be[32-len(b):]`) | sha256d.go:167,241 | Guarded: `len(b)>32` rejected above |
+| `make()`-sized-then-copy (collectors, samples, devices, slices) | metrics.go:267, stats.go:413, engine.go:322, base58.go:51, seed.go:143 | Exact-fit |
+| Hash output to fixed array | btccrypto.go:371, seed.go:304, seedstore.go:162 | 32/64B exact; seedstore length-checks 64 first |
+| HMAC ipad/opad zero-pad | noise.go:234-235, noise_pool.go:64-65 | Correct per RFC 2104 (key ≤ block size) |
+| Reader-contract short copies | wire.go:148, noise.go:325 | Return `n`; io.Reader semantics |
+| Frame encode | frame.go:208 | Buffer sized `HeaderSize+len(Payload)` |
+| V1 line copy | stratumv1.go:204 | Fresh alloc same len |
+
+Zero truncation sites — every copy is either exact-fit, bound-checked
+immediately before the call, or a contract-short copy returning `n`.
+
+**append() — shared-backing scan.**
+
+The risky shape is `append(s, x)` where `s` retains another live view
+of its backing array. All sites fall into three safe classes:
+linear builder buffers (wire encoders, argv/issues/lines —
+the variable is reassigned and no alias is kept), map-value slices
+(`appendUnique` at doctor/checks.go:496 — appended value is stored
+back to `ipToPools[ip]` and the backing is only reachable via the
+map), and the `pendingOrder` head-trim FIFO at dialer.go:239-302
+(`s = s[1:]` + `append(s, v)` bounded by `pendingCap` — the classic
+circular-buffer idiom). Noise `append(out1, 0x02)` HKDF taps append
+to freshly `Sum`-returned slices used only as HMAC input — the tail
+byte cannot leak into another live view.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | copy() truncation class | Absent — all sites exact-fit, bound-checked, or n-returning |
+| M | append() shared-backing class | Absent — linear builders, map-valued slices, bounded FIFO |
+
+All packages build, vet, and test green.
