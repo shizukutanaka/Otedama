@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 630 update — epoch-unit + config-tag audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Epoch unit confusion: seconds vs milliseconds vs nanoseconds mixed across pool-time (`ntime` u32 seconds), uptime deltas, and gauge values — the `Unix()`/`UnixMilli()` swap class. | ✅ Clean: no `time.Unix(x)` constructor calls exist — every site uses `Now().Unix*()` so there is no input to misread. Pool ntime domain is `Unix()` seconds throughout (rollNTime `declared < now`, lastJobReceivedAt/reject gauges); uptime deltas are `UnixNano` at both ends (worker.go). Unit mixing is structurally impossible. |
+| M | Config tag asymmetry: an exported field missing `yaml:` becomes silently unconfigurable via file while looking complete (KnownFields would *reject* the yaml key instead — fail-safe) — or missing both tags becoming invisible in dumps. | ✅ Clean: all 13 file-facing fields carry `yaml:` tags (KnownFields decode means an untagged export would be a hard error, not silent loss). The only untagged exports live on internal tracking structs (`ValueOrigin` map, summary view) that never decode files; `config show` emits an explicit doc map keyed by canonical yaml names. |
+
+All packages build, vet, and test green.
