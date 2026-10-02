@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 647 update — mergeability + ledger re-verification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Open-PR merge conflicts — 46 open PRs from the audit loop could drift into conflict as they land. | ✅ Verified mergeable: all 46 open PRs report MERGEABLE against current master. Note: most append to this ledger's tail, so they will pairwise-conflict once the first merges — that is the known append pattern, resolved by the union-resolution sweep, not a defect. |
+| M | Ledger deferred rows drifted from code reality (s639 follow-up). | ✅ Accurate: 3 remaining `⏸ Deferred` rows are all still true — line ~581 (TUI width; resolved by open PR #721, lands on merge), ~176 (`clock.Clock` test-only gap, still real), line ~10 (CODEOWNERS-gated funds-critical item, tracked). No new stale rows found. |
+
+All packages build, vet, and test green.
