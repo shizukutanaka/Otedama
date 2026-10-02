@@ -743,3 +743,38 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 612 update — break/continue scoping + case-fold audit
+
+**break/continue scoping** — a `break` inside `select` or `switch`
+exits only that inner construct, not the enclosing `for` (the classic
+infinite-loop defect); a `continue` inside `select` continues the
+outer `for` (correct but easy to get wrong). Verified: zero `break`
+inside `select`/`switch` — all six unlabeled breaks sit directly in
+`for` bodies (run.go:465/541 ctx-exit, arbitration:459 best-candidate
+found, dashboard:529 visible-width cap). The one nested-loop exit —
+hal/registry.go:178/193 — correctly uses labeled `break loop`.
+`continue` sites all target the enclosing `for` intentionally
+(dashboard.go:522/527 escape-sequence skipping, engine loops). Zero
+defects.
+
+**case-insensitive comparison** — `ToLower`/`EqualFold` on wire input
+has two traps: comparing a non-folded operand (`s == ToLower(s)`
+misses case) and Unicode folding surprises (Turkish-i, ß→ss). All 7
+sites verified on ASCII-only domains where both traps are absent:
+`EqualFold(TrimSpace(line), mnemonic[pos])` BIP-39 words (ASCII
+wordlist), `ToLower(reason)` reject-reason classification (ASCII
+pool text), `ToLower(tag)` BCP-47 language tags (ASCII), bech32's
+`addr != ToLower(addr) && addr != ToUpper(addr)` (the spec-required
+mixed-case *rejection* — opposite of the trap), `ToLower(level)`
+log-level parsing, `EqualFold(host, "localhost")` ASCII literal.
+Zero defects.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | break-in-select/switch scope confusion | Absent — all breaks direct-in-for or labeled |
+| M | case-fold on wire input | Absent — all on ASCII domains; bech32 uses fold correctly for rejection |
+
+All packages build, vet, and test green.
