@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 633 update — defer-order + dispatch-map audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `defer x.Close()` registered before the error check — a nil handle reaching the deferred call (nil-interface panic on cleanup). | ✅ Clean: all 5 `defer *.Close()` sites (config file, 2× HTTP body, pool conn, session) sit strictly after the `err != nil` early return; the doctor probe defers a drain-then-close closure likewise gated. |
+| M | `map[k]func` dispatch called without an `ok` check — a missing key yields a nil-function call panic. | ✅ Absent: zero `map[...]func` tables exist — all dispatch is switch/if-chains and interface polymorphism. The class is structurally unrepresentable here. |
+
+All packages build, vet, and test green.
