@@ -743,3 +743,29 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 618 update — errors.As target + named-return defer audit
+
+**errors.As panic** — `errors.As` panics when its second argument is
+not a pointer to a type implementing error or `*interface{}` (a
+spec-level contract violation, not an error path). Verified: the
+single production call site (run.go:1830) passes `&fe` where
+`fe *fatalError` — a `**fatalError` target, exactly the required
+pointer-to-error-type form. Zero defect sites.
+
+**named-return defer clobber** — a deferred closure that assigns to
+a named result (`defer func(){ err = nil }()`-class) silently
+discards the real return value — the worst kind of failure
+swallowing. Verified: zero `defer func` bodies assign to `err`,
+`ret`, `result`, or `out` — the two `defer func` sites (worker sweep,
+bounded drain) mutate only channels and waitgroups, never named
+results. Function returns are all explicit `return` statements.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | errors.As non-pointer target panic | Absent — single site uses `**fatalError` correctly |
+| M | defer clobbering named returns | Absent — zero defer-site result assignment |
+
+All packages build, vet, and test green.
