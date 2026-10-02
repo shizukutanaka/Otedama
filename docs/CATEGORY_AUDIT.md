@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 649 update — URL-parsing + path-package audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `net/url.Parse` on pool URLs — it silently accepts `userinfo@`, fragments and paths a `scheme://host:port` contract must reject (the permissive-URL-parser class). | ✅ Absent: zero `url.Parse` sites — pool targets parse via `CutPrefix` + `net.SplitHostPort` with explicit `@/?#`/whitespace rejection and port-range bounds (`validatePoolTarget`); `poolIPResolver` strips the port before DNS. The custom parser is the security-correct choice — `url.Parse` would silently accept userinfo. |
+| M | `path` vs `path/filepath` mixing — `path.Join` on filesystem paths breaks on Windows separators (the path-package class). | ✅ Clean: zero `path` imports — every filesystem join is `filepath.Join` (~15 sites across daemon/config/doctor/hal). |
+
+All packages build, vet, and test green.
