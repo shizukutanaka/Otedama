@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 629 update — wire-marshal nil semantics audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | nil `[]any` reaching `json.Marshal` → `"params":null` on the V1 wire (some pools reject `null` where the spec shows `[]` — the nil-vs-empty wire drift class). | ✅ Clean: `session.call` has exactly 4 call sites and every one passes a literal non-nil `[]any` (submit builds the 5-element share tuple; subscribe/authorize/extranonce.subscribe are literals, the last explicitly `[]any{}` → `[]`). `params` can never be `null` on the wire. |
+| P | Generic `rpcMessage` (`Result`/`Error`/`ID` as `any`) leaking spurious `"error":null`/`"result":null` keys outbound — field-presence drift vs JSON-RPC expectations. | ✅ Clean: `rpcMessage` is decode-only; outbound requests marshal a 3-key map (`id`/`method`/`params`) — `result`/`error` keys can never appear. Decode side treats `null` as nil (`any`), matching JSON-RPC semantics (session 566). V2 is binary — no null semantics exist. Other marshal sites (`version --json`, config dump, doctor `/healthz`) are operator-facing output where null-vs-`[]` is cosmetic, not protocol conformance. |
+
+All packages build, vet, and test green.
