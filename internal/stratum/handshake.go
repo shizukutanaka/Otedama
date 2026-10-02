@@ -157,7 +157,7 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 // implemented — Otedama accepts whatever share target the pool assigns
 // (OpenMiningChannelSuccess.Target, later adjusted via SetTarget), so
 // advertising a preference would be dead configuration. A previous
-// version of this struct carried a TargetNBits field that Encode
+// version of this struct carried a MaxTargetNBits field that Encode
 // never serialized; it was removed rather than left silently dropped.
 type OpenMiningChannel struct {
 	ReqID           uint32  // caller-assigned, echoed in response
