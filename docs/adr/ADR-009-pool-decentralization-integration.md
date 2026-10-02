@@ -824,3 +824,15 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-635 ecosystem update (2026-10-02)
+
+Same-day recheck; state consistent with the session-627 sweep.
+
+- **sv2-spec** — no merges since the Oct-1 normative batch (#223/#225/#226/#227/#228). Open PRs by activity:
+  - **#231 Server/Client role definitions** — still open, Oct-2 discussion converging: `Mining Protocol Server` is the settled name for the upstream-facing server role (replaces the "pseudo-pool" wording); third-party-JDS trust concerns were dropped from scope. Editorial/wire-invariant — when it lands, Otedama docs can adopt the term for pool-facing roles.
+  - **#234 authority-key management** — idle since Sep-25 (still the tracking item for the Noise certificate-verification gap).
+  - **#198 `coinbase_witness` on NewTemplate** — TDP-side only; not applicable.
+  - **#203 non-custodial payouts** — phase-2 watch item, unchanged.
+- **sv2-apps** — housekeeping only: #900 stratum-core bump (Sep-26), #875 single-workspace consolidation (Sep-25). No new normative surface.
+- **SRI** — v1.12.0 (2026-09-17) remains the latest tag.
