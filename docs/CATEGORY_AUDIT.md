@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 651 update — reflect + buffer-reuse audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `reflect` package on hot paths — `DeepEqual`/`ValueOf` in per-share or per-frame code (reflection-cost + type-inspection fragility class). | ✅ Absent: zero `reflect` sites anywhere — all comparison/dispatch is typed. |
+| M | Reused `strings.Builder`/`bytes.Buffer`/scratch slices carrying stale content into the next render or frame (the buffer-reset class). | ✅ Clean: every `strings.Builder` is a per-call `var` (Builder semantics require a fresh value — a stored-and-reused Builder would need `Reset`, and none exist); the sync.Pool hasher resets on checkout; `frame.go`'s `scratch[HeaderSize]` is fully overwritten by `ReadFull` each frame while payloads allocate per call. |
+
+All packages build, vet, and test green.
