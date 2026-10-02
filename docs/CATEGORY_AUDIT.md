@@ -743,3 +743,27 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 619 update — %w scope + fallthrough audit
+
+**`%w` outside `fmt.Errorf`** — the wrap verb is only meaningful
+inside `Errorf`; used in `Sprintf`/`Printf`/`log` it emits literal
+`%!w(...)` garbage, silently corrupting the message (and hiding the
+real error text at the worst time — inside an error path). Verified:
+every `%w` in production code sits inside `fmt.Errorf` — zero
+out-of-scope sites.
+
+**`fallthrough`** — Go requires the keyword explicitly, so implicit
+fallthrough bugs can't occur; but explicit `fallthrough` in a
+type-switch or tag-switch is fragile (it transfers to the next case
+without re-checking). Verified: zero `fallthrough` in production
+code — every switch exits per-case or shares bodies via case lists.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | %w outside fmt.Errorf | Absent — all wrap verbs inside Errorf |
+| M | fallthrough fragility | Absent — zero fallthrough sites |
+
+All packages build, vet, and test green.
