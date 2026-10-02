@@ -743,3 +743,13 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 642 update — nil-func-call audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Calling an optional func-value field that may be nil — nil-function panic on the injected callback (the nil-callback class). | ✅ Clean: every func field is safe by one of two forms — default-filled at construction (`run.go:192` `log = func(_,_) {}`; `dialFn` production default at both dialers; `extract`/`apply`/`Run` always set in table literals) or nil-guarded at the call (`onConnected`, `f.logFn`, `LogFn`, `HashrateFunc`/`NetworkHashrateFunc`). No unguarded optional call site. |
+
+All packages build, vet, and test green.
