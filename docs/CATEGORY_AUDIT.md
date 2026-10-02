@@ -743,3 +743,24 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 605 update — runtime-adjacent escape hatches
+
+Bug class: `unsafe`, `syscall`, `runtime`, compiler directives, and cgo
+bypassing the abstraction layers the rest of the tree is audited
+through — an un-audited low-level path could undermine every guarantee
+recorded above (bounds, deadlines, constant-time).
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `unsafe` package usage. | ✅ Absent: zero non-test references. Consistent with the s538/s544 `checkptr=2` clean runs — no pointer arithmetic exists to escape memory safety. |
+| S | `syscall` direct calls. | ✅ Single site: `syscall.SIGTERM` in `signal.NotifyContext` (`cmd/otedama/run.go:210`) — the canonical cross-platform idiom (SIGTERM is defined on every target; Windows simply never delivers it). No raw fd/socket/process syscalls. |
+| S | `runtime` package calls. | ✅ All intended uses only: `Version`/`GOOS`/`GOARCH` for metadata and platform dispatch (s547-audited), `NumCPU` for worker defaults and display (s578-audited), `ReadMemStats`/`NumGoroutine` inside the metrics collector (its documented purpose), and `daemon`'s `var goos` test seam. No `GOMAXPROCS` mutation, no `runtime.SetFinalizer`, no `Goexit`. |
+| S | Compiler directives & cgo. | ✅ None beyond `//go:build` platform tags: no `go:linkname`, `go:nosplit`, `go:embed`, `go:generate`, no `import "C"`. Release builds are `CGO_ENABLED=0` fully static (s544 binary audit), so the cgo surface is structurally zero on the shipped artifact. |
+
+Every low-level facility is either absent or confined to its documented
+purpose — no un-audited escape path exists.
+
+All packages build, vet, and test green.
