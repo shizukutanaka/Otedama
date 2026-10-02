@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 650 update — ctx-origin + build-tag audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `context.Background()` inside `internal/` — a fresh root ctx severs the caller's cancellation chain (the ctx-origin class). | ✅ Clean: the only site is `httpserver.Server.Stop`, which *must* use a fresh root — a graceful-shutdown grace period would be immediately cancelled if it inherited the (already-cancelled) parent ctx. Correct by necessity. |
+| M | Old-style `// +build` constraints — deprecated pre-Go-1.17 syntax that newer toolchains ignore (the build-tag class). | ✅ Clean: zero `// +build` sites; all 6 build-tagged files (`tui/width_*`, `hal/gpu_*`) use `//go:build`. |
+
+All packages build, vet, and test green.
