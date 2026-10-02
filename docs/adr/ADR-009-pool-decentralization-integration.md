@@ -824,3 +824,31 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-643 ecosystem update (2026-10-02)
+
+**sv2-spec: still quiet** — no merges since the Oct-1 normative batch
+(#223/#225/#226/#227/#228, all recorded in the session-621 update).
+The open landscape is unchanged from session-635:
+
+- **#231 Server/Client role definitions** — still open, last activity
+  Oct-2; converging on `Mining Protocol Server` terminology after
+  plebhash dropped the third-party-JDS parts (Fi3's game-theory
+  objection stands as out-of-scope follow-up). When it lands, Otedama
+  docs may adopt `Mining Pool Server` role names (see #704 note).
+- **#234 authority-key management** — idle since Sep-25 (21 review
+  comments, no replies). Still tracks Otedama's Noise cert-verification
+  gap noted in session-606.
+- **#203 coinbase-transaction payouts** — idle since Sep-15; phase-2
+  watch item, unchanged.
+- **#198 coinbase_witness** — TDP-side only, N/A for Otedama.
+- **#232 table-style** and stale editorial items — cosmetic.
+
+**sv2-apps**: nothing since #900 (Sep-26 stratum-core bump) and #875
+(single-workspace consolidation) — housekeeping only.
+
+**SRI**: v1.12.0 (2026-09-17) remains the latest tag; no release in
+the session-635 window.
+
+Conclusion: no new normative content this window; the Otedama-side
+record is current through the Oct-1 spec batch.
