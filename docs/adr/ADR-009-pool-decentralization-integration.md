@@ -824,3 +824,34 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+---
+
+## Session-627 ecosystem update (2026-10-02)
+
+**sv2-spec merge queue is empty since the Oct-1 normative batch**
+(#223/#225/#226/#227/#228 recorded in Session-621) — no new merges.
+The open set is stable: #234 (authority key management/rotation) idle
+since 2026-09-25; #203 (non-custodial payouts) still the ADR-009
+phase-2 watch item.
+
+**sv2-spec #231 (open, active 2026-10-02)** — "clarify Server/Client
+relationship across roles": defines the previously undefined
+`Client -> Server`/`Server -> Client` message labels, names the pool
+role `Mining Pool Server` (with `Pool Server`/`Pool` as short forms),
+and makes "one software can fulfill multiple roles" checkable rather
+than illustrative. Editorial, no wire change — but once merged, role
+references in our docs (`Mining Pool Server` vs. generic "pool")
+should adopt the canonical names. No Otedama conformance impact.
+
+**sv2-spec #198 (open)** — `coinbase_witness` field on `NewTemplate`
+(TDP side), future-proofing for potential BIP141-related consensus
+changes (closes #166, revives stalled #15). Template-provider side
+only; Otedama submits shares, never builds templates — no action,
+recorded for the phase-2 watch list.
+
+**sv2-apps** — #2401 merged (patch `stratum-core` at the workspace
+root; housekeeping, no protocol change). Nothing new affecting the
+client-side surface since Session-621.
+
+**SRI** — v1.12.0 (2026-09-17) remains the latest tag; no new release.
