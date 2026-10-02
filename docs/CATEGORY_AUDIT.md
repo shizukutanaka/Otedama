@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 638 update — Tick + range-channel audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `time.Tick(d)` — returns a channel that can never be stopped; the ticker lives for the process lifetime (the unstoppable-ticker class). | ✅ Absent: zero `time.Tick` sites — every periodic source is `time.NewTicker` paired with `Stop()` (session 590). |
+| M | `for v := range ch` where the producer never closes — the consumer blocks at the range head forever once senders exit (the hung-range class; can't observe ctx). | ✅ Absent: zero range-over-channel sites — all channel consumption is `select`-based with `ctx.Done()` cases (fanIn per-channel goroutines, session `Jobs()`, `merged` shares). The only `range` hits are map/slice iteration. |
+
+All packages build, vet, and test green.
