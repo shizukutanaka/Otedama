@@ -743,3 +743,26 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 602 update — short-read contract audit
+
+Bug class: a consumer calls `r.Read(p)` once and assumes `n == len(p)`,
+silently truncating a message when the reader returns a short read (legal
+per the `io.Reader` contract — TCP segmentation, buffering, crypto
+wrappers all fragment). Every `Read` call site and `Reader`
+implementation was inspected:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Non-test `Read(` call sites that assume a full fill. | ✅ None exist: every consumer goes through `io.ReadFull` — 15 sites across `wire.go` (6: length-prefixed fields + fixed ints), `noise.go` (len prefix + ciphertext), `frame.go` (header scratch + payload), `handshake.go` (2), `seedstore.go` (salt + nonce), `seed.go`. `binary.Read` is unused. |
+| S | `EncryptedConn.Read` (`noise.go:305`) — a `net.Conn` shim over the Noise transport; its internal framing must not itself short-read. | ✅ Correct: reads the u16 length prefix and the ciphertext via `io.ReadFull`, decrypts, and serves `copy(p, c.readbuf)` — returning short n is legal for a Reader and consumers read it through `Decoder` (which uses `io.ReadFull`). |
+| S | `byteSliceReader.Read` (`wire.go:144`) — in-memory reader feeding the `get*` decoders. | ✅ Correct: copies into the caller's `p`, returns `io.EOF` at exhaustion; all `get*` sites wrap it in `io.ReadFull`. |
+| M | `crypto/rand` entropy fills. | ✅ Correct: production paths use `io.ReadFull(rand.Reader, …)`; `rand.Read` (guaranteed full fill) appears only in tests. |
+
+The short-read / partial-consume defect class is structurally absent:
+consumers universally use `io.ReadFull`, and the only two `Reader`
+implementations satisfy the contract.
+
+All packages build, vet, and test green.
