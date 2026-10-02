@@ -743,3 +743,14 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 637 update — flush + context-cancel audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `bufio.Writer` without `Flush` — buffered bytes silently dropped on return (the unflushed-writer class). | ✅ Absent: zero `bufio.NewWriter` sites — all writes go directly to files/conns/loggers (or `bufio.Reader`-side only). |
+| M | `context.WithCancel/WithTimeout` whose cancel is never invoked — the uncancelled-context leak (timers and child spans retained until parent exits). | ✅ Clean: all 12 sites have a matching cancel — 8 `defer cancel()`, 3 stored into a lifecycle field invoked on Close/Stop (`worker.cancel`, `poller.cancel`, `session.ctxCancel`), 1 explicit `dialCancel()` after the bounded dial. |
+
+All packages build, vet, and test green.
