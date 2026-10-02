@@ -743,3 +743,13 @@ All 24 packages build, vet, and test green.
 | P | `extranonce1` uniqueness across reconnects: a repeated en1 + same en2 range can collide coinbases. | ✅ By protocol: pools scope en1 per session; the spec puts rollover responsibility on the pool — same-session en2 counter roll covers the rest. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 626 update — t.Parallel shared-state audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `t.Parallel()` subtests touching shared mutable state (package fixtures, global counters, env vars) — the parallel-test interference class, including `t.Setenv`/`t.Chdir` inside a parallel test (runtime panic). | ✅ Clean: 19 `t.Parallel` sites across 5 files all operate on per-call values — `config.Defaults()` fresh Configs, `allCatalogSpecs[i].fn()` building a fresh `*Catalog` each call, copied range vars (`tt`/`tc` by value under go≥1.22 semantics), pure value-receiver reads (`Header.Validate`, `Family.Valid`, `ChannelMsg`). The only shared fixture, `placeholderRE`, is a compiled regexp — safe for concurrent use by contract. Zero `t.Setenv`/`t.Chdir`/`os.Setenv` in any parallel-capable file, so no env interference either. |
+
+All packages build, vet, and test green.
