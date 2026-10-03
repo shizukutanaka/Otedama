@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 721 update — marshal-impl + pem-decode + bench-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `MarshalJSON`/`UnmarshalJSON`/`MarshalText`/`UnmarshalText`/`MarshalBinary` implementations — hand-rolled codecs that can panic on hostile input or round-trip lossily. | ✅ Absent: zero custom marshal/unmarshal methods — all wire/serialization goes through `json`/`yaml` tags on stock codecs; no hand-rolled codec exists to misbehave. |
+| S | `pem.Decode`/`AppendCertsFromPEM` misuse on CA-file loading — unchecked return accepting a garbage/empty cert pool, or block-type confusion accepting non-CERTIFICATE blocks. | ✅ Clean: all 3 sites (`stratum/tls.go`, `stratumv1/tls.go`, `doctor/checks.go`) use `AppendCertsFromPEM` (not raw `pem.Decode`) and branch on its bool — failure surfaces as an explicit "no valid CA certificates" error. The API itself handles block filtering and multi-block PEMs; partial garbage is tolerated only when ≥1 valid CERTIFICATE parses. |
+| M | Benchmark-loop misuse — missing `b.N` iteration, setup inside the timed region, or unreported allocations skewing results. | ✅ Clean: all 11 benchmarks use the canonical `for i := 0; i < b.N; i++` loop, hoist setup before `b.ResetTimer()` where needed, and call `b.ReportAllocs()` — no timing-region pollution. |
+
+All packages build, vet, and test green.
