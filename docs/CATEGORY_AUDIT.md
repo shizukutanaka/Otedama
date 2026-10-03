@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 685 update — external-endpoint + any-signature + dialer-goroutine audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `https?://` literals reaching undeclared endpoints — telemetry or exfil surface hiding in string constants (the endpoint-inventory class). | ✅ Clean: every external literal is a declared feed — Coinbase/Kraken/CoinGecko rate sources, mempool.space + blockchain.info hashrate sources, `api.coinbase.com/v2/time` doctor clock-skew probe, plist DTD and spec links in comments. No telemetry URL exists. |
+| M | `any`/`interface{}` parameters in exported (capitalized) functions — weakly-typed public surface (the any-signature class). | ✅ Clean: zero sites — exported APIs are concretely typed; `any` appears only as map values on internal decode paths (validated in earlier sessions). |
+| S | `go func` spawned in dialers/session code without a completion signal — detached workers that leak past `Close` (the dialer-goroutine class; extends the s553 leak map). | ✅ Clean: zero `go func` inside `internal/poolproto/`; the engine's background goroutines all select on `ctx.Done()` and join via `wg`/`done` (s553). |
+
+All packages build, vet, and test green.
