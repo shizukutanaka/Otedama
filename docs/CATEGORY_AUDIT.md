@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 687 update — httputil + x509-verify + path-portability audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `net/http/httputil` or unchecked `x509` parsing — reverse-proxy surface or unvalidated certificate bundles (the transport-security class). | ✅ Clean: `httputil` absent; all three cert-pool sites fail hard on `!AppendCertsFromPEM` (TLS config builders in stratum/stratumv1, doctor pre-check) — no silent empty-pool path. |
+| M | `filepath.IsAbs`/`VolumeName`/manual separator joining — Windows/POSIX path portability drift (the path-portability class). | ✅ Clean: the only separator use is the daemon's `\tmp`-rooted fallback when the home dir is unresolvable — deliberate drive-root fallback, documented; no `IsAbs`/`VolumeName` call sites needing review. |
+| M | Duplicate `tlsConfigWithExtraCAs` in stratum + stratumv1 — verbatim helper duplication across package boundary (the duplication class). | ✅ Benign: the two copies sit behind a package boundary that keeps `internal/stratum/` free of poolproto deps — vendoring the helper is cheaper than introducing a shared crypto-util package for 12 lines. |
+
+All packages build, vet, and test green.
