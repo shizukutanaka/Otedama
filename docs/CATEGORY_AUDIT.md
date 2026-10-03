@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 754 update — heuristic-order + quote-of-quoted + loop-empty audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Substring-heuristic chains mis-ordered — a generic pattern shadowing an informative one (e.g. "bad" matching before "stale"). | ✅ Clean: canonical SV2 codes classify first, then substrings run specific→generic (stale → duplicate → difficulty → invalid/bad → other); "invalid job: stale" correctly lands on "stale" — the more actionable class wins. |
+| M | Double-escaping at display boundary — `strconv.Quote(x)` fed to `%q`, or `%q` on already-escaped fields. | ✅ Clean: `%q` sites all quote raw pool/error text directly; no `Quote`→`%q` composition exists (the systemd `quoteToken` writer is a separate, correctly-scoped mechanism). |
+| M | Loop-assumed-nonempty — a value computed inside `for` and used unguarded after (zero-iteration ⇒ zero-value semantics). | ✅ Clean: no site computes first/last/min/max inside a data-driven loop and reads it unconditionally afterward; fixed-bound loops (sha256d's 32-iteration byte walkers) are length-guaranteed. |
+
+All packages build, vet, and test green.
