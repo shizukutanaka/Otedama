@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 723 update — builtin-adoption + chan-convention + slices-delete audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `clear`/`min`/`max` builtin misuse or non-adoption — `clear` on a map other code still views (wiping shared state), or hand-rolled clamps where the builtins belong. | ✅ Clean: the single `clear` (`opts.activity` in the arbitration loop) wipes a private per-round scratch map that is rebuilt each iteration — no shared view exists; the `min`/`max` sites are the canonical clamp idiom (yield floors, extranonce2 bound, Levenshtein DP). |
+| M | `chan bool` for pure signals — a bool channel implying a payload it doesn't carry (zero-size `struct{}` is the convention). | ✅ Uniform: zero `chan bool` — all ~40 signal channels (`done`, `started`, `runDone`, limiter tokens, test gates) are `chan struct{}`. |
+| P | `slices.Delete*`/`Insert`/`Replace` tail-pointer retention — a removed element's slot still referencing a live object (GC pin). | ✅ Absent: zero prod `slices.Delete`/`DeleteFunc`/`Insert`/`Replace` sites — removal goes through the bounded-FIFO `s[1:]` pattern (no tail retention beyond the cap) or map `delete`. |
+
+All packages build, vet, and test green.
