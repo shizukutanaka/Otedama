@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | `context.WithCancel/WithTimeout` whose cancel is never invoked — the uncancelled-context leak (timers and child spans retained until parent exits). | ✅ Clean: all 12 sites have a matching cancel — 8 `defer cancel()`, 3 stored into a lifecycle field invoked on Close/Stop (`worker.cancel`, `poller.cancel`, `session.ctxCancel`), 1 explicit `dialCancel()` after the bounded dial. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
