@@ -939,6 +939,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 624 update — randomness provenance + nil-error deref audit
+
+| S | `math/rand` reaching security-adjacent paths (nonces, ephemeral keys, jitter that shapes protocol timing) — the weak-RNG class. | ✅ Clean: zero `math/rand` import anywhere in `internal/`/`cmd/` (test or prod). All 6 production randomness sites use `crypto/rand` — `rand.Int(rand.Reader)` for wallet-setup index picks (setup.go) and `rand.Reader` injected for seed/wallet KDF salts and Noise P-256 ephemeral keys (seedstore.go, seed.go, wallet.go, noise.go). Weak-RNG surface structurally absent. |
+| M | `err.Error()` on a potentially-nil error → nil-pointer dereference (usually via a missed guard in logging paths). | ✅ Clean: all 5 `.Error()` call sites in production sit behind a proven `err != nil` guard — cmd/otedama/run.go's `err != nil && err != context.Canceled` gate, engine run.go's `if err := applyJob(...); err != nil`, and both Fetcher sites inside `if err := f.Fetch(ctx); err != nil`. No error-valued field or unchecked provenance site exists. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
