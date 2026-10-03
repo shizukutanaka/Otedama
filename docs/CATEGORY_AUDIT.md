@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 674 update — concat-allocation + unbuffered-channel + busy-default audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `slices.Concat`/`append` rebuilding large slices per iteration — quadratic copy work disguised as concat (the allocation-churn class). | ✅ Clean: `slices.Concat` absent; loop-appends are bounded (diagnostic line building, per-frame `merkle_branch`) or pre-sized via `make(..., 0, n)` — no per-iteration quadratic rebuild. |
+| P | `make(chan T)` unbuffered where the producer must never block — a slow consumer stalls the loop (the channel-capacity class, second pass after s625). | ✅ Clean: bare `make(chan)` appears only on `done`/`doneCh` close-signalling channels where unbuffered is canonical; every data channel is explicitly buffered (8–32, `Threads*4`, `len(sources)`). |
+| P | `for { select { ... default: } }` busy-loop — a `default` arm that re-enters `select` spins a core at 100% with no work (the busy-default class). | ✅ Clean: every `default:` arm is a one-shot non-blocking send/read or the worker's canonical "check-ctx-then-hash-one-iteration" — the mining loop's spin is the productive workload itself, gated by `ctx.Done()`. |
+
+All packages build, vet, and test green.
