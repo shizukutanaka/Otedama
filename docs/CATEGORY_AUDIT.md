@@ -1012,3 +1012,11 @@ All packages build, vet, and test green.
 | S | `json.Unmarshal` into a previously-populated struct — absent fields keep their old values, mixing two payloads (the partial-overwrite class). | ✅ Clean: every site decodes into a fresh local (`var v`, `var p []json.RawMessage`, per-field temporaries) — no struct is reused across decodes. |
 | M | Mixed value/pointer receivers on the same type — methods sharing state see different copies, hiding mutation (the receiver-consistency class). | ✅ Clean: every method on `Engine`/`Worker`/`Dashboard`/`Clock`/`Session` takes a pointer receiver (`func (x *T)`); `gofmt -l` and `go vet` show no inconsistencies. |
 
+
+
+## Session 670 update — hex-decode + bytes/index + slices-membership audit
+
+| S | `hex.DecodeString` on pool-supplied text without an `err` check — malformed hex silently produces truncated or zero bytes, corrupting job hashes or extranonces (the hex-trust class). | ✅ Clean: every site checks `err` *and* validates length — `coinb1/coinb2/merkle_branch` reject malformed or wrong-length values, `prev_hash`/`en1` fall back or bail on decode failure. |
+| P | `bytes.Index`/`LastIndex` on wire data compared against `== 0`/`!= -1` for prefix or membership semantics (the bytes-index class — byte-level sibling of the string Index==0 audit). | ✅ Clean: the only `bytes` predicate on data is `bytes.Equal` — the base-58 checksum compare where exact equality is the correct test. |
+| M | `slices.Index`/`IndexFunc` used where `slices.Contains` or `==` is meant — an index treated as a boolean truth (the membership-mismatch class). | ✅ Clean: the single `slices` use is `slices.Contains` in `Accepts` — an exact-match family dispatch; zero `Index`/`IndexFunc` sites. |
+
