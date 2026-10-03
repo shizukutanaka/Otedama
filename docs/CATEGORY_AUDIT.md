@@ -1119,3 +1119,12 @@ All packages build, vet, and test green.
 | P,S | `bufio.Scanner` on untrusted input with the default 64KB token limit — a long line aborts with `ErrTooLong` or is silently truncated (the scanner-limit class). | ✅ Absent: zero `bufio.Scanner` sites — V1 line reading is the custom bounded `readLine` (s601-era verified). |
 | M | `time.Parse*` result unchecked — a malformed timestamp silently becomes the zero time (the parse-swallow class). | ✅ Absent: zero `time.Parse*` call sites. |
 
+
+
+## Session 656 update — io.Copy + map-any-key + stdlib-log + marshal-error audit
+
+| P | `io.Copy`/`io.CopyN` return value unhandled — a truncated copy continues as if complete (the partial-transfer class; distinct from the builtin `copy()` sweep in s607). | ✅ Clean: the only two sites are `_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, N))` — bounded body drains where a failed drain is best-effort by design (connection-reuse drain, `doctor/checks.go`, `rates/hashrate.go`). |
+| P | `map[any]`/`map[interface{}]` keys — an uncomparable dynamic value (slice/map/func) panics at insert (the uncomparable-key class). | ✅ Absent: zero interface-keyed maps. |
+| M | `log.*` stdlib logger inside `internal/` — bypasses the slog wrapper (atomic level/format control), the logger-bypass class. | ✅ Absent: zero `log` imports or `log.Print*` calls in `internal/` — all logging goes through `logger`/slog. |
+| S | `json.Marshal`/`Encode` error ignored at write boundaries — a failed marshal writes `null`/garbage silently (the silent-marshal class). | ✅ Clean: the single production `json.Marshal` (`stratumv1.go:508`) checks `err` before appending the newline; all three `json.NewEncoder` sites return/check the encode error. |
+
