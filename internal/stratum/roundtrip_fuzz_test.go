@@ -49,8 +49,8 @@ func FuzzMessageRoundTrip(f *testing.F) {
 			MerkleRoot: b32(12),
 		}
 		if len(data) > 0 && data[0]&1 == 1 {
-			job.HasMinNtime = true
-			job.MinNtime = u32(44)
+			job.HasNtimeStart = true
+			job.NtimeStart = u32(44)
 		}
 		enc, err := job.Encode()
 		if err != nil {
@@ -68,11 +68,11 @@ func FuzzMessageRoundTrip(f *testing.F) {
 		}
 
 		prev := SetNewPrevHash{
-			ChannelID: u32(48),
-			JobID:     u32(52),
-			PrevHash:  b32(56),
-			MinNtime:  u32(88),
-			NBits:     u32(92),
+			ChannelID:  u32(48),
+			JobID:      u32(52),
+			PrevHash:   b32(56),
+			NtimeStart: u32(88),
+			NBits:      u32(92),
 		}
 		enc, err = prev.Encode()
 		if err != nil {
@@ -89,7 +89,7 @@ func FuzzMessageRoundTrip(f *testing.F) {
 			t.Fatal("SetNewPrevHash re-encode differs")
 		}
 
-		tgt := SetTarget{ChannelID: u32(96), MaxTarget: b32(100)}
+		tgt := SetTarget{ChannelID: u32(96), Target: b32(100)}
 		enc, err = tgt.Encode()
 		if err != nil {
 			t.Fatalf("SetTarget.Encode: %v", err)
