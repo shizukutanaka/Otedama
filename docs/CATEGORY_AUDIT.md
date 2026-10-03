@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 748 update — cmd-lifecycle + listen-addr + handler-state audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `exec.Cmd` lifecycle misuse — `Wait` after `Run`, double `Wait`, or `Output`+`Wait` mixing. | ✅ Clean: all four sites are single-shot `Output()`/`CombinedOutput()` invocations; no manual `Start`/`Wait` pairing anywhere. |
+| M | `net.Listen` bound-address reporting — logging `s.addr` instead of the listener's actual `Addr()` (wrong when port 0). | ✅ Clean: `httpserver` logs `ln.Addr().String()` — the kernel-assigned bound address — so `:0` and v6 forms report correctly; `Server.Addr()` exposes the same. |
+| P | `http.Handler` mutating shared state per request — unsynchronized writes to receiver fields. | ✅ Clean: all four handlers are read-only (`ready.Load()`, registry `WriteText` under its own lock, static content); the only `s.` writes are one-time construction assignments before `Serve` starts. |
+
+All packages build, vet, and test green.
