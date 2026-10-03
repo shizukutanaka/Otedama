@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 680 update — bool-env + mustcompile + path-package audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Boolean env/flag values checked with string equality (`== "true"`, `== "1"`) — silently treats `TRUE`/`yes`/`on` as false (the bool-parse class). | ✅ Clean: zero `ParseBool` misuse — env lookups return strings into the layered config where typed conversion happens once; no ad-hoc truthy comparisons. |
+| S | `regexp.MustCompile` at package init — a bad pattern panics at startup, and an attacker-influenced pattern is a ReDoS surface (the mustcompile class). | ✅ Clean: zero `regexp` usage in production code (verified s617); nothing compiles patterns at init or from input. |
+| S | `path` package applied to filesystem paths — `path.Join` on Windows paths or `..` elements produces non-native results (the path-package class). | ✅ Clean: every filesystem join uses `filepath.` (service defs, sysfs probes, log paths); `path` appears only inside `filepath`/`urlpath` identifiers — no `import "path"` on filesystem data. |
+
+All packages build, vet, and test green.
