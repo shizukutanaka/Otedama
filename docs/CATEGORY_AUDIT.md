@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | `fmt.Sscanf` with discarded error (`_, _ =`) — malformed input silently yields a zero destination (silent zero-value class, cf. session 604). | ✅ Benign-by-contract: the sole unchecked site is `parseJobID` (dialer.go:401), whose own table test documents `"bad"→0` deliberately. In the V2 flow `sub.JobID` is always `FormatUint`-derived, so malformed input is unreachable; even if reached, `JobID=0` is a *valid* wire value — the pool rejects the share as unknown/stale job, i.e. fail-safe rather than silent credit. The engine-side `Sscanf` (run.go:1781) is checked and fails the job loudly. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
