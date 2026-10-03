@@ -1180,3 +1180,10 @@ All packages build, vet, and test green.
 | M | `time.Duration(x)` unit confusion — nanoseconds vs seconds/milliseconds misinterpreted produces 10^9× off-by-scale timeouts (the duration-unit class). | ✅ Clean: all 3 conversions are typed correctly (`UnixNano` delta, `p50*float64(time.Millisecond)`, `Wait seconds * time.Second`); every literal is `N * time.Unit`. |
 | M | `_ =` discarded returns silently dropping errors a caller could act on (the discarded-error class). | ✅ Clean: every site is an intentional decision — best-effort teardown (`systemctl disable`, `sc.exe stop`, service unload), fire-and-forget deadline sets and Body.Close drains, client-tolerant health-endpoint writes, and the `BTCUSDRate` soft-degrade. No actionable error is discarded. |
 
+
+
+## Session 647 update — mergeability + ledger re-verification
+
+| M | Open-PR merge conflicts — 46 open PRs from the audit loop could drift into conflict as they land. | ✅ Verified mergeable: all 46 open PRs report MERGEABLE against current master. Note: most append to this ledger's tail, so they will pairwise-conflict once the first merges — that is the known append pattern, resolved by the union-resolution sweep, not a defect. |
+| M | Ledger deferred rows drifted from code reality (s639 follow-up). | ✅ Accurate: 3 remaining `⏸ Deferred` rows are all still true — line ~581 (TUI width; resolved by open PR #721, lands on merge), ~176 (`clock.Clock` test-only gap, still real), line ~10 (CODEOWNERS-gated funds-critical item, tracked). No new stale rows found. |
+
