@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 743 update — range-copy + value-receiver + append-result audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Large-struct `for _, v := range` value copies — per-iteration memcpy in hot loops. | ✅ Clean: hot-path loops range pointers (`*Worker`); struct ranges are either small (rune) or infrequent (arbitration `Assignment` ~64B evaluated once per rebalance, setup-time `Pool` configs). `Share` travels channels, never ranged slices. |
+| M | Value-receiver methods named mutatingly — `set`/`add`/`update` on `func (t T)` silently mutates a copy. | ✅ Absent: zero mutatingly-named methods use value receivers; all mutation goes through pointer receivers. |
+| S | `append` result discarded — `append(s, x)` without re-assignment silently loses the element. | ✅ Absent: zero bare `append(...)` statements; every call is `s = append(...)`, returned, or used inline. |
+
+All packages build, vet, and test green.
