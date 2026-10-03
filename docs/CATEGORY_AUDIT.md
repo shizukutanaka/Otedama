@@ -868,3 +868,11 @@ All packages build, vet, and test green.
 | M | `t1 == t2` on `time.Time` — monotonic-vs-wall mismatch gives false negatives (the time-equality class). | ✅ Clean: zero `==` on `time.Time`; all comparisons go through `time.Since`, `.Equal`, or unix-nano arithmetic. |
 | S | `hash.Hash` reused across computations without `Reset` — concatenated digests silently corrupt verification (the hasher-state class). | ✅ Clean: the pooled hasher does comma-ok + `Reset` on borrow; `hmacSHA256`/`hmacSHA256Pooled` build fresh `sha256.New` per call; the Noise handshake hash is single-owner sequential per spec. |
 
+
+
+## Session 691 update — http-server + sync.Pool + decoder-strictness audit
+
+| S | `http.Server` without `ReadHeaderTimeout` — Slowloris header stalls exhaust sockets (the server-timeout class). | ✅ Clean: the metrics/health server sets `ReadHeaderTimeout` 5s plus `Read`/`Write`/`Idle` timeouts — full Slowloris posture. |
+| P | `sync.Pool` objects reused without reset or type-checked — stale state leaks between borrowers (the pool-hygiene class). | ✅ Clean: `hashPool.Get` uses comma-ok then `h.Reset()` before lending; `Put` sites return the same concrete `hash.Hash` type. |
+| S | `yaml`/`xml`/`gob` decoders accepting unknown fields or unbounded documents — config drift and decode bombs (the decoder-strictness class). | ✅ Clean: `yaml.NewDecoder` runs `KnownFields(true)` (unknown keys are hard errors) with EOF-as-empty handling; `xml`/`gob` decoders absent. |
+
