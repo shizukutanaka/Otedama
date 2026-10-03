@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 659 update — slog-bypass + shallow-clone + chdir + exposure audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `slog.*` called directly outside `internal/logger` — bypasses the atomic-swappable wrapper, losing level/format control (the logger-bypass class, slog variant). | ✅ Absent: zero `slog.` sites outside `internal/logger` and tests — every log call flows through the wrapper. |
+| P | `maps.Clone`/`slices.Clone`/`maps.Copy` mistaken for a deep copy — nested maps/slices/pointers stay shared after the clone (the shallow-clone class). | ✅ Clean: the only site is `metrics.cloneLabels` over `map[string]string` — immutable string values make the shallow clone a true independent copy (its doc says exactly that). |
+| S | `os.Chdir` inside library code — mutates process-global cwd for every goroutine (the global-state-mutation class). | ✅ Absent: zero `os.Chdir` call sites. |
+| S | `expvar`/extra listeners exposing runtime state on unconfigured ports (the exposure-surface class). | ✅ Absent: zero `expvar`, `ListenUDP`, `ListenTCP` sites — the only listener is `httpserver` on the configured address. |
+
+All packages build, vet, and test green.
