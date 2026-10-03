@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 656 update — io.Copy + map-any-key + stdlib-log + marshal-error audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `io.Copy`/`io.CopyN` return value unhandled — a truncated copy continues as if complete (the partial-transfer class; distinct from the builtin `copy()` sweep in s607). | ✅ Clean: the only two sites are `_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, N))` — bounded body drains where a failed drain is best-effort by design (connection-reuse drain, `doctor/checks.go`, `rates/hashrate.go`). |
+| P | `map[any]`/`map[interface{}]` keys — an uncomparable dynamic value (slice/map/func) panics at insert (the uncomparable-key class). | ✅ Absent: zero interface-keyed maps. |
+| M | `log.*` stdlib logger inside `internal/` — bypasses the slog wrapper (atomic level/format control), the logger-bypass class. | ✅ Absent: zero `log` imports or `log.Print*` calls in `internal/` — all logging goes through `logger`/slog. |
+| S | `json.Marshal`/`Encode` error ignored at write boundaries — a failed marshal writes `null`/garbage silently (the silent-marshal class). | ✅ Clean: the single production `json.Marshal` (`stratumv1.go:508`) checks `err` before appending the newline; all three `json.NewEncoder` sites return/check the encode error. |
+
+All packages build, vet, and test green.
