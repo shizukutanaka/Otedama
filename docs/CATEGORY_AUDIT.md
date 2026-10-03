@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 724 update — func-compare + raw-fd + header-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `f == g` comparing two func values — always false (or panics on some reflect paths), hiding a broken equality check. | ✅ Clean: zero func==func comparisons; the only `func` hits are method signatures and predicate arguments (`strings.IndexFunc`). |
+| M | `os.NewFile`/`f.Fd()` escapes — wrapping a raw fd whose ownership then competes with the GC'd `*os.File` (double-close). | ✅ Clean: zero `os.NewFile`; the 2 `Fd()` sites are the platform-split TTY-width ioctls (`unix.IoctlGetWinsize`, `windows.GetConsoleScreenBufferInfo`) — the fd is borrowed read-only for the call, no ownership transfer. |
+| L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
+
+All packages build, vet, and test green.
