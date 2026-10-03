@@ -754,3 +754,14 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 652 update — timezone-mixing + test-helper audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| L | UTC/Local mixing: converting some timestamps to `UTC()`/`Local()` while others stay wall-local makes log/metric comparisons drift by the host zone — the timezone-inconsistency class. | ✅ Absent: zero `.UTC()`/`.Local()`/`time.Local`/`.In(...)` sites — every timestamp is `time.Now()`/derived local-clock uniformly, so no mixed-zone comparison can arise. |
+| M | Test helpers taking `*testing.T` without `t.Helper()` — failure lines point at the helper's internals instead of the calling test (the attribution-loss class). | ✅ Clean: all 40 `func helper(t *testing.T…)` sites call `t.Helper()` first — failure attribution already correct tree-wide. |
+
+All packages build, vet, and test green.
