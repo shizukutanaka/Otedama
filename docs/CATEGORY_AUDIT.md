@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 730 update — os-residual + interface-impl + absent-package audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `os.*` residual surface — `ExpandEnv`/`Environ` (unfiltered env exposure into logs/templates), `Unsetenv`/`Clearenv` (global env mutation), `SameFile`/`Lstat`/`Chown`/`Chtimes`/`Link`/`Symlink`/`Truncate`/`FindProcess`/`Hostname`/`TempDir` misuse. | ✅ Clean: every hit is `os.Getenv` on the documented channels (verified session 712); zero usage of all other enumerated `os.*` calls — including `os.TempDir` (all temp work goes through the configured dataDir). |
+| M | `sort.Interface`/`fmt.Formatter` custom impls — a `Len/Less/Swap` triple whose invariants drift from `slices.SortFunc` semantics, or a `Format` method mishandling verb/flags. | ✅ Clean: zero `Formatter`/`Sort` impls — `sort.Ints` (setup.go:306) is the canonical dedup-sort for backup-phrase indices; `Registry.Len` is a diagnostic method, not a sort impl. |
+| M | Absent-package creep — `compress/*`, `archive/*`, `database/*`, `image`, `mime`, `net/mail`, `net/rpc`, `net/smtp`, `log/syslog`, `index/suffixarray`, `expvar` appearing unannounced. | ✅ Absent: zero imports across the entire set — the dependency surface remains the audited single-dep profile. |
+
+All packages build, vet, and test green.
