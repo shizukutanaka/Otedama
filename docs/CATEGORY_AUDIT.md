@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 736 update — path-confinement + new-pkg + tls-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Unconfined user-path opens — `os.Open` on operator-supplied paths without `os.OpenRoot`/`filepath.IsLocal` (Go 1.24 confinement APIs). | ✅ Correctly absent: all 28 open sites touch operator-owned paths (dataDir, config, wallet.dat, log file) where the operator is the trust boundary — no archive extraction or untrusted path components exist, so Root/IsLocal would add machinery with no adversary to exclude. |
+| M | Go 1.23–1.25 stdlib drift — `unique`/`weak`/`iter`/`structs`/`testing.Attr`/`arena` appearing unannounced or needed-but-absent. | ✅ Absent both ways: zero imports and no hand-rolled equivalents that should adopt them (no iterator-style APIs, no interned values, no attr-logging in tests). |
+| S | `tls.Config` modern-field misuse — `GetCertificate`/`ClientHelloInfo` server callbacks or `HTTP2Config`/`Protocols` weakening the client profile. | ✅ Clean: TLS is client-only (two `tls.Config` builders — fresh, MinVersion TLS1.2, `RootCAs` where custom CA given); zero server-callback fields; `Protocols`/`HTTP2Config` absent — default transport for the loopback metrics server is correct. |
+
+All packages build, vet, and test green.
