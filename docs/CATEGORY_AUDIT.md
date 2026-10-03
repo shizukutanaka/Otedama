@@ -1128,3 +1128,12 @@ All packages build, vet, and test green.
 | M | `log.*` stdlib logger inside `internal/` — bypasses the slog wrapper (atomic level/format control), the logger-bypass class. | ✅ Absent: zero `log` imports or `log.Print*` calls in `internal/` — all logging goes through `logger`/slog. |
 | S | `json.Marshal`/`Encode` error ignored at write boundaries — a failed marshal writes `null`/garbage silently (the silent-marshal class). | ✅ Clean: the single production `json.Marshal` (`stratumv1.go:508`) checks `err` before appending the newline; all three `json.NewEncoder` sites return/check the encode error. |
 
+
+
+## Session 655 update — context-TODO + Contains-dispatch + sort-stability + library-print audit
+
+| M | `context.TODO()` leftovers — an unpropagated context the caller can never cancel (the ctx-origin class's TODO variant). | ✅ Absent: zero `context.TODO` sites — every context is either propagated or the deliberate `Background()` stop-grace origin (s650). |
+| P,S | `strings.Contains` used for protocol dispatch — substring matching accepts junk-with-substring where equality was meant (the over-broad match class). | ✅ Clean: the only dispatch use is `engine/stats.go` reject-reason classification, where `Contains` correctly runs after canonical SV2 codes against free-form pool text (the #387 design). All other `Contains*` sites are charset checks (`ContainsAny`/`ContainsFunc`/`ContainsRune`) or output probes (`sc query` text) — nothing masquerades as equality. |
+| P | `sort.Slice`/`slices.Sort` where ties need stable order — unstable sort reorders equal elements nondeterministically (the stability-loss class). | ✅ Clean: `slices.SortStableFunc` is used at the one stability-sensitive site (`arbitration` candidate order); all `Sort`/`SortFunc` comparators are total-order over value elements where equal items are identical. |
+| L | `fmt.Print*` in `internal/` library code — bypasses the slog pipeline, loses level/format control (the print-bypass class). | ✅ Absent: zero `fmt.Print/Println/Printf` sites outside tests — all output flows through `logger`/`i18n`. |
+
