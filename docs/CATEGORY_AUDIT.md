@@ -860,3 +860,11 @@ All packages build, vet, and test green.
 | M | `Must*`/`MustCompile`/`template.Must` initializers — a runtime data problem becomes a process crash (the must-init class). | ✅ Clean: zero sites — all initializations return errors. |
 | S | `fmt.Errorf` verb/argument mismatch — `%d` on a string prints `%!d(MISSING)` and corrupts diagnostics (the printf-verbs class). | ✅ Clean: `go vet ./...` printf analysis reports nothing across ~234 `Errorf` sites. |
 
+
+
+## Session 692 update — aead-nonce + time-equality + hash-reuse audit
+
+| S | AEAD (AES-GCM/ChaCha) keyed nonce reuse or fixed IV — ciphertexts become plaintext-comparable/forgable (the nonce-reuse class). | ✅ Clean: wallet `EncryptSeed` fills `es.Nonce`+`es.Salt` from `crypto/rand` per call; the Noise transport derives each frame nonce from a monotonically incrementing `uint64` counter per Noise spec — no fixed IV. |
+| M | `t1 == t2` on `time.Time` — monotonic-vs-wall mismatch gives false negatives (the time-equality class). | ✅ Clean: zero `==` on `time.Time`; all comparisons go through `time.Since`, `.Equal`, or unix-nano arithmetic. |
+| S | `hash.Hash` reused across computations without `Reset` — concatenated digests silently corrupt verification (the hasher-state class). | ✅ Clean: the pooled hasher does comma-ok + `Reset` on borrow; `hmacSHA256`/`hmacSHA256Pooled` build fresh `sha256.New` per call; the Noise handshake hash is single-owner sequential per spec. |
+
