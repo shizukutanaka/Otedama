@@ -946,6 +946,28 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 620 update — make+append off-by-n + self-append-in-range audit
+
+**`make([]T, n)` then `append`** — preallocating with length `n`
+then appending produces `n` leading zero-valued elements (the
+"capacity vs length" classic — the slice already *contains* n
+zeros). Verified all `make([]T, n>0)` sites: every one is a
+fixed-size wire buffer (12B nonce, 24/16/6B encode buffers) written
+by index — `PutUint32`/`copy` into `buf[i:j]` — never appended to.
+Zero defects.
+
+**self-append during range** — `for _, v := range s { s = append(s,
+...) }` skips or double-processes elements because range evaluates
+the slice header once (new elements appended past the original
+length are never visited — and re-slicing can re-visit). Verified
+via PCRE2 backreference sweep: zero production sites append to the
+ranged slice inside its own loop.
+
+| M | make+append leading-zero corruption | Absent — all fixed buffers are index-written |
+| M | self-append in range loop | Absent — zero sites |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
