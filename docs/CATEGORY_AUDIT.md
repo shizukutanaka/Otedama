@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 684 update — lock-channel + duration-overflow + hot-sprintf audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Mutex held across a channel send/receive — a blocked peer wedges every lock holder (the lock-channel class; extends s560/s632). | ✅ Clean: channel ops adjacent to locks all sit after `Unlock` (e.g. worker snapshots `cancel` under `mu` then waits on `done` unlocked) — no Lock→send/recv region. |
+| P | `time.Duration` formed by unchecked multiplication — `d * n` with large `n` wraps int64 to a negative sleep (the duration-overflow class). | ✅ Clean: the single product (`stats.go` p50→Duration) multiplies a bounded measured latency (~seconds) — magnitudes orders below int64 wrap; timeouts/deadlines are literal constants. |
+| P | `fmt.Sprintf` in the hash hot path — per-nonce allocation churn (the hot-format class). | ✅ Clean: `Sprintf` appears only in display formatting (`HashRateString`, log lines) at stats/log cadence; the hashing loop calls `HashHeader` with zero allocs (s534 verified). |
+
+All packages build, vet, and test green.
