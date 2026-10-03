@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 679 update — wg-negative + json-streaming + deadline-semantics audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `wg.Done()`/`wg.Add(-1)` beyond the paired count — driving the counter negative panics or unblocks `Wait` early (the wg-negative class). | ✅ Clean: `Done` appears only as `defer wg.Done()` at goroutine start after a matching `Add(1)` (worker, fanin); zero `Add(-` calls. |
+| M | `json.NewDecoder` reused across concatenated objects or its partial-decode state ignored — a stream decoder on a one-shot payload (the streaming-decode class). | ✅ Clean: zero `json.NewDecoder` sites — every decode is `json.Unmarshal` on a complete frame or the line-framed V1 reader (validated in earlier sessions). |
+| P | `SetDeadline` where only one direction needs a bound — a shared deadline lets a stalled write mask a healthy read side (the deadline-semantics class). | ✅ Clean: `SetDeadline` appears only at handshakes (both directions bounded, cleared after); steady-state I/O uses separated `SetReadDeadline` (5-min job-wait in V1, negotiate in V2) and `SetWriteDeadline` (10s writes) — directionally correct. |
+
+All packages build, vet, and test green.
