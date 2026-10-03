@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 678 update — recover-value + goroutine-t + sanitize-boundary audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `recover()` whose returned value goes uninspected — catching a panic without classifying it resumes on an unknown failure (the recover-blanket class). | ✅ Clean: zero `recover()` sites — the codebase propagates errors instead of catching panics; the only panics are startup-contract assertions (s644). |
+| M | `t.Log`/`t.Error`/`t.Fatal` called from a goroutine that outlives `t` — post-teardown races on `testing.T` (the goroutine-t class; regression check after PR #705). | ✅ Clean: zero remaining sites — the #705 rewrite holds; no test calls `t` methods outside its own goroutine. |
+| S | `%s`/`%v` on pool-controlled strings at the log boundary — unsanitized C0/C1/control text reaching the terminal (the sanitize-boundary class). | ✅ Clean: every pool-text `%s` (`share rejected` reason, V1 reject reason, `pool notice`) is produced by `poolproto.SanitizePoolText`/`sanitizeNotice` upstream; remaining `%s` args are typed enums, parsed durations, or user-config hosts run through `StripUserinfo`. |
+
+All packages build, vet, and test green.
