@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 707 update — bufio-writer-flush + context-cause + exec-env audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `bufio.Writer` writes never flushed — buffered output silently lost on error return, exit, or connection close (classic data-loss class). | ✅ Absent: zero `bufio.Writer` sites in the tree — only bounded *readers* (`bufio.NewReaderSize` on the V1 wire capped at `maxLineBytes` with `ErrBufferFull` handled, `ReadString` on stdin prompts). No buffered-write surface exists. |
+| P | `context.Cause` family misuse — pairing `context.Cause()` with plain `WithCancel` (returns nil sentinel confusion) or checking `ctx.Err()` while richer causes are set elsewhere. | ✅ Absent: zero `context.Cause`/`WithCancelCause`/`WithDeadlineCause`/`WithTimeoutCause` sites — all 15 `ctx.Err()` checks use the uniform two-sentinel model (`Canceled`/`DeadlineExceeded`), so no cause-semantics mismatch is possible. |
+| S | `exec.Cmd.Env` inheritance leaking or stripping environment — an explicit `.Env` that drops PATH for service-manager lookups, or forwards secrets (wallet passphrase, tokens) to child processes. | ✅ Correct: all 4 `exec.Command` sites (`systemctl`/`launchctl`/`sc.exe` status queries + the install helper) leave `.Env` nil — children inherit `os.Environ()` per the documented default; argv is constant service-manager commands carrying no secret material. |
+
+All packages build, vet, and test green.
