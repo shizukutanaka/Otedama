@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 694 update — shadow-const + positional-literal + defer-named-return audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Same semantic value duplicated as unrelated numeric literals — diverging constants drift apart (the shadow-const class). | ✅ Clean: every magic number in stratum/ is a protocol-defined constant (payload bounds 32/33/65, HMAC pads 0x36/0x5C, block size 64, frame header sizes) — spec values, not duplicated business logic. |
+| M | Positional struct literals — field additions silently rebind values (the positional-literal class). | ✅ Clean: the only multi-element composite literals are `[]hal.Family`/`[]provider.Provider` slices; all struct literals are field-named. |
+| M | Named return values `defer`-mutated — an error path silently overwrites the intended result (the defer-named-return class). | ✅ Clean: named returns (`Transport`, `fetchOne`, `StripScheme`, `parseSubscribeResult`) are assigned at return sites; the sole `defer` (`resp.Body.Close()`) never writes a return value. |
+
+All packages build, vet, and test green.
