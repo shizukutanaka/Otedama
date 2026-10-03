@@ -1145,3 +1145,10 @@ All packages build, vet, and test green.
 | M | Builtin identifier shadowing (`len`, `cap`, `new`, `copy`, `close`, `error`, `min`, `max`, `clear`, `any`, `string`, `int`, `byte`, `bool`, `nil`, `iota`) — a shadowed name silently changes meaning on later use, the shadow-builtin class. | ✅ Benign: one scoped test hit — `for _, max := range []int{…}` in `tui/formatters_test.go:85`; `max` the builtin is never referenced in that scope. Zero production sites. |
 | M | FIXME/HACK/XXX/WORKAROUND/BUG comment markers — leftover defect tickets hiding in prose, the marker-rot class. | ✅ Absent: zero marker comments in `internal/` and `cmd/`. |
 
+
+
+## Session 652 update — timezone-mixing + test-helper audit
+
+| L | UTC/Local mixing: converting some timestamps to `UTC()`/`Local()` while others stay wall-local makes log/metric comparisons drift by the host zone — the timezone-inconsistency class. | ✅ Absent: zero `.UTC()`/`.Local()`/`time.Local`/`.In(...)` sites — every timestamp is `time.Now()`/derived local-clock uniformly, so no mixed-zone comparison can arise. |
+| M | Test helpers taking `*testing.T` without `t.Helper()` — failure lines point at the helper's internals instead of the calling test (the attribution-loss class). | ✅ Clean: all 40 `func helper(t *testing.T…)` sites call `t.Helper()` first — failure attribution already correct tree-wide. |
+
