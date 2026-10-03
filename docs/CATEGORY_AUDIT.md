@@ -877,6 +877,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 637 update — flush + context-cancel audit
+
+| M | `bufio.Writer` without `Flush` — buffered bytes silently dropped on return (the unflushed-writer class). | ✅ Absent: zero `bufio.NewWriter` sites — all writes go directly to files/conns/loggers (or `bufio.Reader`-side only). |
+| M | `context.WithCancel/WithTimeout` whose cancel is never invoked — the uncancelled-context leak (timers and child spans retained until parent exits). | ✅ Clean: all 12 sites have a matching cancel — 8 `defer cancel()`, 3 stored into a lifecycle field invoked on Close/Stop (`worker.cancel`, `poller.cancel`, `session.ctxCancel`), 1 explicit `dialCancel()` after the bounded dial. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
