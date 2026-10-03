@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 731 update — registry + test-env + httptest audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Metrics registry double-registration — a name silently overwritten leaves callers writing to a metric dropped from the exposition. | ✅ Clean: same name+labels re-registration returns the existing object (idempotent, metrics.go:164/202); cross-type collision panics (fail-fast); all 50 registration sites have unique names (uniq -d = ∅). |
+| S | Test env mutation — `os.Setenv`/`Unsetenv` without restore leaks state into parallel tests. | ✅ Clean: all 6 sites pair mutation with `defer os.Setenv(key, old)` restore (nolint'd where unchecked); no leaked env between tests. `t.Setenv` would be equivalent — the manual pattern is correct as written. |
+| M | `httptest.NewServer` lifecycle — a leaked server per test leaks a port and goroutine. | ✅ Clean: all 11 `httptest.NewServer` sites close via `defer ts.Close()` — no leaked servers. |
+
+All packages build, vet, and test green.
