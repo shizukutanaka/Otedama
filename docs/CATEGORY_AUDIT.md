@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 747 update — layout-dep + section-reader + wire-alias audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `unsafe.Sizeof`/`reflect` layout dependencies — ABI changes silently break offsets. | ✅ Clean: `unsafe.` and `reflect.` both absent from non-test code (struct-layout work is done by explicit byte-order codecs). |
+| M | `io.MultiReader`/`io.SectionReader` boundary bugs — concatenated readers short-circuiting reads. | ✅ Clean: MultiReader appears only in `wire_test.go` partial-read tests (the exact abnormal-path coverage it exists for); SectionReader absent. |
+| M | Retained sub-slices of wire buffers — `payload[:n]` stored past the call that owns the buffer. | ✅ Clean: sub-slices in `noise.go`/`frame.go` are all transient (validated or hashed within the handshake; encode writes into the same frame buffer) — consistent with the session-601 read-buffer ownership doc. |
+
+All packages build, vet, and test green.
