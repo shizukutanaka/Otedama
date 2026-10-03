@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 712 update — env-bypass + split-truncation + clock-skew audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `os.Getenv` reads outside `internal/config` silently bypassing the 4-layer precedence (env values the file/flag layers should override, or secrets re-read where a flag could leak them). | ✅ Clean: every prod `os.Getenv` is in a documented channel — wallet passphrases (`OTEDAMA_WALLET_*`, deliberately env-only so they never hit argv or a config file), `OTEDAMA_CONFIG` (the standard path override), platform dirs (`APPDATA`/`XDG_DATA_HOME`), and the injected `getenv` indirection inside config/i18n itself. No precedence hole. |
+| P | `strings.SplitN`/`Split` on wire fields silently dropping tails (host:port with colons, protocol tokens with extra delimiters). | ✅ Absent: only two `strings.Split` sites in prod — uevent line iteration and the BIP-39 wordlist (`TrimSuffix` + `Split("\n")`, the canonical way); protocol parsing goes through `hex`/`Cut*`/`SplitHostPort`, never ad-hoc splitting. |
+| P | Negative `time.Since`/`Sub` where clock skew can cross domains (server-supplied timestamps vs local time) — bogus negative durations mis-driving gauges or stale detection. | ✅ Clean: all skew-sensitive comparisons (doctor probe, rate fetcher `Date`-header drift) use `math.Abs(time.Since(serverTime))`; same-process `time.Since` comparisons ride the monotonic component and cannot go negative. |
+
+All packages build, vet, and test green.
