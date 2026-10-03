@@ -892,3 +892,11 @@ All packages build, vet, and test green.
 | S | `close(ch)` reachable twice — double-close panic on reconnect/teardown (the double-close class). | ✅ Clean: every close is single-shot guarded — `cancelPending` under `pendingMu`+delete, dispatch's delete-before-close, worker's post-`wg.Wait` close, dashboard's CAS on `started`, producer-side `wg.Wait`+close (fanin, hashrate, registry, polling). |
 | S | `json:"-"`/`,omitempty` on wire-marshalled fields — silently dropping or renaming protocol fields (the wire-tag class). | ✅ Clean: zero sites — V1 JSON uses explicit `params` literals, V2 is the binary frame codec; no tag drift on wire structs. |
 
+
+
+## Session 687 update — httputil + x509-verify + path-portability audit
+
+| S | `net/http/httputil` or unchecked `x509` parsing — reverse-proxy surface or unvalidated certificate bundles (the transport-security class). | ✅ Clean: `httputil` absent; all three cert-pool sites fail hard on `!AppendCertsFromPEM` (TLS config builders in stratum/stratumv1, doctor pre-check) — no silent empty-pool path. |
+| M | `filepath.IsAbs`/`VolumeName`/manual separator joining — Windows/POSIX path portability drift (the path-portability class). | ✅ Clean: the only separator use is the daemon's `\tmp`-rooted fallback when the home dir is unresolvable — deliberate drive-root fallback, documented; no `IsAbs`/`VolumeName` call sites needing review. |
+| M | Duplicate `tlsConfigWithExtraCAs` in stratum + stratumv1 — verbatim helper duplication across package boundary (the duplication class). | ✅ Benign: the two copies sit behind a package boundary that keeps `internal/stratum/` free of poolproto deps — vendoring the helper is cheaper than introducing a shared crypto-util package for 12 lines. |
+
