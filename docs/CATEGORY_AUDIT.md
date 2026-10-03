@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 658 update — writer-bypass + unbounded-ReadAll + bufio.Reader + multi-%w audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `fmt.Fprint*`/`os.Stdout`/`os.Stderr` writes bypassing the logger (the output-bypass class; sibling of the `fmt.Print*` sweep in s655). | ✅ Clean: every `Fprint*` writes to an *injected* `io.Writer` (the TUI dashboard writer, the doctor report writer) — the correct DI pattern, not a hardcoded bypass. The sole `os.Stderr` reference is `logger.go`'s own default destination. |
+| P,S | `io.ReadAll` on a response body without a bound — unbounded memory on a hostile/large body (the unbounded-read class). | ✅ Clean: both sites wrap the body in `io.LimitReader` (`rates/hashrate.go` maxHashrateBody, `rates/fetcher.go` 64KiB). |
+| P | `bufio.Reader` buffered-data discard or shared reuse — leftover buffered bytes desync the stream (the buffered-reader class). | ✅ Clean: three sites, all single-owner — V1 reader (`NewReaderSize` → bounded `readLine`), one-shot stdin readers (`wallet.go`, `engine/setup.go`). No cross-call reuse. |
+| M | Multiple `%w` in one `fmt.Errorf` — Go ≥1.20 multi-wrap; safe only when callers expect `Unwrap() []error` (the multi-wrap class). | ✅ Clean: one site (`stratumv1/dialer.go:164`) deliberately wraps sentinel + inner error so `errors.Is(err, ErrHandshakeFailed)` works — the canonical multi-wrap use. |
+
+All packages build, vet, and test green.
