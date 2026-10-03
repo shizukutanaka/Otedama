@@ -898,6 +898,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 631 update — library-exit + HTTP-body audit
+
+| M,S | `os.Exit`/`log.Fatal*` inside `internal/` — a library path that kills the embedding process mid-defer (the library-exit class: skipped cleanup, no error propagation to the caller). | ✅ Clean: zero `os.Exit`/`log.Fatal*` call sites in `internal/` — the only hit is a doc comment describing the `os.Exit(report.ExitCode())` contract, whose exit decision lives in `cmd/otedama`. Every library error propagates (session 568). |
+| M | `http.Response.Body` left unclosed/undrained — connection leak and keep-alive abandonment (under HTTP/2, spurious RST_STREAM) — the response-lifecycle class. | ✅ Clean: all 3 `client.Do` sites (`doctor` clock probe, `rates` hashrate, `rates` fetcher) `defer resp.Body.Close()` after the err check, with bounded drains for keep-alive (8 KiB discard on the probe, `maxHashrateBody` on non-200). The doctor site documents the drain-then-close requirement explicitly. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
