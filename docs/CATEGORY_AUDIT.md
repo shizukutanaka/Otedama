@@ -1092,3 +1092,12 @@ All packages build, vet, and test green.
 | P | `len()`/`s[:n]` on display strings — byte-vs-rune confusion cuts mid-rune or miscomputes column width for multibyte text (the display-width class). | ✅ Clean: `truncateToBudget`/`shortenURL` apply only to ASCII-constructed fields (share counters, validated host:port pool URLs); ANSI/multibyte-aware helpers (`visibleLen`, `padToVisibleWidth`) handle real display width. |
 | P | Writes under `RLock` — a mutation under read lock races (the lock-granularity class). | ✅ Clean: all `RLock` sites are read-only field/map reads, and `metrics.WriteText` uses the canonical snapshot pattern — copies collectors under `RLock`, `RUnlock`s, then invokes them outside the lock. |
 
+
+
+## Session 659 update — slog-bypass + shallow-clone + chdir + exposure audit
+
+| M | `slog.*` called directly outside `internal/logger` — bypasses the atomic-swappable wrapper, losing level/format control (the logger-bypass class, slog variant). | ✅ Absent: zero `slog.` sites outside `internal/logger` and tests — every log call flows through the wrapper. |
+| P | `maps.Clone`/`slices.Clone`/`maps.Copy` mistaken for a deep copy — nested maps/slices/pointers stay shared after the clone (the shallow-clone class). | ✅ Clean: the only site is `metrics.cloneLabels` over `map[string]string` — immutable string values make the shallow clone a true independent copy (its doc says exactly that). |
+| S | `os.Chdir` inside library code — mutates process-global cwd for every goroutine (the global-state-mutation class). | ✅ Absent: zero `os.Chdir` call sites. |
+| S | `expvar`/extra listeners exposing runtime state on unconfigured ports (the exposure-surface class). | ✅ Absent: zero `expvar`, `ListenUDP`, `ListenTCP` sites — the only listener is `httpserver` on the configured address. |
+
