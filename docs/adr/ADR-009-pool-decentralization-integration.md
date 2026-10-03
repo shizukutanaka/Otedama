@@ -824,3 +824,82 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-660 ecosystem update (2026-10-03)
+
+sv2-spec remains in a quiet window: no merges since the Oct-2 batch (the
+roles-terminology #231 was the last). The only open active item is #236
+(`SetTarget.target` must not exceed the channel's `max_target`), which has
+matured rather than stalled: review discussion added a race-condition nuance —
+when a client *lowers* `max_target`, a `SetTarget` arriving above the new bound
+cannot be an in-flight race crossing, so the client should allow a grace period
+for the server to send a conforming `SetTarget` or `UpdateChannel.Error` before
+treating it as a violation. The bound remains a server-side obligation and is
+still a non-issue for Otedama: it never advertises `max_target` in
+`OpenMiningChannel` (internal/stratum/handshake.go), so the constraint is
+vacuous on our wire.
+
+No new spec issues opened in the window. sv2-apps activity is housekeeping only
+(AGENTS.md doc placement). SRI stays at v1.12.0 — no new release to track.
+
+## Session-688 ecosystem update (2026-10-03)
+
+Quiet window confirmed for a second recheck: sv2-spec merged list still ends at
+#231 (10/2 roles clarification) after the Oct-1 normative batch; open items
+unchanged — #236 (SetTarget ≤ max_target, server-side only), #234 (authority-key
+mgmt), #198 (`coinbase_witness`, TDP-side), #203 (payouts extension), plus stale
+editorial #232/#186 and the 2024 WIP #103. SRI release: v1.12.0 (unchanged).
+
+sv2-apps: #839 (JDS job-token → `user_identity` binding), #845 (target-field
+rename tracking spec #228), #856 (`bitcoin_core_sv2` hardening) all remain open —
+#839 is still the notable item for this ADR's custody argument; no landed change
+affects Otedama's client-only footprint.
+
+Conclusion unchanged: nothing in flight requires wire or docs adjustments.
+
+## Session-676 ecosystem update (2026-10-03)
+
+sv2-spec remains quiet — no merges since the Oct-1 normative batch and the
+10/2 roles clarification (#231, recorded in Session-654). Open items unchanged:
+#236 (`SetTarget.target` ≤ channel `max_target` — server-side, vacuous for a
+client that never advertises `max_target`), #234 (authority-key mgmt), #198
+(`coinbase_witness`, TDP-side), #203 (payouts extension). #232/#186 are editorial
+table-cell cleanups; #103 stays a 2024 WIP. SRI release: v1.12.0 (unchanged).
+
+sv2-apps activity of note: #845 renames `target`-message fields to follow the
+#228 spec cleanup — the same alignment Otedama made in PR #704, so the tree is
+already consistent. #839 (jds) binds mining-job tokens to `user_identity` on
+`SetCustomMiningJob` — the reference JDS tightening job-token custody in the
+same direction as this ADR's payout-control argument; worth watching if it
+lands. #856 (`bitcoin_core_sv2` hardening) and #881 (`handle_push_solution`)
+are routine robustness work.
+
+No changes to the ADR's conclusions: the demand-side SV2 trajectory still
+favors pool-side JDP payout isolation, and Otedama's client-only footprint is
+unaffected by every open normative item.
+
+## Session-668 ecosystem update (2026-10-03)
+
+Seventh recheck of the upstream landscape since the session-660 update:
+
+- **sv2-spec** — no merges since the Oct-1 normative batch; #231's role-terminology
+  definitions remain the newest normative text. The open list is unchanged:
+  #236 (`SetTarget.target` ≤ channel `max_target`; still server-side, vacuous for
+  Otedama which never advertises a max_target), #234 (authority-key management),
+  #203 (payouts extension), #198 (coinbase_witness). No new issues filed.
+- **SRI** — v1.12.0 remains latest (2026-09-17).
+- **sv2-apps** — housekeeping continues (#907 docs, #900 stratum-core bump, #875
+  single-workspace consolidation). Notably #857 adds *pool payout policy
+  isolation for solo mining*: upstream pools now isolate payout policy per
+  coinbase output — directly aligned with this ADR's decentralization thesis,
+  and further evidence the ecosystem is standardizing the non-custodial payout
+  pattern Otedama already ships.
+
+No spec action required from Otedama. Continued monitoring of #236/#234.
+
+## Session-654 ecosystem update (2026-10-03)
+
+- **sv2-spec #231 merged (Oct-2):** "clarify Server/Client relationship across roles" landed — the pool role is now defined as `Mining Pool Server`, server/client terms are defined per protocol, and "one type of software can fulfill more than one role" is checkable rather than illustrative. Editorial/terminology only; wire format unchanged. No code impact for Otedama (docs consistently say "pool"); if a conformance doc ever names spec roles it should use `Mining Pool Server`.
+- **sv2-spec #236 open (Oct-2, new):** `SetTarget.target` MUST NOT exceed the channel's `max_target` — closes the gap where an unconstrained `SetTarget` could undo the bounds that 5.3.3/5.3.5/5.3.7 put on the initial target and `UpdateChannel`. This is a server-side obligation; Otedama is unaffected (it advertises no `max_target` in `OpenMiningChannel` and accepts pool-assigned targets by design, see `internal/stratum/handshake.go`). Track to see if it lands.
+- sv2-apps: housekeeping only (#907 agents docs).
+- SRI: still v1.12.0 (2026-09-17).
