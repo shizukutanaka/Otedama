@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 671 update — mutex-aliasing + unmarshal-reuse + receiver-consistency audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `sync.Mutex`/`RWMutex`/`WaitGroup` copied by value — each copy locks an independent state, silently breaking mutual exclusion (the lock-copy class). | ✅ Clean: `go vet -copylocks ./...` reports zero; every `mu`/`wg`/`registryMu` is a struct field reached only through a pointer receiver. |
+| S | `json.Unmarshal` into a previously-populated struct — absent fields keep their old values, mixing two payloads (the partial-overwrite class). | ✅ Clean: every site decodes into a fresh local (`var v`, `var p []json.RawMessage`, per-field temporaries) — no struct is reused across decodes. |
+| M | Mixed value/pointer receivers on the same type — methods sharing state see different copies, hiding mutation (the receiver-consistency class). | ✅ Clean: every method on `Engine`/`Worker`/`Dashboard`/`Clock`/`Session` takes a pointer receiver (`func (x *T)`); `gofmt -l` and `go vet` show no inconsistencies. |
+
+All packages build, vet, and test green.
