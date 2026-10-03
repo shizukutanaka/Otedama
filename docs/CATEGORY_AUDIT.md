@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 670 update — hex-decode + bytes/index + slices-membership audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `hex.DecodeString` on pool-supplied text without an `err` check — malformed hex silently produces truncated or zero bytes, corrupting job hashes or extranonces (the hex-trust class). | ✅ Clean: every site checks `err` *and* validates length — `coinb1/coinb2/merkle_branch` reject malformed or wrong-length values, `prev_hash`/`en1` fall back or bail on decode failure. |
+| P | `bytes.Index`/`LastIndex` on wire data compared against `== 0`/`!= -1` for prefix or membership semantics (the bytes-index class — byte-level sibling of the string Index==0 audit). | ✅ Clean: the only `bytes` predicate on data is `bytes.Equal` — the base-58 checksum compare where exact equality is the correct test. |
+| M | `slices.Index`/`IndexFunc` used where `slices.Contains` or `==` is meant — an index treated as a boolean truth (the membership-mismatch class). | ✅ Clean: the single `slices` use is `slices.Contains` in `Accepts` — an exact-match family dispatch; zero `Index`/`IndexFunc` sites. |
+
+All packages build, vet, and test green.
