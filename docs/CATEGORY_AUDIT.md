@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 716 update — rune-conv + hostport-build + unused-result audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `string(int)` rune conversion — `string(65)` producing "A" where "65" was meant (vet `stringintconv`). | ✅ Absent: every `string(x)` converts a named string type (`Stream`/`SwitchedFromID`/`Lang`/`ID`) or a byte slice (`[]byte`, `json.Marshal` output) — no integer-to-string conversion exists anywhere. |
+| S | `fmt.Sprintf("%s:%d")` host:port construction producing unbracketed IPv6 (`::1:3333`) — should be `net.JoinHostPort`. | ✅ Absent: zero `Sprintf` host:port construction and zero `JoinHostPort` — dial addresses arrive verbatim from config validation (`validatePoolTarget` → `net.SplitHostPort`), so `[::1]:3333` is already bracketed on entry and passes straight to `DialContext`/`DialTLS`. No construction point exists to get wrong. |
+| L | Unused call results — `errors.New(...)`/`strings.Replace*(...)` evaluated and discarded (statement has no effect, likely a missed assignment). | ✅ Absent: every `errors.New`/`Replace*` call assigns, returns, or wraps its result — no statement-level discard. |
+
+All packages build, vet, and test green.
