@@ -832,6 +832,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 644 update — panic-site + tail-index audit
+
+| M | `panic(` sites in library code reachable via untrusted input (pool input crashes the process). | ✅ Clean: all 12 panic sites are programming-error assertions unreachable from input — `Worker.Start` double-call, `poolproto.Register`/`btccrypto` duplicate-registration contracts, `metrics` static-name validation, BIP-39 wordlist length+hash integrity (init-time data check). |
+| M | Tail indexing `s[len(s)-1]` / `s[:len-1]` on a possibly-empty slice (negative-offset panic class). | ✅ Clean: all 4 sites are guarded — `ID.Valid` returns early on `""`, `parse.go` bounds by `len(b) > 0` in the loop condition, `en2` writes bound `i < len(en2)`, completion.go uses a comparison not an index. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
