@@ -1056,3 +1056,12 @@ All packages build, vet, and test green.
 | P | `runtime.Goexit`/`Gosched`/`SetGCPercent`/`FreeOSMemory`/`LockOSThread` — runtime-tuning escapes that distort the scheduler (the runtime-intrusion class). | ✅ Absent: zero sites — `runtime` usage is the GOMAXPROCS query already verified (s605). |
 | M | Tests acquiring resources without `t.Cleanup` — leaked files/conns corrupt later tests (the test-hygiene class). | ✅ Clean: `t.Cleanup` is used across engine/poolproto/daemon/doctor tests; temp dirs use `t.TempDir()` which self-registers cleanup. |
 
+
+
+## Session 664 update — path-traversal + binary-search + multiwriter + stream-reader audit
+
+| S | `filepath.Join`/`EvalSymlinks` on attacker-influenced components — a `..` element escapes the intended directory (the path-traversal class). | ✅ Clean: every join pairs a base dir with a *constant* filename (`wallet.dat`, fingerprint files) or kernel-provided sysfs names (cannot contain `..`); `EvalSymlinks` is only used to canonicalize device/binary paths, never to gate access. |
+| P | `sort.Search`/`slices.BinarySearch` on an unsorted slice — the sorted precondition is unchecked, returning wrong indexes silently (the search-precondition class). | ✅ Absent: zero production call sites — the only `IsSortedFunc` lives in the arbitration fuzz test asserting the property. |
+| M | `io.MultiWriter` first-error short-circuit — an early writer's failure starves later writers (the fan-out-write class). | ✅ Benign: the only site tees log output to console+file (`run.go`); a dead stdout means the session is ending anyway, and logging is already best-effort. |
+| P | `io.TeeReader`/`SectionReader`/`OffsetReader` boundary misuse — mis-sized windows or unbuffered tee loss (the stream-window class). | ✅ Absent: zero call sites. |
+
