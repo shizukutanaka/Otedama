@@ -924,3 +924,11 @@ All packages build, vet, and test green.
 | S | `iota` enum values serialized onto the wire — renumbering a constant silently shifts the protocol (the iota-wire class). | ✅ Clean: all five `iota` blocks are internal-only (Policy, AddressType, Status, ValueOrigin, Format); wire message types use explicit numeric constants, never `iota`. |
 | M | Declared-but-unused `const`/helpers — dead declarations rotting in the tree (the dead-const class; covered by the s532 deadcode sweep). | ✅ Clean: deadcode verdict from s532 stands — no new unused constants introduced; `go vet` + build confirm none today. |
 
+
+
+## Session 682 update — nil-interface + header-key + atomic-bypass audit
+
+| S | Interface `nil` checks that miss typed-nil — `(*T)(nil)` boxed in an interface compares `!= nil` (the nil-interface class; re-verified after s640). | ✅ Clean: no new typed-nil constructions since s640 — interface-returning sites still produce only untyped nil. |
+| M | `http.Header` written via direct map index (`Header["K"]=`) — bypasses canonical textproto casing so `Get("K")` misses (the header-key class). | ✅ Clean: zero direct-map writes; every header is set via `w.Header().Set(...)` which canonicalizes; no case-folded map keys (`ToLower(...)]`) anywhere. |
+| S | Plain assignment/read on a field declared `atomic.*` — bypasses the atomic op and tears the value under racing access (the atomic-bypass class). | ✅ Clean: zero bare assignments to `curtailGate`/`started`/`closed`/`ready`/counter fields — all access goes through `Load`/`Store`/`Swap`/`Add`. |
+
