@@ -1010,6 +1010,27 @@ results. Function returns are all explicit `return` statements.
 
 
 
+## Session 617 update — strings.Replace count + regexp audit
+
+**strings.Replace n-count** — `Replace(s, old, new, n)` with
+`n < occurrences` silently leaves later occurrences un-replaced
+(partial-substitution corruption). Verified: the only replacement
+site is `strings.ReplaceAll` at bundle.go:119 (BCP-47 `_`→`-` tag
+normalization) — ReplaceAll has no count semantics; zero
+`strings.Replace`/`bytes.Replace` calls exist. Class absent.
+
+**regexp** — a regex compiled from untrusted input panics under
+`MustCompile` or, worse, admits ReDoS (catastrophic backtracking on
+pool-supplied strings). Verified: zero `regexp.` references in
+production code — all wire validation is hand-rolled byte/char
+checks (stratumv1 parse, bech32, config validators). The entire
+class is structurally absent.
+
+| M | strings.Replace partial substitution | Absent — only ReplaceAll for BCP-47 normalization |
+| S | regexp on untrusted input (MustCompile panic / ReDoS) | Absent — no regexp usage at all |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
