@@ -764,7 +764,6 @@ No retained slice references a buffer any read path can overwrite — the
 use-after-overwrite class is structurally absent.
 
 All packages build, vet, and test green.
-||||||| 8e86d7d8
 
 ---
 
