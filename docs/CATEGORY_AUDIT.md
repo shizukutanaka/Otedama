@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 728 update — container-pkg + readdir-order + pprof-mount audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `container/heap`/`list`/`ring` invariant bugs — a heap used as a queue without `heap.Fix` after in-place mutation, or a list/ring whose zero value is misused. | ✅ Absent: zero `container/` imports — bounded FIFOs are plain slices (sessions 717/723); no heap/list/ring surface exists. |
+| L | `os.ReadDir` callers assuming an order other than filename-sorted, or assuming POSIX `Readdir` semantics. | ✅ Clean: both sites (hal GPU enumeration, doctor GPU count) iterate every entry and filter by `renderD` prefix — pure membership scans, order-insensitive; hal additionally dedups via `EvalSymlinks` canonical path. |
+| S | pprof handlers exposed via `net/http/pprof`'s `init()` onto `DefaultServeMux` (silent global registration), or mounted without a loopback gate. | ✅ Clean: handlers are mounted explicitly on the custom mux (the import comment documents the deliberate non-blank import), gated by `--pprof`, riding the http server that warns on non-loopback bind. Zero `flag.Var`/`Func`/`BoolFunc`/`TextVar` — standard FlagSet types only. |
+
+All packages build, vet, and test green.
