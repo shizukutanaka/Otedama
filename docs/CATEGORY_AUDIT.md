@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 695 update — signed-cast + tail-index + errors.As audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Negative values cast to unsigned — wrap to a huge number and defeat bounds checks (the signed-cast class). | ✅ Clean: every `uint32`/`uint64` cast consumes an already-bounded source (`ParseUint` at 32-bit width, unsigned counters) — no signed value crosses the boundary. |
+| S | `x[len(x)-1]` without a non-empty guard — index -1 panic on empty input (the tail-index class). | ✅ Clean: both sites (`i18n` suffix check, V1 line trim) are guarded by `s == ""`/`len(b) > 0` on the preceding line. |
+| M | `errors.As` with a mismatched target type — the check never fires and the error is mishandled (the as-target class). | ✅ Clean: the single site targets `*fatalError` (`errors.As(err, &fe)`), matching the producer. |
+
+All packages build, vet, and test green.
