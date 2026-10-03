@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 665 update — timer-reset + closed-channel-read + runtime-tuning + test-cleanup audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `Timer.Reset`/`Ticker.Reset` on live timers — resetting an expired-but-undrained timer double-fires (the reset-drain-race class). | ✅ Absent: zero timer resets — the only `Reset()` site is the hmac hasher's pool reset (the s614 canonical). |
+| P | `case v := <-ch` receiving without comma-ok — a closed channel keeps yielding the zero value forever, spinning the select (the closed-channel-read class). | ✅ Clean: the single site (`tui` `updateCh`) reads a channel that is *never closed by design* — shutdown is signalled on `doneCh`, so a zero `Stats` can never arrive. |
+| P | `runtime.Goexit`/`Gosched`/`SetGCPercent`/`FreeOSMemory`/`LockOSThread` — runtime-tuning escapes that distort the scheduler (the runtime-intrusion class). | ✅ Absent: zero sites — `runtime` usage is the GOMAXPROCS query already verified (s605). |
+| M | Tests acquiring resources without `t.Cleanup` — leaked files/conns corrupt later tests (the test-hygiene class). | ✅ Clean: `t.Cleanup` is used across engine/poolproto/daemon/doctor tests; temp dirs use `t.TempDir()` which self-registers cleanup. |
+
+All packages build, vet, and test green.
