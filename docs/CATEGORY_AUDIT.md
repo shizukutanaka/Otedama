@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 702 update — close-error + any-map + ctx-key audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `defer x.Close()` swallowing the Close error — a flush/commit failure on teardown is silently lost (the close-error class). | ✅ Clean: all 5 sites are teardowns where the error is unactionable (`resp.Body`, `f`, `conn`, `sess`); the one path where it matters — wallet temp file — checks `Sync`+`Close` explicitly (s662-verified). |
+| M | `map[string]any` value read without comma-ok — a wrong-typed value panics on assertion (the any-map class). | ✅ Clean: both `any` maps are write/marshal-only — i18n `data` feeds `template.Execute` (graceful missing-key path) and the V1 request map feeds `json.Marshal` on primitives; no assertion reads exist. |
+| S | `context.WithValue` key collisions — a same-typed key from another package silently overwrites ours (the ctx-key class). | ✅ Clean: single key `loggerKey` of unexported `ctxKey` type (collision-proof), nil-guarded against typed-nil shadowing. |
+
+All packages build, vet, and test green.
