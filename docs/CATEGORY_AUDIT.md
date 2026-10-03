@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 677 update — atomic-alignment + typed-wrapper + unsafe audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `unsafe.Pointer`/`uintptr` — breaking the GC's pointer-tracking contract (the unsafe class; re-verified after s605). | ✅ Clean: zero `unsafe.`/`uintptr` sites in non-test code. |
+| P | Old-style `atomic.AddUint64(&x)` on a struct field — requires manual 64-byte alignment on 32-bit archs or the op crashes (the aligned-64 class). | ✅ Clean: the free-function API is absent; every counter/flag uses the typed `atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]` API (worker counters, curtail gate, httpserver ready/bound-addr/serve-err, dialer closed/diff, metrics values, TUI started, logger defaultPtr), which embeds its own alignment guarantee. |
+| M | `atomic.Pointer[T]` used where a plain pointer under mutex would do — or vice versa, an unguarded pointer where atomic is required (the synchronization-choice class). | ✅ Clean: each `atomic.Pointer` stores a write-once/read-many value (`boundAddr`, `serveErr`, `defaultPtr`) that would otherwise need a dedicated mutex — the right primitive for the access pattern. |
+
+All packages build, vet, and test green.
