@@ -1031,6 +1031,33 @@ class is structurally absent.
 
 
 
+## Session 616 update — slice-expression bounds + math-domain audit
+
+**slice-expression panic** — `s[a:b]` panics when `a>b` or `b>len(s)`
+(a distinct class from the element-index audit of session-558).
+Verified every variable-bound reslice: `candidates[1:]` and
+`candidates[0]` sit behind the `len(candidates)==0` early return;
+`order = order[1:]` runs inside `for len(order) > jobsCap` (non-empty
+by invariant); `maskAddr`'s `a[:6]+a[len-4:]` needs len>12, the guard
+requires it; `c.readbuf = c.readbuf[n:]` uses `n = copy(...)` ≤ len;
+`payload[:65]/[:33]/[:32]` are each behind explicit len guards plus
+the function-level `len < 32` reject; `DecodeNewMiningJob`'s
+`payload[off:off+N]` fields sit behind the `minNeed` check and a
+re-verified `off+36` bound in the OPTION branch. All fixed-offset
+slices index fixed-size arrays ([80]byte header, [12]byte nonce,
+[4]byte u32). Zero defects.
+
+**math domain** — `math.Sqrt(-x)`/`Log(0)`/`Pow` produce NaN/±Inf
+that silently propagates through yield math. Verified: zero
+`math.Sqrt/Log/Pow/Exp/Cbrt/Gamma/Dim` call sites in production code
+— yield aggregation is pure float64 add/compare/mul. The class is
+structurally absent.
+
+| M | slice-expression out-of-bounds panic | Absent — every variable bound len-guarded, fixed offsets on fixed arrays |
+| M | math-domain NaN propagation | Absent — zero math.* domain functions in production |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
