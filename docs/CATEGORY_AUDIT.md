@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 689 update — map-comma-ok + double-close + wire-tag audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Map reads without comma-ok where missing vs zero-value changes behavior — silently treating absent as present (the map-comma-ok class). | ✅ Clean: `updateStream`'s bare `m[key]` reads the zero `Stream`, populates it, and writes `m[key] = existing` back — missing key is the intended fresh-stream path; `dup`-checks and `pending`/`drivers` lookups all use comma-ok or `_, present :=`. |
+| S | `close(ch)` reachable twice — double-close panic on reconnect/teardown (the double-close class). | ✅ Clean: every close is single-shot guarded — `cancelPending` under `pendingMu`+delete, dispatch's delete-before-close, worker's post-`wg.Wait` close, dashboard's CAS on `started`, producer-side `wg.Wait`+close (fanin, hashrate, registry, polling). |
+| S | `json:"-"`/`,omitempty` on wire-marshalled fields — silently dropping or renaming protocol fields (the wire-tag class). | ✅ Clean: zero sites — V1 JSON uses explicit `params` literals, V2 is the binary frame codec; no tag drift on wire structs. |
+
+All packages build, vet, and test green.
