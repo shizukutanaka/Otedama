@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 690 update — dial-context + exec + signal-stop audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `net.Dial`/`tls.Dial` without a context or timeout — dial stalls block forever (the dial-context class). | ✅ Clean: every dial path uses `DialContext` (engine, stratum TLS, stratumv1/v2 dialers) or an explicit `net.Dialer{Timeout: …}` (doctor probes, 3–5s) — no bare `net.Dial`. |
+| S | `os/exec` with attacker-influenced argv — command injection (the exec-argv class). | ✅ Clean: four sites — `systemctl is-active`, `launchctl list`, `sc.exe query`, and the service-manager `exec.Command(name, args…)` — all invoke fixed platform tools with constant/service-defined arguments; no user-controlled string reaches argv. |
+| S | `signal.Notify` without a matching `signal.Stop` — a cancelled registration keeps the channel subscribed (the signal-stop class). | ✅ Clean: the only signal use is `signal.NotifyContext`, whose `cancel` performs the `Stop` — canonical. |
+
+All packages build, vet, and test green.
