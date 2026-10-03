@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 655 update — context-TODO + Contains-dispatch + sort-stability + library-print audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `context.TODO()` leftovers — an unpropagated context the caller can never cancel (the ctx-origin class's TODO variant). | ✅ Absent: zero `context.TODO` sites — every context is either propagated or the deliberate `Background()` stop-grace origin (s650). |
+| P,S | `strings.Contains` used for protocol dispatch — substring matching accepts junk-with-substring where equality was meant (the over-broad match class). | ✅ Clean: the only dispatch use is `engine/stats.go` reject-reason classification, where `Contains` correctly runs after canonical SV2 codes against free-form pool text (the #387 design). All other `Contains*` sites are charset checks (`ContainsAny`/`ContainsFunc`/`ContainsRune`) or output probes (`sc query` text) — nothing masquerades as equality. |
+| P | `sort.Slice`/`slices.Sort` where ties need stable order — unstable sort reorders equal elements nondeterministically (the stability-loss class). | ✅ Clean: `slices.SortStableFunc` is used at the one stability-sensitive site (`arbitration` candidate order); all `Sort`/`SortFunc` comparators are total-order over value elements where equal items are identical. |
+| L | `fmt.Print*` in `internal/` library code — bypasses the slog pipeline, loses level/format control (the print-bypass class). | ✅ Absent: zero `fmt.Print/Println/Printf` sites outside tests — all output flows through `logger`/`i18n`. |
+
+All packages build, vet, and test green.
