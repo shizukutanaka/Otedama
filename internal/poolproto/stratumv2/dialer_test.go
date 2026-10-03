@@ -227,8 +227,15 @@ type poolSide struct {
 
 // writeMsgTo encodes a Stratum V2 message and writes the framed bytes to w.
 // It runs on the mock pool's goroutine, so it must use t.Errorf (safe from
-// any goroutine), never t.Fatalf (which calls runtime.Goexit and is only
-// valid on the test's own goroutine).
+// any goroutine while the test is running), never t.Fatalf (which calls
+// runtime.Goexit and is only valid on the test's own goroutine).
+//
+// Write errors are swallowed silently rather than reported via t: this
+// helper can still be writing after the test function has returned, and
+// any t method — including Logf — races with test teardown once the test
+// is done. Encode/Wrap/EncodeFrame errors keep t.Errorf: they only fail
+// on malformed input, i.e. deterministically and early, while the test is
+// still live.
 func writeMsgTo(t *testing.T, w net.Conn, msgType uint8, isChannel bool, enc interface{ Encode() ([]byte, error) }) {
 	t.Helper()
 	payload, err := enc.Encode()
@@ -246,12 +253,10 @@ func writeMsgTo(t *testing.T, w net.Conn, msgType uint8, isChannel bool, enc int
 		t.Errorf("writeMsgTo EncodeFrame: %v", err)
 		return
 	}
-	if _, err := w.Write(data); err != nil {
-		// Connection may have been closed by the other side after
-		// the test is done — do not fail on write errors after the
-		// happy path.
-		t.Logf("writeMsgTo Write: %v (likely closed by client)", err)
-	}
+	// Connection may have been closed by the other side after the test is
+	// done — do not report write errors after the happy path (and cannot
+	// report them safely anyway; see doc comment).
+	_, _ = w.Write(data)
 }
 
 // doHandshake performs the standard SV2 handshake from the pool side and
@@ -478,7 +483,10 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 		// Read the SubmitSharesStandard frame the client sends.
 		f, err := pool.dec.ReadFrame()
 		if err != nil {
-			pool.t.Logf("pool: read submit: %v", err)
+			// The conn is closed during teardown — a read error here can
+			// arrive after the test function returned, where any t method
+			// would race with test teardown. The submitted channel's
+			// receive timeout already fails the test on a missing frame.
 			return
 		}
 		submitted <- f
