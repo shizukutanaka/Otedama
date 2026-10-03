@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | P | Generic `rpcMessage` (`Result`/`Error`/`ID` as `any`) leaking spurious `"error":null`/`"result":null` keys outbound — field-presence drift vs JSON-RPC expectations. | ✅ Clean: `rpcMessage` is decode-only; outbound requests marshal a 3-key map (`id`/`method`/`params`) — `result`/`error` keys can never appear. Decode side treats `null` as nil (`any`), matching JSON-RPC semantics (session 566). V2 is binary — no null semantics exist. Other marshal sites (`version --json`, config dump, doctor `/healthz`) are operator-facing output where null-vs-`[]` is cosmetic, not protocol conformance. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
