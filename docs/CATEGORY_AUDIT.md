@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 717 update — join-elements + silent-skip + reslice-leak audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `filepath.Join` receiving a user-controlled absolute element — silently neutralizing the trusted root (`Join(dir, "/abs")` stays inside dir but `Join(userPath, name)` where userPath itself is absolute and unvalidated escapes the root). | ✅ Clean: all 24 prod `Join` sites append only compile-time constants (`.config/systemd/user`, `Library/LaunchAgents`, `otedama`, `wallet.dat`, `device`, `vendor`, `uevent`) onto a trusted root (home, dataDir, `drmBasePath`, XDG/APPDATA) — no user-supplied element reaches a `Join`. |
+| M | Silent `t.Skip()`/`SkipNow()` — a test skipping without a recorded reason hides coverage loss. | ✅ Clean: all ~75 `t.Skip*` sites carry an explicit reason string (short-mode, platform gating, permission/environment limits, port-unavailable) — no silent skips. |
+| P | Front-pop reslicing (`s = s[1:]`) leaking the backing array — a queue whose head advances forever while cap grows unbounded. | ✅ Benign: the only two `s[1:]` sites are the bounded job-FIFO evictions (`storeBoundedJob`, SV2 `pendingOrder`) — length is capped by `jobsCap`/`pendingCap`; pop-and-append stay balanced so the backing array is periodically reallocated, not leaked. |
+
+All packages build, vet, and test green.
