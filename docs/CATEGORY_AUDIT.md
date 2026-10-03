@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 699 update — sync.Map + discard-return + range-delete audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `sync.Map.Load` results asserted to a concrete type — a wrong-typed `Store` panics at read (the sync-map-type class). | ✅ Clean: `pauseSet.m` stores only `struct{}{}` and `Load` discards the value — no assertions exist anywhere in the class. |
+| M | Interface call results discarded with `_ =` — failures silently swallowed where they matter (the discard-return class). | ✅ Clean: all sites are intentional — `conn.Close()` on the failure path, health-endpoint `WriteString` (error unactionable), cleanup `Remove`/`Close` in temp-file error branches. |
+| S | `delete(m, k)` inside `for range m` — iteration corruption (the range-delete class). | ✅ Clean: the sole site (`pruneStaleStreams`) deletes from the ranged map — legal per Go spec (entries may be removed during range). |
+
+All packages build, vet, and test green.
