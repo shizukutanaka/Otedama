@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 738 update — time-unit + seq-wrap + hash-compose audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Unix*` unit confusion — seconds vs millis vs nanos producing epoch-shifted timestamps. | ✅ Absent: zero `time.Unix*` call sites; the code carries `UnixNano` + `time.Duration` arithmetic throughout — no unit conversions exist to confuse. |
+| P | SV2 submit `seqNum` u32 wraparound — `seqNum++` rolling past 2^32 makes `e.SequenceNumber > seqNum` checks misclassify live frames. | ✅ Benign: wrap requires ~4.29B submits in one connection (~50 days at 1000 shares/s; real sessions reconnect far sooner and submitTimes settles per seq). The future-seq guards correctly reject unsent acknowledges in the reachable range. |
+| S | Single-vs-double SHA-256 composition — mining code must use sha256d, protocol hashes must not. | ✅ Correct per protocol: `miner/sha256d.go` + `btccrypto` address checksum are double-hash; Noise handshake, BIP-39 checksum, and BIP-340 TaggedHash (`sha256(tag)‖sha256(tag)‖msg`) are spec-mandated single-hash — each site matches its standard. |
+
+All packages build, vet, and test green.
