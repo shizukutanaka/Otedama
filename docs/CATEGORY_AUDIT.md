@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 657 update — goto + request-context + scanner-limit + time-parse audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `goto` misuse — spaghetti flow that defeats structured control (the goto class). | ✅ Clean: two sites, both the canonical forward jump that exits a `select` nested in a `for` (the only place Go needs it — a plain `break` would exit the select, not the loop): `stratumv1.go:385` (drain-then-send) and a test poll loop. No back-edges, no crossed blocks. |
+| P | `http.NewRequest` without context — the request ignores caller cancellation (the ctx-propagation class at HTTP boundaries). | ✅ Absent: zero bare `http.NewRequest` calls — every outbound request is `NewRequestWithContext`. |
+| P,S | `bufio.Scanner` on untrusted input with the default 64KB token limit — a long line aborts with `ErrTooLong` or is silently truncated (the scanner-limit class). | ✅ Absent: zero `bufio.Scanner` sites — V1 line reading is the custom bounded `readLine` (s601-era verified). |
+| M | `time.Parse*` result unchecked — a malformed timestamp silently becomes the zero time (the parse-swallow class). | ✅ Absent: zero `time.Parse*` call sites. |
+
+All packages build, vet, and test green.
