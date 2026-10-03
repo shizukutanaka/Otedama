@@ -746,6 +746,38 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 601 update — read-buffer aliasing audit
+
+Bug class: a decoded field that aliases a shared read buffer is silently
+corrupted when the next read overwrites it (use-after-overwrite). Every
+decode boundary was inspected for slice retention into longer-lived
+structures:
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | V1 `readLine` (`stratumv1.go`): `bufio.Reader.ReadSlice` returns a slice aliasing the reader's internal buffer — invalid on the next read. | ✅ Clean: `readLine` copies the line into a fresh `make([]byte, …)` before returning, preserving the "caller owns its line" contract that `dispatch`/`json.Unmarshal` rely on. Documented in the function comment. |
+| S | V2 `Decoder.ReadFrame` (`frame.go`): a decoder-level scratch buffer reused across frames would corrupt the previous Frame's payload. | ✅ Clean: `payload := make([]byte, h.MsgLength)` is allocated per call — the Frame owns its payload indefinitely. `scratch` covers only the 6-byte header and is consumed into the value-type `Header` (no slice field), so nothing aliases it. |
+| S | V2 wire primitives (`wire.go`) + Noise transport (`noise.go`) + handshake decoders (`handshake.go`) — lower-level decode sites that could alias a reused buffer. | ✅ Clean: every `get*` reader allocates its own result (`getB0_255`, `getStr0_255`) or reads into stack arrays (`getU16LE`/`getU32LE`, fixed-size handshake fields). `EncryptedConn.Read` decrypts into a fresh buffer and hands out copies, never the buffer itself. `byteSliceReader` copies into the caller's `p`. |
+| M | `Frame` doc claimed "the Decoder may reuse its internal buffer for the next frame" — the decoder does no such thing for payloads; the comment both mis-described the implementation and forbade a retention pattern that is actually safe. | ✅ Fixed: comment rewritten to state the real ownership contract (per-call fresh payload, caller-owned; scratch only for the header). |
+
+No retained slice references a buffer any read path can overwrite — the
+use-after-overwrite class is structurally absent.
+
+All packages build, vet, and test green.
+
+---
+
+## Session 632 update — callback-under-lock + nil-channel audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Callback under mutex: `runArbitrationLoop` invoked the injected `opts.log` per pruned key while holding `streamsMu` — the one site where a func value was called inside a critical section. Benign today (the logger is a leaf slog sink), but the pattern re-introduces the lock-held-across-callout class. | ✅ **Fixed**: prune under lock, log after `Unlock()` (same call order, callback now outside the section). Every other mutex region (`updateStream`, fetcher `mu`/`inflightMu`, stats `activityMu`) contains only map/metric writes — no interface or func-value calls under a held lock remain. |
+| M | Nil channel in select — a possibly-nil channel field used in send/recv blocks forever. | ✅ Clean: the only possibly-nil channel is `notices` in `runStatsLoop`, deliberately nil-then-assigned for the select-disabled idiom (documented; also reset to nil on close to un-ready the case). `tokens`/`done`/all producer channels are `make()`'d in their constructors before exposure. |
+
+All packages build, vet, and test green (`go test -race ./internal/engine/`).
+
+---
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
