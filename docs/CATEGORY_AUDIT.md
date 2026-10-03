@@ -932,3 +932,11 @@ All packages build, vet, and test green.
 | M | `http.Header` written via direct map index (`Header["K"]=`) — bypasses canonical textproto casing so `Get("K")` misses (the header-key class). | ✅ Clean: zero direct-map writes; every header is set via `w.Header().Set(...)` which canonicalizes; no case-folded map keys (`ToLower(...)]`) anywhere. |
 | S | Plain assignment/read on a field declared `atomic.*` — bypasses the atomic op and tears the value under racing access (the atomic-bypass class). | ✅ Clean: zero bare assignments to `curtailGate`/`started`/`closed`/`ready`/counter fields — all access goes through `Load`/`Store`/`Swap`/`Add`. |
 
+
+
+## Session 681 update — init-side-effect + unlock-balance + dynamic-inspect audit
+
+| M | `init()` with ordering-dependent or re-entrant side effects — init-order fragility and duplicate registration (the init-surface class, second pass after s567). | ✅ Clean: all four `init()` are self-contained — wordlist split+SHA-256 self-verify (lightning), stub/dialer `Register` calls into owning-package registries (btccrypto, stratumv1, stratumv2); no cross-package ordering dependency, each registration additive. |
+| S | Manual `mu.Unlock()` on an early-return path that skips it — a missed unlock wedges the mutex (the unlock-balance class). | ✅ Clean: every non-deferred `Unlock` is the canonical lock-snapshot-unlock or a local branch symmetric with its `Lock` (worker stats, arbitrate streams, dashboard, metrics accessors) — no branch escapes the pair. |
+| S | `%T`/`encoding/gob` dynamic type inspection on wire data — gob is unbounded and `%T` can leak internals (the dynamic-inspect class). | ✅ Clean: `%T` appears only in decode-error diagnostics (unexpected type reporting); `encoding/gob` absent. |
+
