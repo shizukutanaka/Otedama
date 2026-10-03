@@ -754,7 +754,6 @@ All packages build, vet, and test green.
 | M | Nil channel in select — a possibly-nil channel field used in send/recv blocks forever. | ✅ Clean: the only possibly-nil channel is `notices` in `runStatsLoop`, deliberately nil-then-assigned for the select-disabled idiom (documented; also reset to nil on close to un-ready the case). `tokens`/`done`/all producer channels are `make()`'d in their constructors before exposure. |
 
 All packages build, vet, and test green (`go test -race ./internal/engine/`).
-||||||| 8e86d7d8
 
 ---
 
