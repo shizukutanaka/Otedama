@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 744 update — map-any-key + string-index + defer-go audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `map[any]`/`map[interface{}]` keys — inserting a non-comparable value (slice/map/func) panics at runtime. | ✅ Absent: zero interface-keyed maps; every key is a concrete comparable type (string, uint32, StreamID, ID). |
+| M | Byte-level `s[i]`/`s[:n]` indexing on text — cutting a multi-byte rune emits invalid UTF-8 to the terminal/wire. | ✅ Clean: every `x[i]` site indexes arrays/slices/maps (Hash bytes, device refs, map lookups) — never string characters; text truncation goes through `[]rune` helpers. |
+| M | `defer go func()` — defer never schedules a goroutine; the func literal is evaluated as a value and dropped. | ✅ Absent: zero `defer go` sites; all deferred calls are direct function invocations. |
+
+All packages build, vet, and test green.
