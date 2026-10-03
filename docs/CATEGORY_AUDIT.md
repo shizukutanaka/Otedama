@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 751 update — ptr-key-map + lock-downgrade + recover-value audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `map[*T]` identity-vs-value keys — pointers keyed by address when value semantics intended. | ✅ Clean: zero pointer-keyed maps; every map key is a comparable value type (string/int/struct), matching session-744's `map[any]` absence verdict. |
+| M | `RLock` inside `Lock` on the same mutex — write-lock-held downgrade deadlocks. | ✅ Clean: every `RLock` site (`clock.go`, poolproto/btccrypto `registryMu`) is a top-level leaf read, not nested inside a `Lock` on the same mutex — consistent with the session-740 lock-order/ABBA verdict (all leaf reads, no upgrade paths). |
+| M | `recover()` value discarded — recovered without inspecting the panic value. | ✅ Clean: zero recover sites in production code (session-568); all `recover()` uses are test-side panic assertions or the intentional `_ = recover()` "must not panic" idiom. |
+
+All packages build, vet, and test green.
