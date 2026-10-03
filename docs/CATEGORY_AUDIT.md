@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 653 update — WaitGroup ordering + builtin-shadow + marker audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `wg.Add` called inside (or after) the spawned goroutine — Add-after-spawn lets `Wait` return before the worker registers, the lost-count race class. | ✅ Clean: every `wg.Add` is the canonical loop pattern — `wg.Add(1)` in the loop body immediately before `go func` (`rates/hashrate.go`, `miner/worker.go`, and all test sites); zero `Add` inside a spawned goroutine. |
+| M | Builtin identifier shadowing (`len`, `cap`, `new`, `copy`, `close`, `error`, `min`, `max`, `clear`, `any`, `string`, `int`, `byte`, `bool`, `nil`, `iota`) — a shadowed name silently changes meaning on later use, the shadow-builtin class. | ✅ Benign: one scoped test hit — `for _, max := range []int{…}` in `tui/formatters_test.go:85`; `max` the builtin is never referenced in that scope. Zero production sites. |
+| M | FIXME/HACK/XXX/WORKAROUND/BUG comment markers — leftover defect tickets hiding in prose, the marker-rot class. | ✅ Absent: zero marker comments in `internal/` and `cmd/`. |
+
+All packages build, vet, and test green.
