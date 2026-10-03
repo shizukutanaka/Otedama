@@ -940,3 +940,11 @@ All packages build, vet, and test green.
 | S | Manual `mu.Unlock()` on an early-return path that skips it — a missed unlock wedges the mutex (the unlock-balance class). | ✅ Clean: every non-deferred `Unlock` is the canonical lock-snapshot-unlock or a local branch symmetric with its `Lock` (worker stats, arbitrate streams, dashboard, metrics accessors) — no branch escapes the pair. |
 | S | `%T`/`encoding/gob` dynamic type inspection on wire data — gob is unbounded and `%T` can leak internals (the dynamic-inspect class). | ✅ Clean: `%T` appears only in decode-error diagnostics (unexpected type reporting); `encoding/gob` absent. |
 
+
+
+## Session 680 update — bool-env + mustcompile + path-package audit
+
+| S | Boolean env/flag values checked with string equality (`== "true"`, `== "1"`) — silently treats `TRUE`/`yes`/`on` as false (the bool-parse class). | ✅ Clean: zero `ParseBool` misuse — env lookups return strings into the layered config where typed conversion happens once; no ad-hoc truthy comparisons. |
+| S | `regexp.MustCompile` at package init — a bad pattern panics at startup, and an attacker-influenced pattern is a ReDoS surface (the mustcompile class). | ✅ Clean: zero `regexp` usage in production code (verified s617); nothing compiles patterns at init or from input. |
+| S | `path` package applied to filesystem paths — `path.Join` on Windows paths or `..` elements produces non-native results (the path-package class). | ✅ Clean: every filesystem join uses `filepath.` (service defs, sysfs probes, log paths); `path` appears only inside `filepath`/`urlpath` identifiers — no `import "path"` on filesystem data. |
+
