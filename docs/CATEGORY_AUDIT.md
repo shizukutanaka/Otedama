@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 734 update — input-echo + interface-field + stdio-bypass audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Interactive input echo/gating — a passphrase or word prompt appearing on a headless/piped start would block forever or consume piped bytes. | ✅ Clean: `stdinIsTerminal` (setup.go:263) requires `*os.File` + `ModeCharDevice` — non-file readers and non-terminals return false, so the backup-reentry prompt only appears on a real TTY; the passphrase itself is env/flag-sourced (argv warns, session 381). |
+| S | Interface-typed struct fields called nil — a promoted method on an unassigned embedded interface panics at call time. | ✅ Clean: `Options.Input`/`Output` are named fields with nil-guard defaults (`cmp.Or(opts.Input, os.Stdin)`, `opts.Output = os.Stdout`); no embedded-interface promotion anywhere in the tree. |
+| M | Direct `os.Stdout`/`os.Stderr` writes bypassing the logger — split, unleveled output streams that tests can't intercept. | ✅ Clean: every write goes through injected writers (Options.Output, dashboard `d.w`, logger `w`, doctor `w`, command `stdout`/`stderr` params); literal `os.Std*` appears only at default-assignment sites and `main.go` arg pass-through. |
+
+All packages build, vet, and test green.
