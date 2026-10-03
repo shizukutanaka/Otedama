@@ -919,6 +919,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 628 update — spec-name drift + modernization leftovers 2
+
+| M | Post-sv2-spec-#228 stale names lingering in comments/docs after the #704 rename — `min_ntime`, `maximum_target`, `header_timestamp`, `header_nonce`, `prev hash` (partial-rename drift class). | ✅ Clean on the #704 branch: zero residue including block comments — every `min_ntime`/`MinNtime`/`MaxTarget`/`maximum_target` hit on master is a site #704 already renames. (Verified on `devin/1790945186-s622-specnames`; the hits reported here are master's pre-merge state, expected until #704 lands.) |
+| L | Modernization leftovers, batch 2: `io/ioutil` legacy calls, `reflect` escape hatches, `filepath.Walk` (vs `WalkDir`), manual multi-error concat (vs `errors.Join`), `signal.Notify` channel plumbing (vs `signal.NotifyContext`). | ✅ Clean: `io/ioutil`, `reflect`, `filepath.Walk` all zero — the tree is fully post-1.16 idiom. `errors.Join` used exactly once at its natural site (rates fetcher joining per-source failures, `joined != nil` guard). Signal handling is the canonical `signal.NotifyContext(ctx, os.Interrupt, SIGTERM)` in run.go:208. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
