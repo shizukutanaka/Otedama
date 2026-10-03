@@ -1166,3 +1166,10 @@ All packages build, vet, and test green.
 | M | `context.Background()` inside `internal/` — a fresh root ctx severs the caller's cancellation chain (the ctx-origin class). | ✅ Clean: the only site is `httpserver.Server.Stop`, which *must* use a fresh root — a graceful-shutdown grace period would be immediately cancelled if it inherited the (already-cancelled) parent ctx. Correct by necessity. |
 | M | Old-style `// +build` constraints — deprecated pre-Go-1.17 syntax that newer toolchains ignore (the build-tag class). | ✅ Clean: zero `// +build` sites; all 6 build-tagged files (`tui/width_*`, `hal/gpu_*`) use `//go:build`. |
 
+
+
+## Session 649 update — URL-parsing + path-package audit
+
+| S | `net/url.Parse` on pool URLs — it silently accepts `userinfo@`, fragments and paths a `scheme://host:port` contract must reject (the permissive-URL-parser class). | ✅ Absent: zero `url.Parse` sites — pool targets parse via `CutPrefix` + `net.SplitHostPort` with explicit `@/?#`/whitespace rejection and port-range bounds (`validatePoolTarget`); `poolIPResolver` strips the port before DNS. The custom parser is the security-correct choice — `url.Parse` would silently accept userinfo. |
+| M | `path` vs `path/filepath` mixing — `path.Join` on filesystem paths breaks on Windows separators (the path-package class). | ✅ Clean: zero `path` imports — every filesystem join is `filepath.Join` (~15 sites across daemon/config/doctor/hal). |
+
