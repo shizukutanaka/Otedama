@@ -884,6 +884,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 634 update — assertion-form + loop-capture audit
+
+| M | Single-value type assertion `v := x.(T)` — panics when the dynamic type differs (the assertion-panic class on pool-controlled `interface{}` fields). | ✅ Clean: every assertion is comma-ok (`sess.(ReconnectWaiter)`, `arr[1].(string)`, `resp.result.(bool)`) or a type switch (`m.ID`). The `accepted, _` site discards `ok` but degrades fail-closed — a non-bool `result` is treated as "not accepted" and reports an error. |
+| M | `go func` capturing the loop variable — pre-1.22 semantics the closure shares the variable and sees the last value (or a data race under concurrent writes). | ✅ Clean: all 6 in-loop `go func` sites pass the variable as an explicit parameter (`func(threadID int)`, `func(c <-chan T)`, `func(idx int, chk Check)`, `func(dr Driver)`, `func(s ...)`) — the canonical capture-avoidance form, correct on every toolchain version. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
