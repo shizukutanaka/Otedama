@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 692 update — aead-nonce + time-equality + hash-reuse audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | AEAD (AES-GCM/ChaCha) keyed nonce reuse or fixed IV — ciphertexts become plaintext-comparable/forgable (the nonce-reuse class). | ✅ Clean: wallet `EncryptSeed` fills `es.Nonce`+`es.Salt` from `crypto/rand` per call; the Noise transport derives each frame nonce from a monotonically incrementing `uint64` counter per Noise spec — no fixed IV. |
+| M | `t1 == t2` on `time.Time` — monotonic-vs-wall mismatch gives false negatives (the time-equality class). | ✅ Clean: zero `==` on `time.Time`; all comparisons go through `time.Since`, `.Equal`, or unix-nano arithmetic. |
+| S | `hash.Hash` reused across computations without `Reset` — concatenated digests silently corrupt verification (the hasher-state class). | ✅ Clean: the pooled hasher does comma-ok + `Reset` on borrow; `hmacSHA256`/`hmacSHA256Pooled` build fresh `sha256.New` per call; the Noise handshake hash is single-owner sequential per spec. |
+
+All packages build, vet, and test green.
