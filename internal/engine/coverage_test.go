@@ -927,7 +927,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		// an OpenMiningChannelError which is recognized but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
-		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasNtimeStart: true, NtimeStart: 0x60000000, Version: 0x20000000}
 		payload, _ := job.Encode()
 		f, _ := stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
 		data, _ := stratum.EncodeFrame(f)
