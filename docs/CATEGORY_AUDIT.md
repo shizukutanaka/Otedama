@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 713 update — embedded-mutex + sync.Cond + finalizer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `sync.Mutex`/`RWMutex`/`WaitGroup`/`Cond` embedded directly into exported struct types — `Lock`/`Unlock`/`Wait` leak into the type's public API surface and copylocks propagate. | ✅ Absent: zero embedded sync types — every synchronizer is a named unexported field; no public `Lock`/`Wait` surface exists and `copylocks` stays clean. |
+| P | `sync.Cond` misuse — `Signal()` where `Broadcast()` is required for a shared predicate, or `Wait()` outside a predicate loop (spurious-wakeup loss). | ✅ Absent: zero `sync.Cond`/`Signal`/`Broadcast` sites — all wakeups use channel close/`done` patterns, which make the one-to-many semantics explicit. |
+| S | `runtime.SetFinalizer`-coupled cleanup — non-deterministic finalization for fds/secrets, and `KeepAlive` hazards. | ✅ Absent: zero `SetFinalizer`/`KeepAlive` sites — every resource has an explicit `Close`/`Stop` owner; secret zeroization runs inline at the call site. |
+
+All packages build, vet, and test green.
