@@ -1004,3 +1004,11 @@ All packages build, vet, and test green.
 | M | `sync.Once` used where re-initialization is later needed — a `Do` can't be reset, silently skipping a required re-run (the once-reuse class). | ✅ Clean: all four sites are exactly the lifecycle idempotence `Once` is designed for (`closeOnce`×3, `startOnce`×1) — no re-initialization requirement exists. |
 | P | `defer f(arg)` capturing a mutable variable — args are evaluated at defer registration, so the deferred call sees the stale pre-mutation value (the defer-snapshot class). | ✅ Clean: zero `defer func(args)` sites; every deferred literal takes no parameters and closes over variables by reference (the documented intent). |
 
+
+
+## Session 671 update — mutex-aliasing + unmarshal-reuse + receiver-consistency audit
+
+| P | `sync.Mutex`/`RWMutex`/`WaitGroup` copied by value — each copy locks an independent state, silently breaking mutual exclusion (the lock-copy class). | ✅ Clean: `go vet -copylocks ./...` reports zero; every `mu`/`wg`/`registryMu` is a struct field reached only through a pointer receiver. |
+| S | `json.Unmarshal` into a previously-populated struct — absent fields keep their old values, mixing two payloads (the partial-overwrite class). | ✅ Clean: every site decodes into a fresh local (`var v`, `var p []json.RawMessage`, per-field temporaries) — no struct is reused across decodes. |
+| M | Mixed value/pointer receivers on the same type — methods sharing state see different copies, hiding mutation (the receiver-consistency class). | ✅ Clean: every method on `Engine`/`Worker`/`Dashboard`/`Clock`/`Session` takes a pointer receiver (`func (x *T)`); `gofmt -l` and `go vet` show no inconsistencies. |
+
