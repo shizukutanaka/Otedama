@@ -839,6 +839,12 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 642 update — nil-func-call audit
+
+| M | Calling an optional func-value field that may be nil — nil-function panic on the injected callback (the nil-callback class). | ✅ Clean: every func field is safe by one of two forms — default-filled at construction (`run.go:192` `log = func(_,_) {}`; `dialFn` production default at both dialers; `extract`/`apply`/`Run` always set in table literals) or nil-guarded at the call (`onConnected`, `f.logFn`, `LogFn`, `HashrateFunc`/`NetworkHashrateFunc`). No unguarded optional call site. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
