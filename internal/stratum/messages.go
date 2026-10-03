@@ -81,29 +81,29 @@ const (
 //
 //	channel_id  U32
 //	job_id      U32
-//	min_ntime   OPTION[u32]  (1-byte 0/1 count, then the u32 if present)
+//	ntime_start   OPTION[u32]  (1-byte 0/1 count, then the u32 if present)
 //	version     U32          (block-header version the miner must hash)
 //	merkle_root B32          (32 bytes)
 //
-// An ABSENT min_ntime marks a *future job*: it must not be mined until a
+// An ABSENT ntime_start marks a *future job*: it must not be mined until a
 // SetNewPrevHash arrives naming this job_id (which supplies the ntime).
-// A PRESENT min_ntime marks a job valid against the already-known
+// A PRESENT ntime_start marks a job valid against the already-known
 // prev-hash. Note there is deliberately no nBits here — the network
 // target always arrives via SetNewPrevHash, and the share target via
 // SetTarget / OpenMiningChannelSuccess.
 type NewMiningJob struct {
-	ChannelID   uint32
-	JobID       uint32
-	HasMinNtime bool   // whether the OPTION[u32] min_ntime is present
-	MinNtime    uint32 // nTime lower bound; meaningful only if HasMinNtime
-	Version     uint32 // block-header version
-	MerkleRoot  [32]byte
+	ChannelID     uint32
+	JobID         uint32
+	HasNtimeStart bool   // whether the OPTION[u32] ntime_start is present
+	NtimeStart    uint32 // nTime lower bound; meaningful only if HasNtimeStart
+	Version       uint32 // block-header version
+	MerkleRoot    [32]byte
 }
 
 // Encode serializes NewMiningJob (includes channel_id prefix).
 func (m NewMiningJob) Encode() ([]byte, error) {
 	size := 4 + 4 + 1 + 4 + 32
-	if m.HasMinNtime {
+	if m.HasNtimeStart {
 		size += 4
 	}
 	buf := make([]byte, 0, size)
@@ -112,9 +112,9 @@ func (m NewMiningJob) Encode() ([]byte, error) {
 	buf = append(buf, u32[:]...)
 	binary.LittleEndian.PutUint32(u32[:], m.JobID)
 	buf = append(buf, u32[:]...)
-	if m.HasMinNtime {
+	if m.HasNtimeStart {
 		buf = append(buf, 1)
-		binary.LittleEndian.PutUint32(u32[:], m.MinNtime)
+		binary.LittleEndian.PutUint32(u32[:], m.NtimeStart)
 		buf = append(buf, u32[:]...)
 	} else {
 		buf = append(buf, 0)
@@ -127,7 +127,7 @@ func (m NewMiningJob) Encode() ([]byte, error) {
 
 // DecodeNewMiningJob parses a NewMiningJob payload (channel_id included).
 func DecodeNewMiningJob(payload []byte) (NewMiningJob, error) {
-	// Minimum size: absent min_ntime → 4+4+1+4+32.
+	// Minimum size: absent ntime_start → 4+4+1+4+32.
 	const minNeed = 4 + 4 + 1 + 4 + 32
 	if len(payload) < minNeed {
 		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload (%d < %d)", len(payload), minNeed)
@@ -142,13 +142,13 @@ func DecodeNewMiningJob(payload []byte) (NewMiningJob, error) {
 	case 1:
 		off++
 		if len(payload) < off+4+4+32 {
-			return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload for present min_ntime (%d)", len(payload))
+			return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload for present ntime_start (%d)", len(payload))
 		}
-		m.HasMinNtime = true
-		m.MinNtime = binary.LittleEndian.Uint32(payload[off : off+4])
+		m.HasNtimeStart = true
+		m.NtimeStart = binary.LittleEndian.Uint32(payload[off : off+4])
 		off += 4
 	default:
-		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: invalid OPTION count %d for min_ntime", payload[off])
+		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: invalid OPTION count %d for ntime_start", payload[off])
 	}
 	m.Version = binary.LittleEndian.Uint32(payload[off : off+4])
 	off += 4
@@ -167,13 +167,13 @@ func DecodeNewMiningJob(payload []byte) (NewMiningJob, error) {
 // MUST NOT hash anything.
 //
 // Wire layout: channel_id U32, job_id U32, prev_hash U256,
-// min_ntime U32, nbits U32.
+// ntime_start U32, nbits U32.
 type SetNewPrevHash struct {
-	ChannelID uint32
-	JobID     uint32   // the job this prev-hash activates
-	PrevHash  [32]byte // U256, little-endian (header wire order)
-	MinNtime  uint32
-	NBits     uint32 // network compact target
+	ChannelID  uint32
+	JobID      uint32   // the job this prev-hash activates
+	PrevHash   [32]byte // U256, little-endian (header wire order)
+	NtimeStart uint32
+	NBits      uint32 // network compact target
 }
 
 // Encode serializes SetNewPrevHash (includes channel_id prefix).
@@ -182,7 +182,7 @@ func (m SetNewPrevHash) Encode() ([]byte, error) {
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
 	binary.LittleEndian.PutUint32(buf[4:8], m.JobID)
 	copy(buf[8:40], m.PrevHash[:])
-	binary.LittleEndian.PutUint32(buf[40:44], m.MinNtime)
+	binary.LittleEndian.PutUint32(buf[40:44], m.NtimeStart)
 	binary.LittleEndian.PutUint32(buf[44:48], m.NBits)
 	return buf, nil
 }
@@ -197,7 +197,7 @@ func DecodeSetNewPrevHash(payload []byte) (SetNewPrevHash, error) {
 	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
 	m.JobID = binary.LittleEndian.Uint32(payload[4:8])
 	copy(m.PrevHash[:], payload[8:40])
-	m.MinNtime = binary.LittleEndian.Uint32(payload[40:44])
+	m.NtimeStart = binary.LittleEndian.Uint32(payload[40:44])
 	m.NBits = binary.LittleEndian.Uint32(payload[44:48])
 	return m, nil
 }
@@ -207,21 +207,21 @@ func DecodeSetNewPrevHash(payload []byte) (SetNewPrevHash, error) {
 // ------------------------------------------------------------------
 
 // SetTarget updates the channel's share target: any header hash
-// numerically ≤ MaxTarget is a valid share. This is the pool-controlled
+// numerically ≤ Target is a valid share. This is the pool-controlled
 // difficulty knob; it replaces the initial target delivered in
 // OpenMiningChannelSuccess.
 //
-// Wire layout: channel_id U32, maximum_target U256.
+// Wire layout: channel_id U32, target U256.
 type SetTarget struct {
 	ChannelID uint32
-	MaxTarget [32]byte // U256, same byte order as miner.Hash (LE, MSB at [31])
+	Target    [32]byte // U256, same byte order as miner.Hash (LE, MSB at [31])
 }
 
 // Encode serializes SetTarget (includes channel_id prefix).
 func (m SetTarget) Encode() ([]byte, error) {
 	buf := make([]byte, 4+32)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
-	copy(buf[4:36], m.MaxTarget[:])
+	copy(buf[4:36], m.Target[:])
 	return buf, nil
 }
 
@@ -233,7 +233,7 @@ func DecodeSetTarget(payload []byte) (SetTarget, error) {
 	}
 	var m SetTarget
 	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
-	copy(m.MaxTarget[:], payload[4:36])
+	copy(m.Target[:], payload[4:36])
 	return m, nil
 }
 
