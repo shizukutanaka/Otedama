@@ -972,3 +972,11 @@ All packages build, vet, and test green.
 | P | Old-style `atomic.AddUint64(&x)` on a struct field — requires manual 64-byte alignment on 32-bit archs or the op crashes (the aligned-64 class). | ✅ Clean: the free-function API is absent; every counter/flag uses the typed `atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]` API (worker counters, curtail gate, httpserver ready/bound-addr/serve-err, dialer closed/diff, metrics values, TUI started, logger defaultPtr), which embeds its own alignment guarantee. |
 | M | `atomic.Pointer[T]` used where a plain pointer under mutex would do — or vice versa, an unguarded pointer where atomic is required (the synchronization-choice class). | ✅ Clean: each `atomic.Pointer` stores a write-once/read-many value (`boundAddr`, `serveErr`, `defaultPtr`) that would otherwise need a dedicated mutex — the right primitive for the access pattern. |
 
+
+
+## Session 675 update — errors.Join + multi-wrap + func-assertion audit
+
+| M | `errors.Join`/`errors.Unwrap` misuse — joining a single error or unwrapping an interface without cause hides the real failure class (the multiwrap-mismatch class). | ✅ Clean: the sole `errors.Join` (rates fetcher) aggregates per-source errors then nil-checks, preserving each cause for `errors.Is` — the documented Go 1.20+ pattern; zero `errors.Unwrap` call sites. |
+| M | `fmt.Errorf` with multiple `%w` — silently dropping causes or formatting them as `%!w(MISSING)` (the multi-wrap class). | ✅ Clean: the single site (`stratumv1/dialer.go:164`) wraps `poolproto.ErrHandshakeFailed` + the transport error — both reachable via `errors.Is`, which is correct multi-wrap. |
+| S | `.​(func…)` type assertions on `any` — a wrong dynamic type panics at the call boundary (the func-assert class). | ✅ Absent: zero sites — callbacks are statically typed fields, never smuggled through `any`. |
+
