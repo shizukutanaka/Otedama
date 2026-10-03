@@ -746,6 +746,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 651 update — reflect + buffer-reuse audit
 
 | Cat | Finding | Disposition |
@@ -754,3 +765,4 @@ All packages build, vet, and test green.
 | M | Reused `strings.Builder`/`bytes.Buffer`/scratch slices carrying stale content into the next render or frame (the buffer-reset class). | ✅ Clean: every `strings.Builder` is a per-call `var` (Builder semantics require a fresh value — a stored-and-reused Builder would need `Reset`, and none exist); the sync.Pool hasher resets on checkout; `frame.go`'s `scratch[HeaderSize]` is fully overwritten by `ReadFull` each frame while payloads allocate per call. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
