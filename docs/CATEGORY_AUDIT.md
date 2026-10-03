@@ -948,3 +948,11 @@ All packages build, vet, and test green.
 | S | `regexp.MustCompile` at package init — a bad pattern panics at startup, and an attacker-influenced pattern is a ReDoS surface (the mustcompile class). | ✅ Clean: zero `regexp` usage in production code (verified s617); nothing compiles patterns at init or from input. |
 | S | `path` package applied to filesystem paths — `path.Join` on Windows paths or `..` elements produces non-native results (the path-package class). | ✅ Clean: every filesystem join uses `filepath.` (service defs, sysfs probes, log paths); `path` appears only inside `filepath`/`urlpath` identifiers — no `import "path"` on filesystem data. |
 
+
+
+## Session 679 update — wg-negative + json-streaming + deadline-semantics audit
+
+| S | `wg.Done()`/`wg.Add(-1)` beyond the paired count — driving the counter negative panics or unblocks `Wait` early (the wg-negative class). | ✅ Clean: `Done` appears only as `defer wg.Done()` at goroutine start after a matching `Add(1)` (worker, fanin); zero `Add(-` calls. |
+| M | `json.NewDecoder` reused across concatenated objects or its partial-decode state ignored — a stream decoder on a one-shot payload (the streaming-decode class). | ✅ Clean: zero `json.NewDecoder` sites — every decode is `json.Unmarshal` on a complete frame or the line-framed V1 reader (validated in earlier sessions). |
+| P | `SetDeadline` where only one direction needs a bound — a shared deadline lets a stalled write mask a healthy read side (the deadline-semantics class). | ✅ Clean: `SetDeadline` appears only at handshakes (both directions bounded, cleared after); steady-state I/O uses separated `SetReadDeadline` (5-min job-wait in V1, negotiate in V2) and `SetWriteDeadline` (10s writes) — directionally correct. |
+
