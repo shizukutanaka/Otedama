@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 704 update — json-field + redirect + strconv audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Missing/mistyped JSON fields silently becoming zero values — a pool reply with a dropped field parses "successfully" (the json-field class). | ✅ Clean: V1 notify unmarshal is positional per element with hard parse errors (fail-closed since #677); `subscribe` extension fields that can't decode leave the advisory value absent. |
+| S | `http.Client` following redirects — an HTTPS source can be downgraded/redirected to a hostile endpoint (the redirect class). | ✅ Clean: every outbound client (`rates`, `hashrate`, clock-skew probe) sets `CheckRedirect` that refuses all redirects — documented rationale (hardcoded HTTPS sources; a redirect is only ever hostile). |
+| S | `strconv` parse errors unchecked — malformed input silently becomes 0 and flows into logic (the strconv class). | ✅ Clean: all `ParseUint`/`ParseFloat`/`Atoi` errors are checked except two documented fail-safes — `uintID()` string branch (garbage → unmatched id 0) and the advisory suggest-port (garbage → invalid port, rejected downstream). |
+
+All packages build, vet, and test green.
