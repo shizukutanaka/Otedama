@@ -746,18 +746,42 @@ All packages build, vet, and test green.
 
 ---
 
-## Session 636 update — timer-leak + request-reuse + endian audit
+## Session 601 update — read-buffer aliasing audit
+
+Bug class: a decoded field that aliases a shared read buffer is silently
+corrupted when the next read overwrites it (use-after-overwrite). Every
+decode boundary was inspected for slice retention into longer-lived
+structures:
 
 | Cat | Finding | Disposition |
 |---|---|---|
+| S | V1 `readLine` (`stratumv1.go`): `bufio.Reader.ReadSlice` returns a slice aliasing the reader's internal buffer — invalid on the next read. | ✅ Clean: `readLine` copies the line into a fresh `make([]byte, …)` before returning, preserving the "caller owns its line" contract that `dispatch`/`json.Unmarshal` rely on. Documented in the function comment. |
+| S | V2 `Decoder.ReadFrame` (`frame.go`): a decoder-level scratch buffer reused across frames would corrupt the previous Frame's payload. | ✅ Clean: `payload := make([]byte, h.MsgLength)` is allocated per call — the Frame owns its payload indefinitely. `scratch` covers only the 6-byte header and is consumed into the value-type `Header` (no slice field), so nothing aliases it. |
+| S | V2 wire primitives (`wire.go`) + Noise transport (`noise.go`) + handshake decoders (`handshake.go`) — lower-level decode sites that could alias a reused buffer. | ✅ Clean: every `get*` reader allocates its own result (`getB0_255`, `getStr0_255`) or reads into stack arrays (`getU16LE`/`getU32LE`, fixed-size handshake fields). `EncryptedConn.Read` decrypts into a fresh buffer and hands out copies, never the buffer itself. `byteSliceReader` copies into the caller's `p`. |
+| M | `Frame` doc claimed "the Decoder may reuse its internal buffer for the next frame" — the decoder does no such thing for payloads; the comment both mis-described the implementation and forbade a retention pattern that is actually safe. | ✅ Fixed: comment rewritten to state the real ownership contract (per-call fresh payload, caller-owned; scratch only for the header). |
+
+No retained slice references a buffer any read path can overwrite — the
+use-after-overwrite class is structurally absent.
+
+All packages build, vet, and test green.
+
+---
+
+## Session 632 update — callback-under-lock + nil-channel audit
+
+| M | Callback under mutex: `runArbitrationLoop` invoked the injected `opts.log` per pruned key while holding `streamsMu` — the one site where a func value was called inside a critical section. Benign today (the logger is a leaf slog sink), but the pattern re-introduces the lock-held-across-callout class. | ✅ **Fixed**: prune under lock, log after `Unlock()` (same call order, callback now outside the section). Every other mutex region (`updateStream`, fetcher `mu`/`inflightMu`, stats `activityMu`) contains only map/metric writes — no interface or func-value calls under a held lock remain. |
+| M | Nil channel in select — a possibly-nil channel field used in send/recv blocks forever. | ✅ Clean: the only possibly-nil channel is `notices` in `runStatsLoop`, deliberately nil-then-assigned for the select-disabled idiom (documented; also reset to nil on close to un-ready the case). `tokens`/`done`/all producer channels are `make()`'d in their constructors before exposure. |
+
+All packages build, vet, and test green (`go test -race ./internal/engine/`).
+
+
+## Session 636 update — timer-leak + request-reuse + endian audit
+
 | M | `<-time.After(d)` inside a re-entering select loop — each iteration allocates a timer that lives until it fires (the timer-leak class). | ✅ Clean: the single `time.After` site (run.go:1431) fires at most once per session teardown — a one-shot pool-requested reconnect wait, ctx-cancellable and already clamped by `ReconnectWait`. Not inside a hot re-entering loop. |
 | M | `http.Request` reused across retry attempts — the body is consumed on the first `Do`, so retries send an empty body. | ✅ Absent: no `client.Do` inside a retry loop; all 3 sites build the request per call, and the pool reconnect loop retries `DialURL` (fresh conn + handshake per attempt, never a consumed request). |
 | P | Endianness mixing across the binary surface — an accidentally `BigEndian` field would silently corrupt wire values. | ✅ Clean: every `binary.` call is `LittleEndian` (wire u16/u32, Noise nonce/len prefixes, frame header, miner block-header fields — all spec-mandated LE); zero `BigEndian`/`binary.Read`. |
 
-All packages build, vet, and test green.
-||||||| 8e86d7d8
 
----
 
 ## Session 645 update — embed + weak-crypto audit
 
@@ -765,5 +789,17 @@ All packages build, vet, and test green.
 |---|---|---|
 | M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 684 update — lock-channel + duration-overflow + hot-sprintf audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Mutex held across a channel send/receive — a blocked peer wedges every lock holder (the lock-channel class; extends s560/s632). | ✅ Clean: channel ops adjacent to locks all sit after `Unlock` (e.g. worker snapshots `cancel` under `mu` then waits on `done` unlocked) — no Lock→send/recv region. |
+| P | `time.Duration` formed by unchecked multiplication — `d * n` with large `n` wraps int64 to a negative sleep (the duration-overflow class). | ✅ Clean: the single product (`stats.go` p50→Duration) multiplies a bounded measured latency (~seconds) — magnitudes orders below int64 wrap; timeouts/deadlines are literal constants. |
+| P | `fmt.Sprintf` in the hash hot path — per-nonce allocation churn (the hot-format class). | ✅ Clean: `Sprintf` appears only in display formatting (`HashRateString`, log lines) at stats/log cadence; the hashing loop calls `HashHeader` with zero allocs (s534 verified). |
 
 All packages build, vet, and test green.
