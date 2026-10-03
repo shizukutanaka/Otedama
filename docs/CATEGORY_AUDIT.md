@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 696 update — select-timer + ctx-exit + chan-capacity audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `time.After` inside a looping `select` — each iteration leaks a pending timer until it fires (the select-timer class). | ✅ Clean: the sole `time.After` is a one-shot reconnect wait already paired with `ctx.Done()`; the retry backoff deliberately uses `time.NewTimer` + explicit `Stop` (comment documents the pitfall). |
+| S | `for { select }` loops with no `ctx.Done()` exit — goroutine runs forever past shutdown (the ctx-exit class). | ✅ Clean: all 14 select loops (worker, arbitrate, fanin, engine reconnect/dispatch/submit) lead with `case <-ctx.Done()`. |
+| P | Unbuffered channel carrying data — producers silently serialize on every send (the chan-capacity class). | ✅ Clean: every data channel is buffered (8–32, `Threads*4`, `len(sources)`); unbuffered is only `done`/`doneCh` close signals. |
+
+All packages build, vet, and test green.
