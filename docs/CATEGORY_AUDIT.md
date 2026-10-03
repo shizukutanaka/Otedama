@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 691 update — http-server + sync.Pool + decoder-strictness audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `http.Server` without `ReadHeaderTimeout` — Slowloris header stalls exhaust sockets (the server-timeout class). | ✅ Clean: the metrics/health server sets `ReadHeaderTimeout` 5s plus `Read`/`Write`/`Idle` timeouts — full Slowloris posture. |
+| P | `sync.Pool` objects reused without reset or type-checked — stale state leaks between borrowers (the pool-hygiene class). | ✅ Clean: `hashPool.Get` uses comma-ok then `h.Reset()` before lending; `Put` sites return the same concrete `hash.Hash` type. |
+| S | `yaml`/`xml`/`gob` decoders accepting unknown fields or unbounded documents — config drift and decode bombs (the decoder-strictness class). | ✅ Clean: `yaml.NewDecoder` runs `KnownFields(true)` (unknown keys are hard errors) with EOF-as-empty handling; `xml`/`gob` decoders absent. |
+
+All packages build, vet, and test green.
