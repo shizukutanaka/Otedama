@@ -1207,6 +1207,41 @@ at parse by `maxReconnectWaitSeconds` (stratumv1.go:310). Zero defects.
 
 
 
+## Session 609 update — nil-map write + float-equality audit
+
+Two more silent/panic defect classes swept.
+
+**nil-map writes** — assigning to a nil map panics (`assignment to
+entry in nil map`). Every map-write site checked against its
+initializer: `seen`/`idx`/`copied`/`ipToPools`/`submitTimes`/
+`submitTargets`/`devices`/`ypd`/`fns` all take `make()` at
+declaration; `streamMap` (run.go:349), `lastQuoteAt` (arbitrate.go:154),
+`pending` (stratumv1.go:146 literal), `drivers`/`counters`/`gauges`/
+`rejectByReason`/`lastRejectByReason`/`sharesFoundPerDevice`/
+`payoutInfo`/`registry` (hal:33, metrics:62-63, engine/metrics:470-473,
+btccrypto:176, poolproto:333) are all initialized at construction.
+`existing.YieldPerDevice` (arbitrate.go:277) has an explicit
+lazy-init guard (`if == nil { make }`) before the write at :280.
+Zero nil-map writes.
+
+**float `==` comparisons** — exact-equality on float64 is the
+classic defect for prices/yields (0.1+0.2 != 0.3). Only two named
+float comparisons exist, both correct sentinel semantics:
+`margin == 0` (arbitrate.go:178) tests the config-supplied value for
+"unset → default" — the config value itself, not a computed result;
+`r.rate != 0` (fetcher.go:328) distinguishes "source returned no
+value" (zero, silent) from implausible nonzero readings (logged) —
+both are sentinel checks, not approximate-equality tests. All real
+comparisons use `<`/`>`/`<`; `Confidence`/`SatsPerSecond` fields are
+never `==`-compared. Non-finite rejection is session-331/361 territory
+(already merged: NaN/Inf collapse to zero in Decide, config rejects
+non-finite floats). Zero defects.
+
+| M | nil-map write panic class | Absent — all maps initialized at construction or lazily guarded |
+| M | float `==` equality defect | Absent — only sentinel checks (unset-zero, no-value), no approximate-equality |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
