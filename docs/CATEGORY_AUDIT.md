@@ -1173,3 +1173,10 @@ All packages build, vet, and test green.
 | S | `net/url.Parse` on pool URLs — it silently accepts `userinfo@`, fragments and paths a `scheme://host:port` contract must reject (the permissive-URL-parser class). | ✅ Absent: zero `url.Parse` sites — pool targets parse via `CutPrefix` + `net.SplitHostPort` with explicit `@/?#`/whitespace rejection and port-range bounds (`validatePoolTarget`); `poolIPResolver` strips the port before DNS. The custom parser is the security-correct choice — `url.Parse` would silently accept userinfo. |
 | M | `path` vs `path/filepath` mixing — `path.Join` on filesystem paths breaks on Windows separators (the path-package class). | ✅ Clean: zero `path` imports — every filesystem join is `filepath.Join` (~15 sites across daemon/config/doctor/hal). |
 
+
+
+## Session 648 update — duration-unit + discarded-return audit
+
+| M | `time.Duration(x)` unit confusion — nanoseconds vs seconds/milliseconds misinterpreted produces 10^9× off-by-scale timeouts (the duration-unit class). | ✅ Clean: all 3 conversions are typed correctly (`UnixNano` delta, `p50*float64(time.Millisecond)`, `Wait seconds * time.Second`); every literal is `N * time.Unit`. |
+| M | `_ =` discarded returns silently dropping errors a caller could act on (the discarded-error class). | ✅ Clean: every site is an intentional decision — best-effort teardown (`systemctl disable`, `sc.exe stop`, service unload), fire-and-forget deadline sets and Body.Close drains, client-tolerant health-endpoint writes, and the `BTCUSDRate` soft-degrade. No actionable error is discarded. |
+
