@@ -1110,3 +1110,12 @@ All packages build, vet, and test green.
 | P | `bufio.Reader` buffered-data discard or shared reuse — leftover buffered bytes desync the stream (the buffered-reader class). | ✅ Clean: three sites, all single-owner — V1 reader (`NewReaderSize` → bounded `readLine`), one-shot stdin readers (`wallet.go`, `engine/setup.go`). No cross-call reuse. |
 | M | Multiple `%w` in one `fmt.Errorf` — Go ≥1.20 multi-wrap; safe only when callers expect `Unwrap() []error` (the multi-wrap class). | ✅ Clean: one site (`stratumv1/dialer.go:164`) deliberately wraps sentinel + inner error so `errors.Is(err, ErrHandshakeFailed)` works — the canonical multi-wrap use. |
 
+
+
+## Session 657 update — goto + request-context + scanner-limit + time-parse audit
+
+| M | `goto` misuse — spaghetti flow that defeats structured control (the goto class). | ✅ Clean: two sites, both the canonical forward jump that exits a `select` nested in a `for` (the only place Go needs it — a plain `break` would exit the select, not the loop): `stratumv1.go:385` (drain-then-send) and a test poll loop. No back-edges, no crossed blocks. |
+| P | `http.NewRequest` without context — the request ignores caller cancellation (the ctx-propagation class at HTTP boundaries). | ✅ Absent: zero bare `http.NewRequest` calls — every outbound request is `NewRequestWithContext`. |
+| P,S | `bufio.Scanner` on untrusted input with the default 64KB token limit — a long line aborts with `ErrTooLong` or is silently truncated (the scanner-limit class). | ✅ Absent: zero `bufio.Scanner` sites — V1 line reading is the custom bounded `readLine` (s601-era verified). |
+| M | `time.Parse*` result unchecked — a malformed timestamp silently becomes the zero time (the parse-swallow class). | ✅ Absent: zero `time.Parse*` call sites. |
+
