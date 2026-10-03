@@ -852,6 +852,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 640 update — typed-nil + signal-channel audit
+
+| M | Typed-nil through an interface — a `(*T)(nil)` returned where the type is an interface survives `x != nil` and nil-derefs downstream (the typed-nil class). | ✅ Clean: zero `(*T)(nil)` returns into interface types — the only `(*X)(nil)` forms are the compile-time satisfaction assertions (`var _ Provider = (*MiningProvider)(nil)`). Interface-returning error paths use untyped `nil` (`DialURL` → `Session`, driver `Lookup` → `Dialer`); `Enumerate`/`Detect` return nil *slices*, which are nil-safe. |
+| M,S | `signal.Notify` on an unbuffered channel — a second signal arriving before the handler reads is dropped. | ✅ Absent: no raw `signal.Notify` — the only use is `signal.NotifyContext` (run.go:208, canonical; internally buffered correctly). |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
