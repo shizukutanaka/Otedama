@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 663 update — unsigned-countdown + builder-copy + json-string-tag + index-prefix audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | Countdown loops `for i := n; i >= 0; i--` — with an *unsigned* counter `i--` wraps at 0 and the loop never exits (the countdown-underflow class; signed counters are safe). | ✅ Clean: all three sites (`sha256d.go`, `seed.go` ×2) use signed `int` counters — `i--` reaches −1 and exits normally. No unsigned countdowns exist. |
+| P | `strings.Builder`/`bytes.Buffer` copied by value — copying after first write panics at runtime (the builder-copy class). | ✅ Clean: all sites are function-local `var` builders, or `*strings.Builder` parameters (TUI `writeSection`/`writeLine`) — nothing is copied after use. |
+| M | `json:",string"` tags — quotes numbers as strings; easy to miss on wire structs (the tag-semantics class). | ✅ Absent: zero `,string` tags — all wire fields marshal their native type. |
+| P | `strings.Index(s, x) == 0` used as a prefix test — scans the whole string and allocates where `HasPrefix` is O(len(x)) (the wrong-predicate class, sibling of the Contains sweep). | ✅ Absent: zero `Index(...) == 0` comparisons — prefix checks use `HasPrefix`/`HasSuffix`/`CutPrefix` throughout. |
+
+All packages build, vet, and test green.
