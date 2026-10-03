@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 739 update — marshal-key + enum-string + atomic-type audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `json.Marshal` on non-string-keyed maps — integer keys silently re-encoded as quoted strings, skewing the wire shape. | ✅ Absent: the single `json.Marshal` call targets a V1 RPC request struct with `json:`-tagged string fields — no maps are marshalled. |
+| M | iota enum `String()` drift — a new constant without a `case` renders as `unknown` in logs/metrics. | ✅ Exhaustive: all four enum String()s cover every constant — Policy 4/4 (+`unknown(%d)` diagnostic), AddressType 6/6, Status 4/4, ValueOrigin 3/4 with `default:` correctly covering the OriginDefault zero value. |
+| S | Typed atomic misuse — plain load/store bypass on an `atomic.*` field, or Float64-in-Uint64 bit packing errors. | ✅ Clean: all 13 atomic vars are typed (`Bool`/`Uint64`/`Int64`/`Pointer`); `diff` is math.Float64bits-packed with the paired float64ToUint64/uint64ToFloat64 helpers — zero untyped shared fields remain. |
+
+All packages build, vet, and test green.
