@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 703 update — dep-pin + platform-tag + once-contract audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Floating/loose dependency versions — builds resolve different code than reviewed (the dep-pin class). | ✅ Clean: the sole external dep `go.yaml.in/yaml/v3` is pinned to `v3.0.5` (exact); `go 1.22` floor + `toolchain go1.24.0` are explicit. |
+| M | Platform build-tag splits that leave a GOOS uncovered — silent no-op stub where real logic was expected (the platform-tag class). | ✅ Clean: `width` splits into `unix`/`!unix && !windows`/`windows` (total partition); `hal` GPU splits into `linux`/`!linux` (total). |
+| S | `sync.Once` wrapping an operation that can fail — the error can't be returned and the Once is spent (the once-contract class). | ✅ Clean: all three sites are lifecycle idempotency (`closeOnce`×2, `startOnce`×1) where the Once-fires-once semantics are exactly the requirement. |
+
+All packages build, vet, and test green.
