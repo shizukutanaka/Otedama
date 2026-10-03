@@ -884,3 +884,11 @@ All packages build, vet, and test green.
 | S | `os/exec` with attacker-influenced argv — command injection (the exec-argv class). | ✅ Clean: four sites — `systemctl is-active`, `launchctl list`, `sc.exe query`, and the service-manager `exec.Command(name, args…)` — all invoke fixed platform tools with constant/service-defined arguments; no user-controlled string reaches argv. |
 | S | `signal.Notify` without a matching `signal.Stop` — a cancelled registration keeps the channel subscribed (the signal-stop class). | ✅ Clean: the only signal use is `signal.NotifyContext`, whose `cancel` performs the `Stop` — canonical. |
 
+
+
+## Session 689 update — map-comma-ok + double-close + wire-tag audit
+
+| S | Map reads without comma-ok where missing vs zero-value changes behavior — silently treating absent as present (the map-comma-ok class). | ✅ Clean: `updateStream`'s bare `m[key]` reads the zero `Stream`, populates it, and writes `m[key] = existing` back — missing key is the intended fresh-stream path; `dup`-checks and `pending`/`drivers` lookups all use comma-ok or `_, present :=`. |
+| S | `close(ch)` reachable twice — double-close panic on reconnect/teardown (the double-close class). | ✅ Clean: every close is single-shot guarded — `cancelPending` under `pendingMu`+delete, dispatch's delete-before-close, worker's post-`wg.Wait` close, dashboard's CAS on `started`, producer-side `wg.Wait`+close (fanin, hashrate, registry, polling). |
+| S | `json:"-"`/`,omitempty` on wire-marshalled fields — silently dropping or renaming protocol fields (the wire-tag class). | ✅ Clean: zero sites — V1 JSON uses explicit `params` literals, V2 is the binary frame codec; no tag drift on wire structs. |
+
