@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 752 update — dispatch-default + reader-contract + new-ptr audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Wire-enum `switch` without `default` — unknown message types silently dropped vs. logged. | ✅ Benign: V1 method dispatch deliberately falls through unknown methods (`mining.set_version_mask` and other pool extensions) — the omission is documented in code as forward-compatibility, not an oversight; every *known* method has a case. |
+| M | Custom `io.Reader` violating the `n>0 && err!=nil` contract — `EOF` returned alongside data. | ✅ Clean: `byteSliceReader` (returns data first, `EOF` only at exhaustion) and `EncryptedConn.Read` (drains leftovers, returns `(0, err)` only when nothing was produced) both honor the contract. |
+| P | `new(T)` where `T` needs pointer methods — zero-value misuse. | ✅ Clean: `new(atomic.Bool)` is the correct pointer idiom (atomic methods are pointer-receiver); remaining `new(big.Int|Float)` sites are canonical constructor idioms. |
+
+All packages build, vet, and test green.
