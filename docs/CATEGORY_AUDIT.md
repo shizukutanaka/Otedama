@@ -1152,3 +1152,10 @@ All packages build, vet, and test green.
 | L | UTC/Local mixing: converting some timestamps to `UTC()`/`Local()` while others stay wall-local makes log/metric comparisons drift by the host zone — the timezone-inconsistency class. | ✅ Absent: zero `.UTC()`/`.Local()`/`time.Local`/`.In(...)` sites — every timestamp is `time.Now()`/derived local-clock uniformly, so no mixed-zone comparison can arise. |
 | M | Test helpers taking `*testing.T` without `t.Helper()` — failure lines point at the helper's internals instead of the calling test (the attribution-loss class). | ✅ Clean: all 40 `func helper(t *testing.T…)` sites call `t.Helper()` first — failure attribution already correct tree-wide. |
 
+
+
+## Session 651 update — reflect + buffer-reuse audit
+
+| M | `reflect` package on hot paths — `DeepEqual`/`ValueOf` in per-share or per-frame code (reflection-cost + type-inspection fragility class). | ✅ Absent: zero `reflect` sites anywhere — all comparison/dispatch is typed. |
+| M | Reused `strings.Builder`/`bytes.Buffer`/scratch slices carrying stale content into the next render or frame (the buffer-reset class). | ✅ Clean: every `strings.Builder` is a per-call `var` (Builder semantics require a fresh value — a stored-and-reused Builder would need `Reset`, and none exist); the sync.Pool hasher resets on checkout; `frame.go`'s `scratch[HeaderSize]` is fully overwritten by `ReadFull` each frame while payloads allocate per call. |
+
