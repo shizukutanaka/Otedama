@@ -1083,3 +1083,12 @@ All packages build, vet, and test green.
 | M | `net.IP`/`net.ParseIP` where `netip.Addr` is safer — the legacy 16-byte type accepts zoneless junk and compares awkwardly (the addr-type class). | ✅ Benign: one site (`cmd/run.go` loopback check) — `net.ParseIP(host).IsLoopback()` is correct; `netip` would be a cosmetic swap with no behavioral gain. |
 | M | Unadopted modern stdlib APIs (`iter`, `unique`, `sync.OnceFunc/OnceValue`) — the modernization-gap class. | ✅ Absent/benign: no sites need them — explicit `sync.Once`/`map` usage is already minimal and correct; adopting these would be churn, not improvement. |
 
+
+
+## Session 661 update — env-mutation + template + display-width + RLock audit
+
+| S | `os.Setenv`/`Unsetenv`/`Clearenv` inside library code — mutates process-global env visible to all goroutines (the global-state-mutation class, env variant). | ✅ Absent: zero call sites outside tests. |
+| S | `text/template`/`html/template` parsing attacker-controlled strings — template injection (actions, `{{.}}` on hostile data). | ✅ Clean: the only site (`i18n/message.go`) parses the compiled-in message catalog, never user input; guarded by a `{{` fast-path and both parse/execute errors propagate. |
+| P | `len()`/`s[:n]` on display strings — byte-vs-rune confusion cuts mid-rune or miscomputes column width for multibyte text (the display-width class). | ✅ Clean: `truncateToBudget`/`shortenURL` apply only to ASCII-constructed fields (share counters, validated host:port pool URLs); ANSI/multibyte-aware helpers (`visibleLen`, `padToVisibleWidth`) handle real display width. |
+| P | Writes under `RLock` — a mutation under read lock races (the lock-granularity class). | ✅ Clean: all `RLock` sites are read-only field/map reads, and `metrics.WriteText` uses the canonical snapshot pattern — copies collectors under `RLock`, `RUnlock`s, then invokes them outside the lock. |
+
