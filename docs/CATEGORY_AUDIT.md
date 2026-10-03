@@ -1117,6 +1117,35 @@ secret); payout addresses are masked before logging (session-384).
 
 
 
+## Session 613 update — sort-comparator + json-omitempty audit
+
+**strict-weak-ordering in sort comparators** — a comparator that
+isn't a proper ordering (returns 0 inconsistently, e.g. on NaN) makes
+`slices.SortFunc` nondeterministic and can panic. All three sites are
+total orders: `devices` by `Identity.ID` (unique strings), `entries`
+by (name, key) lexicographic, `candidates` by score-desc then
+StreamID-asc — all lexicographic compositions of total orders. The
+float comparator `cmp.Compare(sb, sa)` cannot see NaN:
+`Yield.Effective()` collapses non-finite inputs to 0 before candidacy
+(engine.go:93-100), `y <= 0` filters them, and Inf compares
+consistently — so `cmp.Compare` remains a strict total order even
+under extreme values. Zero defects.
+
+**json:",omitempty"** — omitempty on a numeric/bool field silently
+drops legitimate zero values (`{"enabled":false}` → `{}`), the
+wire-contract data-loss class. Only 3 omitempty sites exist, all on
+display-only output where dropping an empty value is the intent:
+`Fix` (doctor check hint — empty = no suggestion), `BitcoinAddresses`
+and `Origins` (`otedama config` display dump — empty list/map elided
+for readability; the struct is never re-parsed). No omitempty on any
+numeric/bool field and none on the V1/V2 wire structs (binary
+encode/decode, not JSON). Zero defects.
+
+| M | Non-SWO sort comparator | Absent — all total/lexicographic; NaN structurally excluded |
+| M | omitempty silent field-drop | Absent — only on display strings/slices/maps, not wire or numeric fields |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
