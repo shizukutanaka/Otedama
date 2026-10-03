@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | `//go:build` partitions leaving a GOOS uncovered (missing symbol on some platform) or a file that compiles nowhere; stray `//go:embed`/`//go:generate`/`//go:linkname` directives. | ✅ Clean: the only directives are the two complete partitions — hal GPU `linux`/`!linux` and TUI width `unix`/`windows`/`!unix && !windows` (full GOOS coverage, every file compiles somewhere); zero embed/generate/linkname directives. |
+| M | `os.Pipe`/`net.Pipe` in prod — an fd/in-memory pair whose ends must both be closed and drained (a blocked write wedges a goroutine). | ✅ Absent in prod: all ~50 `net.Pipe` sites are `_test.go` fake transports (the canonical use, with drain goroutines where needed — `dialer_test.go:1126`); the single `os.Pipe` is the test stderr capture. |
+| L | slog attribute keys with unbounded cardinality — dynamic keys (host, ID, user input) exploding the log schema. | ✅ Clean by construction: zero typed-attr call sites — every log line routes through the Logger wrapper's plain-message methods (`Info(msg)`), so no key/value attrs exist to vary. |
+
+All packages build, vet, and test green.
