@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 667 update — cut-comma-ok + binary.Read + form-input + fields-split audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `strings.Cut`/`CutPrefix`/`CutSuffix` ignoring the `found` boolean — a separator-absent input is silently treated as separator-present (the cut-comma-ok class). | ✅ Clean: all four sites are `CutPrefix` with `ok` checked (scheme stripping, sysfs `PCI_ID=` parse); no bare `Cut`/`CutSuffix` sites. |
+| P | `binary.Read` on a struct — a short read leaves trailing fields zero without error (the partial-decode class). | ✅ Absent: zero call sites — decode goes through explicit offset cursor reads that bounds-check each field. |
+| S | `r.ParseForm`/`r.FormValue`/`r.PostFormValue` on untrusted HTTP input — unbounded form/body buffering (the request-input class). | ✅ Absent: the mux registers only fixed read-only handlers (`/healthz`, `/readyz`, `/metrics`, `/`, pprof) — no request-body parsing exists. |
+| P | `strings.Fields` on positionally-meaningful data — runs of whitespace collapse, shifting fixed columns (the fields-position class). | ✅ Absent: zero production sites. |
+
+All packages build, vet, and test green.
