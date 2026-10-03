@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 708 update — http-response + legacy-os.Is + file-perm audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `http.Response` mishandled — body not closed on error branches, StatusCode never checked, or unbounded `io.ReadAll` on a remote-controlled body. | ✅ Correct: all 3 production GETs (`rates/fetcher.go`, `rates/hashrate.go`, doctor clock-skew probe) `defer resp.Body.Close()` immediately after the error check, validate `StatusCode == 200` before decoding, and bound every read (`io.LimitReader` 64KB / `maxHashrateBody` / 8KB drain) — the doctor site even drains-before-Close for keep-alive reuse. |
+| M | Legacy `os.IsNotExist`/`os.IsExist`/`os.IsPermission` sentinel checks missing wrapped `fs.Err*` errors. | ✅ Correct: all 4 sites (`wallet.go`×2, `logfile.go`, `configfile.go`) test errors returned directly by os-package calls (`os.Stat`/`os.Rename`/`os.Open`) — the documented domain of `os.IsNotExist`; no wrapped-error blind spot exists. |
+| S | Secret-bearing files written with world-readable permissions (umask-dependent `os.Create`, 0o644). | ✅ Absent: every write is explicit — wallet dir `0o700`, fingerprint `0o600`, log file `0o600`, service definitions `0o600`, wallet temp via `os.CreateTemp` (0600 default); service dirs `0o755` are the only non-secret directories. |
+
+All packages build, vet, and test green.
