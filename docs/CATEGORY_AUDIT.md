@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 741 update — mux-pattern + loop-resource + binary-codec audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | `http.ServeMux` pattern conflicts — overlapping patterns panic at registration (startup DoS). | ✅ Clean: dedicated mux (DefaultServeMux deliberately avoided); patterns are distinct literals (`/healthz`, `/readyz`, `/metrics`, `/`) plus `/debug/pprof/` subtree + named handlers — no overlap. |
+| S | Resource acquire inside a loop with release deferred to loop end — fd/handle exhaustion on iteration. | ✅ Absent: zero `os.Open*`/`net.Dial`/`http.*` calls inside loop bodies; all connections/files are opened on setup paths outside iteration. |
+| M | `binary.Read`/`binary.Write` on variable-width struct fields — silent truncation/mis-encoding on slices or interface fields. | ✅ Absent: zero call sites; all wire codec goes through the explicit `append*`/`get*` primitives which handle variable-length fields by hand. |
+
+All packages build, vet, and test green.
