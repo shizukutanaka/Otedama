@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | `http.Response.Body` left unclosed/undrained — connection leak and keep-alive abandonment (under HTTP/2, spurious RST_STREAM) — the response-lifecycle class. | ✅ Clean: all 3 `client.Do` sites (`doctor` clock probe, `rates` hashrate, `rates` fetcher) `defer resp.Body.Close()` after the err check, with bounded drains for keep-alive (8 KiB discard on the probe, `maxHashrateBody` on non-200). The doctor site documents the drain-then-close requirement explicitly. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
