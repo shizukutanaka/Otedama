@@ -783,6 +783,38 @@ All packages build, vet, and test green (`go test -race ./internal/engine/`).
 
 
 
+## Session 610 update — ctx-stored-in-struct + duration/shift-overflow audit
+
+**ctx in struct** — storing `context.Context` in a struct field is the
+documented antipattern (lifetime ambiguity between the call's ctx and
+the object's lifetime). Verified: no struct field is `ctx
+context.Context` — the apparent matches are all `dialFn
+func(ctx context.Context, ...)` function-type fields (a signature,
+not a stored value); no `.ctx` member access anywhere; every ctx is
+the first (or only) parameter per convention. The only `_ context.Context`
+ignores are the no-op `Enumerate`/`Shutdown` implementations
+(cpuDriver, linuxGPUDevice) whose work is local-fs and synchronous —
+cancellation has nothing to reach.
+
+**duration/shift overflow** — exponential growth without a cap wraps
+to negative or panics. All sites verified bounded:
+`backoff *= 2` (run.go:613) is guarded by `backoff <
+reconnectBackoffMax` — at most 2×max, never wraps; `stride <<= 1`
+(setup.go:92) multiplies worker stride but the loop terminates under
+`total <= 1<<31` guard; `idx = (idx << 1) | bit` (seed.go:221) builds
+an 11-bit word index (≤2047); `byte(n >> (8*i))` (stratumv1.go:357) is
+bounded by en2 size (≤32, per session-262 bound). The one genuinely
+dangerous shift — `v.Lsh(v, 8*(exp-3))` in `TargetFromNBits` —
+already rejects `exp < 3` (negative shift → panic), negative-mantissa
+bit, zero mantissa, and `len(b) > 32` post-shift overflow; pool-supplied
+nBits cannot reach a panic path. Constants `1<<24`-style are compile-
+time. Zero defects.
+
+| M | context stored in struct | Absent — all ctx is first-parameter; only func-type fields use the name |
+| M | duration/int shift overflow | Absent — every growth is capped or guarded before shift/multiply |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
