@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 749 update — err-assert + contains-match + method-case audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Direct `err.(*T)` assertions without comma-ok — panic on unexpected error type. | ✅ Clean: zero direct error assertions; every type-narrowing goes through `errors.As` or a comma-ok form. |
+| M | `strings.Contains` used for protocol/method matching — substring false-positives ("mining.submit" matching "...submitted"). | ✅ Clean: reject-reason substring heuristics (stats.go:276–282) run only *after* canonical SV2 code classification (session-287 fix); remaining Contains are charset/feature probes, not method matching. |
+| M | Case-insensitive protocol dispatch — accepting non-conformant method casing. | ✅ Clean: V1 dispatch matches exact spec-defined literals ("mining.notify" etc.) — JSON-RPC method names are case-sensitive by spec, so `==` is correct; `EqualFold` appears only on user input (mnemonic re-entry) and hostname normalization ("localhost"). |
+
+All packages build, vet, and test green.
