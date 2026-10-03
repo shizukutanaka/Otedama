@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 715 update — stat-toctou + ioutil + temp-cleanup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `os.Stat`-then-`Open`/`ReadFile` TOCTOU — a decision from Stat racing an attacker-swapped path before the subsequent open. | ✅ Absent: every `os.Stat` is an existence/permission/mtime check that *is* the operation (doctor probes, service-def presence, stale-temp ModTime, wallet-exists UX gates) — none is followed by an open on the same path where the stat's answer matters; file loads go straight to `os.ReadFile`/`os.Open` on fixed config paths. |
+| M | Deprecated `io/ioutil` API still in use (`ioutil.ReadFile`/`WriteFile`/`TempDir`/`Discard` aliases). | ✅ Absent: zero `io/ioutil` imports or call sites — fully migrated to `os`/`io` equivalents. |
+| P | `os.MkdirTemp`/`os.CreateTemp` leaks — temp files never removed (quota/disk growth) on crash or error paths. | ✅ Clean: the single prod `CreateTemp` (`lightning/wallet.go` atomic save) removes the temp on every error path, and the startup sweep at init deletes stale `.wallet-*.tmp` files older than a cutoff — leak mitigated at two levels. |
+
+All packages build, vet, and test green.
