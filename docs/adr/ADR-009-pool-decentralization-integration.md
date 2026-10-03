@@ -841,3 +841,18 @@ vacuous on our wire.
 
 No new spec issues opened in the window. sv2-apps activity is housekeeping only
 (AGENTS.md doc placement). SRI stays at v1.12.0 — no new release to track.
+
+## Session-688 ecosystem update (2026-10-03)
+
+Quiet window confirmed for a second recheck: sv2-spec merged list still ends at
+#231 (10/2 roles clarification) after the Oct-1 normative batch; open items
+unchanged — #236 (SetTarget ≤ max_target, server-side only), #234 (authority-key
+mgmt), #198 (`coinbase_witness`, TDP-side), #203 (payouts extension), plus stale
+editorial #232/#186 and the 2024 WIP #103. SRI release: v1.12.0 (unchanged).
+
+sv2-apps: #839 (JDS job-token → `user_identity` binding), #845 (target-field
+rename tracking spec #228), #856 (`bitcoin_core_sv2` hardening) all remain open —
+#839 is still the notable item for this ADR's custody argument; no landed change
+affects Otedama's client-only footprint.
+
+Conclusion unchanged: nothing in flight requires wire or docs adjustments.
