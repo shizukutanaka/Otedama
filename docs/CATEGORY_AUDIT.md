@@ -988,3 +988,11 @@ All packages build, vet, and test green.
 | P | `make(chan T)` unbuffered where the producer must never block — a slow consumer stalls the loop (the channel-capacity class, second pass after s625). | ✅ Clean: bare `make(chan)` appears only on `done`/`doneCh` close-signalling channels where unbuffered is canonical; every data channel is explicitly buffered (8–32, `Threads*4`, `len(sources)`). |
 | P | `for { select { ... default: } }` busy-loop — a `default` arm that re-enters `select` spins a core at 100% with no work (the busy-default class). | ✅ Clean: every `default:` arm is a one-shot non-blocking send/read or the worker's canonical "check-ctx-then-hash-one-iteration" — the mining loop's spin is the productive workload itself, gated by `ctx.Done()`. |
 
+
+
+## Session 673 update — bytes-string-conversion + nil-receiver + error-style audit
+
+| P | `string([]byte)`/`[]byte(string)` conversions inside loops or hot paths — each copy allocates, thrashing the allocator under frame-rate traffic (the conversion-copy class). | ✅ Clean: the single conversion sits at a parse boundary returning the decoded string once per frame, not per byte; the hot hash path works entirely on `[]byte`. |
+| S | Calling a pointer-receiver method through a possibly-nil `*T` — a nil self inside the method derefs implicitly (the nil-receiver class). | ✅ Clean: all 145 pointer-receiver methods are only invoked after successful construction; `return nil` sites produce typed-error interfaces, never a nil `*Session`/`*Engine` passed onward (typed-nil itself verified in s640). |
+| M | `fmt.Errorf` with a constant format string where `errors.New` is idiomatic — harmless but inconsistent error-construction style (the error-style class). | ✅ Benign: ~8 sites use `fmt.Errorf("engine: ...")` with no verbs — the codebase consistently prefers `fmt.Errorf` everywhere, which is a defensible house style rather than a defect. |
+
