@@ -143,15 +143,58 @@ func (m *Manager) Status() (ServiceStatus, error) {
 const systemdUnitName = "otedama.service"
 
 func (m *Manager) systemdUnitPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	// The systemd user manager resolves its unit search path from its own
+	// environment: $XDG_CONFIG_HOME/systemd/user when set there, otherwise
+	// ~/.config/systemd/user. A shell-only XDG_CONFIG_HOME (exported in
+	// .bashrc but never imported into the manager) does not change where
+	// the manager looks, so a unit installed under it would be invisible
+	// to `systemctl --user`. Ask the manager first; fall back to this
+	// process's spec resolution only when it cannot be queried.
+	if configHome, ok := systemdManagerConfigHome(); ok {
+		if configHome == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
+			}
+			configHome = filepath.Join(home, ".config")
+		}
+		dir := filepath.Join(configHome, "systemd", "user")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, systemdUnitName), nil
 	}
-	dir := filepath.Join(home, ".config", "systemd", "user")
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		configHome = filepath.Join(home, ".config")
+	}
+	dir := filepath.Join(configHome, "systemd", "user")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil
+}
+
+// systemdManagerConfigHome reports the XDG_CONFIG_HOME in the systemd user
+// manager's environment — the variable that actually determines the unit
+// search path. The bool result reports whether the manager could be
+// queried at all; an empty path with ok==true means the manager has no
+// XDG_CONFIG_HOME and therefore searches ~/.config/systemd/user.
+func systemdManagerConfigHome() (string, bool) {
+	out, err := exec.Command("systemctl", "--user", "show-environment").Output()
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if v, ok := strings.CutPrefix(line, "XDG_CONFIG_HOME="); ok {
+			return strings.TrimSpace(v), true
+		}
+	}
+	return "", true
 }
 
 func (m *Manager) installSystemd() error {
