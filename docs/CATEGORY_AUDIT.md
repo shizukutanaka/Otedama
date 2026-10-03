@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 669 update — bigint + compare-and-swap + trylock + readfull audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `big.Int.SetString`/`SetBytes` on untrusted input without the ok return — malformed digits silently become 0 (the bigint-trust class). | ✅ Absent: zero `SetString`/`SetBytes` sites — every `big.Int` is seeded from a compile-time constant (diff1 bound, base-58 radix, `rand.Int` bound). |
+| P | `atomic.CompareAndSwap` in an unbounded retry loop — a contended CAS can livelock at full CPU (the cas-retry class). | ✅ Clean: all four CAS sites are single-shot one-way transitions (`started` flags, logger `defaultPtr` install) — no loops. |
+| M | `Mutex.TryLock`/`TryRLock` masking contention — try-then-skip hides real lock pressure as missing work (the contention-hiding class). | ✅ Absent: zero sites — contention is always faced via `Lock`/`RLock`. |
+| P | `io.ReadFull`/`ReadAtLeast`/`SkipAll` misuse — partial reads treated as complete frames (the partial-read class). | ✅ Clean: every `ReadFull` site checks `err` (wire frame codec, Noise handshake, stratum primitives); zero `ReadAtLeast`/`SkipAll` sites. |
+
+All packages build, vet, and test green.
