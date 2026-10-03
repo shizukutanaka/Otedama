@@ -1047,3 +1047,12 @@ All packages build, vet, and test green.
 | P | Single-case `select` that blocks forever — an unguarded `select { case ch <- v: }` deadlocks when the peer never drains (the blind-blocking class). | ✅ Clean: all selects are multi-case or guard via `default:`/`ctx.Done()`; the miner's share send is non-blocking with a `dropCount` counter. |
 | M | `errors.Is(err, nil)` / `errors.As(err, nil)` — nil-target misuse that silently devolves to `err == nil` or panics (the nil-target class). | ✅ Absent: zero sites. |
 
+
+
+## Session 665 update — timer-reset + closed-channel-read + runtime-tuning + test-cleanup audit
+
+| P | `Timer.Reset`/`Ticker.Reset` on live timers — resetting an expired-but-undrained timer double-fires (the reset-drain-race class). | ✅ Absent: zero timer resets — the only `Reset()` site is the hmac hasher's pool reset (the s614 canonical). |
+| P | `case v := <-ch` receiving without comma-ok — a closed channel keeps yielding the zero value forever, spinning the select (the closed-channel-read class). | ✅ Clean: the single site (`tui` `updateCh`) reads a channel that is *never closed by design* — shutdown is signalled on `doneCh`, so a zero `Stats` can never arrive. |
+| P | `runtime.Goexit`/`Gosched`/`SetGCPercent`/`FreeOSMemory`/`LockOSThread` — runtime-tuning escapes that distort the scheduler (the runtime-intrusion class). | ✅ Absent: zero sites — `runtime` usage is the GOMAXPROCS query already verified (s605). |
+| M | Tests acquiring resources without `t.Cleanup` — leaked files/conns corrupt later tests (the test-hygiene class). | ✅ Clean: `t.Cleanup` is used across engine/poolproto/daemon/doctor tests; temp dirs use `t.TempDir()` which self-registers cleanup. |
+
