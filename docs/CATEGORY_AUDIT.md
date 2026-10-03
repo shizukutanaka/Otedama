@@ -845,6 +845,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 641 update — Split-index + io.Pipe audit
+
+| M | `strings.Split` followed by fixed-position indexing — a repeated or missing separator yields fewer parts and an index panic (the split-index class). | ✅ Clean: only 2 `Split` sites exist, neither indexes — `gpu_linux` iterates lines with `CutPrefix` per line, the BIP-39 wordlist consumes the whole slice. All key=value / scheme extraction uses `Cut*`/`CutPrefix` (comma-ok). |
+| M | `io.Pipe` misuse — close semantics and writer-blocked-forever when the reader exits early (the pipe-ownership class). | ✅ Absent: zero `io.Pipe` sites — streaming is direct conn/reader based. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
