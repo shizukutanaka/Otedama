@@ -1072,3 +1072,39 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+
+## Session-746 ecosystem update (2026-10-02)
+
+**sv2-spec** — quiet window continues; no new normative merges since
+the October-1 batch recorded at session-668. The open normative set is
+unchanged: #236 (`SetTarget.target` ≤ channel `max_target`, last
+touched 2026-10-02), #234 (authority-key management §4.8), #203
+(coinbase payouts extension), #198 (`coinbase_witness`). The
+conformance requirements recorded at session-606 for the future
+secp256k1/certificate work therefore still stand verbatim.
+
+**SRI** — v1.12.0 (2026-09-17) remains the latest tag and now also
+exists as a proper GitHub Release (previously the tag existed while
+the newest Release object was still v1.11.1). No newer release.
+
+**sv2-apps** — the open set grew 17 → 26 since session-606:
+- **#903 (open)** — "Buffer sv2 hardening": bounds-checking work on
+  the shared buffer layer. Same defect class Otedama already covers
+  via `MsgLength`-prechecked `Frame` decode + u16-bounded Noise
+  ciphertexts (sessions 604, 738) — tracked for reference, no action.
+- **#904 (open)** — monitoring, configuration, and release edge-case
+  fixes in the reference pool.
+- **#902 (open)** — Windows CI support for sv2-apps.
+- **#857 (merged)** — pool payout-policy isolation for solo mining:
+  upstream now isolates payout-script policy per configuration, the
+  same payout-isolation direction noted at session-668.
+- **#878 (reopened)** — the empty-coinbase-script rejection recorded
+  as merged at session-606 is open again; fail-closed intent
+  unchanged, landing still pending.
+- **#900 (merged)** — stratum-core bump superseding #862 (closed
+  unmerged).
+- **Tracked set unchanged** — #881 (WIP `handle_push_solution` on
+  jd_server_sv2 + bitcoin_core_sv2), #839 (bind mining job tokens to
+  user_identity), #845 (target-field renames), #856
+  (bitcoin_core_sv2 hardening) all remain open.
