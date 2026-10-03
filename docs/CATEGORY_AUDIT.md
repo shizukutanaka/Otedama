@@ -753,3 +753,15 @@ All packages build, vet, and test green.
 | M | `t.Parallel()` subtests touching shared mutable state (package fixtures, global counters, env vars) — the parallel-test interference class, including `t.Setenv`/`t.Chdir` inside a parallel test (runtime panic). | ✅ Clean: 19 `t.Parallel` sites across 5 files all operate on per-call values — `config.Defaults()` fresh Configs, `allCatalogSpecs[i].fn()` building a fresh `*Catalog` each call, copied range vars (`tt`/`tc` by value under go≥1.22 semantics), pure value-receiver reads (`Header.Validate`, `Family.Valid`, `ChannelMsg`). The only shared fixture, `placeholderRE`, is a compiled regexp — safe for concurrent use by contract. Zero `t.Setenv`/`t.Chdir`/`os.Setenv` in any parallel-capable file, so no env interference either. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
