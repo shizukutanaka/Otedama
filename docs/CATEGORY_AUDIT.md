@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 698 update — sleep-hotpath + unlock-balance + callback-panic audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `time.Sleep` inside a hot loop — fixed stalls throttle throughput or hide races (the sleep-hotpath class). | ✅ Clean: single site (`worker.go:269`) is a 10 ms yield only when `localWork == nil` (pre-job spin); the hash loop itself is sleep-free. |
+| S | `Lock()` without a guaranteed `Unlock` — a panic or early return deadlocks the mutex (the unlock-balance class). | ✅ Clean: 42 Lock sites — 30 `defer Unlock` and 12 explicit Unlocks, each a symmetric lock-snapshot-unlock (worker/stats/metrics/arbitrate/dashboard/hashrate) with the Unlock on the dominant path. |
+| S | Panic inside an injected callback crosses the engine boundary — a logger failure kills the arbitration loop (the callback-panic class). | ✅ Clean: `opts.log` is bound to `logger.Logger.Adapter()` — a level dispatch over `slog` Info/Warn/Error/Debug, which cannot panic on message writes. |
+
+All packages build, vet, and test green.
