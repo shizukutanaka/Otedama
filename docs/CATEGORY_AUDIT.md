@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 755 update — env-presence + wire-id + hex-case audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Getenv` conflating unset and set-but-empty — a `VAR=` export silently treated as absent. | ✅ Benign: every site wants exactly the unset/empty conflation — OTEDAMA_* secrets (empty ⇒ prompt), OTEDAMA_CONFIG (empty ⇒ default search), APPDATA/XDG_DATA_HOME (empty ⇒ fallback path). No site needs the unset-vs-empty distinction `LookupEnv` provides. |
+| M | JSON wire IDs decoded via `float64` — precision loss or false correlation above 2^53. | ✅ Clean: `uintID()` converts float64/int/int64/string → uint64; a wrong-precision or malformed ID resolves to a key that simply isn't in `pending` — fail-closed, never a false match; real ids are a small counter. |
+| M | Hex/case canonicality — mixed-case hex or names compared case-sensitively. | ✅ Clean: bech32 enforces uniform-case and decodes via `ToLower`; classification does `ToLower(reason)` once before matching; `EqualFold` only on user-input/hostname boundaries. |
+
+All packages build, vet, and test green.
