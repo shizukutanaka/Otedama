@@ -1951,15 +1951,15 @@ func TestCheckWallet_MalformedFingerprintNotEchoed(t *testing.T) {
 
 func TestIsFingerprint(t *testing.T) {
 	for s, want := range map[string]bool{
-		"a1b2c3d4": true,
-		"deadbeef": true,
-		"01234567": true,
-		"":         false,
-		"a1b2c3":   false,   // too short
-		"A1B2C3D4": false,   // uppercase
-		"a1b2c3d ": false,   // space
-		"a1b2c3d\n": false,  // newline
-		"zzzzzzzz": false,   // not hex
+		"a1b2c3d4":  true,
+		"deadbeef":  true,
+		"01234567":  true,
+		"":          false,
+		"a1b2c3":    false, // too short
+		"A1B2C3D4":  false, // uppercase
+		"a1b2c3d ":  false, // space
+		"a1b2c3d\n": false, // newline
+		"zzzzzzzz":  false, // not hex
 	} {
 		if got := isFingerprint(s); got != want {
 			t.Errorf("isFingerprint(%q) = %v, want %v", s, got, want)
