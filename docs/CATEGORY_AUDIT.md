@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 745 update — write-err + duration-mix + var-init audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Ignored `Write`/`WriteString` errors — a failed write silently drops output. | ✅ Clean: the ignored sites are contract-infallible — `hash.Hash.Write` ("never returns an error"), `strings.Builder` writes (always nil), and `http.ResponseWriter` writes where a half-failed response is unactionable. |
+| P | `time.Duration`/`int` mixed-unit comparisons — `int(dur) > 5` comparing nanoseconds against seconds. | ✅ Clean: every crossing goes through explicit unit methods (`.Seconds()/.Milliseconds()/.Microseconds()`) into float/int display values; zero raw `int(dur)` comparisons. |
+| M | Package-level `var x = f()` ordering — initializer call graphs depending on file order. | ✅ Clean: the two function-valued vars (`runCmd`, `poolIPResolver`) are self-contained test-injection seams with no cross-file initialization order dependency. |
+
+All packages build, vet, and test green.
