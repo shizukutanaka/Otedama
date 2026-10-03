@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 718 update — stringer-leak + compile-assert + time-format audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `String()`/`GoString()`/`Format()` methods on secret-carrying types — a `%v`/`slog.Any` formatting accidentally printing key material to logs. | ✅ Clean: 9 `String()` methods, 8 on public value types (hash hex, ID, Policy, Status…). The one secret-adjacent site — `Mnemonic.String()` — is *required*: BIP-39 PBKDF2 consumes the sentence form (`[]byte(m.String())`), and its two display flows (`printRecoveryPhrase`, `verifyBackupPhrase`) go through the injected `io.Writer` TTY boundary, never the logger. Documented at `seed.go:168-180`. |
+| M | `var _ Iface = ...` compile-time conformance assertions missing or stale. | ✅ Present: assertion lines exist at every implementation site (`Provider`→Akash/Mining, `Dialer`, `Session`, `PoolNoticeReceiver`, `Scheme`→secp256k1Stub, `Clock`→System/Fake) — interface drift fails at compile time. |
+| L | `time.Format` layout-string errors — literal "YYYY-MM-DD"/wrong-hour layouts producing silently malformed timestamps. | ✅ Absent: zero prod `time.Format` call sites (display timestamps use `time.RFC3339`-style constants or slog's built-in time attr). |
+
+All packages build, vet, and test green.
