@@ -968,6 +968,26 @@ ranged slice inside its own loop.
 
 
 
+## Session 619 update — %w scope + fallthrough audit
+
+**`%w` outside `fmt.Errorf`** — the wrap verb is only meaningful
+inside `Errorf`; used in `Sprintf`/`Printf`/`log` it emits literal
+`%!w(...)` garbage, silently corrupting the message (and hiding the
+real error text at the worst time — inside an error path). Verified:
+every `%w` in production code sits inside `fmt.Errorf` — zero
+out-of-scope sites.
+
+**`fallthrough`** — Go requires the keyword explicitly, so implicit
+fallthrough bugs can't occur; but explicit `fallthrough` in a
+type-switch or tag-switch is fragile (it transfers to the next case
+without re-checking). Verified: zero `fallthrough` in production
+code — every switch exits per-case or shares bodies via case lists.
+
+| M | %w outside fmt.Errorf | Absent — all wrap verbs inside Errorf |
+| M | fallthrough fragility | Absent — zero fallthrough sites |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
