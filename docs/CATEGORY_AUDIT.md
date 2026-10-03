@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 729 update — crypto-inventory + test-helpers + tabwriter audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Legacy crypto in the import set — rsa/dsa/des/rc4/md5/sha1 slipping in via direct imports (transitive stdlib deps are expected). | ✅ Clean: the direct set is aes, cipher, ecdh, ecdsa, elliptic, hmac, rand, sha256, sha512, subtle, tls, x509, pkix — all modern; des/dsa/ed25519/hkdf/hpke appear only transitively inside crypto/tls + x509. |
+| M | `testing` helper packages misused or absent where needed — partial-read robustness untested without `iotest`. | ✅ Clean: `testing/iotest` used in the stratum frame/wire tests (HalfReader-style partial-read coverage — exactly its purpose); zero `debug/*` imports (the `debug/` grep hits are the pprof URL path). |
+| P | `text/tabwriter` vs hand-rolled column padding — tabwriter counting raw bytes would mis-pad ANSI-colored cells. | ✅ Correctly absent: TUI pads via ANSI-aware `padRight` (dashboard.go:477 — measures visible width); tabwriter cannot model escape sequences, so the custom path is required. |
+
+All packages build, vet, and test green.
