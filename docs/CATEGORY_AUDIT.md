@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 686 update — assertion-ok + tls-verify + rand-seed audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Single-value type assertions on `json.Unmarshal`-decoded `any` — a malformed pool payload panics at the assertion (the decode-assert class; regression check after s634). | ✅ Clean: both V1 decode assertions (`arr[1].(string)`, `arr[2].(float64)`) use comma-ok with explicit error branches — zero unchecked `.(T)` on decoded data. |
+| S | `tls.Config{InsecureSkipVerify: true}` or `MinVersion < TLS12` — MITM-capable connections (the tls-verify class). | ✅ Clean: zero `InsecureSkipVerify`; every client config sets `MinVersion: tls.VersionTLS12` (stratum/tls.go, stratumv1/tls.go); protocol `MinVersion` fields are SV2 wire values, not TLS. |
+| S | `rand.Seed`/`rand.New` with predictable seeds (`time.Now`) on security paths — weak token generation (the rand-seed class; extends s624). | ✅ Clean: zero `math/rand`/`Seed`/`rand.New` — all randomness is `crypto/rand` (s624). |
+
+All packages build, vet, and test green.
