@@ -1331,6 +1331,25 @@ purpose — no un-audited escape path exists.
 
 
 
+## Session 603 update — partial-write contract audit
+
+Mirror of session 602 on the write side: a producer calls `w.Write(p)`
+once and assumes the whole buffer went out, silently truncating the
+stream when the writer returns `n < len(p)`. Every `Write`/`WriteString`/
+`WriteByte` call site and `Writer` implementation was inspected:
+
+| S | Fallible-writer call sites checking only `err` (`noise.go:292/295`, `dialer.go:395`, `stratumv1.go:516`, `run.go:1665`, `wallet.go:300`). | ✅ Correct per the `io.Writer` contract: a conforming Writer MUST return a non-nil error when `n < len(p)`, so `err != nil` is a complete partial-write detector. All underlying writers are stdlib types (`net.Conn`, `*os.File`) which honour the contract. |
+| S | `EncryptedConn.Write` (`noise.go:282`) — Noise frame writer. | ✅ Contract-conforming: rejects oversized plaintext before framing (`maxNoiseFrame`) rather than truncating — a truncated frame would desynchronise the cipher stream. Returns `0, err` on any underlying failure; callers treat errors as fatal and reconnect. |
+| M | `cappedLogFile.Write` (`logfile.go:51`) — rotation wrapper. | ✅ Contract-conforming passthrough: forwards the real `n` to the caller and accumulates `c.size += n`, so rotation accounting can never over-count a short write. |
+| M | `hash.Hash`/`hmac` Write sites (`btccrypto`, `noise` mixHash/HKDF, `noise_pool`, `seed.go` MAC). | ✅ Unchecked by design: `hash.Hash.Write` is documented to never return an error. |
+| M | `strings.Builder`/`io.WriteString` to in-memory builders (metrics exposition, TUI frame assembly). | ✅ Infallible — `Builder.Write` always returns `(len(p), nil)`. |
+| M | `io.WriteString` to `http.ResponseWriter` (healthz/readyz/index) and the TUI terminal writer. | ✅ Best-effort display paths; a response-truncating error is already fatal to the request, and the TUI write is `nolint:errcheck`-documented. |
+
+No `binary.Write` call sites exist. The silent-truncation class is
+absent on the write path as well.
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
