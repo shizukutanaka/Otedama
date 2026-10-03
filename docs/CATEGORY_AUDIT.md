@@ -1159,3 +1159,10 @@ All packages build, vet, and test green.
 | M | `reflect` package on hot paths — `DeepEqual`/`ValueOf` in per-share or per-frame code (reflection-cost + type-inspection fragility class). | ✅ Absent: zero `reflect` sites anywhere — all comparison/dispatch is typed. |
 | M | Reused `strings.Builder`/`bytes.Buffer`/scratch slices carrying stale content into the next render or frame (the buffer-reset class). | ✅ Clean: every `strings.Builder` is a per-call `var` (Builder semantics require a fresh value — a stored-and-reused Builder would need `Reset`, and none exist); the sync.Pool hasher resets on checkout; `frame.go`'s `scratch[HeaderSize]` is fully overwritten by `ReadFull` each frame while payloads allocate per call. |
 
+
+
+## Session 650 update — ctx-origin + build-tag audit
+
+| M | `context.Background()` inside `internal/` — a fresh root ctx severs the caller's cancellation chain (the ctx-origin class). | ✅ Clean: the only site is `httpserver.Server.Stop`, which *must* use a fresh root — a graceful-shutdown grace period would be immediately cancelled if it inherited the (already-cancelled) parent ctx. Correct by necessity. |
+| M | Old-style `// +build` constraints — deprecated pre-Go-1.17 syntax that newer toolchains ignore (the build-tag class). | ✅ Clean: zero `// +build` sites; all 6 build-tagged files (`tui/width_*`, `hal/gpu_*`) use `//go:build`. |
+
