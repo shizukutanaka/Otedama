@@ -964,3 +964,11 @@ All packages build, vet, and test green.
 | M | `t.Log`/`t.Error`/`t.Fatal` called from a goroutine that outlives `t` — post-teardown races on `testing.T` (the goroutine-t class; regression check after PR #705). | ✅ Clean: zero remaining sites — the #705 rewrite holds; no test calls `t` methods outside its own goroutine. |
 | S | `%s`/`%v` on pool-controlled strings at the log boundary — unsanitized C0/C1/control text reaching the terminal (the sanitize-boundary class). | ✅ Clean: every pool-text `%s` (`share rejected` reason, V1 reject reason, `pool notice`) is produced by `poolproto.SanitizePoolText`/`sanitizeNotice` upstream; remaining `%s` args are typed enums, parsed durations, or user-config hosts run through `StripUserinfo`. |
 
+
+
+## Session 677 update — atomic-alignment + typed-wrapper + unsafe audit
+
+| S | `unsafe.Pointer`/`uintptr` — breaking the GC's pointer-tracking contract (the unsafe class; re-verified after s605). | ✅ Clean: zero `unsafe.`/`uintptr` sites in non-test code. |
+| P | Old-style `atomic.AddUint64(&x)` on a struct field — requires manual 64-byte alignment on 32-bit archs or the op crashes (the aligned-64 class). | ✅ Clean: the free-function API is absent; every counter/flag uses the typed `atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]` API (worker counters, curtail gate, httpserver ready/bound-addr/serve-err, dialer closed/diff, metrics values, TUI started, logger defaultPtr), which embeds its own alignment guarantee. |
+| M | `atomic.Pointer[T]` used where a plain pointer under mutex would do — or vice versa, an unguarded pointer where atomic is required (the synchronization-choice class). | ✅ Clean: each `atomic.Pointer` stores a write-once/read-many value (`boundAddr`, `serveErr`, `defaultPtr`) that would otherwise need a dedicated mutex — the right primitive for the access pattern. |
+
