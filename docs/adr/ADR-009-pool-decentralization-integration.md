@@ -825,6 +825,38 @@ JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
 
+## Session-660 ecosystem update (2026-10-03)
+
+sv2-spec remains in a quiet window: no merges since the Oct-2 batch (the
+roles-terminology #231 was the last). The only open active item is #236
+(`SetTarget.target` must not exceed the channel's `max_target`), which has
+matured rather than stalled: review discussion added a race-condition nuance —
+when a client *lowers* `max_target`, a `SetTarget` arriving above the new bound
+cannot be an in-flight race crossing, so the client should allow a grace period
+for the server to send a conforming `SetTarget` or `UpdateChannel.Error` before
+treating it as a violation. The bound remains a server-side obligation and is
+still a non-issue for Otedama: it never advertises `max_target` in
+`OpenMiningChannel` (internal/stratum/handshake.go), so the constraint is
+vacuous on our wire.
+
+No new spec issues opened in the window. sv2-apps activity is housekeeping only
+(AGENTS.md doc placement). SRI stays at v1.12.0 — no new release to track.
+
+## Session-688 ecosystem update (2026-10-03)
+
+Quiet window confirmed for a second recheck: sv2-spec merged list still ends at
+#231 (10/2 roles clarification) after the Oct-1 normative batch; open items
+unchanged — #236 (SetTarget ≤ max_target, server-side only), #234 (authority-key
+mgmt), #198 (`coinbase_witness`, TDP-side), #203 (payouts extension), plus stale
+editorial #232/#186 and the 2024 WIP #103. SRI release: v1.12.0 (unchanged).
+
+sv2-apps: #839 (JDS job-token → `user_identity` binding), #845 (target-field
+rename tracking spec #228), #856 (`bitcoin_core_sv2` hardening) all remain open —
+#839 is still the notable item for this ADR's custody argument; no landed change
+affects Otedama's client-only footprint.
+
+Conclusion unchanged: nothing in flight requires wire or docs adjustments.
+
 ## Session-676 ecosystem update (2026-10-03)
 
 sv2-spec remains quiet — no merges since the Oct-1 normative batch and the
