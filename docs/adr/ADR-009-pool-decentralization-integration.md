@@ -903,3 +903,31 @@ No spec action required from Otedama. Continued monitoring of #236/#234.
 - **sv2-spec #236 open (Oct-2, new):** `SetTarget.target` MUST NOT exceed the channel's `max_target` — closes the gap where an unconstrained `SetTarget` could undo the bounds that 5.3.3/5.3.5/5.3.7 put on the initial target and `UpdateChannel`. This is a server-side obligation; Otedama is unaffected (it advertises no `max_target` in `OpenMiningChannel` and accepts pool-assigned targets by design, see `internal/stratum/handshake.go`). Track to see if it lands.
 - sv2-apps: housekeeping only (#907 agents docs).
 - SRI: still v1.12.0 (2026-09-17).
+
+## Session-643 ecosystem update (2026-10-02)
+
+**sv2-spec: still quiet** — no merges since the Oct-1 normative batch
+(#223/#225/#226/#227/#228, all recorded in the session-621 update).
+The open landscape is unchanged from session-635:
+
+- **#231 Server/Client role definitions** — still open, last activity
+  Oct-2; converging on `Mining Protocol Server` terminology after
+  plebhash dropped the third-party-JDS parts (Fi3's game-theory
+  objection stands as out-of-scope follow-up). When it lands, Otedama
+  docs may adopt `Mining Pool Server` role names (see #704 note).
+- **#234 authority-key management** — idle since Sep-25 (21 review
+  comments, no replies). Still tracks Otedama's Noise cert-verification
+  gap noted in session-606.
+- **#203 coinbase-transaction payouts** — idle since Sep-15; phase-2
+  watch item, unchanged.
+- **#198 coinbase_witness** — TDP-side only, N/A for Otedama.
+- **#232 table-style** and stale editorial items — cosmetic.
+
+**sv2-apps**: nothing since #900 (Sep-26 stratum-core bump) and #875
+(single-workspace consolidation) — housekeeping only.
+
+**SRI**: v1.12.0 (2026-09-17) remains the latest tag; no release in
+the session-635 window.
+
+Conclusion: no new normative content this window; the Otedama-side
+record is current through the Oct-1 spec batch.
