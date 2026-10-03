@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 673 update — bytes-string-conversion + nil-receiver + error-style audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `string([]byte)`/`[]byte(string)` conversions inside loops or hot paths — each copy allocates, thrashing the allocator under frame-rate traffic (the conversion-copy class). | ✅ Clean: the single conversion sits at a parse boundary returning the decoded string once per frame, not per byte; the hot hash path works entirely on `[]byte`. |
+| S | Calling a pointer-receiver method through a possibly-nil `*T` — a nil self inside the method derefs implicitly (the nil-receiver class). | ✅ Clean: all 145 pointer-receiver methods are only invoked after successful construction; `return nil` sites produce typed-error interfaces, never a nil `*Session`/`*Engine` passed onward (typed-nil itself verified in s640). |
+| M | `fmt.Errorf` with a constant format string where `errors.New` is idiomatic — harmless but inconsistent error-construction style (the error-style class). | ✅ Benign: ~8 sites use `fmt.Errorf("engine: ...")` with no verbs — the codebase consistently prefers `fmt.Errorf` everywhere, which is a defensible house style rather than a defect. |
+
+All packages build, vet, and test green.
