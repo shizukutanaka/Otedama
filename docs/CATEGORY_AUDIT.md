@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 759 update — time-parse + type-switch + env-direct audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Parse`/`ParseTime` errors discarded — a malformed timestamp silently treated as zero time. | ✅ Clean: both `http.ParseTime` sites handle the error — doctor returns a Warn result, fetcher guards with `parseErr == nil` before using the skew. |
+| M | `x.(type)` switch without a default — an unexpected concrete type falling through silently. | ✅ Clean: the sole type switch (`rpcMessage.uintID`) has an explicit default returning 0, which resolves to a `pending` key that can't exist — fail-closed (verified session 755). |
+| M | Direct `os.Getenv` bypassing the 4-layer config precedence — a hidden env-only override. | ✅ Clean: 9 non-test call sites, all previously classified as documented channels (OTEDAMA_* secrets, OTEDAMA_CONFIG, XDG/APPDATA fallbacks); no hidden layer (verified sessions 712/755). |
+
+All packages build, vet, and test green.
