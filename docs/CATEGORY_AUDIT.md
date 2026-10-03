@@ -1187,3 +1187,10 @@ All packages build, vet, and test green.
 | M | Open-PR merge conflicts — 46 open PRs from the audit loop could drift into conflict as they land. | ✅ Verified mergeable: all 46 open PRs report MERGEABLE against current master. Note: most append to this ledger's tail, so they will pairwise-conflict once the first merges — that is the known append pattern, resolved by the union-resolution sweep, not a defect. |
 | M | Ledger deferred rows drifted from code reality (s639 follow-up). | ✅ Accurate: 3 remaining `⏸ Deferred` rows are all still true — line ~581 (TUI width; resolved by open PR #721, lands on merge), ~176 (`clock.Clock` test-only gap, still real), line ~10 (CODEOWNERS-gated funds-critical item, tracked). No new stale rows found. |
 
+
+
+## Session 646 update — deadlock-primitive + serialization audit
+
+| M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
+| M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
+
