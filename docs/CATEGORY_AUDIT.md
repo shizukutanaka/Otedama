@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 758 update — init-side-effect + byte-conv + ticker-lifecycle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `init()` side effects — import order changing behavior, or hidden global mutation at startup. | ✅ Clean: all 4 sites are benign — three self-registrations (documented blank-import pattern) and one embedded-wordlist integrity check that panics on corrupt static data (fail-fast on an invariant). |
+| P | `[]byte(string)` conversion GC pressure on hot paths — per-iteration allocations in the hashing loop. | ✅ Clean: only 9 conversion sites total, all on cold paths (service defs, seed ops, wordlist init) — none in the mining hot loop. |
+| P | `time.Ticker` leaks or misuse — missing Stop, or Reset-instead-of-reuse races. | ✅ Clean: all 10 NewTicker sites pair `defer .Stop()`; no Reset usage — tickers are created once per loop scope and never mutated. |
+
+All packages build, vet, and test green.
