@@ -896,3 +896,10 @@ Seventh recheck of the upstream landscape since the session-660 update:
   pattern Otedama already ships.
 
 No spec action required from Otedama. Continued monitoring of #236/#234.
+
+## Session-654 ecosystem update (2026-10-03)
+
+- **sv2-spec #231 merged (Oct-2):** "clarify Server/Client relationship across roles" landed — the pool role is now defined as `Mining Pool Server`, server/client terms are defined per protocol, and "one type of software can fulfill more than one role" is checkable rather than illustrative. Editorial/terminology only; wire format unchanged. No code impact for Otedama (docs consistently say "pool"); if a conformance doc ever names spec roles it should use `Mining Pool Server`.
+- **sv2-spec #236 open (Oct-2, new):** `SetTarget.target` MUST NOT exceed the channel's `max_target` — closes the gap where an unconstrained `SetTarget` could undo the bounds that 5.3.3/5.3.5/5.3.7 put on the initial target and `UpdateChannel`. This is a server-side obligation; Otedama is unaffected (it advertises no `max_target` in `OpenMiningChannel` and accepts pool-assigned targets by design, see `internal/stratum/handshake.go`). Track to see if it lands.
+- sv2-apps: housekeeping only (#907 agents docs).
+- SRI: still v1.12.0 (2026-09-17).
