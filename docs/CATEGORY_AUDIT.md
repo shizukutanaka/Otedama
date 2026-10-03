@@ -454,6 +454,10 @@ Recorded, not fixed (rule 3; consolidation is a layering decision):
   designates `internal/btccrypto` as the Bitcoin abstraction home, so a
   future `btccrypto.ValidateMainnetAddress` could be the single source —
   an architecture decision, deferred.
+- ✅ Resolved: the decision landed as `btccrypto.ValidateAddress` — the
+  unified dispatcher over bech32/bech32m/Base58Check (`bech32.go`); every
+  validator call site (config file check, doctor payout/failover probes)
+  routes through it. No charset-level duplication remains.
 
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
@@ -578,7 +582,7 @@ the binary and driving real invocations, not just reading source.
 | S,E | TUI wrote raw ANSI escape codes to stdout unconditionally — redirecting output (`> log.txt`, `\| tee`, any non-interactive capture) produced an unreadable, ever-growing stream of cursor-control noise instead of logs. No TTY detection existed anywhere in the codebase. | ✅ Fixed: `cmd/otedama/run.go` `isTerminal` (stdlib-only, `os.ModeCharDevice`) auto-disables the TUI when stdout is not a terminal; `--no-tui` still works as an explicit override. Tests: `TestIsTerminal_*`. |
 | M,S | `otedama service install` (a first-class, documented workflow) produces a unit that runs with the TUI on and no `--log-file` — since a service never has a controlling terminal, this meant `journalctl`/launchd logs filled with ANSI noise forever while the structured logger was silently discarded (`logger.Discard()`). No flag existed to fix this short of hand-editing the generated unit. | ✅ Fixed as a side effect of the TTY-detection fix above: systemd/launchd capture stdout as a non-TTY pipe, so `isTerminal` now auto-flips to `--no-tui` behavior for every service-managed run, and `buildLogger` falls through to its plain-stdout branch — real structured logs now reach `journalctl`/the launchd log file with zero additional flags needed. |
 | S | `poolLine`/`miningLine` truncated the pool URL and share-count fields using **fixed** budgets (hardcoded 40 / 20 chars) independent of the actual configured `cols`. At the documented 40-column minimum, the connection-status text ("✓ connected"/"✗ disconnected") — the single most important field on the line — could be truncated away entirely by `writeLine`'s right-side cut before it was ever reached. | ✅ Fixed: both functions now take `cols` and compute the variable-length field's budget from it (`cols - fixed-overhead`), with status placed so it is never the part that gets cut. Test: `TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth`. |
-| S | Package doc claimed terminal width is "detected at startup via TIOCGWINSZ (Unix) or GetConsoleScreenBufferInfo (Windows)"; `SetWidth` exists but is called only from test files — every real invocation renders at the hardcoded 80-column default regardless of actual terminal size. | ⏸ Deferred (doc corrected to state the gap honestly; disclosed as KNOWN_LIMITATIONS §15). Needs a maintainer decision: add `golang.org/x/term` as a new direct dependency (exception to ADR-003's zero-dependency stance) vs. hand-roll per-platform syscalls via the already-indirect `golang.org/x/sys`. |
+| S | Package doc claimed terminal width is "detected at startup via TIOCGWINSZ (Unix) or GetConsoleScreenBufferInfo (Windows)"; `SetWidth` exists but is called only from test files — every real invocation renders at the hardcoded 80-column default regardless of actual terminal size. | ✅ Resolved (session 385): the decision landed as hand-rolled per-platform syscalls via the already-direct `golang.org/x/sys` dep — `width_unix.go` `unix.IoctlGetWinsize(TIOCGWINSZ)`, `width_windows.go` `GetConsoleScreenBufferInfo`; `detectWidth` refreshes `d.cols` each render tick and `SetWidth` pins it for tests/embedders. KNOWN_LIMITATIONS §15 marked resolved. |
 | L | `config show --help` / `config validate --help` printed `Usage of run:` (the shared `flag.FlagSet`'s hardcoded name) and dumped all 15 `run` flags, more than a third of which are no-ops for those two subcommands (`--dry-run`, `--no-tui`, `--pprof`, `--wallet-passphrase`, `--wallet-mnemonic-passphrase`, `--log-file`). | ✅ Fixed: `parseRunFlags` now takes a `name` parameter (each of the 3 call sites passes its real command name), and every run-only flag's help text is prefixed `(run only)`, matching the existing `(config show only)` convention already used for `--origin`/`--json`. |
 | L | No typo tolerance / "did you mean" for subcommands (`otedama rnu` → generic "unknown subcommand" + full usage dump). | ✅ Fixed (session 434): `suggestSubcommand` offers the nearest subcommand at Levenshtein distance ≤ 2 on stderr; exit 64 unchanged. |
 
@@ -746,17 +750,194 @@ All packages build, vet, and test green.
 
 ---
 
-## Session 625 update — sync.Map + unchecked-Sscanf audit
+## Session 601 update — read-buffer aliasing audit
+
+Bug class: a decoded field that aliases a shared read buffer is silently
+corrupted when the next read overwrites it (use-after-overwrite). Every
+decode boundary was inspected for slice retention into longer-lived
+structures:
 
 | Cat | Finding | Disposition |
 |---|---|---|
+| S | V1 `readLine` (`stratumv1.go`): `bufio.Reader.ReadSlice` returns a slice aliasing the reader's internal buffer — invalid on the next read. | ✅ Clean: `readLine` copies the line into a fresh `make([]byte, …)` before returning, preserving the "caller owns its line" contract that `dispatch`/`json.Unmarshal` rely on. Documented in the function comment. |
+| S | V2 `Decoder.ReadFrame` (`frame.go`): a decoder-level scratch buffer reused across frames would corrupt the previous Frame's payload. | ✅ Clean: `payload := make([]byte, h.MsgLength)` is allocated per call — the Frame owns its payload indefinitely. `scratch` covers only the 6-byte header and is consumed into the value-type `Header` (no slice field), so nothing aliases it. |
+| S | V2 wire primitives (`wire.go`) + Noise transport (`noise.go`) + handshake decoders (`handshake.go`) — lower-level decode sites that could alias a reused buffer. | ✅ Clean: every `get*` reader allocates its own result (`getB0_255`, `getStr0_255`) or reads into stack arrays (`getU16LE`/`getU32LE`, fixed-size handshake fields). `EncryptedConn.Read` decrypts into a fresh buffer and hands out copies, never the buffer itself. `byteSliceReader` copies into the caller's `p`. |
+| M | `Frame` doc claimed "the Decoder may reuse its internal buffer for the next frame" — the decoder does no such thing for payloads; the comment both mis-described the implementation and forbade a retention pattern that is actually safe. | ✅ Fixed: comment rewritten to state the real ownership contract (per-call fresh payload, caller-owned; scratch only for the header). |
+
+No retained slice references a buffer any read path can overwrite — the
+use-after-overwrite class is structurally absent.
+
+All packages build, vet, and test green.
+
+---
+
+## Session 632 update — callback-under-lock + nil-channel audit
+
+| M | Callback under mutex: `runArbitrationLoop` invoked the injected `opts.log` per pruned key while holding `streamsMu` — the one site where a func value was called inside a critical section. Benign today (the logger is a leaf slog sink), but the pattern re-introduces the lock-held-across-callout class. | ✅ **Fixed**: prune under lock, log after `Unlock()` (same call order, callback now outside the section). Every other mutex region (`updateStream`, fetcher `mu`/`inflightMu`, stats `activityMu`) contains only map/metric writes — no interface or func-value calls under a held lock remain. |
+| M | Nil channel in select — a possibly-nil channel field used in send/recv blocks forever. | ✅ Clean: the only possibly-nil channel is `notices` in `runStatsLoop`, deliberately nil-then-assigned for the select-disabled idiom (documented; also reset to nil on close to un-ready the case). `tokens`/`done`/all producer channels are `make()`'d in their constructors before exposure. |
+
+All packages build, vet, and test green (`go test -race ./internal/engine/`).
+
+
+## Session 636 update — timer-leak + request-reuse + endian audit
+
+| M | `<-time.After(d)` inside a re-entering select loop — each iteration allocates a timer that lives until it fires (the timer-leak class). | ✅ Clean: the single `time.After` site (run.go:1431) fires at most once per session teardown — a one-shot pool-requested reconnect wait, ctx-cancellable and already clamped by `ReconnectWait`. Not inside a hot re-entering loop. |
+| M | `http.Request` reused across retry attempts — the body is consumed on the first `Do`, so retries send an empty body. | ✅ Absent: no `client.Do` inside a retry loop; all 3 sites build the request per call, and the pool reconnect loop retries `DialURL` (fresh conn + handshake per attempt, never a consumed request). |
+| P | Endianness mixing across the binary surface — an accidentally `BigEndian` field would silently corrupt wire values. | ✅ Clean: every `binary.` call is `LittleEndian` (wire u16/u32, Noise nonce/len prefixes, frame header, miner block-header fields — all spec-mandated LE); zero `BigEndian`/`binary.Read`. |
+
+
+
+## Session 610 update — ctx-stored-in-struct + duration/shift-overflow audit
+
+**ctx in struct** — storing `context.Context` in a struct field is the
+documented antipattern (lifetime ambiguity between the call's ctx and
+the object's lifetime). Verified: no struct field is `ctx
+context.Context` — the apparent matches are all `dialFn
+func(ctx context.Context, ...)` function-type fields (a signature,
+not a stored value); no `.ctx` member access anywhere; every ctx is
+the first (or only) parameter per convention. The only `_ context.Context`
+ignores are the no-op `Enumerate`/`Shutdown` implementations
+(cpuDriver, linuxGPUDevice) whose work is local-fs and synchronous —
+cancellation has nothing to reach.
+
+**duration/shift overflow** — exponential growth without a cap wraps
+to negative or panics. All sites verified bounded:
+`backoff *= 2` (run.go:613) is guarded by `backoff <
+reconnectBackoffMax` — at most 2×max, never wraps; `stride <<= 1`
+(setup.go:92) multiplies worker stride but the loop terminates under
+`total <= 1<<31` guard; `idx = (idx << 1) | bit` (seed.go:221) builds
+an 11-bit word index (≤2047); `byte(n >> (8*i))` (stratumv1.go:357) is
+bounded by en2 size (≤32, per session-262 bound). The one genuinely
+dangerous shift — `v.Lsh(v, 8*(exp-3))` in `TargetFromNBits` —
+already rejects `exp < 3` (negative shift → panic), negative-mantissa
+bit, zero mantissa, and `len(b) > 32` post-shift overflow; pool-supplied
+nBits cannot reach a panic path. Constants `1<<24`-style are compile-
+time. Zero defects.
+
+| M | context stored in struct | Absent — all ctx is first-parameter; only func-type fields use the name |
+| M | duration/int shift overflow | Absent — every growth is capped or guarded before shift/multiply |
+
+
+
+## Session 604 update — silent zero-value on decode failure
+
+Residual surface of the session-595 fail-closed fix: every decoder that
+can yield a zero value when parsing fails (`hex.Decode*`, `base64`,
+`big.Int.SetString`, `strconv.Parse*`, `Atoi`, `UnmarshalText`). If a
+call site drops the error, downstream code consumes a fabricated zero —
+the class that made notify produce zero-MerkleRoot jobs.
+
+| S | `hex.DecodeString` sites (`stratumv1/parse.go` ×5, `stratumv1.go` en1). | ✅ All fail-closed since #677: coinb/merkle/prevhash reject malformed or wrong-length values; `extranonce1OK` returns false; `completeV1Job` bails on en1 decode error. `base64`, `hex.NewDecoder`, `SetString`, `UnmarshalText`: zero non-test call sites. |
+| S | `strconv.Atoi` unchecked at `parse.go:268` — a failed parse sets `reconnectDirective.Port = 0`, a fabricated value a consumer could dial. | ✅ Benign: `Port`/`Host` are recorded but never consumed — `parseReconnect`'s doc explicitly states the pool-supplied `Host:Port` is NOT honored (only `Wait` is, via `ReconnectWait`, bounded by `maxReconnectWaitSeconds`). The zero can reach no dialer. |
+| S | `strconv.ParseUint` unchecked at `stratumv1.go:484` — `uintID`'s string-id fallback returns 0 on unparseable input. | ✅ By design: every request id Otedama sends is a `uint64`, so a non-numeric string id can never match a pending entry regardless — 0 is just another unmatched key, and the response is dropped either way. |
+| M | `strconv.ParseFloat`/`Atoi`/`ParseUint` remainder (`rates`, `config`, `hashrate`). | ✅ All error-checked; non-finite rejection audited in #437/#443/#478. |
+
+No reachable site lets a failed decode masquerade as a valid zero.
+
+
+
+## Session 644 update — panic-site + tail-index audit
+
+| M | `panic(` sites in library code reachable via untrusted input (pool input crashes the process). | ✅ Clean: all 12 panic sites are programming-error assertions unreachable from input — `Worker.Start` double-call, `poolproto.Register`/`btccrypto` duplicate-registration contracts, `metrics` static-name validation, BIP-39 wordlist length+hash integrity (init-time data check). |
+| M | Tail indexing `s[len(s)-1]` / `s[:len-1]` on a possibly-empty slice (negative-offset panic class). | ✅ Clean: all 4 sites are guarded — `ID.Valid` returns early on `""`, `parse.go` bounds by `len(b) > 0` in the loop condition, `en2` writes bound `i < len(en2)`, completion.go uses a comparison not an index. |
+
+
+
+## Session 642 update — nil-func-call audit
+
+| M | Calling an optional func-value field that may be nil — nil-function panic on the injected callback (the nil-callback class). | ✅ Clean: every func field is safe by one of two forms — default-filled at construction (`run.go:192` `log = func(_,_) {}`; `dialFn` production default at both dialers; `extract`/`apply`/`Run` always set in table literals) or nil-guarded at the call (`onConnected`, `f.logFn`, `LogFn`, `HashrateFunc`/`NetworkHashrateFunc`). No unguarded optional call site. |
+
+
+
+## Session 641 update — Split-index + io.Pipe audit
+
+| M | `strings.Split` followed by fixed-position indexing — a repeated or missing separator yields fewer parts and an index panic (the split-index class). | ✅ Clean: only 2 `Split` sites exist, neither indexes — `gpu_linux` iterates lines with `CutPrefix` per line, the BIP-39 wordlist consumes the whole slice. All key=value / scheme extraction uses `Cut*`/`CutPrefix` (comma-ok). |
+| M | `io.Pipe` misuse — close semantics and writer-blocked-forever when the reader exits early (the pipe-ownership class). | ✅ Absent: zero `io.Pipe` sites — streaming is direct conn/reader based. |
+
+
+
+## Session 640 update — typed-nil + signal-channel audit
+
+| M | Typed-nil through an interface — a `(*T)(nil)` returned where the type is an interface survives `x != nil` and nil-derefs downstream (the typed-nil class). | ✅ Clean: zero `(*T)(nil)` returns into interface types — the only `(*X)(nil)` forms are the compile-time satisfaction assertions (`var _ Provider = (*MiningProvider)(nil)`). Interface-returning error paths use untyped `nil` (`DialURL` → `Session`, driver `Lookup` → `Dialer`); `Enumerate`/`Detect` return nil *slices*, which are nil-safe. |
+| M,S | `signal.Notify` on an unbuffered channel — a second signal arriving before the handler reads is dropped. | ✅ Absent: no raw `signal.Notify` — the only use is `signal.NotifyContext` (run.go:208, canonical; internally buffered correctly). |
+
+
+
+## Session 639 update — ledger-staleness sweep
+
+| M | Deferred ledger rows that later resolutions never amended — a stale "⏸ deferred" stays indistinguishable from an open item. | ✅ **2 stale rows amended in place**: the TUI terminal-width row (resolved session 385 — `detectWidth` per render tick via `x/sys`, §15 marked resolved) and the address-validator dedup row (resolved — `btccrypto.ValidateAddress` is the single source). |
+| M | Remaining deferred rows re-verified against current code: passphrase-string immutability (Go semantics, unchanged), `clock.Clock` test-only gap (rates/providers still use `time.Now()`, unchanged), Noise `readMessage2` soft-degrade (still the documented P-256 stub, secp256k1 migration pending — correctly stays deferred). | ✅ Accurate as-is. |
+
+
+
+## Session 638 update — Tick + range-channel audit
+
+| M | `time.Tick(d)` — returns a channel that can never be stopped; the ticker lives for the process lifetime (the unstoppable-ticker class). | ✅ Absent: zero `time.Tick` sites — every periodic source is `time.NewTicker` paired with `Stop()` (session 590). |
+| M | `for v := range ch` where the producer never closes — the consumer blocks at the range head forever once senders exit (the hung-range class; can't observe ctx). | ✅ Absent: zero range-over-channel sites — all channel consumption is `select`-based with `ctx.Done()` cases (fanIn per-channel goroutines, session `Jobs()`, `merged` shares). The only `range` hits are map/slice iteration. |
+
+
+
+## Session 637 update — flush + context-cancel audit
+
+| M | `bufio.Writer` without `Flush` — buffered bytes silently dropped on return (the unflushed-writer class). | ✅ Absent: zero `bufio.NewWriter` sites — all writes go directly to files/conns/loggers (or `bufio.Reader`-side only). |
+| M | `context.WithCancel/WithTimeout` whose cancel is never invoked — the uncancelled-context leak (timers and child spans retained until parent exits). | ✅ Clean: all 12 sites have a matching cancel — 8 `defer cancel()`, 3 stored into a lifecycle field invoked on Close/Stop (`worker.cancel`, `poller.cancel`, `session.ctxCancel`), 1 explicit `dialCancel()` after the bounded dial. |
+
+
+
+## Session 634 update — assertion-form + loop-capture audit
+
+| M | Single-value type assertion `v := x.(T)` — panics when the dynamic type differs (the assertion-panic class on pool-controlled `interface{}` fields). | ✅ Clean: every assertion is comma-ok (`sess.(ReconnectWaiter)`, `arr[1].(string)`, `resp.result.(bool)`) or a type switch (`m.ID`). The `accepted, _` site discards `ok` but degrades fail-closed — a non-bool `result` is treated as "not accepted" and reports an error. |
+| M | `go func` capturing the loop variable — pre-1.22 semantics the closure shares the variable and sees the last value (or a data race under concurrent writes). | ✅ Clean: all 6 in-loop `go func` sites pass the variable as an explicit parameter (`func(threadID int)`, `func(c <-chan T)`, `func(idx int, chk Check)`, `func(dr Driver)`, `func(s ...)`) — the canonical capture-avoidance form, correct on every toolchain version. |
+
+
+
+## Session 633 update — defer-order + dispatch-map audit
+
+| M | `defer x.Close()` registered before the error check — a nil handle reaching the deferred call (nil-interface panic on cleanup). | ✅ Clean: all 5 `defer *.Close()` sites (config file, 2× HTTP body, pool conn, session) sit strictly after the `err != nil` early return; the doctor probe defers a drain-then-close closure likewise gated. |
+| M | `map[k]func` dispatch called without an `ok` check — a missing key yields a nil-function call panic. | ✅ Absent: zero `map[...]func` tables exist — all dispatch is switch/if-chains and interface polymorphism. The class is structurally unrepresentable here. |
+
+
+
+## Session 631 update — library-exit + HTTP-body audit
+
+| M,S | `os.Exit`/`log.Fatal*` inside `internal/` — a library path that kills the embedding process mid-defer (the library-exit class: skipped cleanup, no error propagation to the caller). | ✅ Clean: zero `os.Exit`/`log.Fatal*` call sites in `internal/` — the only hit is a doc comment describing the `os.Exit(report.ExitCode())` contract, whose exit decision lives in `cmd/otedama`. Every library error propagates (session 568). |
+| M | `http.Response.Body` left unclosed/undrained — connection leak and keep-alive abandonment (under HTTP/2, spurious RST_STREAM) — the response-lifecycle class. | ✅ Clean: all 3 `client.Do` sites (`doctor` clock probe, `rates` hashrate, `rates` fetcher) `defer resp.Body.Close()` after the err check, with bounded drains for keep-alive (8 KiB discard on the probe, `maxHashrateBody` on non-200). The doctor site documents the drain-then-close requirement explicitly. |
+
+
+
+## Session 630 update — epoch-unit + config-tag audit
+
+| M | Epoch unit confusion: seconds vs milliseconds vs nanoseconds mixed across pool-time (`ntime` u32 seconds), uptime deltas, and gauge values — the `Unix()`/`UnixMilli()` swap class. | ✅ Clean: no `time.Unix(x)` constructor calls exist — every site uses `Now().Unix*()` so there is no input to misread. Pool ntime domain is `Unix()` seconds throughout (rollNTime `declared < now`, lastJobReceivedAt/reject gauges); uptime deltas are `UnixNano` at both ends (worker.go). Unit mixing is structurally impossible. |
+| M | Config tag asymmetry: an exported field missing `yaml:` becomes silently unconfigurable via file while looking complete (KnownFields would *reject* the yaml key instead — fail-safe) — or missing both tags becoming invisible in dumps. | ✅ Clean: all 13 file-facing fields carry `yaml:` tags (KnownFields decode means an untagged export would be a hard error, not silent loss). The only untagged exports live on internal tracking structs (`ValueOrigin` map, summary view) that never decode files; `config show` emits an explicit doc map keyed by canonical yaml names. |
+
+
+
+## Session 629 update — wire-marshal nil semantics audit
+
+| P | nil `[]any` reaching `json.Marshal` → `"params":null` on the V1 wire (some pools reject `null` where the spec shows `[]` — the nil-vs-empty wire drift class). | ✅ Clean: `session.call` has exactly 4 call sites and every one passes a literal non-nil `[]any` (submit builds the 5-element share tuple; subscribe/authorize/extranonce.subscribe are literals, the last explicitly `[]any{}` → `[]`). `params` can never be `null` on the wire. |
+| P | Generic `rpcMessage` (`Result`/`Error`/`ID` as `any`) leaking spurious `"error":null`/`"result":null` keys outbound — field-presence drift vs JSON-RPC expectations. | ✅ Clean: `rpcMessage` is decode-only; outbound requests marshal a 3-key map (`id`/`method`/`params`) — `result`/`error` keys can never appear. Decode side treats `null` as nil (`any`), matching JSON-RPC semantics (session 566). V2 is binary — no null semantics exist. Other marshal sites (`version --json`, config dump, doctor `/healthz`) are operator-facing output where null-vs-`[]` is cosmetic, not protocol conformance. |
+
+
+
+## Session 628 update — spec-name drift + modernization leftovers 2
+
+| M | Post-sv2-spec-#228 stale names lingering in comments/docs after the #704 rename — `min_ntime`, `maximum_target`, `header_timestamp`, `header_nonce`, `prev hash` (partial-rename drift class). | ✅ Clean on the #704 branch: zero residue including block comments — every `min_ntime`/`MinNtime`/`MaxTarget`/`maximum_target` hit on master is a site #704 already renames. (Verified on `devin/1790945186-s622-specnames`; the hits reported here are master's pre-merge state, expected until #704 lands.) |
+| L | Modernization leftovers, batch 2: `io/ioutil` legacy calls, `reflect` escape hatches, `filepath.Walk` (vs `WalkDir`), manual multi-error concat (vs `errors.Join`), `signal.Notify` channel plumbing (vs `signal.NotifyContext`). | ✅ Clean: `io/ioutil`, `reflect`, `filepath.Walk` all zero — the tree is fully post-1.16 idiom. `errors.Join` used exactly once at its natural site (rates fetcher joining per-source failures, `joined != nil` guard). Signal handling is the canonical `signal.NotifyContext(ctx, os.Interrupt, SIGTERM)` in run.go:208. |
+
+
+
+## Session 626 update — t.Parallel shared-state audit
+
+| M | `t.Parallel()` subtests touching shared mutable state (package fixtures, global counters, env vars) — the parallel-test interference class, including `t.Setenv`/`t.Chdir` inside a parallel test (runtime panic). | ✅ Clean: 19 `t.Parallel` sites across 5 files all operate on per-call values — `config.Defaults()` fresh Configs, `allCatalogSpecs[i].fn()` building a fresh `*Catalog` each call, copied range vars (`tt`/`tc` by value under go≥1.22 semantics), pure value-receiver reads (`Header.Validate`, `Family.Valid`, `ChannelMsg`). The only shared fixture, `placeholderRE`, is a compiled regexp — safe for concurrent use by contract. Zero `t.Setenv`/`t.Chdir`/`os.Setenv` in any parallel-capable file, so no env interference either. |
+
+
+
+## Session 625 update — sync.Map + unchecked-Sscanf audit
+
 | M | `sync.Map` misuse (mixed key types, Range-snapshot iteration, missing "zero value ready" contract) — the map-substitution bug class. | ✅ Clean: the tree's only `sync.Map` is `pauseSet` (arbitrate.go) — fixed `string→struct{}` key/value shape, single-writer (arbitration loop) with pool-dispatch readers, `Load`-only reads (no `Range`), zero value documented as ready-to-use. Canonical form; a mutex+map would add nothing but a second lock discipline to audit. |
 | M | `fmt.Sscanf` with discarded error (`_, _ =`) — malformed input silently yields a zero destination (silent zero-value class, cf. session 604). | ✅ Benign-by-contract: the sole unchecked site is `parseJobID` (dialer.go:401), whose own table test documents `"bad"→0` deliberately. In the V2 flow `sub.JobID` is always `FormatUint`-derived, so malformed input is unreachable; even if reached, `JobID=0` is a *valid* wire value — the pool rejects the share as unknown/stale job, i.e. fail-safe rather than silent credit. The engine-side `Sscanf` (run.go:1781) is checked and fails the job loudly. |
 
-All packages build, vet, and test green.
-||||||| 8e86d7d8
 
----
 
 ## Session 645 update — embed + weak-crypto audit
 
@@ -766,3 +947,357 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 684 update — lock-channel + duration-overflow + hot-sprintf audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Mutex held across a channel send/receive — a blocked peer wedges every lock holder (the lock-channel class; extends s560/s632). | ✅ Clean: channel ops adjacent to locks all sit after `Unlock` (e.g. worker snapshots `cancel` under `mu` then waits on `done` unlocked) — no Lock→send/recv region. |
+| P | `time.Duration` formed by unchecked multiplication — `d * n` with large `n` wraps int64 to a negative sleep (the duration-overflow class). | ✅ Clean: the single product (`stats.go` p50→Duration) multiplies a bounded measured latency (~seconds) — magnitudes orders below int64 wrap; timeouts/deadlines are literal constants. |
+| P | `fmt.Sprintf` in the hash hot path — per-nonce allocation churn (the hot-format class). | ✅ Clean: `Sprintf` appears only in display formatting (`HashRateString`, log lines) at stats/log cadence; the hashing loop calls `HashHeader` with zero allocs (s534 verified). |
+
+All packages build, vet, and test green.
+
+
+## Session 693 update — file-handle + Must-init + printf-verbs audit
+
+| S | `os.Open*`/`Create*` handles without a `Close` path — descriptor leak until process exit (the file-handle class). | ✅ Clean: `logfile` stores the handle on the owned writer (closed on rotate/close); the wallet temp file closes+removes on every error branch; remaining sites are self-contained `ReadFile`/`WriteFile`; `configfile` defers `Close`. |
+| M | `Must*`/`MustCompile`/`template.Must` initializers — a runtime data problem becomes a process crash (the must-init class). | ✅ Clean: zero sites — all initializations return errors. |
+| S | `fmt.Errorf` verb/argument mismatch — `%d` on a string prints `%!d(MISSING)` and corrupts diagnostics (the printf-verbs class). | ✅ Clean: `go vet ./...` printf analysis reports nothing across ~234 `Errorf` sites. |
+
+
+
+## Session 692 update — aead-nonce + time-equality + hash-reuse audit
+
+| S | AEAD (AES-GCM/ChaCha) keyed nonce reuse or fixed IV — ciphertexts become plaintext-comparable/forgable (the nonce-reuse class). | ✅ Clean: wallet `EncryptSeed` fills `es.Nonce`+`es.Salt` from `crypto/rand` per call; the Noise transport derives each frame nonce from a monotonically incrementing `uint64` counter per Noise spec — no fixed IV. |
+| M | `t1 == t2` on `time.Time` — monotonic-vs-wall mismatch gives false negatives (the time-equality class). | ✅ Clean: zero `==` on `time.Time`; all comparisons go through `time.Since`, `.Equal`, or unix-nano arithmetic. |
+| S | `hash.Hash` reused across computations without `Reset` — concatenated digests silently corrupt verification (the hasher-state class). | ✅ Clean: the pooled hasher does comma-ok + `Reset` on borrow; `hmacSHA256`/`hmacSHA256Pooled` build fresh `sha256.New` per call; the Noise handshake hash is single-owner sequential per spec. |
+
+
+
+## Session 691 update — http-server + sync.Pool + decoder-strictness audit
+
+| S | `http.Server` without `ReadHeaderTimeout` — Slowloris header stalls exhaust sockets (the server-timeout class). | ✅ Clean: the metrics/health server sets `ReadHeaderTimeout` 5s plus `Read`/`Write`/`Idle` timeouts — full Slowloris posture. |
+| P | `sync.Pool` objects reused without reset or type-checked — stale state leaks between borrowers (the pool-hygiene class). | ✅ Clean: `hashPool.Get` uses comma-ok then `h.Reset()` before lending; `Put` sites return the same concrete `hash.Hash` type. |
+| S | `yaml`/`xml`/`gob` decoders accepting unknown fields or unbounded documents — config drift and decode bombs (the decoder-strictness class). | ✅ Clean: `yaml.NewDecoder` runs `KnownFields(true)` (unknown keys are hard errors) with EOF-as-empty handling; `xml`/`gob` decoders absent. |
+
+
+
+## Session 690 update — dial-context + exec + signal-stop audit
+
+| P | `net.Dial`/`tls.Dial` without a context or timeout — dial stalls block forever (the dial-context class). | ✅ Clean: every dial path uses `DialContext` (engine, stratum TLS, stratumv1/v2 dialers) or an explicit `net.Dialer{Timeout: …}` (doctor probes, 3–5s) — no bare `net.Dial`. |
+| S | `os/exec` with attacker-influenced argv — command injection (the exec-argv class). | ✅ Clean: four sites — `systemctl is-active`, `launchctl list`, `sc.exe query`, and the service-manager `exec.Command(name, args…)` — all invoke fixed platform tools with constant/service-defined arguments; no user-controlled string reaches argv. |
+| S | `signal.Notify` without a matching `signal.Stop` — a cancelled registration keeps the channel subscribed (the signal-stop class). | ✅ Clean: the only signal use is `signal.NotifyContext`, whose `cancel` performs the `Stop` — canonical. |
+
+
+
+## Session 689 update — map-comma-ok + double-close + wire-tag audit
+
+| S | Map reads without comma-ok where missing vs zero-value changes behavior — silently treating absent as present (the map-comma-ok class). | ✅ Clean: `updateStream`'s bare `m[key]` reads the zero `Stream`, populates it, and writes `m[key] = existing` back — missing key is the intended fresh-stream path; `dup`-checks and `pending`/`drivers` lookups all use comma-ok or `_, present :=`. |
+| S | `close(ch)` reachable twice — double-close panic on reconnect/teardown (the double-close class). | ✅ Clean: every close is single-shot guarded — `cancelPending` under `pendingMu`+delete, dispatch's delete-before-close, worker's post-`wg.Wait` close, dashboard's CAS on `started`, producer-side `wg.Wait`+close (fanin, hashrate, registry, polling). |
+| S | `json:"-"`/`,omitempty` on wire-marshalled fields — silently dropping or renaming protocol fields (the wire-tag class). | ✅ Clean: zero sites — V1 JSON uses explicit `params` literals, V2 is the binary frame codec; no tag drift on wire structs. |
+
+
+
+## Session 687 update — httputil + x509-verify + path-portability audit
+
+| S | `net/http/httputil` or unchecked `x509` parsing — reverse-proxy surface or unvalidated certificate bundles (the transport-security class). | ✅ Clean: `httputil` absent; all three cert-pool sites fail hard on `!AppendCertsFromPEM` (TLS config builders in stratum/stratumv1, doctor pre-check) — no silent empty-pool path. |
+| M | `filepath.IsAbs`/`VolumeName`/manual separator joining — Windows/POSIX path portability drift (the path-portability class). | ✅ Clean: the only separator use is the daemon's `\tmp`-rooted fallback when the home dir is unresolvable — deliberate drive-root fallback, documented; no `IsAbs`/`VolumeName` call sites needing review. |
+| M | Duplicate `tlsConfigWithExtraCAs` in stratum + stratumv1 — verbatim helper duplication across package boundary (the duplication class). | ✅ Benign: the two copies sit behind a package boundary that keeps `internal/stratum/` free of poolproto deps — vendoring the helper is cheaper than introducing a shared crypto-util package for 12 lines. |
+
+
+
+## Session 686 update — assertion-ok + tls-verify + rand-seed audit
+
+| S | Single-value type assertions on `json.Unmarshal`-decoded `any` — a malformed pool payload panics at the assertion (the decode-assert class; regression check after s634). | ✅ Clean: both V1 decode assertions (`arr[1].(string)`, `arr[2].(float64)`) use comma-ok with explicit error branches — zero unchecked `.(T)` on decoded data. |
+| S | `tls.Config{InsecureSkipVerify: true}` or `MinVersion < TLS12` — MITM-capable connections (the tls-verify class). | ✅ Clean: zero `InsecureSkipVerify`; every client config sets `MinVersion: tls.VersionTLS12` (stratum/tls.go, stratumv1/tls.go); protocol `MinVersion` fields are SV2 wire values, not TLS. |
+| S | `rand.Seed`/`rand.New` with predictable seeds (`time.Now`) on security paths — weak token generation (the rand-seed class; extends s624). | ✅ Clean: zero `math/rand`/`Seed`/`rand.New` — all randomness is `crypto/rand` (s624). |
+
+
+
+## Session 685 update — external-endpoint + any-signature + dialer-goroutine audit
+
+| S | `https?://` literals reaching undeclared endpoints — telemetry or exfil surface hiding in string constants (the endpoint-inventory class). | ✅ Clean: every external literal is a declared feed — Coinbase/Kraken/CoinGecko rate sources, mempool.space + blockchain.info hashrate sources, `api.coinbase.com/v2/time` doctor clock-skew probe, plist DTD and spec links in comments. No telemetry URL exists. |
+| M | `any`/`interface{}` parameters in exported (capitalized) functions — weakly-typed public surface (the any-signature class). | ✅ Clean: zero sites — exported APIs are concretely typed; `any` appears only as map values on internal decode paths (validated in earlier sessions). |
+| S | `go func` spawned in dialers/session code without a completion signal — detached workers that leak past `Close` (the dialer-goroutine class; extends the s553 leak map). | ✅ Clean: zero `go func` inside `internal/poolproto/`; the engine's background goroutines all select on `ctx.Done()` and join via `wg`/`done` (s553). |
+
+
+
+## Session 683 update — loop-capture + iota-wire + dead-const audit
+
+| S | `for range` loop variable captured by `go func` — the pre-1.22 shared-variable capture (the loop-capture class; regression check after s634). | ✅ Clean: all five fan-out sites pass the loop variable as an explicit parameter (`go func(c <-chan T)`, `go func(s Source)`, `go func(idx int, chk Check)`, `go func(d Driver)`) — canonical even under pre-1.22 semantics. |
+| S | `iota` enum values serialized onto the wire — renumbering a constant silently shifts the protocol (the iota-wire class). | ✅ Clean: all five `iota` blocks are internal-only (Policy, AddressType, Status, ValueOrigin, Format); wire message types use explicit numeric constants, never `iota`. |
+| M | Declared-but-unused `const`/helpers — dead declarations rotting in the tree (the dead-const class; covered by the s532 deadcode sweep). | ✅ Clean: deadcode verdict from s532 stands — no new unused constants introduced; `go vet` + build confirm none today. |
+
+
+
+## Session 682 update — nil-interface + header-key + atomic-bypass audit
+
+| S | Interface `nil` checks that miss typed-nil — `(*T)(nil)` boxed in an interface compares `!= nil` (the nil-interface class; re-verified after s640). | ✅ Clean: no new typed-nil constructions since s640 — interface-returning sites still produce only untyped nil. |
+| M | `http.Header` written via direct map index (`Header["K"]=`) — bypasses canonical textproto casing so `Get("K")` misses (the header-key class). | ✅ Clean: zero direct-map writes; every header is set via `w.Header().Set(...)` which canonicalizes; no case-folded map keys (`ToLower(...)]`) anywhere. |
+| S | Plain assignment/read on a field declared `atomic.*` — bypasses the atomic op and tears the value under racing access (the atomic-bypass class). | ✅ Clean: zero bare assignments to `curtailGate`/`started`/`closed`/`ready`/counter fields — all access goes through `Load`/`Store`/`Swap`/`Add`. |
+
+
+
+## Session 681 update — init-side-effect + unlock-balance + dynamic-inspect audit
+
+| M | `init()` with ordering-dependent or re-entrant side effects — init-order fragility and duplicate registration (the init-surface class, second pass after s567). | ✅ Clean: all four `init()` are self-contained — wordlist split+SHA-256 self-verify (lightning), stub/dialer `Register` calls into owning-package registries (btccrypto, stratumv1, stratumv2); no cross-package ordering dependency, each registration additive. |
+| S | Manual `mu.Unlock()` on an early-return path that skips it — a missed unlock wedges the mutex (the unlock-balance class). | ✅ Clean: every non-deferred `Unlock` is the canonical lock-snapshot-unlock or a local branch symmetric with its `Lock` (worker stats, arbitrate streams, dashboard, metrics accessors) — no branch escapes the pair. |
+| S | `%T`/`encoding/gob` dynamic type inspection on wire data — gob is unbounded and `%T` can leak internals (the dynamic-inspect class). | ✅ Clean: `%T` appears only in decode-error diagnostics (unexpected type reporting); `encoding/gob` absent. |
+
+
+
+## Session 680 update — bool-env + mustcompile + path-package audit
+
+| S | Boolean env/flag values checked with string equality (`== "true"`, `== "1"`) — silently treats `TRUE`/`yes`/`on` as false (the bool-parse class). | ✅ Clean: zero `ParseBool` misuse — env lookups return strings into the layered config where typed conversion happens once; no ad-hoc truthy comparisons. |
+| S | `regexp.MustCompile` at package init — a bad pattern panics at startup, and an attacker-influenced pattern is a ReDoS surface (the mustcompile class). | ✅ Clean: zero `regexp` usage in production code (verified s617); nothing compiles patterns at init or from input. |
+| S | `path` package applied to filesystem paths — `path.Join` on Windows paths or `..` elements produces non-native results (the path-package class). | ✅ Clean: every filesystem join uses `filepath.` (service defs, sysfs probes, log paths); `path` appears only inside `filepath`/`urlpath` identifiers — no `import "path"` on filesystem data. |
+
+
+
+## Session 679 update — wg-negative + json-streaming + deadline-semantics audit
+
+| S | `wg.Done()`/`wg.Add(-1)` beyond the paired count — driving the counter negative panics or unblocks `Wait` early (the wg-negative class). | ✅ Clean: `Done` appears only as `defer wg.Done()` at goroutine start after a matching `Add(1)` (worker, fanin); zero `Add(-` calls. |
+| M | `json.NewDecoder` reused across concatenated objects or its partial-decode state ignored — a stream decoder on a one-shot payload (the streaming-decode class). | ✅ Clean: zero `json.NewDecoder` sites — every decode is `json.Unmarshal` on a complete frame or the line-framed V1 reader (validated in earlier sessions). |
+| P | `SetDeadline` where only one direction needs a bound — a shared deadline lets a stalled write mask a healthy read side (the deadline-semantics class). | ✅ Clean: `SetDeadline` appears only at handshakes (both directions bounded, cleared after); steady-state I/O uses separated `SetReadDeadline` (5-min job-wait in V1, negotiate in V2) and `SetWriteDeadline` (10s writes) — directionally correct. |
+
+
+
+## Session 678 update — recover-value + goroutine-t + sanitize-boundary audit
+
+| S | `recover()` whose returned value goes uninspected — catching a panic without classifying it resumes on an unknown failure (the recover-blanket class). | ✅ Clean: zero `recover()` sites — the codebase propagates errors instead of catching panics; the only panics are startup-contract assertions (s644). |
+| M | `t.Log`/`t.Error`/`t.Fatal` called from a goroutine that outlives `t` — post-teardown races on `testing.T` (the goroutine-t class; regression check after PR #705). | ✅ Clean: zero remaining sites — the #705 rewrite holds; no test calls `t` methods outside its own goroutine. |
+| S | `%s`/`%v` on pool-controlled strings at the log boundary — unsanitized C0/C1/control text reaching the terminal (the sanitize-boundary class). | ✅ Clean: every pool-text `%s` (`share rejected` reason, V1 reject reason, `pool notice`) is produced by `poolproto.SanitizePoolText`/`sanitizeNotice` upstream; remaining `%s` args are typed enums, parsed durations, or user-config hosts run through `StripUserinfo`. |
+
+
+
+## Session 677 update — atomic-alignment + typed-wrapper + unsafe audit
+
+| S | `unsafe.Pointer`/`uintptr` — breaking the GC's pointer-tracking contract (the unsafe class; re-verified after s605). | ✅ Clean: zero `unsafe.`/`uintptr` sites in non-test code. |
+| P | Old-style `atomic.AddUint64(&x)` on a struct field — requires manual 64-byte alignment on 32-bit archs or the op crashes (the aligned-64 class). | ✅ Clean: the free-function API is absent; every counter/flag uses the typed `atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]` API (worker counters, curtail gate, httpserver ready/bound-addr/serve-err, dialer closed/diff, metrics values, TUI started, logger defaultPtr), which embeds its own alignment guarantee. |
+| M | `atomic.Pointer[T]` used where a plain pointer under mutex would do — or vice versa, an unguarded pointer where atomic is required (the synchronization-choice class). | ✅ Clean: each `atomic.Pointer` stores a write-once/read-many value (`boundAddr`, `serveErr`, `defaultPtr`) that would otherwise need a dedicated mutex — the right primitive for the access pattern. |
+
+
+
+## Session 675 update — errors.Join + multi-wrap + func-assertion audit
+
+| M | `errors.Join`/`errors.Unwrap` misuse — joining a single error or unwrapping an interface without cause hides the real failure class (the multiwrap-mismatch class). | ✅ Clean: the sole `errors.Join` (rates fetcher) aggregates per-source errors then nil-checks, preserving each cause for `errors.Is` — the documented Go 1.20+ pattern; zero `errors.Unwrap` call sites. |
+| M | `fmt.Errorf` with multiple `%w` — silently dropping causes or formatting them as `%!w(MISSING)` (the multi-wrap class). | ✅ Clean: the single site (`stratumv1/dialer.go:164`) wraps `poolproto.ErrHandshakeFailed` + the transport error — both reachable via `errors.Is`, which is correct multi-wrap. |
+| S | `.​(func…)` type assertions on `any` — a wrong dynamic type panics at the call boundary (the func-assert class). | ✅ Absent: zero sites — callbacks are statically typed fields, never smuggled through `any`. |
+
+
+
+## Session 674 update — concat-allocation + unbuffered-channel + busy-default audit
+
+| P | `slices.Concat`/`append` rebuilding large slices per iteration — quadratic copy work disguised as concat (the allocation-churn class). | ✅ Clean: `slices.Concat` absent; loop-appends are bounded (diagnostic line building, per-frame `merkle_branch`) or pre-sized via `make(..., 0, n)` — no per-iteration quadratic rebuild. |
+| P | `make(chan T)` unbuffered where the producer must never block — a slow consumer stalls the loop (the channel-capacity class, second pass after s625). | ✅ Clean: bare `make(chan)` appears only on `done`/`doneCh` close-signalling channels where unbuffered is canonical; every data channel is explicitly buffered (8–32, `Threads*4`, `len(sources)`). |
+| P | `for { select { ... default: } }` busy-loop — a `default` arm that re-enters `select` spins a core at 100% with no work (the busy-default class). | ✅ Clean: every `default:` arm is a one-shot non-blocking send/read or the worker's canonical "check-ctx-then-hash-one-iteration" — the mining loop's spin is the productive workload itself, gated by `ctx.Done()`. |
+
+
+
+## Session 673 update — bytes-string-conversion + nil-receiver + error-style audit
+
+| P | `string([]byte)`/`[]byte(string)` conversions inside loops or hot paths — each copy allocates, thrashing the allocator under frame-rate traffic (the conversion-copy class). | ✅ Clean: the single conversion sits at a parse boundary returning the decoded string once per frame, not per byte; the hot hash path works entirely on `[]byte`. |
+| S | Calling a pointer-receiver method through a possibly-nil `*T` — a nil self inside the method derefs implicitly (the nil-receiver class). | ✅ Clean: all 145 pointer-receiver methods are only invoked after successful construction; `return nil` sites produce typed-error interfaces, never a nil `*Session`/`*Engine` passed onward (typed-nil itself verified in s640). |
+| M | `fmt.Errorf` with a constant format string where `errors.New` is idiomatic — harmless but inconsistent error-construction style (the error-style class). | ✅ Benign: ~8 sites use `fmt.Errorf("engine: ...")` with no verbs — the codebase consistently prefers `fmt.Errorf` everywhere, which is a defensible house style rather than a defect. |
+
+
+
+## Session 672 update — map-delete + sync.Once + defer-arg-snapshot audit
+
+| P | `delete(m, k)` on a shared map as state invalidation — racing readers see the stale value between the check and the delete, or a deleted-but-resurrected entry (the invalidate-race class). | ✅ Clean: every delete is inside a lock or on a single-owner map — `pruneStaleStreams` GC under `streamsMu`, `jobs`/`pending` LRU eviction bounded, `submitTimes`/`submitTargets` single-engine-goroutine. Deleting during `range` is a defined operation in Go. |
+| M | `sync.Once` used where re-initialization is later needed — a `Do` can't be reset, silently skipping a required re-run (the once-reuse class). | ✅ Clean: all four sites are exactly the lifecycle idempotence `Once` is designed for (`closeOnce`×3, `startOnce`×1) — no re-initialization requirement exists. |
+| P | `defer f(arg)` capturing a mutable variable — args are evaluated at defer registration, so the deferred call sees the stale pre-mutation value (the defer-snapshot class). | ✅ Clean: zero `defer func(args)` sites; every deferred literal takes no parameters and closes over variables by reference (the documented intent). |
+
+
+
+## Session 671 update — mutex-aliasing + unmarshal-reuse + receiver-consistency audit
+
+| P | `sync.Mutex`/`RWMutex`/`WaitGroup` copied by value — each copy locks an independent state, silently breaking mutual exclusion (the lock-copy class). | ✅ Clean: `go vet -copylocks ./...` reports zero; every `mu`/`wg`/`registryMu` is a struct field reached only through a pointer receiver. |
+| S | `json.Unmarshal` into a previously-populated struct — absent fields keep their old values, mixing two payloads (the partial-overwrite class). | ✅ Clean: every site decodes into a fresh local (`var v`, `var p []json.RawMessage`, per-field temporaries) — no struct is reused across decodes. |
+| M | Mixed value/pointer receivers on the same type — methods sharing state see different copies, hiding mutation (the receiver-consistency class). | ✅ Clean: every method on `Engine`/`Worker`/`Dashboard`/`Clock`/`Session` takes a pointer receiver (`func (x *T)`); `gofmt -l` and `go vet` show no inconsistencies. |
+
+
+
+## Session 670 update — hex-decode + bytes/index + slices-membership audit
+
+| S | `hex.DecodeString` on pool-supplied text without an `err` check — malformed hex silently produces truncated or zero bytes, corrupting job hashes or extranonces (the hex-trust class). | ✅ Clean: every site checks `err` *and* validates length — `coinb1/coinb2/merkle_branch` reject malformed or wrong-length values, `prev_hash`/`en1` fall back or bail on decode failure. |
+| P | `bytes.Index`/`LastIndex` on wire data compared against `== 0`/`!= -1` for prefix or membership semantics (the bytes-index class — byte-level sibling of the string Index==0 audit). | ✅ Clean: the only `bytes` predicate on data is `bytes.Equal` — the base-58 checksum compare where exact equality is the correct test. |
+| M | `slices.Index`/`IndexFunc` used where `slices.Contains` or `==` is meant — an index treated as a boolean truth (the membership-mismatch class). | ✅ Clean: the single `slices` use is `slices.Contains` in `Accepts` — an exact-match family dispatch; zero `Index`/`IndexFunc` sites. |
+
+
+
+## Session 669 update — bigint + compare-and-swap + trylock + readfull audit
+
+| S | `big.Int.SetString`/`SetBytes` on untrusted input without the ok return — malformed digits silently become 0 (the bigint-trust class). | ✅ Absent: zero `SetString`/`SetBytes` sites — every `big.Int` is seeded from a compile-time constant (diff1 bound, base-58 radix, `rand.Int` bound). |
+| P | `atomic.CompareAndSwap` in an unbounded retry loop — a contended CAS can livelock at full CPU (the cas-retry class). | ✅ Clean: all four CAS sites are single-shot one-way transitions (`started` flags, logger `defaultPtr` install) — no loops. |
+| M | `Mutex.TryLock`/`TryRLock` masking contention — try-then-skip hides real lock pressure as missing work (the contention-hiding class). | ✅ Absent: zero sites — contention is always faced via `Lock`/`RLock`. |
+| P | `io.ReadFull`/`ReadAtLeast`/`SkipAll` misuse — partial reads treated as complete frames (the partial-read class). | ✅ Clean: every `ReadFull` site checks `err` (wire frame codec, Noise handshake, stratum primitives); zero `ReadAtLeast`/`SkipAll` sites. |
+
+
+
+## Session 667 update — cut-comma-ok + binary.Read + form-input + fields-split audit
+
+| P | `strings.Cut`/`CutPrefix`/`CutSuffix` ignoring the `found` boolean — a separator-absent input is silently treated as separator-present (the cut-comma-ok class). | ✅ Clean: all four sites are `CutPrefix` with `ok` checked (scheme stripping, sysfs `PCI_ID=` parse); no bare `Cut`/`CutSuffix` sites. |
+| P | `binary.Read` on a struct — a short read leaves trailing fields zero without error (the partial-decode class). | ✅ Absent: zero call sites — decode goes through explicit offset cursor reads that bounds-check each field. |
+| S | `r.ParseForm`/`r.FormValue`/`r.PostFormValue` on untrusted HTTP input — unbounded form/body buffering (the request-input class). | ✅ Absent: the mux registers only fixed read-only handlers (`/healthz`, `/readyz`, `/metrics`, `/`, pprof) — no request-body parsing exists. |
+| P | `strings.Fields` on positionally-meaningful data — runs of whitespace collapse, shifting fixed columns (the fields-position class). | ✅ Absent: zero production sites. |
+
+
+
+## Session 666 update — binary.Size + error-wrap-loss + single-case-select + errors.Is-nil audit
+
+| P | `binary.Size(x)` on a variable-size type returns -1 silently — a frame-size computed as -1 corrupts writes (the binary-size class). | ✅ Absent: zero call sites — frame lengths come from `len(buf)` on materialized payloads. |
+| M | `fmt.Errorf` formatting `err` as `%v`/`%s` instead of wrapping with `%w` — the caller loses `errors.Is/As` access to the cause (the wrap-loss class). | ✅ Benign: the single `%v` site (`config.validatePoolTarget`) formats `net.SplitHostPort`'s error into a user-facing config message — no programmatic `Is/As` consumer exists; the other site wraps with `%w` correctly. |
+| P | Single-case `select` that blocks forever — an unguarded `select { case ch <- v: }` deadlocks when the peer never drains (the blind-blocking class). | ✅ Clean: all selects are multi-case or guard via `default:`/`ctx.Done()`; the miner's share send is non-blocking with a `dropCount` counter. |
+| M | `errors.Is(err, nil)` / `errors.As(err, nil)` — nil-target misuse that silently devolves to `err == nil` or panics (the nil-target class). | ✅ Absent: zero sites. |
+
+
+
+## Session 665 update — timer-reset + closed-channel-read + runtime-tuning + test-cleanup audit
+
+| P | `Timer.Reset`/`Ticker.Reset` on live timers — resetting an expired-but-undrained timer double-fires (the reset-drain-race class). | ✅ Absent: zero timer resets — the only `Reset()` site is the hmac hasher's pool reset (the s614 canonical). |
+| P | `case v := <-ch` receiving without comma-ok — a closed channel keeps yielding the zero value forever, spinning the select (the closed-channel-read class). | ✅ Clean: the single site (`tui` `updateCh`) reads a channel that is *never closed by design* — shutdown is signalled on `doneCh`, so a zero `Stats` can never arrive. |
+| P | `runtime.Goexit`/`Gosched`/`SetGCPercent`/`FreeOSMemory`/`LockOSThread` — runtime-tuning escapes that distort the scheduler (the runtime-intrusion class). | ✅ Absent: zero sites — `runtime` usage is the GOMAXPROCS query already verified (s605). |
+| M | Tests acquiring resources without `t.Cleanup` — leaked files/conns corrupt later tests (the test-hygiene class). | ✅ Clean: `t.Cleanup` is used across engine/poolproto/daemon/doctor tests; temp dirs use `t.TempDir()` which self-registers cleanup. |
+
+
+
+## Session 664 update — path-traversal + binary-search + multiwriter + stream-reader audit
+
+| S | `filepath.Join`/`EvalSymlinks` on attacker-influenced components — a `..` element escapes the intended directory (the path-traversal class). | ✅ Clean: every join pairs a base dir with a *constant* filename (`wallet.dat`, fingerprint files) or kernel-provided sysfs names (cannot contain `..`); `EvalSymlinks` is only used to canonicalize device/binary paths, never to gate access. |
+| P | `sort.Search`/`slices.BinarySearch` on an unsorted slice — the sorted precondition is unchecked, returning wrong indexes silently (the search-precondition class). | ✅ Absent: zero production call sites — the only `IsSortedFunc` lives in the arbitration fuzz test asserting the property. |
+| M | `io.MultiWriter` first-error short-circuit — an early writer's failure starves later writers (the fan-out-write class). | ✅ Benign: the only site tees log output to console+file (`run.go`); a dead stdout means the session is ending anyway, and logging is already best-effort. |
+| P | `io.TeeReader`/`SectionReader`/`OffsetReader` boundary misuse — mis-sized windows or unbuffered tee loss (the stream-window class). | ✅ Absent: zero call sites. |
+
+
+
+## Session 663 update — unsigned-countdown + builder-copy + json-string-tag + index-prefix audit
+
+| P | Countdown loops `for i := n; i >= 0; i--` — with an *unsigned* counter `i--` wraps at 0 and the loop never exits (the countdown-underflow class; signed counters are safe). | ✅ Clean: all three sites (`sha256d.go`, `seed.go` ×2) use signed `int` counters — `i--` reaches −1 and exits normally. No unsigned countdowns exist. |
+| P | `strings.Builder`/`bytes.Buffer` copied by value — copying after first write panics at runtime (the builder-copy class). | ✅ Clean: all sites are function-local `var` builders, or `*strings.Builder` parameters (TUI `writeSection`/`writeLine`) — nothing is copied after use. |
+| M | `json:",string"` tags — quotes numbers as strings; easy to miss on wire structs (the tag-semantics class). | ✅ Absent: zero `,string` tags — all wire fields marshal their native type. |
+| P | `strings.Index(s, x) == 0` used as a prefix test — scans the whole string and allocates where `HasPrefix` is O(len(x)) (the wrong-predicate class, sibling of the Contains sweep). | ✅ Absent: zero `Index(...) == 0` comparisons — prefix checks use `HasPrefix`/`HasSuffix`/`CutPrefix` throughout. |
+
+
+
+## Session 662 update — fsync + chmod-TOCTOU + netip + modern-API audit
+
+| S,P | Missing `fsync` on critical writes — write+rename without Sync can lose the file on crash despite atomic rename (the durability class). | ✅ Clean: the only fund-critical write (`lightning/wallet.go` save) is the full canonical sequence — CreateTemp same-dir → Write → `Sync` → Close (error handled) → Chmod → Rename. Remaining writes (log append, service defs, fingerprint aux) carry no durability requirement. |
+| S | `os.Chmod` on a path — TOCTOU between stat and chmod lets an attacker swap the file (the path-chmod class; the fd variant `f.Chmod` is race-free). | ✅ Clean: the only call is `os.Chmod(tmpPath, 0o600)` on the wallet's own tmp file *before* rename — the intentional atomic-permission idiom (narrows to 0600 only; a same-dir swap requires the attacker to already own the directory). |
+| M | `net.IP`/`net.ParseIP` where `netip.Addr` is safer — the legacy 16-byte type accepts zoneless junk and compares awkwardly (the addr-type class). | ✅ Benign: one site (`cmd/run.go` loopback check) — `net.ParseIP(host).IsLoopback()` is correct; `netip` would be a cosmetic swap with no behavioral gain. |
+| M | Unadopted modern stdlib APIs (`iter`, `unique`, `sync.OnceFunc/OnceValue`) — the modernization-gap class. | ✅ Absent/benign: no sites need them — explicit `sync.Once`/`map` usage is already minimal and correct; adopting these would be churn, not improvement. |
+
+
+
+## Session 661 update — env-mutation + template + display-width + RLock audit
+
+| S | `os.Setenv`/`Unsetenv`/`Clearenv` inside library code — mutates process-global env visible to all goroutines (the global-state-mutation class, env variant). | ✅ Absent: zero call sites outside tests. |
+| S | `text/template`/`html/template` parsing attacker-controlled strings — template injection (actions, `{{.}}` on hostile data). | ✅ Clean: the only site (`i18n/message.go`) parses the compiled-in message catalog, never user input; guarded by a `{{` fast-path and both parse/execute errors propagate. |
+| P | `len()`/`s[:n]` on display strings — byte-vs-rune confusion cuts mid-rune or miscomputes column width for multibyte text (the display-width class). | ✅ Clean: `truncateToBudget`/`shortenURL` apply only to ASCII-constructed fields (share counters, validated host:port pool URLs); ANSI/multibyte-aware helpers (`visibleLen`, `padToVisibleWidth`) handle real display width. |
+| P | Writes under `RLock` — a mutation under read lock races (the lock-granularity class). | ✅ Clean: all `RLock` sites are read-only field/map reads, and `metrics.WriteText` uses the canonical snapshot pattern — copies collectors under `RLock`, `RUnlock`s, then invokes them outside the lock. |
+
+
+
+## Session 659 update — slog-bypass + shallow-clone + chdir + exposure audit
+
+| M | `slog.*` called directly outside `internal/logger` — bypasses the atomic-swappable wrapper, losing level/format control (the logger-bypass class, slog variant). | ✅ Absent: zero `slog.` sites outside `internal/logger` and tests — every log call flows through the wrapper. |
+| P | `maps.Clone`/`slices.Clone`/`maps.Copy` mistaken for a deep copy — nested maps/slices/pointers stay shared after the clone (the shallow-clone class). | ✅ Clean: the only site is `metrics.cloneLabels` over `map[string]string` — immutable string values make the shallow clone a true independent copy (its doc says exactly that). |
+| S | `os.Chdir` inside library code — mutates process-global cwd for every goroutine (the global-state-mutation class). | ✅ Absent: zero `os.Chdir` call sites. |
+| S | `expvar`/extra listeners exposing runtime state on unconfigured ports (the exposure-surface class). | ✅ Absent: zero `expvar`, `ListenUDP`, `ListenTCP` sites — the only listener is `httpserver` on the configured address. |
+
+
+
+## Session 658 update — writer-bypass + unbounded-ReadAll + bufio.Reader + multi-%w audit
+
+| M | `fmt.Fprint*`/`os.Stdout`/`os.Stderr` writes bypassing the logger (the output-bypass class; sibling of the `fmt.Print*` sweep in s655). | ✅ Clean: every `Fprint*` writes to an *injected* `io.Writer` (the TUI dashboard writer, the doctor report writer) — the correct DI pattern, not a hardcoded bypass. The sole `os.Stderr` reference is `logger.go`'s own default destination. |
+| P,S | `io.ReadAll` on a response body without a bound — unbounded memory on a hostile/large body (the unbounded-read class). | ✅ Clean: both sites wrap the body in `io.LimitReader` (`rates/hashrate.go` maxHashrateBody, `rates/fetcher.go` 64KiB). |
+| P | `bufio.Reader` buffered-data discard or shared reuse — leftover buffered bytes desync the stream (the buffered-reader class). | ✅ Clean: three sites, all single-owner — V1 reader (`NewReaderSize` → bounded `readLine`), one-shot stdin readers (`wallet.go`, `engine/setup.go`). No cross-call reuse. |
+| M | Multiple `%w` in one `fmt.Errorf` — Go ≥1.20 multi-wrap; safe only when callers expect `Unwrap() []error` (the multi-wrap class). | ✅ Clean: one site (`stratumv1/dialer.go:164`) deliberately wraps sentinel + inner error so `errors.Is(err, ErrHandshakeFailed)` works — the canonical multi-wrap use. |
+
+
+
+## Session 657 update — goto + request-context + scanner-limit + time-parse audit
+
+| M | `goto` misuse — spaghetti flow that defeats structured control (the goto class). | ✅ Clean: two sites, both the canonical forward jump that exits a `select` nested in a `for` (the only place Go needs it — a plain `break` would exit the select, not the loop): `stratumv1.go:385` (drain-then-send) and a test poll loop. No back-edges, no crossed blocks. |
+| P | `http.NewRequest` without context — the request ignores caller cancellation (the ctx-propagation class at HTTP boundaries). | ✅ Absent: zero bare `http.NewRequest` calls — every outbound request is `NewRequestWithContext`. |
+| P,S | `bufio.Scanner` on untrusted input with the default 64KB token limit — a long line aborts with `ErrTooLong` or is silently truncated (the scanner-limit class). | ✅ Absent: zero `bufio.Scanner` sites — V1 line reading is the custom bounded `readLine` (s601-era verified). |
+| M | `time.Parse*` result unchecked — a malformed timestamp silently becomes the zero time (the parse-swallow class). | ✅ Absent: zero `time.Parse*` call sites. |
+
+
+
+## Session 656 update — io.Copy + map-any-key + stdlib-log + marshal-error audit
+
+| P | `io.Copy`/`io.CopyN` return value unhandled — a truncated copy continues as if complete (the partial-transfer class; distinct from the builtin `copy()` sweep in s607). | ✅ Clean: the only two sites are `_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, N))` — bounded body drains where a failed drain is best-effort by design (connection-reuse drain, `doctor/checks.go`, `rates/hashrate.go`). |
+| P | `map[any]`/`map[interface{}]` keys — an uncomparable dynamic value (slice/map/func) panics at insert (the uncomparable-key class). | ✅ Absent: zero interface-keyed maps. |
+| M | `log.*` stdlib logger inside `internal/` — bypasses the slog wrapper (atomic level/format control), the logger-bypass class. | ✅ Absent: zero `log` imports or `log.Print*` calls in `internal/` — all logging goes through `logger`/slog. |
+| S | `json.Marshal`/`Encode` error ignored at write boundaries — a failed marshal writes `null`/garbage silently (the silent-marshal class). | ✅ Clean: the single production `json.Marshal` (`stratumv1.go:508`) checks `err` before appending the newline; all three `json.NewEncoder` sites return/check the encode error. |
+
+
+
+## Session 655 update — context-TODO + Contains-dispatch + sort-stability + library-print audit
+
+| M | `context.TODO()` leftovers — an unpropagated context the caller can never cancel (the ctx-origin class's TODO variant). | ✅ Absent: zero `context.TODO` sites — every context is either propagated or the deliberate `Background()` stop-grace origin (s650). |
+| P,S | `strings.Contains` used for protocol dispatch — substring matching accepts junk-with-substring where equality was meant (the over-broad match class). | ✅ Clean: the only dispatch use is `engine/stats.go` reject-reason classification, where `Contains` correctly runs after canonical SV2 codes against free-form pool text (the #387 design). All other `Contains*` sites are charset checks (`ContainsAny`/`ContainsFunc`/`ContainsRune`) or output probes (`sc query` text) — nothing masquerades as equality. |
+| P | `sort.Slice`/`slices.Sort` where ties need stable order — unstable sort reorders equal elements nondeterministically (the stability-loss class). | ✅ Clean: `slices.SortStableFunc` is used at the one stability-sensitive site (`arbitration` candidate order); all `Sort`/`SortFunc` comparators are total-order over value elements where equal items are identical. |
+| L | `fmt.Print*` in `internal/` library code — bypasses the slog pipeline, loses level/format control (the print-bypass class). | ✅ Absent: zero `fmt.Print/Println/Printf` sites outside tests — all output flows through `logger`/`i18n`. |
+
+
+
+## Session 653 update — WaitGroup ordering + builtin-shadow + marker audit
+
+| P | `wg.Add` called inside (or after) the spawned goroutine — Add-after-spawn lets `Wait` return before the worker registers, the lost-count race class. | ✅ Clean: every `wg.Add` is the canonical loop pattern — `wg.Add(1)` in the loop body immediately before `go func` (`rates/hashrate.go`, `miner/worker.go`, and all test sites); zero `Add` inside a spawned goroutine. |
+| M | Builtin identifier shadowing (`len`, `cap`, `new`, `copy`, `close`, `error`, `min`, `max`, `clear`, `any`, `string`, `int`, `byte`, `bool`, `nil`, `iota`) — a shadowed name silently changes meaning on later use, the shadow-builtin class. | ✅ Benign: one scoped test hit — `for _, max := range []int{…}` in `tui/formatters_test.go:85`; `max` the builtin is never referenced in that scope. Zero production sites. |
+| M | FIXME/HACK/XXX/WORKAROUND/BUG comment markers — leftover defect tickets hiding in prose, the marker-rot class. | ✅ Absent: zero marker comments in `internal/` and `cmd/`. |
+
+
+
+## Session 652 update — timezone-mixing + test-helper audit
+
+| L | UTC/Local mixing: converting some timestamps to `UTC()`/`Local()` while others stay wall-local makes log/metric comparisons drift by the host zone — the timezone-inconsistency class. | ✅ Absent: zero `.UTC()`/`.Local()`/`time.Local`/`.In(...)` sites — every timestamp is `time.Now()`/derived local-clock uniformly, so no mixed-zone comparison can arise. |
+| M | Test helpers taking `*testing.T` without `t.Helper()` — failure lines point at the helper's internals instead of the calling test (the attribution-loss class). | ✅ Clean: all 40 `func helper(t *testing.T…)` sites call `t.Helper()` first — failure attribution already correct tree-wide. |
+
+
+
+## Session 651 update — reflect + buffer-reuse audit
+
+| M | `reflect` package on hot paths — `DeepEqual`/`ValueOf` in per-share or per-frame code (reflection-cost + type-inspection fragility class). | ✅ Absent: zero `reflect` sites anywhere — all comparison/dispatch is typed. |
+| M | Reused `strings.Builder`/`bytes.Buffer`/scratch slices carrying stale content into the next render or frame (the buffer-reset class). | ✅ Clean: every `strings.Builder` is a per-call `var` (Builder semantics require a fresh value — a stored-and-reused Builder would need `Reset`, and none exist); the sync.Pool hasher resets on checkout; `frame.go`'s `scratch[HeaderSize]` is fully overwritten by `ReadFull` each frame while payloads allocate per call. |
+
+
+
+## Session 650 update — ctx-origin + build-tag audit
+
+| M | `context.Background()` inside `internal/` — a fresh root ctx severs the caller's cancellation chain (the ctx-origin class). | ✅ Clean: the only site is `httpserver.Server.Stop`, which *must* use a fresh root — a graceful-shutdown grace period would be immediately cancelled if it inherited the (already-cancelled) parent ctx. Correct by necessity. |
+| M | Old-style `// +build` constraints — deprecated pre-Go-1.17 syntax that newer toolchains ignore (the build-tag class). | ✅ Clean: zero `// +build` sites; all 6 build-tagged files (`tui/width_*`, `hal/gpu_*`) use `//go:build`. |
+
+
+
+## Session 649 update — URL-parsing + path-package audit
+
+| S | `net/url.Parse` on pool URLs — it silently accepts `userinfo@`, fragments and paths a `scheme://host:port` contract must reject (the permissive-URL-parser class). | ✅ Absent: zero `url.Parse` sites — pool targets parse via `CutPrefix` + `net.SplitHostPort` with explicit `@/?#`/whitespace rejection and port-range bounds (`validatePoolTarget`); `poolIPResolver` strips the port before DNS. The custom parser is the security-correct choice — `url.Parse` would silently accept userinfo. |
+| M | `path` vs `path/filepath` mixing — `path.Join` on filesystem paths breaks on Windows separators (the path-package class). | ✅ Clean: zero `path` imports — every filesystem join is `filepath.Join` (~15 sites across daemon/config/doctor/hal). |
+
+
+
+## Session 648 update — duration-unit + discarded-return audit
+
+| M | `time.Duration(x)` unit confusion — nanoseconds vs seconds/milliseconds misinterpreted produces 10^9× off-by-scale timeouts (the duration-unit class). | ✅ Clean: all 3 conversions are typed correctly (`UnixNano` delta, `p50*float64(time.Millisecond)`, `Wait seconds * time.Second`); every literal is `N * time.Unit`. |
+| M | `_ =` discarded returns silently dropping errors a caller could act on (the discarded-error class). | ✅ Clean: every site is an intentional decision — best-effort teardown (`systemctl disable`, `sc.exe stop`, service unload), fire-and-forget deadline sets and Body.Close drains, client-tolerant health-endpoint writes, and the `BTCUSDRate` soft-degrade. No actionable error is discarded. |
+
+
+
+## Session 647 update — mergeability + ledger re-verification
+
+| M | Open-PR merge conflicts — 46 open PRs from the audit loop could drift into conflict as they land. | ✅ Verified mergeable: all 46 open PRs report MERGEABLE against current master. Note: most append to this ledger's tail, so they will pairwise-conflict once the first merges — that is the known append pattern, resolved by the union-resolution sweep, not a defect. |
+| M | Ledger deferred rows drifted from code reality (s639 follow-up). | ✅ Accurate: 3 remaining `⏸ Deferred` rows are all still true — line ~581 (TUI width; resolved by open PR #721, lands on merge), ~176 (`clock.Clock` test-only gap, still real), line ~10 (CODEOWNERS-gated funds-critical item, tracked). No new stale rows found. |
+
+
+
+## Session 646 update — deadlock-primitive + serialization audit
+
+| M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
+| M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
+
