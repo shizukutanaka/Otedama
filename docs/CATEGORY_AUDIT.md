@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 753 update — dynamic-fmt + header-dup + chan-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Non-constant format strings — `Sprintf(userInput, ...)`/`Printf(dynamic)` format-injection and vet-blindness. | ✅ Clean: every `Fprintf`/`Sprintf`-family call uses a constant format (backtick literals or quoted constants); vet's printf analysis sees every verb/arg pairing. |
+| M | `Header.Add` on single-value headers — repeated calls duplicate Content-Type/UA lines. | ✅ Clean: all header writes use `Set` on genuinely single-value fields (Content-Type, User-Agent); `Add` appears nowhere — no duplication path exists. |
+| P | `chan` API without direction annotations — receivers able to send on a channel that should be read-only. | ✅ Clean: public boundaries are already directional (`Jobs() <-chan Job`, `PoolNotices() <-chan string`, `<-chan Share`, `chan<- Share`, `[]<-chan T` in fanIn); bidirectional channels exist only as internal machinery. |
+
+All packages build, vet, and test green.
