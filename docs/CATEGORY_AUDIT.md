@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | Config tag asymmetry: an exported field missing `yaml:` becomes silently unconfigurable via file while looking complete (KnownFields would *reject* the yaml key instead — fail-safe) — or missing both tags becoming invisible in dumps. | ✅ Clean: all 13 file-facing fields carry `yaml:` tags (KnownFields decode means an untagged export would be a hard error, not silent loss). The only untagged exports live on internal tracking structs (`ValueOrigin` map, summary view) that never decode files; `config show` emits an explicit doc map keyed by canonical yaml names. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
