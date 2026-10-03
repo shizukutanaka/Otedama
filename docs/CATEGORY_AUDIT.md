@@ -1176,6 +1176,37 @@ log-level parsing, `EqualFold(host, "localhost")` ASCII literal.
 
 
 
+## Session 611 update — strings.Trim* semantics + time.Time comparison audit
+
+**Trim-family set-vs-prefix confusion** — `strings.TrimLeft(s, "x")`
+trims a *character set* (every leading rune in "x"), not the string
+"x" — a classic defect when a prefix is intended
+(`TrimLeft(url, "https://")` eats leading h/t/p/s). All 10 sites
+verified: 9 are `TrimSpace` (whitespace set — always the intended
+semantics), `TrimSuffix(raw, "\n")` removes the one trailing newline
+of the embedded wordlist (suffix semantics — correct), and
+`TrimLeft(typed, "-")` (main.go:158) strips a leading dash *run* for
+subcommand matching, where set-semantics is exactly what's wanted.
+No prefix intended anywhere; zero defects.
+
+**time.Time `==` vs `.Equal()`** — `==` compares the monotonic clock
+reading too, so two Times representing the same instant compare
+unequal after any serialization round-trip (a monotonic-stripping
+defect). Verified: zero `==` comparisons on `time.Time` values — all
+time logic uses `time.Since`, `.Sub`, `.Before`, `.After`
+(monotonic-safe instant/duration ops): staleness pruning
+(`now.Sub(ts) > timeout`), stall detection (`time.Since(lastJobAt)`),
+share latency (`now.Sub(sent)`), temp-file sweep cutoff
+(`ModTime().Before(cutoff)`), and clock-skew measurement
+(`math.Abs(time.Since(serverTime))`). The one pool-controlled
+duration — `time.After(w)` for client.reconnect waits — is bounded
+at parse by `maxReconnectWaitSeconds` (stratumv1.go:310). Zero defects.
+
+| M | Trim set-vs-prefix misuse | Absent — TrimSpace + correct suffix/set usage |
+| M | time.Time `==` monotonic defect | Absent — all comparisons via Before/Sub/Since |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
