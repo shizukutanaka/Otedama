@@ -1137,3 +1137,11 @@ All packages build, vet, and test green.
 | P | `sort.Slice`/`slices.Sort` where ties need stable order — unstable sort reorders equal elements nondeterministically (the stability-loss class). | ✅ Clean: `slices.SortStableFunc` is used at the one stability-sensitive site (`arbitration` candidate order); all `Sort`/`SortFunc` comparators are total-order over value elements where equal items are identical. |
 | L | `fmt.Print*` in `internal/` library code — bypasses the slog pipeline, loses level/format control (the print-bypass class). | ✅ Absent: zero `fmt.Print/Println/Printf` sites outside tests — all output flows through `logger`/`i18n`. |
 
+
+
+## Session 653 update — WaitGroup ordering + builtin-shadow + marker audit
+
+| P | `wg.Add` called inside (or after) the spawned goroutine — Add-after-spawn lets `Wait` return before the worker registers, the lost-count race class. | ✅ Clean: every `wg.Add` is the canonical loop pattern — `wg.Add(1)` in the loop body immediately before `go func` (`rates/hashrate.go`, `miner/worker.go`, and all test sites); zero `Add` inside a spawned goroutine. |
+| M | Builtin identifier shadowing (`len`, `cap`, `new`, `copy`, `close`, `error`, `min`, `max`, `clear`, `any`, `string`, `int`, `byte`, `bool`, `nil`, `iota`) — a shadowed name silently changes meaning on later use, the shadow-builtin class. | ✅ Benign: one scoped test hit — `for _, max := range []int{…}` in `tui/formatters_test.go:85`; `max` the builtin is never referenced in that scope. Zero production sites. |
+| M | FIXME/HACK/XXX/WORKAROUND/BUG comment markers — leftover defect tickets hiding in prose, the marker-rot class. | ✅ Absent: zero marker comments in `internal/` and `cmd/`. |
+
