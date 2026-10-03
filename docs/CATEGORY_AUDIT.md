@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 756 update — scanner-limit + signal-dup + cas-aba audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `bufio.Scanner` 64KB line cap — long V1 notify lines hitting `bufio.ErrTooLong` silently. | ✅ Clean: `bufio.Scanner` absent — V1 line reading uses the bounded custom reader, so the cap class can't arise. |
+| M | Duplicate `signal.Notify` registrations — competing handlers splitting OS signals. | ✅ Clean: exactly one registration point (`signal.NotifyContext` in `run.go`) — no competing handlers anywhere. |
+| P | `CompareAndSwap` ABA — a CAS state machine vulnerable to value returning to an earlier state mid-check. | ✅ Clean: all three CAS sites are one-way guards — `started` flip-flops (init/stop idempotence) and `defaultPtr` init-once (winner-takes-all) — not multi-state machines, so the ABA window can't exist. |
+
+All packages build, vet, and test green.
