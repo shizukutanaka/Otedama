@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 735 update — metric-naming + slog-level + label-build audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Prometheus naming-convention drift — counters without `_total`, unit-bearing metrics without a unit suffix, mixed-case or dotted names breaking scrape parsers. | ✅ Clean: all 45 series share the `otedama_` namespace in snake_case; every counter ends `_total`; unit-bearing gauges carry `_seconds`/`_sats_per_second`/`_hashes_per_second`/`_milliseconds`/`_watts`; `_info` meta-gauges and `_rate` ratios are consistent. |
+| M | slog level discipline — error content emitted at Debug/Info (invisible at default level) or noise at Error. | ✅ Clean: zero Debug/Info sites with error content; all `Warn`/`Error` calls sit on genuine failure paths (rate-fetch failures, engine errors, argv-secret warn); the log-callback adapter maps "warn"/"error" to the right levels. |
+| P | Metric-label value construction via `fmt.Sprintf` — an allocation per emission on the share hot path. | ✅ Clean: all label values are enumerated strings (`reason`, `device`, `address`) with zero Sprintf in label construction; `fmt.Sprintf` appears only in panic messages and value rendering (`%d`/`%g` — correct verbs). |
+
+All packages build, vet, and test green.
