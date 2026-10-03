@@ -824,3 +824,24 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-676 ecosystem update (2026-10-03)
+
+sv2-spec remains quiet — no merges since the Oct-1 normative batch and the
+10/2 roles clarification (#231, recorded in Session-654). Open items unchanged:
+#236 (`SetTarget.target` ≤ channel `max_target` — server-side, vacuous for a
+client that never advertises `max_target`), #234 (authority-key mgmt), #198
+(`coinbase_witness`, TDP-side), #203 (payouts extension). #232/#186 are editorial
+table-cell cleanups; #103 stays a 2024 WIP. SRI release: v1.12.0 (unchanged).
+
+sv2-apps activity of note: #845 renames `target`-message fields to follow the
+#228 spec cleanup — the same alignment Otedama made in PR #704, so the tree is
+already consistent. #839 (jds) binds mining-job tokens to `user_identity` on
+`SetCustomMiningJob` — the reference JDS tightening job-token custody in the
+same direction as this ADR's payout-control argument; worth watching if it
+lands. #856 (`bitcoin_core_sv2` hardening) and #881 (`handle_push_solution`)
+are routine robustness work.
+
+No changes to the ADR's conclusions: the demand-side SV2 trajectory still
+favors pool-side JDP payout isolation, and Otedama's client-only footprint is
+unaffected by every open normative item.
