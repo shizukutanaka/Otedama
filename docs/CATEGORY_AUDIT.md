@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 714 update — err-string + nil-chan + float-drift audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Error identity checked via `err.Error() == "..."` or `Contains` on the message — brittle string coupling where `errors.Is`/`As` or sentinels belong. | ✅ Absent: zero prod sites — error identity goes through `errors.Is`/`errors.As` or direct sentinel comparison (`err == flag.ErrHelp`); no message-string coupling. |
+| P | Accidental nil channel in `select` — `var ch chan T` left nil while a case selects on it (permanent block looks like a stalled event). | ✅ Absent: zero `var ch chan T` declarations — every selected channel is `make`'d at construction; no nil-channel disabling idiom is used. |
+| P | float64 accumulation drift on long-running counters — a `+=` each tick on money-adjacent totals drifting unbounded over days. | ✅ Benign: the single accumulating site (`satsAccountant.observe`) is a display-side expected-accept estimate, guarded against negative elapsed and non-productive intervals; float64 relative error over any realistic uptime stays far below the estimate's own model error. All authoritative counts remain integer (`SharesFound uint64`). |
+
+All packages build, vet, and test green.
