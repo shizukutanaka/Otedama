@@ -852,3 +852,11 @@ All packages build, vet, and test green.
 | P | `fmt.Sprintf` in the hash hot path — per-nonce allocation churn (the hot-format class). | ✅ Clean: `Sprintf` appears only in display formatting (`HashRateString`, log lines) at stats/log cadence; the hashing loop calls `HashHeader` with zero allocs (s534 verified). |
 
 All packages build, vet, and test green.
+
+
+## Session 693 update — file-handle + Must-init + printf-verbs audit
+
+| S | `os.Open*`/`Create*` handles without a `Close` path — descriptor leak until process exit (the file-handle class). | ✅ Clean: `logfile` stores the handle on the owned writer (closed on rotate/close); the wallet temp file closes+removes on every error branch; remaining sites are self-contained `ReadFile`/`WriteFile`; `configfile` defers `Close`. |
+| M | `Must*`/`MustCompile`/`template.Must` initializers — a runtime data problem becomes a process crash (the must-init class). | ✅ Clean: zero sites — all initializations return errors. |
+| S | `fmt.Errorf` verb/argument mismatch — `%d` on a string prints `%!d(MISSING)` and corrupts diagnostics (the printf-verbs class). | ✅ Clean: `go vet ./...` printf analysis reports nothing across ~234 `Errorf` sites. |
+
