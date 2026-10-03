@@ -883,7 +883,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
 	// tip (prev_hash + network nBits + ntime, via SetNewPrevHash) are
-	// known. Jobs without min_ntime are *future jobs*: they activate only
+	// known. Jobs without ntime_start are *future jobs*: they activate only
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
@@ -1037,11 +1037,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					opts.log("debug", fmt.Sprintf("engine: evicted oldest pending job (cap %d)", jobsCap))
 				}
 				switch {
-				case j.HasMinNtime && havePrev:
+				case j.HasNtimeStart && havePrev:
 					// Job for the current chain tip: mine it now. Its own
-					// min_ntime supersedes the tip's (it is never older).
-					startJob(j, j.MinNtime)
-				case !j.HasMinNtime:
+					// ntime_start supersedes the tip's (it is never older).
+					startJob(j, j.NtimeStart)
+				case !j.HasNtimeStart:
 					// Future job: valid only for a chain tip we have not
 					// seen yet. Hold until SetNewPrevHash names it.
 					opts.log("info", fmt.Sprintf("engine: job %d stored (future job, awaiting prev-hash)", j.JobID))
@@ -1070,9 +1070,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				if named != nil {
 					jobs[p.JobID] = named
 					jobOrder = append(jobOrder, p.JobID)
-					ntime := p.MinNtime
-					if named.HasMinNtime && named.MinNtime > ntime {
-						ntime = named.MinNtime
+					ntime := p.NtimeStart
+					if named.HasNtimeStart && named.NtimeStart > ntime {
+						ntime = named.NtimeStart
 					}
 					startJob(named, ntime)
 					opts.log("info", fmt.Sprintf("engine: new prev-hash, job %d nBits=0x%08X",
@@ -1088,7 +1088,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				shareTarget = miner.Hash(pm.msg.SetTarget.Target)
 				if active != nil && havePrev {
 					// Re-issue the current job so workers compare against
 					// the new share target immediately.
@@ -1803,13 +1803,13 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, cha
 }
 
 // rollNTime rolls a stale pool-declared ntime forward to the local wall
-// clock. SRI 1.12.0 tightened share validation to enforce min_ntime/nTime
+// clock. SRI 1.12.0 tightened share validation to enforce ntime_start/nTime
 // bounds on every channel type: a share stamped with the job's original
 // (aging) ntime lands outside the pool's acceptance window once the job
 // has been grinding for a while — a guaranteed reject that burns
 // hashrate for nothing. Rolling ntime forward is standard miner
 // behaviour (it is part of the effective nonce space); a future ntime
-// is kept verbatim since undershooting min_ntime is itself a reject.
+// is kept verbatim since undershooting ntime_start is itself a reject.
 func rollNTime(declared uint32) uint32 {
 	if now := uint32(time.Now().Unix()); declared < now {
 		return now
