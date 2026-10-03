@@ -16,7 +16,7 @@ import (
 func FuzzMessageDecoders(f *testing.F) {
 	seeds := [][]byte{
 		// Minimally-shaped valid-ish payloads.
-		mkBytes(49, 0x20), // NewMiningJob without min_ntime
+		mkBytes(49, 0x20), // NewMiningJob without ntime_start
 		append(append(mkBytes(8, 0x00), 0x01), mkBytes(4+4+32, 0x30)...), // OPTION=1 shape
 		mkBytes(48, 0x20), // SetNewPrevHash
 		mkBytes(36, 0x21), // SetTarget
@@ -66,11 +66,11 @@ func TestMessageDecoderBounds(t *testing.T) {
 	if _, err := DecodeNewMiningJob(mkBytes(45, 0)); err != nil {
 		t.Fatalf("NewMiningJob rejected minimal valid shape: %v", err)
 	}
-	// OPTION flag = 1 but body too short for present min_ntime.
+	// OPTION flag = 1 but body too short for present ntime_start.
 	bad := append(mkBytes(8, 0), 0x01)
 	bad = append(bad, mkBytes(10, 0)...)
 	if _, err := DecodeNewMiningJob(bad); err == nil {
-		t.Fatal("NewMiningJob accepted truncated min_ntime payload")
+		t.Fatal("NewMiningJob accepted truncated ntime_start payload")
 	}
 	if _, err := DecodeSetNewPrevHash(mkBytes(47, 0)); err == nil {
 		t.Fatal("SetNewPrevHash accepted 47-byte payload")
