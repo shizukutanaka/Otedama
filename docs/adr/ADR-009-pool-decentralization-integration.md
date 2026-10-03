@@ -824,3 +824,22 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-668 ecosystem update (2026-10-03)
+
+Seventh recheck of the upstream landscape since the session-660 update:
+
+- **sv2-spec** — no merges since the Oct-1 normative batch; #231's role-terminology
+  definitions remain the newest normative text. The open list is unchanged:
+  #236 (`SetTarget.target` ≤ channel `max_target`; still server-side, vacuous for
+  Otedama which never advertises a max_target), #234 (authority-key management),
+  #203 (payouts extension), #198 (coinbase_witness). No new issues filed.
+- **SRI** — v1.12.0 remains latest (2026-09-17).
+- **sv2-apps** — housekeeping continues (#907 docs, #900 stratum-core bump, #875
+  single-workspace consolidation). Notably #857 adds *pool payout policy
+  isolation for solo mining*: upstream pools now isolate payout policy per
+  coinbase output — directly aligned with this ADR's decentralization thesis,
+  and further evidence the ecosystem is standardizing the non-custodial payout
+  pattern Otedama already ships.
+
+No spec action required from Otedama. Continued monitoring of #236/#234.
