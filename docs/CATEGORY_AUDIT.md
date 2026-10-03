@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | `for v := range ch` where the producer never closes — the consumer blocks at the range head forever once senders exit (the hung-range class; can't observe ctx). | ✅ Absent: zero range-over-channel sites — all channel consumption is `select`-based with `ctx.Done()` cases (fanIn per-channel goroutines, session `Jobs()`, `merged` shares). The only `range` hits are map/slice iteration. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
