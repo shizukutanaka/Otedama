@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 737 update — argv-bound + zero-value + make-hint audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `os.Args` indexing and positional args — `args[0]` on an empty slice or unguarded positional indexing panics. | ✅ Clean: the only direct read is `os.Args[1:]` (main.go:110 — slicing past end is legal); all positional dispatch goes through `flag.FlagSet` argument lists, never indexed. |
+| M | Zero-value struct trap — a constructible `T{}` whose methods panic on nil map/slice fields. | ✅ Clean: every multi-field config honors zero-value semantics — `WorkerConfig{}` normalizes `Threads<=0`→NumCPU inside NewWorker; `Options.Input/Output` nil-guard to os.Stdin/Stdout; all internal maps/slices are lazily created inside the type. |
+| S | `make()` with unvalidated size hints — a pool- or config-derived capacity forcing a huge allocation. | ✅ Clean: every variable-capacity site is bounded — `MsgLength` checked against `MaxFrameSize` pre-alloc (frame.go:293); Noise `ctLen` width-bounded by u16; extranonce2 bounded (session 262); `Threads` is NumCPU-derived, not user-set; the rest are named constants or `len()`. |
+
+All packages build, vet, and test green.
