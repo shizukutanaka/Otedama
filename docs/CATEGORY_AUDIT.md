@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | L | Modernization leftovers, batch 2: `io/ioutil` legacy calls, `reflect` escape hatches, `filepath.Walk` (vs `WalkDir`), manual multi-error concat (vs `errors.Join`), `signal.Notify` channel plumbing (vs `signal.NotifyContext`). | ✅ Clean: `io/ioutil`, `reflect`, `filepath.Walk` all zero — the tree is fully post-1.16 idiom. `errors.Join` used exactly once at its natural site (rates fetcher joining per-source failures, `joined != nil` guard). Signal handling is the canonical `signal.NotifyContext(ctx, os.Interrupt, SIGTERM)` in run.go:208. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
