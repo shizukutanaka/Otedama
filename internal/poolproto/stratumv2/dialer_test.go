@@ -89,7 +89,7 @@ func TestDialer_RegisteredInRegistry(t *testing.T) {
 
 // TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash drives a full handshake
 // against an in-memory fake pool and asserts the SV2 activation
-// semantics: a future job (no min_ntime) is NOT emitted on its own; the
+// semantics: a future job (no ntime_start) is NOT emitted on its own; the
 // SetNewPrevHash naming it triggers emission of a fully-populated
 // poolproto.Job (version, prev-hash, ntime, nBits, clean flag).
 func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
@@ -129,7 +129,7 @@ func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
 			return
 		}
 
-		// Future job (no min_ntime): must not be emitted yet.
+		// Future job (no ntime_start): must not be emitted yet.
 		job := stratum.NewMiningJob{ChannelID: 7, JobID: 5, Version: 0x20000002}
 		for i := range job.MerkleRoot {
 			job.MerkleRoot[i] = byte(i)
@@ -144,7 +144,7 @@ func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
 		// SetNewPrevHash activates job 5.
 		prev := stratum.SetNewPrevHash{
 			ChannelID: 7, JobID: 5,
-			MinNtime: 0x66000000, NBits: 0x1d00ffff,
+			NtimeStart: 0x66000000, NBits: 0x1d00ffff,
 		}
 		for i := range prev.PrevHash {
 			prev.PrevHash[i] = byte(0xB0 + i%16)
@@ -422,7 +422,7 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 	const chanID = uint32(1)
 	go func() {
 		pool.doHandshake(chanID)
-		// Send a future job (no min_ntime), then the SetNewPrevHash that
+		// Send a future job (no ntime_start), then the SetNewPrevHash that
 		// activates it — the SV2 pair required before a job is emittable.
 		// NBits/ntime now arrive on SetNewPrevHash, not NewMiningJob.
 		job := stratum.NewMiningJob{
@@ -434,10 +434,10 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
 
 		prev := stratum.SetNewPrevHash{
-			ChannelID: chanID,
-			JobID:     100,
-			MinNtime:  0x60000000,
-			NBits:     0x170d21b4,
+			ChannelID:  chanID,
+			JobID:      100,
+			NtimeStart: 0x60000000,
+			NBits:      0x170d21b4,
 		}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 	}()
@@ -870,19 +870,19 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 
 	// jobsCh has a buffer of 8. Send 12 jobs without reading from Jobs() to
 	// fill the buffer, then cancel ctx so the readLoop's select fires ctx.Done().
-	// SetNewPrevHash first establishes havePrev so each job (HasMinNtime=true)
+	// SetNewPrevHash first establishes havePrev so each job (HasNtimeStart=true)
 	// emits immediately instead of waiting as a future job.
 	go func() {
 		pool.doHandshake(1)
-		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, NtimeStart: 0x60000000, NBits: 0x1d00ffff}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 		for i := 0; i < 12; i++ {
 			job := stratum.NewMiningJob{
-				ChannelID:   1,
-				JobID:       uint32(i),
-				HasMinNtime: true,
-				MinNtime:    0x60000000,
-				Version:     0x20000000,
+				ChannelID:     1,
+				JobID:         uint32(i),
+				HasNtimeStart: true,
+				NtimeStart:    0x60000000,
+				Version:       0x20000000,
 			}
 			copy(job.MerkleRoot[:], make([]byte, 32))
 			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
@@ -933,9 +933,9 @@ func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
 		// Then establish the chain tip and send a real (immediately-active)
 		// job — readLoop should continue past the malformed frame and
 		// deliver it.
-		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 77, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 77, NtimeStart: 0x60000000, NBits: 0x1d00ffff}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
-		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, HasNtimeStart: true, NtimeStart: 0x60000000, Version: 0x20000000}
 		copy(job.MerkleRoot[:], make([]byte, 32))
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
 	}()
@@ -1064,7 +1064,7 @@ func TestSession_PendingJobsBounded(t *testing.T) {
 		pool.doHandshake(7)
 
 		// Flood pendingJobs far past pendingCap — all future jobs (no
-		// min_ntime), so they sit in the map waiting for a tip.
+		// ntime_start), so they sit in the map waiting for a tip.
 		for i := uint32(1); i <= pendingCap+6; i++ {
 			job := stratum.NewMiningJob{ChannelID: 7, JobID: i, Version: 0x20000000}
 			for k := range job.MerkleRoot {
@@ -1075,10 +1075,10 @@ func TestSession_PendingJobsBounded(t *testing.T) {
 
 		// Activate the NEWEST job: if FIFO eviction kept it, it emits.
 		prev := stratum.SetNewPrevHash{
-			ChannelID: 7,
-			JobID:     pendingCap + 6,
-			MinNtime:  0x60000000,
-			NBits:     0x207fffff,
+			ChannelID:  7,
+			JobID:      pendingCap + 6,
+			NtimeStart: 0x60000000,
+			NBits:      0x207fffff,
 		}
 		writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 		// Keep the conn open until the client has had time to emit.
