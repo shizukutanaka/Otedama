@@ -152,10 +152,10 @@ func (p *mockPool) handleConn(conn net.Conn) {
 		return
 	}
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     100,
-		MinNtime:  uint32(time.Now().Unix()),
-		NBits:     0x1d00ffff,
+		ChannelID:  1,
+		JobID:      100,
+		NtimeStart: uint32(time.Now().Unix()),
+		NBits:      0x1d00ffff,
 	}
 	for i := range prev.PrevHash {
 		prev.PrevHash[i] = byte(0x10 + i)
