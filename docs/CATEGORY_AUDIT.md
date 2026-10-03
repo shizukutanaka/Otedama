@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 701 update — secret-hex + copy-order + shift-count audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `%x`/`hex.EncodeToString` applied to secret bytes — keys/seeds/nonces land in logs (the secret-hex class). | ✅ Clean: every hex call encodes public data — block `Hash.String`, V1 extranonce2, the 4-byte MAC fingerprint, the wordlist checksum. No key/seed/ciphertext reaches a formatter. |
+| M | `copy(src, dst)` argument-order reversal — destination silently stays zeroed (the copy-order class). | ✅ Clean: all 13 sites are `copy(dst, src)` — header packing, big-endian conversion, Noise state/key copies. |
+| S | Shift counts ≥ operand width or negative — silent zero results or runtime panic (the shift-count class). | ✅ Clean: every shift uses literal counts ≤ width or provably bounded loops (`stride <<= 1` capped by `total ≤ 1<<31`; `8*i` with `i < len ≤ 8`; `uint(i)` bit walks under 8). |
+
+All packages build, vet, and test green.
