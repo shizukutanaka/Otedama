@@ -908,3 +908,11 @@ All packages build, vet, and test green.
 | S | `tls.Config{InsecureSkipVerify: true}` or `MinVersion < TLS12` — MITM-capable connections (the tls-verify class). | ✅ Clean: zero `InsecureSkipVerify`; every client config sets `MinVersion: tls.VersionTLS12` (stratum/tls.go, stratumv1/tls.go); protocol `MinVersion` fields are SV2 wire values, not TLS. |
 | S | `rand.Seed`/`rand.New` with predictable seeds (`time.Now`) on security paths — weak token generation (the rand-seed class; extends s624). | ✅ Clean: zero `math/rand`/`Seed`/`rand.New` — all randomness is `crypto/rand` (s624). |
 
+
+
+## Session 685 update — external-endpoint + any-signature + dialer-goroutine audit
+
+| S | `https?://` literals reaching undeclared endpoints — telemetry or exfil surface hiding in string constants (the endpoint-inventory class). | ✅ Clean: every external literal is a declared feed — Coinbase/Kraken/CoinGecko rate sources, mempool.space + blockchain.info hashrate sources, `api.coinbase.com/v2/time` doctor clock-skew probe, plist DTD and spec links in comments. No telemetry URL exists. |
+| M | `any`/`interface{}` parameters in exported (capitalized) functions — weakly-typed public surface (the any-signature class). | ✅ Clean: zero sites — exported APIs are concretely typed; `any` appears only as map values on internal decode paths (validated in earlier sessions). |
+| S | `go func` spawned in dialers/session code without a completion signal — detached workers that leak past `Close` (the dialer-goroutine class; extends the s553 leak map). | ✅ Clean: zero `go func` inside `internal/poolproto/`; the engine's background goroutines all select on `ctx.Done()` and join via `wg`/`done` (s553). |
+
