@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 662 update — fsync + chmod-TOCTOU + netip + modern-API audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S,P | Missing `fsync` on critical writes — write+rename without Sync can lose the file on crash despite atomic rename (the durability class). | ✅ Clean: the only fund-critical write (`lightning/wallet.go` save) is the full canonical sequence — CreateTemp same-dir → Write → `Sync` → Close (error handled) → Chmod → Rename. Remaining writes (log append, service defs, fingerprint aux) carry no durability requirement. |
+| S | `os.Chmod` on a path — TOCTOU between stat and chmod lets an attacker swap the file (the path-chmod class; the fd variant `f.Chmod` is race-free). | ✅ Clean: the only call is `os.Chmod(tmpPath, 0o600)` on the wallet's own tmp file *before* rename — the intentional atomic-permission idiom (narrows to 0600 only; a same-dir swap requires the attacker to already own the directory). |
+| M | `net.IP`/`net.ParseIP` where `netip.Addr` is safer — the legacy 16-byte type accepts zoneless junk and compares awkwardly (the addr-type class). | ✅ Benign: one site (`cmd/run.go` loopback check) — `net.ParseIP(host).IsLoopback()` is correct; `netip` would be a cosmetic swap with no behavioral gain. |
+| M | Unadopted modern stdlib APIs (`iter`, `unique`, `sync.OnceFunc/OnceValue`) — the modernization-gap class. | ✅ Absent/benign: no sites need them — explicit `sync.Once`/`map` usage is already minimal and correct; adopting these would be churn, not improvement. |
+
+All packages build, vet, and test green.
