@@ -996,3 +996,11 @@ All packages build, vet, and test green.
 | S | Calling a pointer-receiver method through a possibly-nil `*T` — a nil self inside the method derefs implicitly (the nil-receiver class). | ✅ Clean: all 145 pointer-receiver methods are only invoked after successful construction; `return nil` sites produce typed-error interfaces, never a nil `*Session`/`*Engine` passed onward (typed-nil itself verified in s640). |
 | M | `fmt.Errorf` with a constant format string where `errors.New` is idiomatic — harmless but inconsistent error-construction style (the error-style class). | ✅ Benign: ~8 sites use `fmt.Errorf("engine: ...")` with no verbs — the codebase consistently prefers `fmt.Errorf` everywhere, which is a defensible house style rather than a defect. |
 
+
+
+## Session 672 update — map-delete + sync.Once + defer-arg-snapshot audit
+
+| P | `delete(m, k)` on a shared map as state invalidation — racing readers see the stale value between the check and the delete, or a deleted-but-resurrected entry (the invalidate-race class). | ✅ Clean: every delete is inside a lock or on a single-owner map — `pruneStaleStreams` GC under `streamsMu`, `jobs`/`pending` LRU eviction bounded, `submitTimes`/`submitTargets` single-engine-goroutine. Deleting during `range` is a defined operation in Go. |
+| M | `sync.Once` used where re-initialization is later needed — a `Do` can't be reset, silently skipping a required re-run (the once-reuse class). | ✅ Clean: all four sites are exactly the lifecycle idempotence `Once` is designed for (`closeOnce`×3, `startOnce`×1) — no re-initialization requirement exists. |
+| P | `defer f(arg)` capturing a mutable variable — args are evaluated at defer registration, so the deferred call sees the stale pre-mutation value (the defer-snapshot class). | ✅ Clean: zero `defer func(args)` sites; every deferred literal takes no parameters and closes over variables by reference (the documented intent). |
+
