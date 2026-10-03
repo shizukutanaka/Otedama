@@ -769,14 +769,19 @@ All packages build, vet, and test green.
 
 ## Session 632 update — callback-under-lock + nil-channel audit
 
-| Cat | Finding | Disposition |
-|---|---|---|
 | M | Callback under mutex: `runArbitrationLoop` invoked the injected `opts.log` per pruned key while holding `streamsMu` — the one site where a func value was called inside a critical section. Benign today (the logger is a leaf slog sink), but the pattern re-introduces the lock-held-across-callout class. | ✅ **Fixed**: prune under lock, log after `Unlock()` (same call order, callback now outside the section). Every other mutex region (`updateStream`, fetcher `mu`/`inflightMu`, stats `activityMu`) contains only map/metric writes — no interface or func-value calls under a held lock remain. |
 | M | Nil channel in select — a possibly-nil channel field used in send/recv blocks forever. | ✅ Clean: the only possibly-nil channel is `notices` in `runStatsLoop`, deliberately nil-then-assigned for the select-disabled idiom (documented; also reset to nil on close to un-ready the case). `tokens`/`done`/all producer channels are `make()`'d in their constructors before exposure. |
 
 All packages build, vet, and test green (`go test -race ./internal/engine/`).
 
----
+
+## Session 636 update — timer-leak + request-reuse + endian audit
+
+| M | `<-time.After(d)` inside a re-entering select loop — each iteration allocates a timer that lives until it fires (the timer-leak class). | ✅ Clean: the single `time.After` site (run.go:1431) fires at most once per session teardown — a one-shot pool-requested reconnect wait, ctx-cancellable and already clamped by `ReconnectWait`. Not inside a hot re-entering loop. |
+| M | `http.Request` reused across retry attempts — the body is consumed on the first `Do`, so retries send an empty body. | ✅ Absent: no `client.Do` inside a retry loop; all 3 sites build the request per call, and the pool reconnect loop retries `DialURL` (fresh conn + handshake per attempt, never a consumed request). |
+| P | Endianness mixing across the binary surface — an accidentally `BigEndian` field would silently corrupt wire values. | ✅ Clean: every `binary.` call is `LittleEndian` (wire u16/u32, Noise nonce/len prefixes, frame header, miner block-header fields — all spec-mandated LE); zero `BigEndian`/`binary.Read`. |
+
+
 
 ## Session 645 update — embed + weak-crypto audit
 
