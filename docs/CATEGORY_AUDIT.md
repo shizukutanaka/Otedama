@@ -1020,3 +1020,12 @@ All packages build, vet, and test green.
 | P | `bytes.Index`/`LastIndex` on wire data compared against `== 0`/`!= -1` for prefix or membership semantics (the bytes-index class — byte-level sibling of the string Index==0 audit). | ✅ Clean: the only `bytes` predicate on data is `bytes.Equal` — the base-58 checksum compare where exact equality is the correct test. |
 | M | `slices.Index`/`IndexFunc` used where `slices.Contains` or `==` is meant — an index treated as a boolean truth (the membership-mismatch class). | ✅ Clean: the single `slices` use is `slices.Contains` in `Accepts` — an exact-match family dispatch; zero `Index`/`IndexFunc` sites. |
 
+
+
+## Session 669 update — bigint + compare-and-swap + trylock + readfull audit
+
+| S | `big.Int.SetString`/`SetBytes` on untrusted input without the ok return — malformed digits silently become 0 (the bigint-trust class). | ✅ Absent: zero `SetString`/`SetBytes` sites — every `big.Int` is seeded from a compile-time constant (diff1 bound, base-58 radix, `rand.Int` bound). |
+| P | `atomic.CompareAndSwap` in an unbounded retry loop — a contended CAS can livelock at full CPU (the cas-retry class). | ✅ Clean: all four CAS sites are single-shot one-way transitions (`started` flags, logger `defaultPtr` install) — no loops. |
+| M | `Mutex.TryLock`/`TryRLock` masking contention — try-then-skip hides real lock pressure as missing work (the contention-hiding class). | ✅ Absent: zero sites — contention is always faced via `Lock`/`RLock`. |
+| P | `io.ReadFull`/`ReadAtLeast`/`SkipAll` misuse — partial reads treated as complete frames (the partial-read class). | ✅ Clean: every `ReadFull` site checks `err` (wire frame codec, Noise handshake, stratum primitives); zero `ReadAtLeast`/`SkipAll` sites. |
+
