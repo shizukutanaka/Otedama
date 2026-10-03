@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 757 update — defer-binding + label-hierarchy + range-discard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defer x.mu.Unlock()` receiver rebinding — if the field were swapped post-defer, Unlock releases a different mutex than Lock grabbed. | ✅ Clean: receiver evaluated at defer registration and every mutex field is fixed at construction (never reassigned); all sites are the canonical lock-pair form. |
+| M | Labeled `break`/`continue` — an out-of-level jump escaping the wrong loop in nested structure. | ✅ Clean: no named labels exist — the only colon-lines are `default:` cases; nested exits use plain break/continue with ctx.Done cases (session-732 verified). |
+| M | Bare `for range` discarding values — index/value accidentally unused where the element was intended. | ✅ Clean: single site drains exactly `len(f.sources)` results from the results channel — a count-based gather loop where the index is deliberately unused. |
+
+All packages build, vet, and test green.
