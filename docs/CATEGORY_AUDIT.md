@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 722 update — time-add + error-discard + blank-import audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `time.Add`/`AddDate` on unbounded or user-controlled durations — a far-future/wrapped deadline silently disabling a guard (or negative duration pre-expiring it). | ✅ Clean: every `time.Add` uses a compile-time or config-validated constant (`handshakeTimeout`, `10s`, `5m`, `-staleTempMaxAge`) — no unbounded duration reaches a deadline computation. |
+| S | `_ =` swallowing *error* values — a failed operation whose error was the only signal. | ✅ Clean: all discards are documented unactionables — HTTP health-endpoint writes (client disconnect can't be fixed), `fmt.Sscanf` where a malformed value fails validation downstream, bounded `io.Copy` drains before Close, and one explicitly commented `// intentionally ignored: non-fatal`. |
+| M | Blank imports (`import _ "..."`) with undocumented side effects — hidden init() work the reader can't see. | ✅ Clean: 2 sites, both `_ "internal/poolproto/stratumv1"` — the documented self-registration import (V1's init() registers its dialer into the poolproto registry); no hidden side effect beyond the deliberate one. |
+
+All packages build, vet, and test green.
