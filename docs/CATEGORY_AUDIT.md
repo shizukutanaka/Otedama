@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 672 update — map-delete + sync.Once + defer-arg-snapshot audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `delete(m, k)` on a shared map as state invalidation — racing readers see the stale value between the check and the delete, or a deleted-but-resurrected entry (the invalidate-race class). | ✅ Clean: every delete is inside a lock or on a single-owner map — `pruneStaleStreams` GC under `streamsMu`, `jobs`/`pending` LRU eviction bounded, `submitTimes`/`submitTargets` single-engine-goroutine. Deleting during `range` is a defined operation in Go. |
+| M | `sync.Once` used where re-initialization is later needed — a `Do` can't be reset, silently skipping a required re-run (the once-reuse class). | ✅ Clean: all four sites are exactly the lifecycle idempotence `Once` is designed for (`closeOnce`×3, `startOnce`×1) — no re-initialization requirement exists. |
+| P | `defer f(arg)` capturing a mutable variable — args are evaluated at defer registration, so the deferred call sees the stale pre-mutation value (the defer-snapshot class). | ✅ Clean: zero `defer func(args)` sites; every deferred literal takes no parameters and closes over variables by reference (the documented intent). |
+
+All packages build, vet, and test green.
