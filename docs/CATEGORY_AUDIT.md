@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 700 update — audit-program coverage checkpoint (milestone)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | The mechanical per-class sweep program (sessions 586–699) has recorded verdicts for ~100 distinct defect classes across the Go surface: memory/aliasing, concurrency (locks, channels, contexts, timers, goroutines), crypto (nonces, TLS, cert pools, weak primitives), I/O (files, sockets, HTTP, YAML/JSON decoders), serialization, error handling, and idiom traps (iota drift, positional literals, printf verbs, defer interactions). | ✅ Clean: every class verified — verdicts recorded per session above; the only fixes required were s632 (log callback outside `streamsMu`), s639 (two stale ledger rows), plus queued items #704 (spec-#228 field rename) and #705 (test goroutine hygiene). |
+| M | Ledger state: master's copy ends at session 645; sessions 646–699 are queued as open PRs in strict append order. Remaining tracked non-clean rows from the base audit: `clock.Clock` injection (deferred, design), CODEOWNERS-gated funds-critical items (🚩 by policy), and TUI-width/ValidateAddress rows resolved in #721 (pending merge). | ⏸ Tracked — no new unresolved rows since s639. |
+| M | Coverage is saturating: recent sessions re-verify ~0 residual defects per class, so the remaining useful cadence is (a) periodic ecosystem rechecks (ADR-009, ~every 7 sessions), (b) targeted re-sweeps when code actually lands on master, and (c) new-class sweeps only when a genuinely distinct class remains un-recorded. | ❎ Verified — diminishing returns acknowledged in the ledger itself. |
+
+All packages build, vet, and test green.
