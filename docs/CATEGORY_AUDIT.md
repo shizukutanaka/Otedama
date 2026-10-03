@@ -1242,6 +1242,36 @@ non-finite floats). Zero defects.
 
 
 
+## Session 608 update — defer-in-loop + map-mutation-during-range audit
+
+Two scheduling/state defect classes swept.
+
+**defer-in-loop** — a `defer` executed once per loop iteration defers
+the cleanup until the *function* returns, accumulating resources
+(handles, locks, ticker alloc) for the loop's lifetime. All ~90 defer
+sites inspected: every defer is function-scoped or goroutine-scoped —
+the run.go ticker defers (216, 289, 1861) sit inside `go func(){...}()`
+bodies so each runs once when its goroutine exits on ctx.Done, and
+run.go:247's `defer func(){ for _, w := range workers { w.Stop() } }`
+is a function-exit sweep, not a per-iteration defer. Zero
+per-iteration defer sites.
+
+**map mutation during range** — Go permits deleting the current key
+during iteration, but writes/deletes to other entries mid-iteration or
+concurrent writes are a panic/corruption class. All sites verified:
+`pruneStaleStreams` (arbitrate.go:255) deletes only the *current* key
+under the streams mutex; `ypd[k] = v` / `copied[id] = msg` /
+`prev[j] = j` all write to a *different* (fresh or DP) container while
+reading the source — the documented deep-copy idiom; the FIFO evictions
+(`jobs`, `pending`, `pendingOrder`) run outside iteration; stratumv1
+`pending` and engine `submitTimes`/`submitTargets` deletes execute in
+the single owning readLoop goroutine. Zero violations.
+
+| M | defer-in-loop resource accumulation | Absent — all defers function/goroutine-scoped |
+| M | map mutation during range | Absent — current-key delete, fresh-map writes, owner-goroutine deletes |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
