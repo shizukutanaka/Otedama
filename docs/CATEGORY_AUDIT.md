@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 711 update — ctx-decouple + symlink-attack + ip-classification audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `context.WithoutCancel`/`context.AfterFunc` decoupling a lifecycle scope — teardown or goroutines outliving the cancellation that owns them (leak/classic use-after-cancel). | ✅ Absent: zero `WithoutCancel`/`AfterFunc` sites — every scope derives from its parent via `WithTimeout`/`WithCancel`/`NotifyContext`; no detached lifetimes exist. |
+| S | Symlink/hardlink attacks on secret-adjacent paths — following links in `~/.otedama` or opening `O_NOFOLLOW`-sensitive files an attacker could redirect. | ✅ Absent: zero `os.Symlink`/`os.Link`/`os.Lstat`/`ReadLink` in production; the two `filepath.EvalSymlinks` sites canonicalize *trusted* paths in the safe direction (own binary for the service definition, kernel sysfs device nodes for GPU dedup) — no attacker-writable target is resolved. |
+| S | IP classification misuse — `IsLoopback`/`IsPrivate`/`ParseIP` errors letting a non-loopback bind or pool address slip the loopback checks. | ✅ Correct: the sole classifier (`isLoopbackAddr` for the `--pprof`/`--http-addr` bind warnings) strips `[]`, accepts the `"localhost"` literal, then `net.ParseIP` + `IsLoopback()` (127/8 + ::1); unparseable names return false → warn, the fail-safe direction. |
+
+All packages build, vet, and test green.
