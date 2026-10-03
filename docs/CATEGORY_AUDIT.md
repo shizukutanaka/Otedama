@@ -754,3 +754,16 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 666 update — binary.Size + error-wrap-loss + single-case-select + errors.Is-nil audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | `binary.Size(x)` on a variable-size type returns -1 silently — a frame-size computed as -1 corrupts writes (the binary-size class). | ✅ Absent: zero call sites — frame lengths come from `len(buf)` on materialized payloads. |
+| M | `fmt.Errorf` formatting `err` as `%v`/`%s` instead of wrapping with `%w` — the caller loses `errors.Is/As` access to the cause (the wrap-loss class). | ✅ Benign: the single `%v` site (`config.validatePoolTarget`) formats `net.SplitHostPort`'s error into a user-facing config message — no programmatic `Is/As` consumer exists; the other site wraps with `%w` correctly. |
+| P | Single-case `select` that blocks forever — an unguarded `select { case ch <- v: }` deadlocks when the peer never drains (the blind-blocking class). | ✅ Clean: all selects are multi-case or guard via `default:`/`ctx.Done()`; the miner's share send is non-blocking with a `dropCount` counter. |
+| M | `errors.Is(err, nil)` / `errors.As(err, nil)` — nil-target misuse that silently devolves to `err == nil` or panics (the nil-target class). | ✅ Absent: zero sites. |
+
+All packages build, vet, and test green.
