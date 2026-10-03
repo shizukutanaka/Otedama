@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 675 update — errors.Join + multi-wrap + func-assertion audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `errors.Join`/`errors.Unwrap` misuse — joining a single error or unwrapping an interface without cause hides the real failure class (the multiwrap-mismatch class). | ✅ Clean: the sole `errors.Join` (rates fetcher) aggregates per-source errors then nil-checks, preserving each cause for `errors.Is` — the documented Go 1.20+ pattern; zero `errors.Unwrap` call sites. |
+| M | `fmt.Errorf` with multiple `%w` — silently dropping causes or formatting them as `%!w(MISSING)` (the multi-wrap class). | ✅ Clean: the single site (`stratumv1/dialer.go:164`) wraps `poolproto.ErrHandshakeFailed` + the transport error — both reachable via `errors.Is`, which is correct multi-wrap. |
+| S | `.​(func…)` type assertions on `any` — a wrong dynamic type panics at the call boundary (the func-assert class). | ✅ Absent: zero sites — callbacks are statically typed fields, never smuggled through `any`. |
+
+All packages build, vet, and test green.
