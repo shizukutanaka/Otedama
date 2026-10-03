@@ -1074,3 +1074,12 @@ All packages build, vet, and test green.
 | M | `json:",string"` tags — quotes numbers as strings; easy to miss on wire structs (the tag-semantics class). | ✅ Absent: zero `,string` tags — all wire fields marshal their native type. |
 | P | `strings.Index(s, x) == 0` used as a prefix test — scans the whole string and allocates where `HasPrefix` is O(len(x)) (the wrong-predicate class, sibling of the Contains sweep). | ✅ Absent: zero `Index(...) == 0` comparisons — prefix checks use `HasPrefix`/`HasSuffix`/`CutPrefix` throughout. |
 
+
+
+## Session 662 update — fsync + chmod-TOCTOU + netip + modern-API audit
+
+| S,P | Missing `fsync` on critical writes — write+rename without Sync can lose the file on crash despite atomic rename (the durability class). | ✅ Clean: the only fund-critical write (`lightning/wallet.go` save) is the full canonical sequence — CreateTemp same-dir → Write → `Sync` → Close (error handled) → Chmod → Rename. Remaining writes (log append, service defs, fingerprint aux) carry no durability requirement. |
+| S | `os.Chmod` on a path — TOCTOU between stat and chmod lets an attacker swap the file (the path-chmod class; the fd variant `f.Chmod` is race-free). | ✅ Clean: the only call is `os.Chmod(tmpPath, 0o600)` on the wallet's own tmp file *before* rename — the intentional atomic-permission idiom (narrows to 0600 only; a same-dir swap requires the attacker to already own the directory). |
+| M | `net.IP`/`net.ParseIP` where `netip.Addr` is safer — the legacy 16-byte type accepts zoneless junk and compares awkwardly (the addr-type class). | ✅ Benign: one site (`cmd/run.go` loopback check) — `net.ParseIP(host).IsLoopback()` is correct; `netip` would be a cosmetic swap with no behavioral gain. |
+| M | Unadopted modern stdlib APIs (`iter`, `unique`, `sync.OnceFunc/OnceValue`) — the modernization-gap class. | ✅ Absent/benign: no sites need them — explicit `sync.Once`/`map` usage is already minimal and correct; adopting these would be churn, not improvement. |
+
