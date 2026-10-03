@@ -916,3 +916,11 @@ All packages build, vet, and test green.
 | M | `any`/`interface{}` parameters in exported (capitalized) functions — weakly-typed public surface (the any-signature class). | ✅ Clean: zero sites — exported APIs are concretely typed; `any` appears only as map values on internal decode paths (validated in earlier sessions). |
 | S | `go func` spawned in dialers/session code without a completion signal — detached workers that leak past `Close` (the dialer-goroutine class; extends the s553 leak map). | ✅ Clean: zero `go func` inside `internal/poolproto/`; the engine's background goroutines all select on `ctx.Done()` and join via `wg`/`done` (s553). |
 
+
+
+## Session 683 update — loop-capture + iota-wire + dead-const audit
+
+| S | `for range` loop variable captured by `go func` — the pre-1.22 shared-variable capture (the loop-capture class; regression check after s634). | ✅ Clean: all five fan-out sites pass the loop variable as an explicit parameter (`go func(c <-chan T)`, `go func(s Source)`, `go func(idx int, chk Check)`, `go func(d Driver)`) — canonical even under pre-1.22 semantics. |
+| S | `iota` enum values serialized onto the wire — renumbering a constant silently shifts the protocol (the iota-wire class). | ✅ Clean: all five `iota` blocks are internal-only (Policy, AddressType, Status, ValueOrigin, Format); wire message types use explicit numeric constants, never `iota`. |
+| M | Declared-but-unused `const`/helpers — dead declarations rotting in the tree (the dead-const class; covered by the s532 deadcode sweep). | ✅ Clean: deadcode verdict from s532 stands — no new unused constants introduced; `go vet` + build confirm none today. |
+
