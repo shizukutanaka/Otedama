@@ -980,3 +980,11 @@ All packages build, vet, and test green.
 | M | `fmt.Errorf` with multiple `%w` — silently dropping causes or formatting them as `%!w(MISSING)` (the multi-wrap class). | ✅ Clean: the single site (`stratumv1/dialer.go:164`) wraps `poolproto.ErrHandshakeFailed` + the transport error — both reachable via `errors.Is`, which is correct multi-wrap. |
 | S | `.​(func…)` type assertions on `any` — a wrong dynamic type panics at the call boundary (the func-assert class). | ✅ Absent: zero sites — callbacks are statically typed fields, never smuggled through `any`. |
 
+
+
+## Session 674 update — concat-allocation + unbuffered-channel + busy-default audit
+
+| P | `slices.Concat`/`append` rebuilding large slices per iteration — quadratic copy work disguised as concat (the allocation-churn class). | ✅ Clean: `slices.Concat` absent; loop-appends are bounded (diagnostic line building, per-frame `merkle_branch`) or pre-sized via `make(..., 0, n)` — no per-iteration quadratic rebuild. |
+| P | `make(chan T)` unbuffered where the producer must never block — a slow consumer stalls the loop (the channel-capacity class, second pass after s625). | ✅ Clean: bare `make(chan)` appears only on `done`/`doneCh` close-signalling channels where unbuffered is canonical; every data channel is explicitly buffered (8–32, `Threads*4`, `len(sources)`). |
+| P | `for { select { ... default: } }` busy-loop — a `default` arm that re-enters `select` spins a core at 100% with no work (the busy-default class). | ✅ Clean: every `default:` arm is a one-shot non-blocking send/read or the worker's canonical "check-ctx-then-hash-one-iteration" — the mining loop's spin is the productive workload itself, gated by `ctx.Done()`. |
+
