@@ -891,6 +891,13 @@ No reachable site lets a failed decode masquerade as a valid zero.
 
 
 
+## Session 633 update — defer-order + dispatch-map audit
+
+| M | `defer x.Close()` registered before the error check — a nil handle reaching the deferred call (nil-interface panic on cleanup). | ✅ Clean: all 5 `defer *.Close()` sites (config file, 2× HTTP body, pool conn, session) sit strictly after the `err != nil` early return; the doctor probe defers a drain-then-close closure likewise gated. |
+| M | `map[k]func` dispatch called without an `ok` check — a missing key yields a nil-function call panic. | ✅ Absent: zero `map[...]func` tables exist — all dispatch is switch/if-chains and interface polymorphism. The class is structurally unrepresentable here. |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
