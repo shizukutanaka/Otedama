@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | M | Tail indexing `s[len(s)-1]` / `s[:len-1]` on a possibly-empty slice (negative-offset panic class). | ✅ Clean: all 4 sites are guarded — `ID.Valid` returns early on `""`, `parse.go` bounds by `len(b) > 0` in the loop condition, `en2` writes bound `i < len(en2)`, completion.go uses a comparison not an index. |
 
 All packages build, vet, and test green.
+||||||| 8e86d7d8
+
+---
+
+## Session 645 update — embed + weak-crypto audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `//go:embed` directive misuse — pattern/type mismatch fails the build (low risk but verifies the class). | ✅ Absent: zero `go:embed` sites — the BIP-39 wordlist is a generated `.go` string literal, all other data is computed or external. |
+| S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
+
+All packages build, vet, and test green.
