@@ -754,3 +754,15 @@ All packages build, vet, and test green.
 | S | Weak cryptographic primitives on a security path — MD5/SHA-1/DES/ECB providing false integrity/confidentiality (the weak-crypto class). | ✅ Clean: zero md5/sha1/des/ECB sites; the crypto surface is `subtle` (constant-time compare), `sha256`/`sha512`/`hmac` (BIP-39 + mining), `aes`+`cipher` (AES-GCM seed store), `rand`, `tls`, `x509` — all standard, none weak. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 681 update — init-side-effect + unlock-balance + dynamic-inspect audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `init()` with ordering-dependent or re-entrant side effects — init-order fragility and duplicate registration (the init-surface class, second pass after s567). | ✅ Clean: all four `init()` are self-contained — wordlist split+SHA-256 self-verify (lightning), stub/dialer `Register` calls into owning-package registries (btccrypto, stratumv1, stratumv2); no cross-package ordering dependency, each registration additive. |
+| S | Manual `mu.Unlock()` on an early-return path that skips it — a missed unlock wedges the mutex (the unlock-balance class). | ✅ Clean: every non-deferred `Unlock` is the canonical lock-snapshot-unlock or a local branch symmetric with its `Lock` (worker stats, arbitrate streams, dashboard, metrics accessors) — no branch escapes the pair. |
+| S | `%T`/`encoding/gob` dynamic type inspection on wire data — gob is unbounded and `%T` can leak internals (the dynamic-inspect class). | ✅ Clean: `%T` appears only in decode-error diagnostics (unexpected type reporting); `encoding/gob` absent. |
+
+All packages build, vet, and test green.
