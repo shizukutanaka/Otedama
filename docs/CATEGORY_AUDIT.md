@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 710 update — builtin-print + noncrypto-hash + base64-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Builtin `print(`/`println(` leaking debug output past the logger in library code. | ✅ Absent: zero `print(`/`println(` call sites in non-test code — all output flows through `opts.log` / slog / catalog i18n. |
+| S | Non-cryptographic hash (`fnv`/`crc32`/`adler32`/`maphash`/`crc64`) used on a security boundary — collision-forgeable fingerprints, IDs, or checksums. | ✅ Absent: zero sites — every fingerprint/checksum goes through SHA-256 or the frame codec's explicit constants; no weak-hash surface exists. |
+| P | `base64`/`base32`/`ascii85` decode of external input without error checking or padding normalization. | ✅ Absent: zero decode call sites — the only mentions are comments (frame encoding docs, spec notes, the bech32 charset comment in doctor's validator, which is hand-rolled and charset-checked, not a decoder). |
+
+All packages build, vet, and test green.
