@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 720 update — float-trunc + rune-width + round-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `int(float)` truncation toward zero on yield/duration/rate math — silently flooring fractional values (or inverting sign expectation on negatives). | ✅ Clean: the only float→int casts are the documented sats *display* estimate (`uint64(satsAcc.observe(...))`, whole-sat presentation) and `int(d.Seconds())%60` TUI formatting; all other `int()`/`uint32()` casts are on integer/bounded fields (MsgLength, Threads, ioctl Col). |
+| S | `[]rune`/`[]byte` width confusion — iterating bytes where runes were meant (mangling multibyte pool text or validation positions). | ✅ Clean: rune conversion happens exactly where needed — the two pool-text sanitizers (`poolproto.go`, `stratumv1/parse.go`) and the `[]rune` Levenshtein in `did-you-mean` — and all `[]byte` conversions are on ASCII-canonical data (hashes, protocol names, KDF inputs). |
+| P | `Truncate`/`Round`/`Floor` direction errors on staleness or rate math (rounding a bound the wrong way). | ✅ Clean: all four sites are presentation-side — `quiet.Truncate(time.Second)` and `.Round(time.Millisecond)` format durations/latency for display; no truncation feeds a staleness or pricing comparison. |
+
+All packages build, vet, and test green.
