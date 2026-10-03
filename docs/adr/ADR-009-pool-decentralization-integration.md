@@ -824,3 +824,26 @@ direction; watch for spec stabilization before ADR-009 phase 2.
 JDC may mine the pool's template when its tip is ahead, bounded by a
 timeout (default-off). Addresses the honest-latency case for solo JDP
 stacks; worth mirroring as an opt-in knob if/when the JDP client lands.
+
+## Session-697 ecosystem update (2026-10-02)
+
+sv2-spec: third consecutive quiet window since the Oct-1 normative batch
+and #231 (Server/Client role clarifications, merged 10-02). The open
+queue is unchanged: #236 (SetTarget.target must not exceed channel
+max_target — a server-side obligation, vacuous for Otedama which does not
+advertise max_target), #234 (authority key rotation), #203 (non-custodial
+payouts — still the ADR-009 phase-2 watch item), #198 (coinbase_witness),
+plus stale editorial #232/#186/#103.
+
+SRI: still v1.12.0 (2026-09-17); no newer release.
+
+sv2-apps: tracked items #839 (JDS job-token → user_identity binding),
+#845 (target-field rename per spec #228 — same direction as our #704),
+and #856 (bitcoin_core_sv2 hardening) remain open. Recent merges are
+housekeeping/infra (#875 single cargo workspace, #869/#871 docs+CI,
+#907 agent notes) with no wire-visible change. New open items of note:
+#878 (pool rejects empty coinbase reward scripts) and #821 (translator
+logs shares dropped on the submit path) — both pool-side concerns only.
+
+Conclusion: no spec drift requiring Otedama action this round; keep
+watching #203/#198 for the JDP payout surface.
