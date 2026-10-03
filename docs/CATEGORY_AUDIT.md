@@ -815,6 +815,23 @@ time. Zero defects.
 
 
 
+## Session 604 update — silent zero-value on decode failure
+
+Residual surface of the session-595 fail-closed fix: every decoder that
+can yield a zero value when parsing fails (`hex.Decode*`, `base64`,
+`big.Int.SetString`, `strconv.Parse*`, `Atoi`, `UnmarshalText`). If a
+call site drops the error, downstream code consumes a fabricated zero —
+the class that made notify produce zero-MerkleRoot jobs.
+
+| S | `hex.DecodeString` sites (`stratumv1/parse.go` ×5, `stratumv1.go` en1). | ✅ All fail-closed since #677: coinb/merkle/prevhash reject malformed or wrong-length values; `extranonce1OK` returns false; `completeV1Job` bails on en1 decode error. `base64`, `hex.NewDecoder`, `SetString`, `UnmarshalText`: zero non-test call sites. |
+| S | `strconv.Atoi` unchecked at `parse.go:268` — a failed parse sets `reconnectDirective.Port = 0`, a fabricated value a consumer could dial. | ✅ Benign: `Port`/`Host` are recorded but never consumed — `parseReconnect`'s doc explicitly states the pool-supplied `Host:Port` is NOT honored (only `Wait` is, via `ReconnectWait`, bounded by `maxReconnectWaitSeconds`). The zero can reach no dialer. |
+| S | `strconv.ParseUint` unchecked at `stratumv1.go:484` — `uintID`'s string-id fallback returns 0 on unparseable input. | ✅ By design: every request id Otedama sends is a `uint64`, so a non-numeric string id can never match a pending entry regardless — 0 is just another unmatched key, and the response is dropped either way. |
+| M | `strconv.ParseFloat`/`Atoi`/`ParseUint` remainder (`rates`, `config`, `hashrate`). | ✅ All error-checked; non-finite rejection audited in #437/#443/#478. |
+
+No reachable site lets a failed decode masquerade as a valid zero.
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
