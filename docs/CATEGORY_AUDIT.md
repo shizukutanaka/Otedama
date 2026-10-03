@@ -1086,6 +1086,37 @@ a copy by pointer for read-only use — never stored. Zero defects.
 
 
 
+## Session 614 update — sync.Pool reset + secret-via-format audit
+
+**sync.Pool stale-object** — a pooled object returned without reset
+hands stale state to the next borrower. One pool exists (`hashPool`,
+noise_pool.go): `getHasher` calls `h.Reset()` on *checkout* — the
+correct reset side (put-side reset would also work; checkout reset is
+the idempotent choice). `putHasher` stores the used hasher as-is —
+safe because every borrow resets first. Pooled hashers are only ever
+sha256 `hash.Hash`; `inner`/`outer` in `hmacSHA256Pooled` both reset
+via `getHasher`. Zero defects.
+
+**secret leak via fmt/log** — formatting a secret-bearing value
+(`%v`/`%+v`/`%s`/`%q`/`Sprint`) into a log line or error string is the
+silent leak class. Verified: every secret-adjacent format mentions
+only *lengths and versions* (`decrypted seed is %d bytes`, `mnemonic
+has %d words`, `EncryptedSeed version %d`) — never contents. The
+mnemonic crosses a string boundary at exactly two places:
+`printRecoveryPhrase` writes it to `opts.Output` on first run — the
+deliberate one-time display that bypasses the structured logger
+(commented as intentional), and `MnemonicToSeed` uses `m.String()` as
+PBKDF2 input then zeroes it (`zeroBytes(password)`). No `String()`/
+`%v`/`Sprint` on `HandshakeState`, `EncryptedConn`, `Session`, or
+`Wallet` — the cipher-key-bearing structs are never formatted.
+Fingerprint output is a 7-hex-char sha256 prefix (identifier, not
+secret); payout addresses are masked before logging (session-384).
+
+| M | sync.Pool stale-object reuse | Absent — checkout-time Reset() is the correct side |
+| S | secret leak via fmt/log | Absent — only lengths/versions formatted; mnemonic only via deliberate TTY + PBKDF2 input |
+
+
+
 ## Session 645 update — embed + weak-crypto audit
 
 | Cat | Finding | Disposition |
