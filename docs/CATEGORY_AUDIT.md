@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 709 update — ecdh-api + http-client-timeout + flag-dispatch audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `crypto/ecdh` misuse — accepting an unvalidated peer point (no on-curve check) or deriving a shared secret from a stale/self-generated key. | ✅ Correct: ephemeral generated fresh per handshake from `crypto/rand`; the peer key is admitted only via `ecdh.P256().NewPublicKey` (stdlib on-curve validation) on the 65B/33B encodings — the 32B x-only fallback is the documented alpha stub on a path not wired into live connect; P-256 cofactor 1 means no low-order-subgroup check applies; `ECDH` error is checked. |
+| P | `http.Client` without a request-level bound — a hanging response holds a background fetcher or probe goroutine indefinitely. | ✅ Bounded: both rates clients set `Timeout: 10s` (whole-request); the doctor probe's `clockSkewDefaultClient` relies on the caller's `context.WithTimeout(5s)` per probe — every outbound HTTP call is bounded end-to-end. |
+| M | `flag` package misuse — mutating the global `flag.CommandLine`, double `flag.Parse()`, or raw `os.Args[i]` indexing outside main dispatch. | ✅ Absent: every subcommand uses its own `flag.NewFlagSet` with `ContinueOnError` and `flag.ErrHelp` handling through the centralized `parseSubcommandFlags` (which normalizes `-h`/`-help`/`--help`); zero `flag.Parse()`/`flag.CommandLine` sites; `os.Args` is read once (`os.Args[1:]` in `main`). |
+
+All packages build, vet, and test green.
