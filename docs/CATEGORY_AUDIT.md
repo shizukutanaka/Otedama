@@ -1029,3 +1029,12 @@ All packages build, vet, and test green.
 | M | `Mutex.TryLock`/`TryRLock` masking contention — try-then-skip hides real lock pressure as missing work (the contention-hiding class). | ✅ Absent: zero sites — contention is always faced via `Lock`/`RLock`. |
 | P | `io.ReadFull`/`ReadAtLeast`/`SkipAll` misuse — partial reads treated as complete frames (the partial-read class). | ✅ Clean: every `ReadFull` site checks `err` (wire frame codec, Noise handshake, stratum primitives); zero `ReadAtLeast`/`SkipAll` sites. |
 
+
+
+## Session 667 update — cut-comma-ok + binary.Read + form-input + fields-split audit
+
+| P | `strings.Cut`/`CutPrefix`/`CutSuffix` ignoring the `found` boolean — a separator-absent input is silently treated as separator-present (the cut-comma-ok class). | ✅ Clean: all four sites are `CutPrefix` with `ok` checked (scheme stripping, sysfs `PCI_ID=` parse); no bare `Cut`/`CutSuffix` sites. |
+| P | `binary.Read` on a struct — a short read leaves trailing fields zero without error (the partial-decode class). | ✅ Absent: zero call sites — decode goes through explicit offset cursor reads that bounds-check each field. |
+| S | `r.ParseForm`/`r.FormValue`/`r.PostFormValue` on untrusted HTTP input — unbounded form/body buffering (the request-input class). | ✅ Absent: the mux registers only fixed read-only handlers (`/healthz`, `/readyz`, `/metrics`, `/`, pprof) — no request-body parsing exists. |
+| P | `strings.Fields` on positionally-meaningful data — runs of whitespace collapse, shifting fixed columns (the fields-position class). | ✅ Absent: zero production sites. |
+
