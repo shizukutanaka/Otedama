@@ -856,3 +856,24 @@ rename tracking spec #228), #856 (`bitcoin_core_sv2` hardening) all remain open 
 affects Otedama's client-only footprint.
 
 Conclusion unchanged: nothing in flight requires wire or docs adjustments.
+
+## Session-676 ecosystem update (2026-10-03)
+
+sv2-spec remains quiet — no merges since the Oct-1 normative batch and the
+10/2 roles clarification (#231, recorded in Session-654). Open items unchanged:
+#236 (`SetTarget.target` ≤ channel `max_target` — server-side, vacuous for a
+client that never advertises `max_target`), #234 (authority-key mgmt), #198
+(`coinbase_witness`, TDP-side), #203 (payouts extension). #232/#186 are editorial
+table-cell cleanups; #103 stays a 2024 WIP. SRI release: v1.12.0 (unchanged).
+
+sv2-apps activity of note: #845 renames `target`-message fields to follow the
+#228 spec cleanup — the same alignment Otedama made in PR #704, so the tree is
+already consistent. #839 (jds) binds mining-job tokens to `user_identity` on
+`SetCustomMiningJob` — the reference JDS tightening job-token custody in the
+same direction as this ADR's payout-control argument; worth watching if it
+lands. #856 (`bitcoin_core_sv2` hardening) and #881 (`handle_push_solution`)
+are routine robustness work.
+
+No changes to the ADR's conclusions: the demand-side SV2 trajectory still
+favors pool-side JDP payout isolation, and Otedama's client-only footprint is
+unaffected by every open normative item.
