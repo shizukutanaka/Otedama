@@ -143,11 +143,17 @@ func (m *Manager) Status() (ServiceStatus, error) {
 const systemdUnitName = "otedama.service"
 
 func (m *Manager) systemdUnitPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	// systemd looks up user units under $XDG_CONFIG_HOME/systemd/user,
+	// defaulting to ~/.config — install where systemd actually searches.
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		configHome = filepath.Join(home, ".config")
 	}
-	dir := filepath.Join(home, ".config", "systemd", "user")
+	dir := filepath.Join(configHome, "systemd", "user")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
