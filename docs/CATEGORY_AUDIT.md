@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 733 update — panic-census + logger-bypass + defer-receiver audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `panic(` in production paths — a pool- or config-controlled panic aborts the process. | ✅ Clean: all 12 sites are init/registration invariants — Worker.Start-twice, Register nil/unknown/dup Dialer, btccrypto scheme dup, BIP-39 wordlist length+integrity, metrics name/label validation + cross-type collision. None reachable from wire data. |
+| S | Direct `log.` usage bypassing the atomic slog wrapper — a `log.Fatal` would kill the process mid-loop and split the log stream. | ✅ Clean: zero `log.` calls outside `internal/logger` itself (which hosts the only `slog.New*Handler` construction); every emission routes through the wrapper. |
+| M | `defer recv.Method()` receiver capture — a deferred call bound to a stale or reassigned receiver releases the wrong resource. | ✅ Clean: all sites bind the intended instance (`wg.Done`, `mu.Unlock`, `ticker.Stop`, `provider.Stop`, `conn.Close`); no receiver reassignment between defer and exit. |
+
+All packages build, vet, and test green.
