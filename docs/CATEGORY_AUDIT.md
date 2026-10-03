@@ -900,3 +900,11 @@ All packages build, vet, and test green.
 | M | `filepath.IsAbs`/`VolumeName`/manual separator joining — Windows/POSIX path portability drift (the path-portability class). | ✅ Clean: the only separator use is the daemon's `\tmp`-rooted fallback when the home dir is unresolvable — deliberate drive-root fallback, documented; no `IsAbs`/`VolumeName` call sites needing review. |
 | M | Duplicate `tlsConfigWithExtraCAs` in stratum + stratumv1 — verbatim helper duplication across package boundary (the duplication class). | ✅ Benign: the two copies sit behind a package boundary that keeps `internal/stratum/` free of poolproto deps — vendoring the helper is cheaper than introducing a shared crypto-util package for 12 lines. |
 
+
+
+## Session 686 update — assertion-ok + tls-verify + rand-seed audit
+
+| S | Single-value type assertions on `json.Unmarshal`-decoded `any` — a malformed pool payload panics at the assertion (the decode-assert class; regression check after s634). | ✅ Clean: both V1 decode assertions (`arr[1].(string)`, `arr[2].(float64)`) use comma-ok with explicit error branches — zero unchecked `.(T)` on decoded data. |
+| S | `tls.Config{InsecureSkipVerify: true}` or `MinVersion < TLS12` — MITM-capable connections (the tls-verify class). | ✅ Clean: zero `InsecureSkipVerify`; every client config sets `MinVersion: tls.VersionTLS12` (stratum/tls.go, stratumv1/tls.go); protocol `MinVersion` fields are SV2 wire values, not TLS. |
+| S | `rand.Seed`/`rand.New` with predictable seeds (`time.Now`) on security paths — weak token generation (the rand-seed class; extends s624). | ✅ Clean: zero `math/rand`/`Seed`/`rand.New` — all randomness is `crypto/rand` (s624). |
+
