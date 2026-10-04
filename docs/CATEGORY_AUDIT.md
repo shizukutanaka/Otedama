@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 810 update — tick-leak + defer-order + nil-empty audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Tick` used where a stoppable ticker is needed — leaks the ticker forever. | ✅ Clean: zero `time.Tick(` sites — every ticker is `time.NewTicker` with a `Stop` on exit (verified session 665). |
+| M | Resource acquired, early `return` taken before `defer release` is registered — leak on the early path. | ✅ Clean: every `defer` unlock/close sits immediately after the acquisition it pairs with; no acquisition precedes an early return without its defer (verified sessions 572/696). |
+| S | `x == nil` check for slices/maps where `len(x) == 0` is the real invariant — nil/empty conflation. | ✅ Benign: `nil` checks target pointers (`w == nil`) and wire fields (`remoteEph`); length checks are separate clauses — no `s == nil` used as the empty test on a slice. |
+
+All packages build, vet, and test green.
