@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1133 update — recover-placement census
+
+`recover()` outside a deferred function always returns nil — the classic
+misuse that silently masks panics.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 19 `recover()` sites, all inside `defer func()` bodies in test files; production code has zero recover (panics = programming errors per s787 census) | S |
+| S | Two deliberate `_ = recover()` sites assert panic-or-clean-close contracts — correctly deferred | S |
+
+All packages build, vet, and test green.
