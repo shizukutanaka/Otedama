@@ -149,6 +149,18 @@ Manage the Lightning wallet without starting the engine.
 The wallet directory resolves through the usual four layers
 (`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
 
+### `otedama completion`
+
+Print a shell-completion script for bash, zsh, or fish to stdout.
+
+```
+otedama completion bash > /etc/bash_completion.d/otedama
+otedama completion zsh  > "${fpath[1]}/_otedama"
+otedama completion fish > ~/.config/fish/completions/otedama.fish
+```
+
+Passing an unsupported shell exits with a usage error (2).
+
 Suitable as a container healthcheck command:
 ```yaml
 healthcheck:
