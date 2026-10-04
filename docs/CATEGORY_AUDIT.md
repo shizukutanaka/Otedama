@@ -3181,6 +3181,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1196 update — CLAUDE.md inventory parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Workflow files per CLAUDE.md | ✅ Clean — all 7 listed workflows exist; s1166 added devin-direct-merge.yml coverage (8 files total on disk) |
+| S | `internal/` map vs disk | ✅ Clean — every listed package dir exists; no forbidden paths (`pkg/`, `web/`, `internal/providers/`, etc.) present |
+| L | skills/ extras not in CLAUDE.md | ⚠️ Noted — `quality-pass-opus.md`/`quality-pass-sonnet.md` exist on disk but aren't in the CLAUDE.md skill inventory |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
