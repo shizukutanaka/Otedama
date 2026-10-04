@@ -3793,6 +3793,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 790 update — builtin-minmax + cmp-adoption + clamp-form audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Hand-rolled `min`/`max` duplicated where go1.21 builtins suffice — divergent clamp logic. | ✅ Benign: builtins `min`/`max`/`clear`/`cmp.*` are already adopted where semantically apt (arbitrate max-fold, stratumv1 clamp, `cmp.Or` defaults, `cmp.Compare` sort keys, `clear` map reset); remaining `if`-form sites are guard checks not pure min/max assignments — conversion adds nothing. |
+| S | `clear(m)` missing where a map is manually re-created — needless reallocation. | ✅ Clean: `arbitrate.go:221` uses `clear()` for the activity map; no manual empty-map re-creation exists in hot loops. |
+| S | `cmp` package unused where `Compare`/`Or` would simplify — hand-rolled three-way compare. | ✅ Clean: `cmp.Compare` drives every comparator and `cmp.Or` drives defaults — adoption is complete. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
