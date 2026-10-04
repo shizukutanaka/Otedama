@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 961 update — doctor-dispatch + check-name + result-slot audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Concurrent check results racing into a shared map/slice — lost updates or nondeterministic order. | ✅ Clean: each check goroutine writes only its own `results[idx]` slot; report order always matches `Checks` order regardless of completion order; `Name`/`Elapsed` stamped after `Run`. |
+| M | A check ignoring ctx — `otedama doctor` hanging past its deadline on a stuck probe. | ✅ Clean: `Run` passes the caller ctx into every `chk.Run`; `wg.Wait()` only after all return. |
+| M | Pool reachability check serializing dials or leaking dials with no per-probe bound. | ✅ Clean: probes fan out over a `net.Dialer{Timeout: 5s}` per URL with `DialContext`; results land in per-index slots; unparseable URLs (empty host after `StripUserinfo`/`stripScheme`) short-circuit to `badURL` without a goroutine. |
+| M | all-unparseable vs all-unreachable vs mixed outcomes collapsed into one misleading verdict. | ✅ Clean: three buckets (reachable/unreachable/unparseable) render distinct Fail/Warn details. |
+
+All packages build, vet, and test green.
