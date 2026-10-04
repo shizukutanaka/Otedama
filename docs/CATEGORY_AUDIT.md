@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1027 update — logger-default + ctx-injection + fanin audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A typed-nil logger in ctx shadowing the default. | ✅ Clean: `IntoContext(nil)` is a documented no-op; `FromContext` also guards `l != nil` — two layers against the typed-nil footgun. |
+| M | Default-logger initialization racing concurrent `FromContext` calls. | ✅ Clean: `atomic.Pointer` with a CAS slow path that returns the winner's logger — the loser branch is split out so it's unit-testable; `SetDefault(nil)` can never clobber the default. |
+| S | `ParseLevel`/`Adapter` misclassifying unknown levels. | ✅ Clean: both lowercase+trim and fall back to Info (visible, not silent-drop); `warn`/`warning` both mapped. |
+| M | fanIn goroutines pinned open by a stuck input after cancel. | ✅ Clean: the receive itself selects `ctx.Done()` (comment explains why — a never-written input can't pin `out` open); send path also selects Done; output closes via `wg.Wait()`. |
+| M | fanIn buffer sizing unbounded or zero. | ✅ Clean: `factor*len(channels)` capped at 64, floored at 1 — quotes get 64×, shares 4×, both bounded. |
+
+All packages build, vet, and test green.
