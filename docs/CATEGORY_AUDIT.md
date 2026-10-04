@@ -2059,6 +2059,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1034 update — config-load matrix + fuzz-invariant + wallet-side-effect audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Config-file load paths under-covered (the doc example itself breaking). | ✅ Clean: malformed→warn+empty, empty/comments-only→empty, NUL-byte path→warn, unreadable→warn/empty, `http_addr` field, **and** the literal API.md example file asserted to parse — doc drift can't ship silently. |
+| M | Fuzz harness asserting too little (returns-without-panic only). | ✅ Clean: `FuzzLoadConfigFile` seeds adversarial corpus (binary junk, self-referential alias, deep nesting, unknown field) AND asserts the real invariant — `cfg.Validate()` must not panic on whatever the decoder produced; >64 KB inputs `t.Skip`ped as out-of-contract (documented bound). |
+| M | `otedama wallet verify` silently minting a wallet when pointed at the wrong dir. | ✅ Clean: `TestWalletVerify_NoWallet_DoesNotCreate` asserts non-zero exit AND `wallet.dat` absent afterward — the create-when-absent footgun is pinned closed. |
+| M | Fingerprint-file fallback path untested (older builds lack the sidecar). | ✅ Clean: `TestWalletVerify_FallbackDecryptsWalletDat` deletes the fingerprint file and verifies via `OTEDAMA_WALLET_PASSPHRASE` decryption — the documented fallback is exercised, not assumed. |
+| S | safeDisplay strip matrix (empty/ASCII/all-control) thin. | ✅ Clean: four dedicated cases — empty→placeholder, control-stripped, ASCII preserved, all-control→placeholder. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
