@@ -2420,6 +2420,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1123 update — stub-function census
+
+Functions whose entire body is `return nil/0/false` — potential unimplemented
+stubs hiding behind interface conformance.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 4 sites, all documented platform no-ops: hal.RegisterGPULinux (non-Linux stub), terminalWidth (fallback-width stub), linuxGPUDevice.Shutdown + cpuDevice.Shutdown (stateless devices) | ⚠️ Noted (intentional, documented) |
+| S | Zero undocumented stubs | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
