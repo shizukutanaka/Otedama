@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 943 update — sv1-difficulty + reconnect-directive + boundary-validators audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `mining.set_difficulty` accepting `d <= 0` or non-finite — collapses share-target to "accept every hash" (share-flood vector). | ✅ Clean: `parseDifficulty` rejects `d <= 0`, `IsNaN`, `IsInf` — non-positive and non-finite values are dropped before they can poison the difficulty gauge. |
+| M | `client.reconnect` honoring pool-supplied host:port — unauthenticated notification = redirection vector. | ✅ Clean (deliberate design): the directive records `Host/Port` but the reconnect loop only uses operator-configured pools; only `Wait` is honored (advisory). Doc on `reconnectDirective` states the reasoning. |
+| M | `set_extranonce` values flowing into `completeV1Job` without validation — non-hex en1 or huge en2_size reaching the coinbase fold. | ✅ Clean: `extranonce1OK` (hex-decodable, non-empty) and `extranonce2SizeOK` (`0 < sz <= 64`) gate at the parse boundary; invalid values never reach `completeV1Job`. |
+
+All packages build, vet, and test green.
