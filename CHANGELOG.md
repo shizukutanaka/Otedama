@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1310 — golangci-lint v2 移行)
+
+**変更.** lint 経路が3系統で恒久的に赤だった根本問題を修正:
+`.golangci.yml` を v2 スキーマへ移行（`golangci-lint migrate`、23 linter・
+settings・exclusion・severity を全引き継ぎ、gofumpt `extra-rules`→
+`extra.group-params`）、`ci.yml` を `golangci-lint-action@v9` 化、
+`test.yml`/`ci-cd.yml` を `@v3`→`@v9`、`make setup` を `/v2/` モジュール
+パスへ。`internal/i18n/` を misspell 除外（10言語カタログに米英
+スペルチェッカーは適用不能）。v2.14 で ~111 件の実指摘が可視化
+（従来はツール自体が死んでおり隠れていた）— 段階的に解消予定。
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
