@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"strconv"
 )
 
 // RuntimeCollector returns a CollectFunc that writes standard go_* metrics
@@ -53,7 +54,7 @@ func RuntimeCollector() CollectFunc {
 				name:  "go_goroutines",
 				help:  "Number of goroutines that currently exist.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", goroutines),
+				value: strconv.Itoa(goroutines),
 			},
 			{
 				name:   "go_info",
@@ -66,43 +67,43 @@ func RuntimeCollector() CollectFunc {
 				name:  "go_memstats_alloc_bytes",
 				help:  "Number of bytes allocated and still in use.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.Alloc),
+				value: strconv.FormatUint(ms.Alloc, 10),
 			},
 			{
 				name:  "go_memstats_sys_bytes",
 				help:  "Number of bytes obtained from the OS.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.Sys),
+				value: strconv.FormatUint(ms.Sys, 10),
 			},
 			{
 				name:  "go_memstats_heap_alloc_bytes",
 				help:  "Number of heap bytes allocated and still in use.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.HeapAlloc),
+				value: strconv.FormatUint(ms.HeapAlloc, 10),
 			},
 			{
 				name:  "go_memstats_heap_sys_bytes",
 				help:  "Number of heap bytes obtained from the OS.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.HeapSys),
+				value: strconv.FormatUint(ms.HeapSys, 10),
 			},
 			{
 				name:  "go_memstats_heap_inuse_bytes",
 				help:  "Number of heap bytes in use by live objects.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.HeapInuse),
+				value: strconv.FormatUint(ms.HeapInuse, 10),
 			},
 			{
 				name:  "go_memstats_heap_idle_bytes",
 				help:  "Number of heap bytes waiting to be used.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.HeapIdle),
+				value: strconv.FormatUint(ms.HeapIdle, 10),
 			},
 			{
 				name:  "go_memstats_stack_inuse_bytes",
 				help:  "Number of bytes in use by the stack allocator.",
 				kind:  "gauge",
-				value: fmt.Sprintf("%d", ms.StackInuse),
+				value: strconv.FormatUint(ms.StackInuse, 10),
 			},
 			{
 				name:  "go_memstats_gc_cpu_fraction",
@@ -120,7 +121,7 @@ func RuntimeCollector() CollectFunc {
 				name:  "go_gc_cycles_total",
 				help:  "Total number of completed GC cycles.",
 				kind:  "counter",
-				value: fmt.Sprintf("%d", ms.NumGC),
+				value: strconv.FormatUint(uint64(ms.NumGC), 10),
 			},
 		}
 		for _, e := range entries {
