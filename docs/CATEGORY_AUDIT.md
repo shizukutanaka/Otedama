@@ -3951,6 +3951,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 811 update — addr-of-local + cap-reslice + slice-alias audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `&v` stored on a reused local inside a decode switch — all cases alias one variable. | ✅ Clean: each `case` decodes into its own fresh `var v T` then stores `&v` — no cross-case aliasing (messages.go:419+). |
+| M | `s[:cap(s)]` reslice overshoot exposing uninitialised/stale backing data. | ✅ Clean: zero `[:cap(` sites — reslicing stays within `len`. |
+| M | Slice field of a map-stored struct mutated after insertion — silent corruption of the stored value. | ✅ Clean: stored structs are read-after-write only; mutation paths go through explicit copy/set methods. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
