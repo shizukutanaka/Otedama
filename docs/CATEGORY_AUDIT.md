@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1070 update — config-field orphan audit (defined-but-never-read knobs)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `config.Config` fields decoded from YAML/env but never read by production code — a knob the user sets that does nothing. | ✅ Clean: all 14 top-level fields consumed outside `internal/config` (excluding tests): BitcoinAddress(4)/BitcoinAddresses(6)/Pools(27)/Workers(3)/Language(5)/LogLevel(3)/LogFormat(3)/DataDir(7)/ArbitrationHysteresisPct(3)/CurtailBelowBTCUSD(3)/MinYieldSatsPerSec(5)/PowerWatts(8)/ElectricityPricePerKWh(6)/HTTPAddr(3). All six nested fields likewise consumed (PoolConfig URL/User/Password/PayoutScheme/TLSCAFile, WorkerConfig.Name). |
+| S | Origin-tracking fields that lost their display path. | ✅ Clean: `configOrigins` rows are consumed by `config show --origin` (cmd/otedama/config.go) — a documented display surface, not dead weight. |
+
+All packages build, vet, and test green.
