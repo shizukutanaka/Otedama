@@ -4457,6 +4457,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 855 update — atomic-field + custom-marshal + racy-access audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `atomic.*` field also written non-atomically — torn read/write bypassing the atomic guarantee. | ✅ Clean: the 5 `atomic.Pointer` fields (httpserver boundAddr/serveErr, stratumv1 lastReconnect/extranonce1, logger defaultPtr) are accessed exclusively via `.Load()/.Store()/.CompareAndSwap()`; the 13 `atomic.Int64`/`Float64` counters likewise (s739). |
+| M | Custom `MarshalJSON`/`UnmarshalJSON` bypassing `encoding/json` invariants — recursion, duplicate keys, partial unmarshal. | ✅ Clean: absent — marshalling is plain tagged structs (s721/739). |
+| M | Same field accessed both via `atomic` and plain ops — data race. | ✅ Clean: no field mixes atomic and plain access; plain-access fields are mutex-guarded instead (s740/764). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
