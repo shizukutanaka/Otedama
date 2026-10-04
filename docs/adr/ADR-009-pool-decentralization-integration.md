@@ -1072,3 +1072,37 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-922 ecosystem update (2026-10-02)
+
+**sv2-spec** — open=7, normative set unchanged from session-908:
+`#236` (SetTarget must not exceed `max_target`; last touched 2026-10-02),
+`#234` (authority key management/rotation), `#203` (coinbase payouts
+extension), `#198` (`coinbase_witness` on `NewTemplate`), plus the two
+editorial cell-unwrap PRs (`#232`, `#186`) and the WIP `#103` Proxy
+Annex. The ~3-week quiet window continues: no new normative text has
+landed that would change Otedama's wire layout since #228 (field
+renames, tracked at session-622/PR-#704).
+
+**SRI** — still v1.12.0 (2026-09-17); no new release.
+
+**sv2-apps** — open=27, one merge since session-908 (`#907` docs
+hygiene). Open set now includes several security-relevant items worth
+tracking:
+
+- **#839** — binds mining-job tokens to `user_identity` and enforces
+  the binding on `SetCustomMiningJob`. This is upstream's fix for the
+  job-token→identity gap Otedama already avoids by not issuing
+  unbound tokens (single-tenant JDC).
+- **#845** — renames target message fields to match the post-#228
+  spec cleanup; mirrors the Otedama rename landed at PR #704.
+- **#878** — `stratum-apps` rejects empty coinbase reward scripts;
+  upstream converging on the fail-closed parser direction Otedama
+  adopted at session-595.
+- **#881** (open, WIP) — JDS `handle_push_solution` still open,
+  updated 2026-10-02; remains the piece phase-2 JDC submits through.
+- **#856** — `bitcoin_core_sv2` hardening, updated 2026-10-02.
+
+No action items: the normative SV2 surface Otedama implements is
+unchanged, and the two tracked upstream convergence items (#845 field
+rename, #878 empty-script rejection) are already reflected in-tree.
