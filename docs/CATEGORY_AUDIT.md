@@ -1921,6 +1921,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1025 update — completion-sync + log-rotate + write-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Completion scripts desynced from the dispatch switch. | ✅ Clean: all three shells list the full command set including `wallet`/`completion`; a pin-test asserts the verb lists against dispatch — the header comment's sync instruction is mechanically enforced. |
+| S | Shell-argument rejection losing the offending token. | ✅ Clean: `len(args)!=1` gate plus `%q` quoting and the `joinOr` "a, b or c" enumeration in the error. |
+| M | Unbounded `--log-file` growth on an unattended miner. | ✅ Clean: 32 MiB cap + single `.old` rotation bounds total at ~64 MiB; file opens 0600 with O_APPEND so a restart resumes rather than truncates. |
+| M | Rotation losing writes when rename/open fails. | ✅ Clean: rotation is best-effort with a fall-back to appending the existing file — the audit trail degrades, never aborts the run; new file is seeded with a rotation marker line. |
+| S | `cappedLogFile` size accounting racing concurrent writers. | ✅ Clean: `Write`/`rotateLocked`/`Close` all hold `c.mu`; `size` is seeded from `Stat` on open and updated only under the lock. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
