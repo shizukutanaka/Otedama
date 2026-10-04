@@ -19,7 +19,7 @@ import (
 	"math/big"
 	"os"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -303,7 +303,7 @@ func pickWordPositions(n, k int) []int {
 		seen[i] = struct{}{}
 		out = append(out, i)
 	}
-	sort.Ints(out)
+	slices.Sort(out)
 	return out
 }
 
