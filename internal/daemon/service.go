@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -446,7 +447,7 @@ func (m *Manager) serviceArgs() string {
 func quoteToken(s string) string {
 	if strings.ContainsAny(s, " \t\"") ||
 		strings.IndexFunc(s, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
-		return fmt.Sprintf("%q", s)
+		return strconv.Quote(s)
 	}
 	return s
 }
