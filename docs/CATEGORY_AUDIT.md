@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1038 update — logger-test singleton + ctx-injection + adapter-routing audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defaultLogger()` racing nil on first concurrent access (atomic CAS slow path). | ✅ Clean: `TestDefaultLogger_ConcurrentInitNeverReturnsNil` (50×100 goroutines) + `TestDefaultLoggerSlow_CASLoserReturnsSameInstanceAsWinner` — the documented CAS contract is pinned explicitly, not just race-checked. |
+| M | `SetDefault(nil)` clobbering the singleton into a panic landmine. | ✅ Clean: `TestSetDefault_NilDoesNotClobber` asserts the stored logger survives a nil call — the defensive no-op is exercised. |
+| M | `IntoContext` corrupting other context values (shared private key class). | ✅ Clean: `TestIntoContext_PreservesOtherValues` injects a same-shape other-key value and asserts survival — the classic ctx-key collision is pinned closed. |
+| M | `FromContext` returning nil on missing/typed-nil injection. | ✅ Clean: background ctx → default singleton; `IntoContext(ctx, nil)` no-ops without panic (recover + fallback asserted) — every path returns usable. |
+| S | Adapter misrouting unknown/empty levels or dying on nil receiver. | ✅ Clean: unknown → Info, empty → safe, nil receiver → usable adapter — three dedicated tests. |
+
+All packages build, vet, and test green.
