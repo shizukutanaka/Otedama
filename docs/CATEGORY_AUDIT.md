@@ -1731,3 +1731,22 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1161 update — Close-error discard census
+
+Census of every `.Close()` error handling site in non-test code:
+20 `defer`/`_ =` discards vs 1 checked close.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | The only write-side Close — `tmp.Close()` on the atomic wallet save — checks and returns the error, with a comment explaining that a post-Sync Close error can mean the flush never hit disk | Clean |
+| M | `_ = tmp.Close()` ×2 (wallet.go:301,306) run only on already-failed Write/Sync error paths — the real error is returned | Clean |
+| M | `_ = conn/sess.Close()` ×~14 — cleanup closes on probe/dial/error paths where a Close error carries no information | Clean |
+| M | `defer f/conn/sess/Body.Close()` ×5 — read-side or lifecycle closes; Close errors are conventionally ignorable | Clean |
+
+The write-flush-confirmation path is not just correct but documented;
+every discard is on a path where Close cannot produce new information.
+
+All packages build, vet, and test green.
