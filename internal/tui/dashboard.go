@@ -14,19 +14,20 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
-// line is truncated to fit whatever width is configured, and the most
-// important field on each line (pool connection status, in particular)
-// is sized from a dynamic budget rather than a fixed offset, so it
-// cannot be silently cut off even at the documented 40-column minimum.
+// When the output writer is a real terminal file (os.Stdout in
+// production), each render tick queries the kernel for the live column
+// count — TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows —
+// so the dashboard tracks both the initial size and later resizes.
+// SetWidth overrides detection (used by tests and non-terminal callers);
+// a non-file writer or a failed query falls back to the NewDashboard
+// default of 80 columns. What is handled correctly regardless of the
+// real width: every line is truncated to fit whatever width is
+// configured, and the most important field on each line (pool
+// connection status, in particular) is sized from a dynamic budget
+// rather than a fixed offset, so it cannot be silently cut off even
+// at the documented 40-column minimum.
 //
 // # Thread safety
 //
@@ -37,6 +38,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,7 +64,7 @@ type Stats struct {
 	WalletFingerprint string
 	// EstSatsEarned is an ESTIMATE of cumulative earnings, integrated from
 	// the engine's forecast yield rate over productive time — not a figure
-	// from the pool. It is labelled "est." in the dashboard accordingly; the
+	// from the pool. It is labeled "est." in the dashboard accordingly; the
 	// pool's own accounting is authoritative. See docs/KNOWN_LIMITATIONS.md §9.
 	EstSatsEarned uint64
 
@@ -103,13 +105,16 @@ type ProviderStats struct {
 
 // Dashboard renders a live terminal dashboard.
 type Dashboard struct {
-	w         io.Writer
-	mu        sync.Mutex
-	started   atomic.Bool
-	updateCh  chan Stats
-	doneCh    chan struct{}
-	cols      int
-	lastStats Stats
+	w        io.Writer
+	mu       sync.Mutex
+	started  atomic.Bool
+	updateCh chan Stats
+	doneCh   chan struct{}
+	cols     int
+	// widthLocked is set by SetWidth: tests and embedders pin a width and
+	// disable the per-tick auto-detection that would otherwise override it.
+	widthLocked bool
+	lastStats   Stats
 	// wg tracks the render loop goroutine so Stop can block until it has
 	// genuinely exited before Stop itself writes to w (showCursor /
 	// Fprintln below) — without this, Stop's writes could race an
@@ -160,9 +165,9 @@ func (d *Dashboard) Stop() {
 
 // Update delivers a new stats snapshot. Non-blocking: if the dashboard
 // update queue is full the oldest entry is discarded.
-func (d *Dashboard) Update(s Stats) {
+func (d *Dashboard) Update(s *Stats) {
 	select {
-	case d.updateCh <- s:
+	case d.updateCh <- *s:
 	default:
 		// Drain one stale entry then enqueue.
 		select {
@@ -170,7 +175,7 @@ func (d *Dashboard) Update(s Stats) {
 		default:
 		}
 		select {
-		case d.updateCh <- s:
+		case d.updateCh <- *s:
 		default:
 		}
 	}
@@ -194,7 +199,7 @@ func (d *Dashboard) renderLoop() {
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
-			d.render(s)
+			d.render(&s)
 		}
 	}
 }
@@ -219,7 +224,8 @@ const (
 	restoreCursor = "\x1b[u"
 )
 
-func (d *Dashboard) render(s Stats) {
+func (d *Dashboard) render(s *Stats) {
+	d.detectWidth()
 	var sb strings.Builder
 	cols := d.cols
 
@@ -266,7 +272,7 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 	d.writeLine(sb, line, cols)
 }
 
-func (d *Dashboard) miningLine(s Stats, cols int) string {
+func (d *Dashboard) miningLine(s *Stats, cols int) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	if s.DevicesIdle > 0 {
@@ -287,17 +293,17 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 	case s.Stalled:
 		// Yellow hashrate + stall badge so the operator sees the warning
 		// immediately without needing to check Prometheus.
-		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  ", yellow, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %s  ", yellow, rate, reset, padToVisibleWidth(dim+devs+reset, 20))
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	default:
-		prefix := fmt.Sprintf("  %s%-14s%s  %-20s  ", green, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s%s  %s  ", green, rate, reset, padToVisibleWidth(dim+devs+reset, 20))
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	}
 }
 
-func (d *Dashboard) poolLine(s Stats, cols int) string {
+func (d *Dashboard) poolLine(s *Stats, cols int) string {
 	statusPlain := "✗ disconnected"
 	status := red + statusPlain + reset
 	if s.Connected {
@@ -320,7 +326,19 @@ func (d *Dashboard) poolLine(s Stats, cols int) string {
 		urlBudget = 8
 	}
 	url := dim + shortenURL(s.PoolURL, urlBudget) + reset
-	return fmt.Sprintf("%s%-*s  %s", prefix, urlBudget, url, status)
+	return prefix + padToVisibleWidth(url, urlBudget) + "  " + status
+}
+
+// padToVisibleWidth appends spaces so s occupies width visible columns.
+// fmt's %-Ns pads by rune count, which counts ANSI escape bytes as width —
+// a value carrying colour codes would be under-padded and the column after
+// it would drift left by the escape length. Use this wherever the field
+// already contains escapes.
+func padToVisibleWidth(s string, width int) string {
+	if n := width - visibleLen(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
 }
 
 // truncateToBudget shortens a plain (no-ANSI) string to fit budget visible
@@ -339,7 +357,7 @@ func truncateToBudget(s string, budget int) string {
 	return s[:budget-3] + "..."
 }
 
-func (d *Dashboard) earningsLine(s Stats) string {
+func (d *Dashboard) earningsLine(s *Stats) string {
 	satsPerSec := s.HashRate * defaultSatsPerHash()
 	satsPerDay := satsPerSec * 86400
 
@@ -352,7 +370,7 @@ func (d *Dashboard) earningsLine(s Stats) string {
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
 	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset
-	return fmt.Sprintf("  %-30s  %s", total, earned)
+	return "  " + padToVisibleWidth(total, 30) + "  " + earned
 }
 
 func (d *Dashboard) providerLine(p ProviderStats) string {
@@ -364,7 +382,7 @@ func (d *Dashboard) providerLine(p ProviderStats) string {
 	return fmt.Sprintf("  %-30s  %-12s  %s", p.Name, rate, active)
 }
 
-func (d *Dashboard) walletLine(s Stats) string {
+func (d *Dashboard) walletLine(s *Stats) string {
 	fp := s.WalletFingerprint
 	if fp == "" {
 		fp = "not initialized"
@@ -372,7 +390,7 @@ func (d *Dashboard) walletLine(s Stats) string {
 	return fmt.Sprintf("  Fingerprint: %s%s%s", cyan, fp, reset)
 }
 
-func (d *Dashboard) footer(s Stats, cols int) string {
+func (d *Dashboard) footer(s *Stats, cols int) string {
 	uptime := formatDuration(s.Uptime)
 	hint := dim + "Ctrl+C to exit" + reset
 	left := fmt.Sprintf("  uptime: %s", uptime)
@@ -465,7 +483,7 @@ func visibleLen(s string) int {
 			// A CSI sequence ends at its final byte, any character in the
 			// range '@'..'~' (0x40-0x7E) — not only 'm'. The '[' introducer
 			// and the numeric/';' parameter bytes (< '@') are consumed
-			// silently. Ending on any final byte means a non-colour escape
+			// silently. Ending on any final byte means a non-color escape
 			// (e.g. "\x1b[2J") can't swallow the rest of the string.
 			if r >= '@' && r <= '~' && r != '[' {
 				inEsc = false
@@ -538,12 +556,35 @@ func shortenURL(url string, maxLen int) string {
 	return url[:maxLen-3] + "..."
 }
 
-// ----- Width detection stub -----
+// ----- Width detection -----
 
-// SetWidth allows callers to inject the terminal width.
-// If never called, defaults to 80 columns.
+// SetWidth injects the terminal width and locks it, disabling
+// auto-detection — for tests and embedders writing somewhere other than
+// a terminal file. Values below the documented 40-column minimum are
+// rejected; the previous width stands.
 func (d *Dashboard) SetWidth(cols int) {
 	if cols >= 40 {
+		d.cols = cols
+		d.widthLocked = true
+	}
+}
+
+// detectWidth refreshes d.cols from the kernel when the dashboard is
+// writing to a terminal file. It is a no-op when the width was pinned
+// via SetWidth, when w is not an *os.File (tests use buffers), or when
+// the platform query fails or reports a degenerate width — in every
+// case the previous value stands, so a transient failure never collapses
+// the layout. Called once per render tick so a terminal resize between
+// ticks is picked up without a SIGWINCH handler.
+func (d *Dashboard) detectWidth() {
+	if d.widthLocked {
+		return
+	}
+	f, ok := d.w.(*os.File)
+	if !ok {
+		return
+	}
+	if cols := terminalWidth(f); cols >= 40 {
 		d.cols = cols
 	}
 }
