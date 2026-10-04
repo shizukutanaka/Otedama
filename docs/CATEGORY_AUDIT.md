@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 913 update — nonce-partition + residue-class + ntime-roll audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `NonceStep` left at 1 with N threads — every thread rescans the same sequence, silently discarding (N−1)/N of the hash rate. | ✅ Clean: `NonceStep: 0` is a sentinel resolved to `Threads` at `NewWorker`; thread i grinds `i, i+Threads, i+2*Threads…` — disjoint residue classes. |
+| M | Multiple workers on the same job duplicating each other's nonce space. | ✅ Clean: `NonceOffset = i*Threads` per worker with the shared step → every (worker, thread) pair owns a distinct residue class. |
+| S | `nonce += NonceStep` wrap re-hashing identical headers — duplicate-share spam. | ✅ Clean: wrap detected by `nonce < prev`, rolls `ntime` forward (`ntimeRoll++`) so the next sweep hashes distinct headers (s370 fix). |
+
+All packages build, vet, and test green.
