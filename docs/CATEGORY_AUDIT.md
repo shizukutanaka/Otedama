@@ -1803,3 +1803,16 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1260 update — unicode-sanitize + context-leftover + runtime-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All three user-facing sanitizers (`poolproto.SanitizePoolText`, `stratumv1.sanitizeNotice`, `cmd.safeDisplay`) stripped only `unicode.IsControl` — the Cc category. Cf format characters (bidi overrides U+202A–U+202E / U+2066–U+2069, zero-width spaces/joiners U+200B–U+200F, tag characters U+E0000+, BOM U+FEFF) and Zl/Zp line/paragraph separators passed through to logs, the TUI, and `otedama config` output — the Trojan Source class (CWE-838) plus non-Cc line forgery. | 🔧 Fixed: predicate widened to `unicode.In(r, Cc, Cf, Zl, Zp)` via `unsafePoolRune`/`unsafeDisplayRune`; `sanitizeNotice` (a verbatim duplicate) now delegates to `SanitizePoolText`; three format/separator regression tests added (poolproto, stratumv1, cmd). |
+| M | `stratumv1.sanitizeNotice` was an exact duplicate of `poolproto.SanitizePoolText` — predicate drift guaranteed. | 🔧 Fixed: `sanitizeNotice` now delegates; `maxNoticeRunes` kept for the existing test contract. |
+| L | `context.Background()` at call sites vs `t.Context()`/`b.Loop()` in tests — the go1.24-gated API cannot compile under `go 1.22` module floor (same class as s1258/s1259). | ⚠️ Noted: version-gated, tracked with the maps.Keys/`slices.Collect` deferral. |
+| L | `runtime`/`runtime/debug`/`pprof` surface — prior censuses (s821, s871, s877, s883) remain accurate: zero new runtime escapes, zero debug imports, pprof gated. | ✅ Clean. |
+
+All packages build, vet, and test green.
