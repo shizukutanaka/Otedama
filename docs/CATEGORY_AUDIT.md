@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1101 update — error-comparison census
+
+`err.Error()` string comparisons and direct `err == sentinel` checks that
+should be `errors.Is`/`errors.As`.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `err.Error()` comparisons — the only call site (cmd/otedama/run.go:242) is log display, not matching | S |
+| S | One `err == flag.ErrHelp` (cmd/otedama/run.go:130) — stdlib `flag` returns the sentinel unwrapped; contract documented at :62; `errors.Is` is marginally more robust but `==` is correct here | ⚠️ Noted (unwrapped-sentinel idiom, documented) |
+| S | All other error flows use `errors.Is`/`errors.As` correctly | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
