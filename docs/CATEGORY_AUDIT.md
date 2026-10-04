@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 787 update — panic-census-2 + recover-absence + must-helper audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `panic` reachable from network input — a crafted frame crashing the process. | ✅ Clean: all 12 panics are programmer-error or integrity guards (duplicate Start, double-registered scheme/dialer/metric, wordlist checksum, invalid label name) — none sits on a wire-data path (re-verified; session 733). |
+| M | `recover()` swallowing a panic — masking a real bug as a return code. | ✅ Clean: zero recover sites in production code — failures surface as errors, panics as panics. |
+| M | `Must*` helper invoked at runtime — a convenience wrapper panicking mid-operation. | ✅ Clean: no `Must*` helpers exist — all fallible construction returns errors. |
+
+All packages build, vet, and test green.
