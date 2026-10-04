@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1016 update — wallet-atomicity + oracle + sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A killed mid-write leaving a half-written wallet.dat. | ✅ Clean: CreateTemp→Write→Sync→Close→Chmod(0600)→Rename in the same dir (same filesystem); Close errors are honored because the final flush can happen there; every failure path removes the temp file; `sweepStaleTempFiles` reaps >1-minute leftovers at startup without touching a live writer. |
+| S | The wallet file briefly world-readable between write and chmod. | ✅ Clean: Chmod(0600) happens **before** the rename, so the final path is never visible with loose permissions; data dir itself is MkdirAll 0700. |
+| S | Decrypt errors leaking an oracle (wrong passphrase vs corrupt file distinguishable). | ✅ Clean: `loadExisting` and `ChangePassphrase` collapse `DecryptSeed` failures into opaque fixed strings ("wallet unlock failed", "incorrect old passphrase"); the documented intent is oracle-resistance. |
+| S | A restored-backup wallet.dat losing fingerprint identity checks. | ✅ Clean: missing `wallet.fingerprint` is recreated from the decrypted seed on load — but never overwritten when present, since a mismatching fingerprint is a signal, not a bug to mask. |
+| M | The BIP-39 25th-word silently deriving a different seed. | ✅ Documented benign: `WithMnemonicPassphrase` spells out the decoy-wallet property (wrong phrase → valid-looking different seed, no error) and why it is creation-only (the phrase is folded into the stored seed). |
+
+All packages build, vet, and test green.
