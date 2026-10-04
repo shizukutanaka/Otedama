@@ -2222,6 +2222,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1046 update — httpserver-test readiness-tristate + pprof-gate + lifecycle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Readiness probe stuck in one direction (never recovers or never degrades). | ✅ Clean: 503-when-not-ready, 200-when-ready, AND **flips-back-to-503** — the full tri-state transition is pinned, not just the two steady states. |
+| M | pprof surface accidentally exposed. | ✅ Clean: `Pprof_DisabledByDefault` asserts the debug surface is off unless opted in; enabled path serves index + named profiles — both halves pinned (complements the session-393 bind-warn fix). |
+| M | ServeError/Addr reporting indistinguishable states. | ✅ Clean: nil-healthy / nil-after-clean-stop / returns-stored-error tri-state; Addr returns configured address before start and bound address after. |
+| M | Handler/lifecycle edges untested (404, nil registry, shutdown). | ✅ Clean: unknown→404, metrics nil-registry→500 (fail-closed), graceful stop, ctx-cancel shutdown, invalid-address error, concurrent-requests no-race. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
