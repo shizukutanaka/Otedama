@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1024 update — config-load + display-sanitize + json-origins audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A user-named `--config` file that does not exist failing silently (defaults used, typo invisible). | ⚠️ Tracked: real gap on master; fix proposed in the now-closed #551 — recorded as proposed-and-rejected, not re-delivered. |
+| M | Unknown keys in config.yaml silently ignored. | ✅ Clean: `KnownFields(true)` strict decode; a decode failure warns and falls back to defaults rather than starting with a half-parsed file; `io.EOF` (empty/comments-only) correctly means "defaults". |
+| C | Control chars in config values injecting ANSI/ forged log lines on `config show`. | ✅ Clean: `safeDisplay` strips `unicode.IsControl` (C1-class already fixed here); JSON path doesn't need it (encoding escapes controls natively — documented). |
+| M | Pool-URL userinfo leaking credentials into `config show` output. | ✅ Clean: `poolproto.StripUserinfo` applied in BOTH the text view and the JSON doc before printing. |
+| S | `--origin` provenance leaking into normal output or JSON losing it. | ✅ Clean: origin tag gated on `--origin`; JSON carries a parallel `origins` map only when both flags combine. |
+| M | Malformed `OTEDAMA_*` env values vanishing silently during `config validate`. | ✅ Clean: `EnvWarnings` are emitted before `Validate` — the typo'd setting is named for the operator. |
+
+All packages build, vet, and test green.
