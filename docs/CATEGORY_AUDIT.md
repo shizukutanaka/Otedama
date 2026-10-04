@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 855 update — atomic-field + custom-marshal + racy-access audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `atomic.*` field also written non-atomically — torn read/write bypassing the atomic guarantee. | ✅ Clean: the 5 `atomic.Pointer` fields (httpserver boundAddr/serveErr, stratumv1 lastReconnect/extranonce1, logger defaultPtr) are accessed exclusively via `.Load()/.Store()/.CompareAndSwap()`; the 13 `atomic.Int64`/`Float64` counters likewise (s739). |
+| M | Custom `MarshalJSON`/`UnmarshalJSON` bypassing `encoding/json` invariants — recursion, duplicate keys, partial unmarshal. | ✅ Clean: absent — marshalling is plain tagged structs (s721/739). |
+| M | Same field accessed both via `atomic` and plain ops — data race. | ✅ Clean: no field mixes atomic and plain access; plain-access fields are mutex-guarded instead (s740/764). |
+
+All packages build, vet, and test green.
