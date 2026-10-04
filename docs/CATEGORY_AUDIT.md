@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1096 update — var-that-should-be-const census
+
+Package-level `var` holding a literal that never mutates should be `const`;
+`var` is only justified for non-constable types or deliberate mutation seams.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All non-const vars are non-constable by kind: slices (`EnglishWords`, `defaultSources`, `numericEnvVars`), map (`validEntropyBits`), errors (`errExhausted`, `ErrWrongPassphrase`), `atomic.Pointer` (`defaultPtr`) | S |
+| S | 4 string/address vars (`drmBasePath`, `gpuDRMPath`, `networkCheckEndpoint`, `clockSkewProbeURL`) are deliberate test seams — tests swap them for fake sysfs/servers via save-restore | S (design) |
+| S | Local literal assignments (`model = "unknown"`) and `const`-block members correctly classified | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
