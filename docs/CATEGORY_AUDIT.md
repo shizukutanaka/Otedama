@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1288 update — CHANGELOG Unreleased drift measurement
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Unreleased section currency | ⚠️ Noted: last Unreleased entry covers session 323; hundreds of merged changes since (V1/V2 hardening, metrics fixes, stdlib modernization, CI repairs, dep bumps) are unrecorded. File last modified 2026-09-30 (8e86d7d8f) — the convention of skipping changelog entries for docs-only rounds is working as designed, but real fixes/feat merged post-323 are absent from the ledger. Wholesale backfill is out of scope for an audit round; recorded as drift for a future docs round. |
+| R | Release anchors | ✓ `[3.0.0-alpha.1] — 2026-04-24` section exists; latest git tag is v2.1.9 (no v3 tag) — consistent with alpha status |
+
