@@ -32,6 +32,18 @@ type arbitrationLoopOpts struct {
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
 
+	// powerWatts/powerPricePerKWh/rateSource, when all set, add a derived
+	// profitability floor on top of minYield: the per-device share of the
+	// configured power draw is converted to sats/sec at the current BTC/USD
+	// rate and arbitration must clear max(minYield, that breakeven) before
+	// routing a device to a stream. It is the reward-vs-constraint half of
+	// the bi-criteria formulation — yield is maximized only subject to the
+	// power-cost constraint (RESEARCH_IMPROVEMENTS Category 6 item 6).
+	// rateSource may be nil; the derived floor is then always 0.
+	powerWatts       float64
+	powerPricePerKWh float64
+	rateSource       provider.RateSource
+
 	// activityMu/activity, when both non-nil, receive the TUI-facing
 	// provider status: after each Decide() this loop rewrites activity to
 	// exactly the providers with a live (non-idle) assignment this cycle,
@@ -42,6 +54,50 @@ type arbitrationLoopOpts struct {
 	// exists. See buildStats/stats.go for the read side.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+
+	// paused, when non-nil, is the shared per-device pause set rewritten
+	// after each Decide: devices whose assignment is idle or routed to a
+	// non-mining ("ai.") stream are marked paused so pool job dispatch
+	// (updateWork/applyJob) does not re-arm them between ticks. applyAllocation
+	// alone only pauses a worker once; without this the next pool job
+	// silently undid every arbitration pause (the per-device counterpart
+	// of the curtailGate documented in run.go).
+	paused *pauseSet
+}
+
+// pauseSet tracks device IDs arbitration has currently paused (idle below
+// the yield floor, or assigned to a non-mining stream). The arbitration
+// loop is the only writer; the pool-session job dispatch reads it.
+// The zero value is ready to use.
+type pauseSet struct{ m sync.Map }
+
+// Pause records deviceID as arbitration-paused.
+func (p *pauseSet) Pause(deviceID string) { p.m.Store(deviceID, struct{}{}) }
+
+// Resume removes deviceID from the paused set.
+func (p *pauseSet) Resume(deviceID string) { p.m.Delete(deviceID) }
+
+// Paused reports whether deviceID is currently arbitration-paused.
+func (p *pauseSet) Paused(deviceID string) bool {
+	_, ok := p.m.Load(deviceID)
+	return ok
+}
+
+// reconcileArbPauses rewrites the shared pause set to exactly the devices
+// whose current assignment is idle or routed to a non-mining stream. It is
+// called after every successful Decide, before applyAllocation, so the set
+// always mirrors the latest allocation. A nil paused is a no-op (tests).
+func reconcileArbPauses(alloc *arbitration.Allocation, paused *pauseSet) {
+	if paused == nil || alloc == nil {
+		return
+	}
+	for _, a := range alloc.Assignments {
+		if a.Idle() || strings.HasPrefix(string(a.Stream), "ai.") {
+			paused.Pause(a.DeviceID)
+		} else {
+			paused.Resume(a.DeviceID)
+		}
+	}
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -56,8 +112,34 @@ const defaultHysteresisPct = 0.05
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
 const streamStaleTimeout = 3 * time.Minute
 
+// powerFloor returns the per-device power-breakeven yield floor in
+// sats/sec: the configured system power cost (powerWatts/1000 × price
+// $/kWh, in USD/hour) is converted to sats/sec at the current BTC/USD
+// rate and split evenly across the devices arbitration manages. Returns
+// 0 — no floor — when power data is unconfigured, no rate is available,
+// or there are no devices. Splitting evenly is exact for a single-device
+// rig and an approximation for heterogeneous multi-device rigs (per-device
+// power draw is not yet measured; document power_watts as the dominant
+// device's draw if strict per-device gating is needed).
+func (o *arbitrationLoopOpts) powerFloor() float64 {
+	if o.powerWatts <= 0 || o.powerPricePerKWh <= 0 || len(o.devRefs) == 0 {
+		return 0
+	}
+	var rate float64
+	if o.rateSource != nil {
+		rate, _ = o.rateSource.BTCUSDRate()
+	}
+	if rate <= 0 {
+		return 0
+	}
+	usdPerHour := o.powerWatts / 1000 * o.powerPricePerKWh
+	floor := provider.SatsPerSecond(usdPerHour, rate) / float64(len(o.devRefs))
+	o.metrics.powerBreakevenFloor.Set(floor)
+	return floor
+}
+
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is cancelled or
+// or whenever a fresh quote arrives. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
@@ -74,7 +156,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if !ok {
 				return
 			}
-			key := updateStream(opts.streamsMu, opts.streamMap, q)
+			key := updateStream(opts.streamsMu, opts.streamMap, &q)
 			ts := q.At
 			if ts.IsZero() {
 				ts = time.Now()
@@ -82,26 +164,32 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
-				opts.log("info", fmt.Sprintf(
-					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
-					key, streamStaleTimeout))
-			}
+			pruned := pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now())
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
+			for _, key := range pruned {
+				opts.log("info", fmt.Sprintf(
+					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
+					key, streamStaleTimeout,
+				))
+			}
 			opts.metrics.activeStreams.Set(float64(len(streams)))
 
 			margin := opts.hysteresisPct
 			if margin == 0 {
 				margin = defaultHysteresisPct
 			}
-			alloc, err := arbitration.Decide(arbitration.Input{
+			minYield := opts.minYield
+			if pf := opts.powerFloor(); pf > minYield {
+				minYield = pf
+			}
+			alloc, err := arbitration.Decide(&arbitration.Input{
 				Devices:            opts.devRefs,
 				Streams:            streams,
 				Previous:           prevAlloc,
 				Policy:             arbitration.PolicyMaximizeEarnings,
 				HysteresisMargin:   margin,
-				MinYieldSatsPerSec: opts.minYield,
+				MinYieldSatsPerSec: minYield,
 			})
 			if err != nil {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
@@ -142,26 +230,32 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if alloc.SkippedDevice != prevSkipped {
 				if alloc.SkippedDevice > 0 {
 					opts.log("info", fmt.Sprintf(
-						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
-						alloc.SkippedDevice))
+						"arbitration: %d device(s) now idle (no viable stream, or below the effective profitability floor)",
+						alloc.SkippedDevice,
+					))
 				} else {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
+			// Keep the shared pause set in step with this allocation BEFORE
+			// applyAllocation runs: the set is what makes a pause survive the
+			// next pool job, so it must reflect the new Decide result even on
+			// the tick where the worker gets its one-shot SetWork(nil).
+			reconcileArbPauses(alloc, opts.paused)
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
-// older than ttl, returning the pruned keys. Only entries that have a recorded
+// older than streamStaleTimeout, returning the pruned keys. Only entries that have a recorded
 // quote time are considered: a stream present in m but absent from seen (e.g.
 // pre-seeded directly, never quoted) is never pruned. now is passed in so the
 // logic is deterministically testable.
-func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time, ttl time.Duration) []string {
+func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time) []string {
 	var pruned []string
 	for key, ts := range seen {
-		if now.Sub(ts) > ttl {
+		if now.Sub(ts) > streamStaleTimeout {
 			delete(m, key)
 			delete(seen, key)
 			pruned = append(pruned, key)
@@ -173,7 +267,7 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 // updateStream folds one provider quote into the live streams map,
 // keyed by "providerID:deviceID". It returns the key it wrote, so the caller
 // can track per-stream freshness for staleness pruning.
-func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
+func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
 	key := q.ProviderID + ":" + q.DeviceID
@@ -212,7 +306,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
-			// updateStream always initialises YieldPerDevice before inserting
+			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y
