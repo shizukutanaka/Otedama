@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 907 update — vendor + go-directive + nolint audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `vendor/` tree drift — vendored deps diverging from go.mod. | ✅ Clean: no `vendor/` directory — module resolution is the single source of truth. |
+| M | `//go:` directives beyond `//go:build` — hidden codegen/linkname/unsafe escapes. | ✅ Clean: only the three `//go:build` platform tags on `tui/width_*.go` (s547/650); `//go:generate|embed|noinline|norace|linkname|uintptrescapes|cgo_|fix|debug` all absent. |
+| S | `//nolint` suppression without a stated reason. | ✅ Clean: all ~12 sites carry the `//nolint:<linter>` tag plus a justification (verified at s631/549); none are bare. |
+
+All packages build, vet, and test green.
