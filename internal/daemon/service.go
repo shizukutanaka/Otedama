@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -447,7 +448,7 @@ func (m *Manager) serviceArgs() string {
 func quoteToken(s string) string {
 	if strings.ContainsAny(s, " \t\"") ||
 		strings.IndexFunc(s, unicode.IsControl) >= 0 {
-		return fmt.Sprintf("%q", s)
+		return strconv.Quote(s)
 	}
 	return s
 }
