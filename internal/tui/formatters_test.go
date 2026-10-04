@@ -114,7 +114,7 @@ func TestDefaultSatsPerHash_IsPositiveAndTiny(t *testing.T) {
 func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:   "stratum+v2://example.com:3336",
 		Connected: false,
 	}, d.cols)
@@ -126,7 +126,7 @@ func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 func TestDashboard_PoolLineWhenConnected(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:     "stratum+v2://example.com:3336",
 		Connected:   true,
 		PoolLatency: 42 * time.Millisecond,
@@ -151,7 +151,7 @@ func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	const cols = 40 // documented minimum, see SetWidth
-	line := d.poolLine(Stats{
+	line := d.poolLine(&Stats{
 		PoolURL:   "stratum+v2://a-very-long-pool-hostname.example.com:3336",
 		Connected: true,
 	}, cols)
@@ -168,7 +168,7 @@ func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
 func TestDashboard_WalletLine_WithFingerprint(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.walletLine(Stats{WalletFingerprint: "a1b2c3d4"})
+	line := d.walletLine(&Stats{WalletFingerprint: "a1b2c3d4"})
 	if !strings.Contains(line, "a1b2c3d4") {
 		t.Errorf("walletLine missing fingerprint: %q", line)
 	}
@@ -177,7 +177,7 @@ func TestDashboard_WalletLine_WithFingerprint(t *testing.T) {
 func TestDashboard_WalletLine_NotInitialized(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.walletLine(Stats{WalletFingerprint: ""})
+	line := d.walletLine(&Stats{WalletFingerprint: ""})
 	if !strings.Contains(line, "not initialized") {
 		t.Errorf("empty fingerprint must show 'not initialized': %q", line)
 	}
@@ -186,7 +186,7 @@ func TestDashboard_WalletLine_NotInitialized(t *testing.T) {
 func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 2.5e6, Devices: 3, SharesFound: 42, SharesSent: 40,
 	}, d.cols)
 	if !strings.Contains(line, "2.50 MH/s") {
@@ -203,7 +203,7 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Stalled: true,
 	}, d.cols)
 	if !strings.Contains(line, "stalled") {
@@ -214,7 +214,7 @@ func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 1e9, Devices: 2, Stalled: false,
 	}, d.cols)
 	if strings.Contains(line, "stalled") {
@@ -225,7 +225,7 @@ func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Curtailed: true,
 	}, d.cols)
 	if !strings.Contains(line, "paused") {
@@ -242,7 +242,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 	// shown — never the misleading fault badge.
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.miningLine(Stats{
+	line := d.miningLine(&Stats{
 		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
 	}, d.cols)
 	if !strings.Contains(line, "paused") {
@@ -256,7 +256,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.earningsLine(Stats{
+	line := d.earningsLine(&Stats{
 		HashRate:      1e9, // 1 GH/s
 		EstSatsEarned: 1234,
 	})
@@ -271,7 +271,7 @@ func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 func TestDashboard_EarningsLine_IncludesProviders(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.earningsLine(Stats{
+	line := d.earningsLine(&Stats{
 		HashRate: 1e6,
 		Providers: []ProviderStats{
 			{Name: "akash", SatsPerSecond: 1000, Active: true},
@@ -301,7 +301,7 @@ func TestDashboard_Footer_IncludesUptimeAndHint(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(80)
-	line := d.footer(Stats{Uptime: 3*time.Hour + 15*time.Minute + 30*time.Second}, 80)
+	line := d.footer(&Stats{Uptime: 3*time.Hour + 15*time.Minute + 30*time.Second}, 80)
 	if !strings.Contains(line, "3h") {
 		t.Errorf("footer missing uptime: %q", line)
 	}
@@ -383,7 +383,7 @@ func TestDashboard_StopDoesNotRaceRenderLoop(t *testing.T) {
 	d := NewDashboard(&buf)
 	d.Start()
 	for i := 0; i < 5; i++ {
-		d.Update(Stats{HashRate: float64(i) * 1e6, Devices: 1})
+		d.Update(&Stats{HashRate: float64(i) * 1e6, Devices: 1})
 		time.Sleep(2 * time.Millisecond)
 	}
 	d.Stop() // must not race renderLoop's writes to buf
@@ -503,5 +503,44 @@ func TestVisibleLen_IncompleteEscapeAtEnd(t *testing.T) {
 	// of the escape sequence. We just assert no panic and result ≤ len(s).
 	if got < 0 || got > len(s) {
 		t.Errorf("visibleLen on truncated escape = %d", got)
+	}
+}
+
+// TestDashboard_PoolLine_StatusColumnAligned pins padToVisibleWidth: fmt's
+// %-Ns pads by rune count, so a field carrying ANSI escapes was under-padded
+// and the connection status drifted left by the escape length. The status
+// must land at the same visible column regardless of escapes.
+func TestDashboard_PoolLine_StatusColumnAligned(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	const cols = 60
+	line := d.poolLine(&Stats{
+		PoolURL:   "stratum+v2://a.co:3336",
+		Connected: true,
+	}, cols)
+	// Find where "✓" first appears in visible terms.
+	if got := strings.Index(line, "✓"); got < 0 {
+		t.Fatalf("status missing: %q", line)
+	}
+	// Walk visibleLen up to the ✓: prefix "  Pool: " (8) + urlBudget
+	// (cols-8-len("✓ connected")-2) + 2-space gap.
+	urlBudget := cols - len("  Pool: ") - len("✓ connected") - 2
+	want := len("  Pool: ") + urlBudget + 2
+	vis := visibleLen(line[:strings.Index(line, "✓")])
+	if vis != want {
+		t.Errorf("status column = %d visible chars, want %d: %q", vis, want, line)
+	}
+}
+
+func TestPadToVisibleWidth(t *testing.T) {
+	if got := padToVisibleWidth("ab", 5); got != "ab   " {
+		t.Errorf("plain pad: %q", got)
+	}
+	esc := dim + "ab" + reset // escapes must not count as width
+	if got := padToVisibleWidth(esc, 5); visibleLen(got) != 5 {
+		t.Errorf("escaped pad visible width = %d, want 5: %q", visibleLen(got), got)
+	}
+	if got := padToVisibleWidth("abcdef", 3); got != "abcdef" {
+		t.Errorf("over-wide stays uncut: %q", got)
 	}
 }
