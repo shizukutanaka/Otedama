@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1018 update — runtime-exposition + summary-substitute + escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go_gc_duration_seconds` silently mis-typed vs client_golang. | ✅ Clean: the summary this package cannot emit is deliberately re-expressed as two counters (`_total` pause seconds + `_total` cycles) — the rate()-able form dashboards actually use; the substitution is documented at the top of the file. |
+| M | A Go version string breaking label syntax in `go_info`. | ✅ Clean: the label value goes through `escapeLabel` (Prometheus escaping), not `%q` — the nolint comment explains why the obvious-looking gocritic fix would be a bug. |
+| M | Dashboards keyed on client_golang names silently breaking. | ✅ Clean: all emitted names match the client_golang `go_*` surface; kind strings (gauge/counter) are per-entry, not a blanket type. |
+| S | An inconsistent snapshot mixing memstats from different instants. | ✅ Clean: one `ReadMemStats` + one `NumGoroutine` per scrape feeds all 12 metrics. |
+| M | Write failures swallowed mid-exposition. | ✅ Clean: `Fprintf` errors propagate to the collector caller. |
+
+All packages build, vet, and test green.
