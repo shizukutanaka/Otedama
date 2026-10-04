@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -50,7 +51,7 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 		m:         m,
 		providers: nil,
 	}
-	stats := buildStats(opts, 500.0, 10, nil, false)
+	stats := buildStats(&opts, 500.0, 10, nil, false)
 	if stats.HashRate != 500.0 {
 		t.Errorf("HashRate = %v, want 500.0", stats.HashRate)
 	}
@@ -85,7 +86,7 @@ func TestBuildStats_ProviderActiveReflectsArbitrationAssignment(t *testing.T) {
 		activity:   activity,
 	}
 
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if len(stats.Providers) != 2 {
 		t.Fatalf("Providers len = %d, want 2", len(stats.Providers))
 	}
@@ -111,7 +112,7 @@ func TestBuildStats_ProviderInactiveWithNilActivityMap(t *testing.T) {
 		startTime: time.Now(),
 		providers: []provider.Provider{mining},
 	}
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if len(stats.Providers) != 1 {
 		t.Fatalf("Providers len = %d, want 1", len(stats.Providers))
 	}
@@ -169,7 +170,7 @@ func TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount(t *testing.
 	// cannot represent, proving SharesSent is now its own signal.
 	m.sharesSubmitted.Add(3)
 
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if stats.SharesFound != 0 {
 		t.Errorf("SharesFound = %d, want 0 (fresh worker)", stats.SharesFound)
 	}
@@ -187,7 +188,7 @@ func TestBuildStats_SharesSentIsZeroWithNilMetrics(t *testing.T) {
 		poolURL:   "stratum+v2://pool.example.com:3336",
 		startTime: time.Now(),
 	}
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if stats.SharesSent != 0 {
 		t.Errorf("SharesSent = %d, want 0 (opts.m is nil)", stats.SharesSent)
 	}
@@ -536,6 +537,104 @@ func TestRunArbitrationLoop_HysteresisPctIsUsed(t *testing.T) {
 	}
 }
 
+// TestArbitrationLoopOpts_PowerFloor covers the derived per-device
+// power-breakeven floor: disabled inputs return 0; a configured
+// powerWatts × price ÷ BTC/USD converts to sats/sec and splits evenly
+// across managed devices.
+func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+	devs := []arbitration.DeviceRef{{Identity: hal.Identity{ID: "cpu-0"}}}
+
+	// Disabled inputs: no power, no price, no devices, no rate source.
+	for name, o := range map[string]arbitrationLoopOpts{
+		"zero power":    {powerWatts: 0, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"zero price":    {powerWatts: 3000, powerPricePerKWh: 0, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"no devices":    {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: nil, metrics: m},
+		"nil rate":      {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: nil, devRefs: devs, metrics: m},
+		"nonpos rate":   {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 0}, devRefs: devs, metrics: m},
+		"negative both": {powerWatts: -1, powerPricePerKWh: -1, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+	} {
+		if got := o.powerFloor(); got != 0 {
+			t.Errorf("%s: powerFloor() = %v, want 0", name, got)
+		}
+	}
+
+	// 3000 W × $0.10/kWh = $0.30/h → at $100,000/BTC = 0.30/100000×1e8/3600
+	// ≈ 0.0833 sats/s for the single device; halves across two devices.
+	want := 0.30 / 100000 * 1e8 / 3600
+	o := arbitrationLoopOpts{
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+		devRefs:          devs,
+		metrics:          m,
+	}
+	if got := o.powerFloor(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("powerFloor() = %v, want ~%v", got, want)
+	}
+	if got := m.powerBreakevenFloor.Value(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("power_breakeven_floor gauge = %v, want ~%v", got, want)
+	}
+	o.devRefs = append(o.devRefs, arbitration.DeviceRef{Identity: hal.Identity{ID: "gpu-0"}})
+	if got := o.powerFloor(); math.Abs(got-want/2) > 1e-9 {
+		t.Errorf("powerFloor() with 2 devices = %v, want ~%v", got, want/2)
+	}
+}
+
+// TestRunArbitrationLoop_PowerFloorIdlesDevice verifies the derived floor
+// reaches Decide: a stream below the power-breakeven leaves the device
+// idle even when min_yield_sats_per_sec is unset.
+func TestRunArbitrationLoop_PowerFloorIdlesDevice(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	streamMap := map[string]arbitration.Stream{
+		"mining.stratum:cpu-0": {
+			ID:              "mining.stratum",
+			IsBitcoinMining: true,
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 0.01, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 0.01, Confidence: 1.0},
+		},
+	}
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{SHA256d: true},
+		}},
+		streamsMu:        &sync.Mutex{},
+		streamMap:        streamMap,
+		quoteCh:          make(chan provider.Quote),
+		metrics:          m,
+		log:              func(_, _ string) {},
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	// Floor ≈ 0.0833 sats/s > yield 0.01 sats/s → the device must idle.
+	deadline := time.After(250 * time.Millisecond)
+	for m.devicesIdle.Value() != 1 {
+		select {
+		case <-deadline:
+			t.Fatalf("devicesIdle = %v, want 1 (yield below power breakeven)", m.devicesIdle.Value())
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	<-done
+}
+
 // ============================================================================
 // run.go sendMsg — encode error and WrapMessage error
 // ============================================================================
@@ -825,10 +924,10 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		serverConn.Read(buf) //nolint:errcheck
 		// Send a valid SetupConnectionSuccess but then a second one instead of
 		// the expected OpenMiningChannel flow — here we deliberately send
-		// an OpenMiningChannelError which is recognised but sets neither
+		// an OpenMiningChannelError which is recognized but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
-		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasNtimeStart: true, NtimeStart: 0x60000000, Version: 0x20000000}
 		payload, _ := job.Encode()
 		f, _ := stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
 		data, _ := stratum.EncodeFrame(f)
@@ -1078,12 +1177,153 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
 					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+					`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}()
 
 	return ln.Addr().String()
+}
+
+// fakeV1PoolSilent completes the V1 handshake then holds the connection open
+// without ever sending a job — used to exercise the silent-pool tripwire,
+// which requires the session to stay alive past jobStallWarnAfter.
+func fakeV1PoolSilent(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolSilent listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		// Same handshake trio as fakeV1Pool.
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Hold the connection open without sending a job; drain until the
+		// engine disconnects so the goroutine exits on test teardown.
+		for {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
+// fakeV1PoolHighDiff is fakeV1Pool plus a mining.set_difficulty of 1e15 —
+// large enough that the expected share interval exceeds the 1-hour
+// starvation tripwire at any CPU hashrate.
+func fakeV1PoolHighDiff(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolHighDiff listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e15]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		// Stay connected so the stats ticker keeps firing.
+		time.Sleep(10 * time.Second)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_StarvationWarnsOnce(t *testing.T) {
+	addr := fakeV1PoolHighDiff(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns int
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + addr,
+			user:     "worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log: func(level, msg string) {
+				if level == "warn" && strings.Contains(msg, "between shares") {
+					mu.Lock()
+					warns++
+					mu.Unlock()
+				}
+			},
+		})
+	}()
+
+	deadline := time.After(3 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := warns
+			mu.Unlock()
+			if n > 0 {
+				goto asserted
+			}
+		case <-deadline:
+			goto asserted
+		}
+	}
+asserted:
+	cancel()
+	<-runDone
+	mu.Lock()
+	defer mu.Unlock()
+	if warns == 0 {
+		t.Fatal("expected starvation warning (difficulty 1e15 → interval > 1h)")
+	}
+	if warns > 1 {
+		t.Fatalf("starvation warning fired %d times, want exactly 1 per episode", warns)
+	}
 }
 
 func TestRunSessionV1_PoolClosesAfterHandshake(t *testing.T) {
@@ -1129,9 +1369,77 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 		t.Error("onConnected was not called")
 	}
 	// Ends with pool disconnect.
-	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
+	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("unexpected error: %v", err)
 	}
+}
+
+// fakeV1PoolWithNotice is fakeV1Pool plus a client.show_message
+// notification before close, exercising the PoolNoticeReceiver wiring.
+func fakeV1PoolWithNotice(t *testing.T, message string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolWithNotice listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		msg, _ := json.Marshal(message)
+		fmt.Fprintf(conn, `{"id":null,"method":"client.show_message","params":[%s]}`+"\n", msg)
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
+	addr := fakeV1PoolWithNotice(t, "scheduled maintenance at 02:00 UTC")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      logf,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range logs {
+		if strings.Contains(l, "pool notice: scheduled maintenance") {
+			return
+		}
+	}
+	t.Error("client.show_message notice did not reach the log")
 }
 
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
@@ -1302,7 +1610,7 @@ func TestRunSessionV1_ContextCancelled(t *testing.T) {
 		interval: 500 * time.Millisecond,
 		log:      func(_, _ string) {},
 	})
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)
 	}
 }
@@ -2148,7 +2456,7 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
@@ -2241,6 +2549,224 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_JobStallWarnsOnce exercises the same silent-pool tripwire
+// on the V1 path: a connected pool that never sends a job must warn exactly
+// once per episode.
+func TestRunSessionV1_JobStallWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	old := jobStallWarnAfter
+	jobStallWarnAfter = 50 * time.Millisecond
+	defer func() { jobStallWarnAfter = old }()
+
+	poolURL := "stratum+tcp://" + fakeV1PoolSilent(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  poolURL,
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var stallWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "no new job") {
+			stallWarns++
+		}
+	}
+	if stallWarns == 0 {
+		t.Errorf("silent-pool warning never fired; warns=%v", warns)
+	}
+	if stallWarns > 1 {
+		t.Errorf("silent-pool warning fired %d times, want once per episode", stallWarns)
+	}
+}
+
+// ============================================================================
+// runReconnectLoop — backoff resets after a session that established
+// ============================================================================
+
+// dropAfterHandshakePool accepts every connection, completes the SV2
+// handshake (SetupConnection + OpenMiningChannel), then immediately closes
+// the connection — simulating a pool that establishes sessions and drops
+// them. Each accept runs on its own goroutine so reconnects can proceed.
+type dropAfterHandshakePool struct {
+	ln   net.Listener
+	addr string
+}
+
+func newDropAfterHandshakePool(t *testing.T) *dropAfterHandshakePool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dropAfterHandshakePool: listen: %v", err)
+	}
+	fp := &dropAfterHandshakePool{ln: ln, addr: ln.Addr().String()}
+	go fp.serve()
+	return fp
+}
+
+func (fp *dropAfterHandshakePool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *dropAfterHandshakePool) Close()      { fp.ln.Close() }
+
+func (fp *dropAfterHandshakePool) serve() {
+	for {
+		conn, err := fp.ln.Accept()
+		if err != nil {
+			return
+		}
+		go fp.handle(conn)
+	}
+}
+
+func (fp *dropAfterHandshakePool) handle(conn net.Conn) {
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+	emit := func(msgType uint8, isChannel bool, payload []byte) bool {
+		f, err := stratum.WrapMessage(msgType, isChannel, payload)
+		if err != nil {
+			return false
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			return false
+		}
+		_, err = conn.Write(data)
+		return err == nil
+	}
+	if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	if !emit(stratum.MsgSetupConnectionSuccess, false, payload) {
+		return
+	}
+	f, err := dec.ReadFrame() // OpenMiningChannel
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF
+	}
+	payload, _ = omcSucc.Encode()
+	emit(stratum.MsgOpenMiningChannelSuccess, true, payload)
+	// Close on return — the session ends as soon as the engine notices EOF.
+}
+
+// TestRunReconnectLoop_BackoffResetsAfterConnectedSession: a session that
+// completed its handshake resets the exponential backoff to the initial
+// value — a healthy hours-long session dropping should not inherit the
+// backoff grown by an earlier dead-endpoint episode. Without the reset the
+// third reconnect log would already read "reconnecting in 4s".
+func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
+	fp := newDropAfterHandshakePool(t)
+	defer fp.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3400*time.Millisecond)
+	defer cancel()
+
+	var logs []string
+	var logMu sync.Mutex
+	log := func(_, m string) {
+		logMu.Lock()
+		logs = append(logs, m)
+		logMu.Unlock()
+	}
+
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: fp.URL()}},
+			},
+			MaxReconnectAttempts: 10,
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     log,
+	}
+
+	runReconnectLoop(ctx, r) //nolint:errcheck
+
+	logMu.Lock()
+	defer logMu.Unlock()
+	reconnects := 0
+	for _, m := range logs {
+		if strings.Contains(m, "reconnecting in") {
+			reconnects++
+			if !strings.Contains(m, "reconnecting in 1s") {
+				t.Fatalf("backoff did not reset after an established session: %q (all: %v)", m, logs)
+			}
+		}
+	}
+	if reconnects < 2 {
+		t.Fatalf("expected >=2 reconnect logs in window, got %d: %v", reconnects, logs)
 	}
 }
 
@@ -2391,7 +2917,7 @@ func TestApplyJob_SkipsArbitrationPausedWorker(t *testing.T) {
 	paused.Pause("dev-a")
 
 	job := poolproto.Job{JobID: "42", NTime: 0x60000000, NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{wa, wb}, paused, job, 1, 0); err != nil {
+	if err := applyJob([]*miner.Worker{wa, wb}, paused, &job, 1, 0); err != nil {
 		t.Fatalf("applyJob: %v", err)
 	}
 	if wa.HasWork() {

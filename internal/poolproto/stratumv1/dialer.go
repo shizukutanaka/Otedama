@@ -64,7 +64,7 @@ var handshakeTimeout = 30 * time.Second
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
 // dialer). Credentials are stashed on the returned Connection so that
 // Negotiate can use them without requiring a second credentials argument.
-func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
+func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := parseAddress(url)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 		raw:        conn,
 		remoteAddr: address,
 		protocol:   d.Protocol(),
-		creds:      creds,
+		creds:      *creds,
 	}, nil
 }
 
@@ -161,7 +161,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	en1, en2Size, err := parseSubscribeResult(resp.result)
 	if err != nil {
 		_ = sess.Close()
-		return nil, fmt.Errorf("%w: %v", poolproto.ErrHandshakeFailed, err)
+		return nil, fmt.Errorf("%w: %w", poolproto.ErrHandshakeFailed, err)
 	}
 	sess.extranonce1.Store(&en1)
 	sess.extranonce2Size.Store(int64(en2Size))

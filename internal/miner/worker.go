@@ -56,7 +56,7 @@ type Share struct {
 	ExtraNonce []byte
 }
 
-// WorkerConfig controls the behaviour of a Worker.
+// WorkerConfig controls the behavior of a Worker.
 type WorkerConfig struct {
 	// Threads is the number of goroutines to spawn. Zero or negative
 	// values are replaced with runtime.NumCPU().
@@ -72,6 +72,14 @@ type WorkerConfig struct {
 	// available hash rate (each of Threads goroutines redundantly
 	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
+
+	// NonceOffset shifts every thread's starting nonce so that several
+	// workers grinding the same job partition the space instead of
+	// duplicating it. The engine assigns worker i an offset of
+	// i*Threads with a shared power-of-two NonceStep, giving each
+	// (worker, thread) pair a residue class no other worker touches.
+	// Zero preserves the legacy single-worker layout.
+	NonceOffset uint32
 
 	// DeviceID is the HAL identity of the hardware device this worker
 	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
@@ -127,7 +135,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		cfg.Threads = runtime.NumCPU()
 	}
 	if cfg.NonceStep == 0 {
-		cfg.NonceStep = uint32(cfg.Threads)
+		cfg.NonceStep = uint32(cfg.Threads) //nolint:gosec // Threads defaults to NumCPU and stays far below 2^32
 	}
 	return &Worker{cfg: cfg, done: make(chan struct{})}
 }
@@ -152,7 +160,7 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			w.grind(innerCtx, uint32(threadID), shares)
+			w.grind(innerCtx, uint32(threadID), shares) //nolint:gosec // threadID < Threads, far below 2^32
 		}(i)
 	}
 
@@ -231,7 +239,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID
+		nonce        = w.cfg.NonceOffset + threadID
 		// ntimeRoll counts how many times this thread has exhausted the
 		// nonce space for localWork and rolled the timestamp forward.
 		// Without a roll the wrap would re-hash identical headers —
@@ -251,7 +259,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID // restart nonce from thread offset on new job
+			nonce = w.cfg.NonceOffset + threadID // restart from the thread's own residue class on new job
 			ntimeRoll = 0
 		}
 		w.mu.Unlock()
@@ -271,7 +279,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		h.Time += ntimeRoll
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
-			hash := HashHeader(h)
+			hash := HashHeader(&h)
 			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {

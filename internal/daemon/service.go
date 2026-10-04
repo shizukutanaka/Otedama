@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -36,6 +37,12 @@ import (
 // platform-specific branches without running on a different OS. Production
 // code never changes it; default is the real runtime.GOOS.
 var goos = runtime.GOOS
+
+const (
+	goosLinux   = "linux"
+	goosDarwin  = "darwin"
+	goosWindows = "windows"
+)
 
 // ServiceStatus describes the current state of the Otedama service.
 type ServiceStatus struct {
@@ -92,11 +99,11 @@ func NewManager(configPath, dataDir string, flags ServiceFlags) (*Manager, error
 // Install writes the service definition and enables auto-start.
 func (m *Manager) Install() error {
 	switch goos {
-	case "linux":
+	case goosLinux:
 		return m.installSystemd()
-	case "darwin":
+	case goosDarwin:
 		return m.installLaunchd()
-	case "windows":
+	case goosWindows:
 		return m.installWindowsService()
 	default:
 		return fmt.Errorf("daemon: unsupported platform %q", runtime.GOOS)
@@ -106,11 +113,11 @@ func (m *Manager) Install() error {
 // Uninstall removes the service definition and disables auto-start.
 func (m *Manager) Uninstall() error {
 	switch goos {
-	case "linux":
+	case goosLinux:
 		return m.uninstallSystemd()
-	case "darwin":
+	case goosDarwin:
 		return m.uninstallLaunchd()
-	case "windows":
+	case goosWindows:
 		return m.uninstallWindowsService()
 	default:
 		return fmt.Errorf("daemon: unsupported platform %q", runtime.GOOS)
@@ -120,11 +127,11 @@ func (m *Manager) Uninstall() error {
 // Status returns the current service state.
 func (m *Manager) Status() (ServiceStatus, error) {
 	switch goos {
-	case "linux":
+	case goosLinux:
 		return m.statusSystemd()
-	case "darwin":
+	case goosDarwin:
 		return m.statusLaunchd()
-	case "windows":
+	case goosWindows:
 		return m.statusWindowsService()
 	default:
 		return ServiceStatus{}, fmt.Errorf("daemon: unsupported platform %q", runtime.GOOS)
@@ -142,7 +149,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil
@@ -155,7 +162,7 @@ func (m *Manager) installSystemd() error {
 	}
 
 	unit := m.systemdUnit()
-	if err := os.WriteFile(path, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0o600); err != nil {
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
 	// Reload daemon and enable the unit.
@@ -244,7 +251,7 @@ func (m *Manager) launchdPlistPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, "Library", "LaunchAgents")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, launchdLabel+".plist"), nil
@@ -256,7 +263,7 @@ func (m *Manager) installLaunchd() error {
 		return err
 	}
 	plist := m.launchdPlist()
-	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(plist), 0o600); err != nil {
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
 	return runCmd("launchctl", "load", "-w", path)
@@ -336,7 +343,7 @@ func launchdLogPath(name string) string {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	dir := filepath.Join(home, "Library", "Logs")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	return filepath.Join(dir, name)
@@ -345,7 +352,7 @@ func launchdLogPath(name string) string {
 // ----- Windows service -----
 
 func (m *Manager) installWindowsService() error {
-	args := fmt.Sprintf(`"%s" %s`, m.binaryPath, m.serviceArgs())
+	args := fmt.Sprintf(`"%s" %s`, m.binaryPath, m.serviceArgs()) //nolint:gocritic // %q would escape Windows path separators
 	return runCmd("sc.exe", "create", "Otedama",
 		"binPath=", args,
 		"start=", "auto",
@@ -372,7 +379,7 @@ func (m *Manager) uninstallWindowsService() error {
 func (m *Manager) statusWindowsService() (ServiceStatus, error) {
 	out, err := exec.Command("sc.exe", "query", "Otedama").Output()
 	if err != nil {
-		return ServiceStatus{}, nil
+		return ServiceStatus{}, nil //nolint:nilerr // sc.exe failing means "not installed", matching statusLaunchd
 	}
 	running := strings.Contains(string(out), "RUNNING")
 	return ServiceStatus{
@@ -440,7 +447,7 @@ func (m *Manager) serviceArgs() string {
 func quoteToken(s string) string {
 	if strings.ContainsAny(s, " \t\"") ||
 		strings.IndexFunc(s, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
-		return fmt.Sprintf("%q", s)
+		return strconv.Quote(s)
 	}
 	return s
 }

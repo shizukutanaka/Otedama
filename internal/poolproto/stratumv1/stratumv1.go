@@ -6,7 +6,7 @@
 // # Why V1 still matters in 2026
 //
 // Stratum V1 is a 14-year-old plaintext JSON-RPC-over-TCP protocol with
-// no standardisation document, no encryption, and no authentication of
+// no standardization document, no encryption, and no authentication of
 // the pool to the miner. It is also what >99% of Bitcoin mining pools
 // speak in 2026, and it will remain operational well beyond Otedama's
 // 10-year horizon because pool translation proxies make every SV2 pool
@@ -121,7 +121,7 @@ type session struct {
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
 
-	// ctx controls the read-loop lifetime; cancelled on Close.
+	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
 }
@@ -155,7 +155,7 @@ func (s *session) start(ctx context.Context) {
 }
 
 // readLoop is the single goroutine that reads and dispatches V1 messages.
-// It runs until the connection closes or the context is cancelled.
+// It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
 	defer close(s.noticeCh)
@@ -249,7 +249,7 @@ func (s *session) dispatch(line []byte) {
 			return
 		}
 		s.completeV1Job(&job)
-		s.sendJob(job)
+		s.sendJob(&job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -286,13 +286,31 @@ func (s *session) dispatch(line []byte) {
 		// reconnect machinery uses to re-dial the configured pool list.
 		// We deliberately do NOT follow the pool-supplied Host:Port — see
 		// reconnectDirective for the rationale.
-		if d, ok := parseReconnect(msg.Params); ok {
-			s.lastReconnect.Store(&d)
-		}
+		d := parseReconnect(msg.Params)
+		s.lastReconnect.Store(&d)
 		go s.Close()
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
 	}
+}
+
+// maxReconnectWaitSeconds caps a pool-supplied reconnect wait so a
+// hostile pool cannot park the session indefinitely.
+const maxReconnectWaitSeconds = 300
+
+// ReconnectWait returns the pool-requested reconnect delay recorded by
+// the last client.reconnect/mining.reconnect notification, clamped to
+// [0, maxReconnectWaitSeconds]. Zero when no directive was received.
+// Implements poolproto.ReconnectWaiter.
+func (s *session) ReconnectWait() time.Duration {
+	d := s.lastReconnect.Load()
+	if d == nil || d.Wait <= 0 {
+		return 0
+	}
+	if d.Wait > maxReconnectWaitSeconds {
+		return maxReconnectWaitSeconds * time.Second
+	}
+	return time.Duration(d.Wait) * time.Second
 }
 
 // Jobs returns the channel of incoming jobs.
@@ -357,7 +375,7 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 // produce stale (rejected) shares, which is the #1 reject cause after
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
-func (s *session) sendJob(job poolproto.Job) {
+func (s *session) sendJob(job *poolproto.Job) {
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -370,7 +388,7 @@ func (s *session) sendJob(job poolproto.Job) {
 	}
 send:
 	select {
-	case s.jobsCh <- job:
+	case s.jobsCh <- *job:
 	default:
 		// Channel still full (clean_jobs=false, slow worker):
 		// drop oldest, push newest.
@@ -379,7 +397,7 @@ send:
 		default:
 		}
 		select {
-		case s.jobsCh <- job:
+		case s.jobsCh <- *job:
 		default:
 		}
 	}
@@ -454,14 +472,14 @@ type rpcMessage struct {
 	Error  any             `json:"error"`
 }
 
-func (m rpcMessage) uintID() uint64 {
+func (m *rpcMessage) uintID() uint64 {
 	switch v := m.ID.(type) {
 	case float64:
 		return uint64(v)
 	case int:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case int64:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case string:
 		n, _ := strconv.ParseUint(v, 10, 64)
 		return n

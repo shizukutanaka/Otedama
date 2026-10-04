@@ -35,7 +35,7 @@ import (
 //
 // stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
 // indicator in the TUI so operators see the warning immediately.
-func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
+func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) *tui.Stats {
 	var sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
@@ -66,7 +66,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	// (see arbitrationLoopOpts.activity). Nil activityMu (no arbitration
 	// loop wired, e.g. some tests) renders every provider inactive rather
 	// than defaulting back to the old unconditional true.
-	var providerStats []tui.ProviderStats
+	providerStats := make([]tui.ProviderStats, 0, len(opts.providers))
 	for _, p := range opts.providers {
 		ps := tui.ProviderStats{Name: p.Name()}
 		if opts.activityMu != nil {
@@ -79,7 +79,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		providerStats = append(providerStats, ps)
 	}
 
-	return tui.Stats{
+	return &tui.Stats{
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
@@ -106,8 +106,8 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 // it correctly; nothing was ever driving it). Hashrate/shares/earnings are
 // left at zero rather than echoing stale pre-disconnect values, since this
 // snapshot does not know the true current state of any of them.
-func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) tui.Stats {
-	return tui.Stats{
+func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) *tui.Stats {
+	return &tui.Stats{
 		PoolURL:           poolproto.StripUserinfo(poolURL),
 		Connected:         false,
 		WalletFingerprint: wallet,
@@ -255,7 +255,7 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
-// rejectClass categorises a pool's share-rejection reason. The category
+// rejectClass categorizes a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
 // classification (community field taxonomy, e.g. D-Central's guide):
@@ -472,7 +472,8 @@ func (m *HashrateMonitor) Observe(hashrate float64) {
 				m.log("warn", fmt.Sprintf(
 					"engine: hashrate stalled at %s for %d consecutive samples — "+
 						"check device health, cooling, and pool connection",
-					miner.HashRateString(hashrate), m.stallCount))
+					miner.HashRateString(hashrate), m.stallCount,
+				))
 			}
 		}
 		return
@@ -505,7 +506,7 @@ type rateStats interface {
 // skew into their respective gauges. The rate gauge uses the fetcher's fallback
 // before the first successful fetch, so it is never left at zero. The skew
 // gauge is updated whenever the fetcher has seen at least one HTTP Date header
-// from a source (0 until then, signalling "not yet observed").
+// from a source (0 until then, signaling "not yet observed").
 func publishBTCRate(m *engineMetrics, f rateStats) {
 	if rate, _ := f.BTCUSDRate(); rate > 0 {
 		m.btcUSDRate.Set(rate)

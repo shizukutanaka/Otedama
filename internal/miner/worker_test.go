@@ -82,7 +82,7 @@ func TestWorker_StartAndStop(t *testing.T) {
 	select {
 	case _, ok := <-shares:
 		if ok {
-			// A share arrived before stop — that's fine, just drain.
+			t.Log("a share arrived before stop — drained")
 		}
 	case <-time.After(100 * time.Millisecond):
 		// Channel not closed — Stop didn't terminate goroutines.
@@ -280,7 +280,7 @@ func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
 	h := work.Header
 	for i := 0; i < b.N; i++ {
 		h.Nonce = uint32(i)
-		_ = HashHeader(h)
+		_ = HashHeader(&h)
 	}
 }
 
@@ -383,6 +383,48 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 	w := NewWorker(WorkerConfig{Threads: 1})
 	if got := w.DeviceID(); got != "" {
 		t.Errorf("DeviceID() = %q, want empty string", got)
+	}
+}
+
+// ----- Cross-worker nonce partitioning -----
+
+func TestWorker_NoncePartitionAcrossWorkers(t *testing.T) {
+	// Two workers configured the way startMinerWorkers configures a
+	// two-device rig: NonceOffset 0 and 1 with a shared NonceStep of 2.
+	// Every share nonce from worker 0 must be even, from worker 1 odd —
+	// the devices can never duplicate each other's hashes or earn
+	// "duplicate" pool rejects the way same-space grinding did.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	w0 := NewWorker(WorkerConfig{Threads: 1, NonceStep: 2, NonceOffset: 0, DeviceID: "dev-a"})
+	w1 := NewWorker(WorkerConfig{Threads: 1, NonceStep: 2, NonceOffset: 1, DeviceID: "dev-b"})
+	ch0, ch1 := w0.Start(ctx), w1.Start(ctx)
+	w0.SetWork(makeEasyWork())
+	w1.SetWork(makeEasyWork())
+
+	seen := map[uint32]string{}
+	for n := 0; n < 40; n++ {
+		for i, ch := range []<-chan Share{ch0, ch1} {
+			select {
+			case s, ok := <-ch:
+				if !ok {
+					t.Fatalf("worker %d channel closed early", i)
+				}
+				if prev, dup := seen[s.Nonce]; dup {
+					t.Fatalf("nonce %d produced by both %s and worker %d", s.Nonce, prev, i)
+				}
+				seen[s.Nonce] = s.DeviceID
+				if i == 0 && s.Nonce%2 != 0 {
+					t.Fatalf("worker 0 emitted odd nonce %d", s.Nonce)
+				}
+				if i == 1 && s.Nonce%2 != 1 {
+					t.Fatalf("worker 1 emitted even nonce %d", s.Nonce)
+				}
+			case <-ctx.Done():
+				t.Fatalf("timeout after %d seen nonces", len(seen))
+			}
+		}
 	}
 }
 
