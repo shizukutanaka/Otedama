@@ -1986,6 +1986,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 899 update — ctx-census + ctx-root + ctx-value audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `context.WithValue` for anything other than the logger injection — request-scoped smuggling. | ✅ Clean: 1 site (`logger.go:174`) — the canonical `loggerKey` injection verified at s681; no other value-carrying. |
+| M | `context.Background()`/`TODO()` inside non-root logic — orphaned goroutines. | ✅ Clean: 3 `Background()` sites are all entry-point roots (httpserver shutdown timeout, doctor root, run root); `TODO()` absent. |
+| S | `WithCancel`/`WithTimeout` sites without a paired `cancel` — leaked timers/contexts. | ✅ Clean: all 10 sites pair `cancel`/`dialCancel`/`stopLimiter`/`hcancel` with the correct scope. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
