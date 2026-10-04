@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 938 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `hashPool` returning a hasher with stale state from a previous borrower — first `Write` could mix in old key material. | ✅ Clean: `getHasher` calls `h.Reset()` before handing out every pooled hasher — residual state cannot leak into the next HMAC. The long-key path (`len(key) > blockSize`) hashes the key down first per RFC 2104. |
+| M | Pooled hashers retaining key-derived state while idle in the pool — secret residue on the free list. | ✅ Benign: the residue is sha256's internal block state, which holds no more recoverable key material than the key bytes already live in memory; `Reset` on checkout makes it correctness-neutral. Zeroing hash state is not a Go stdlib convention anywhere (same class as `secret-format` audit, session-614). |
+| S | `hmacSHA256Pooled` correctness drifting from `hmacSHA256` — a pooled-impl regression going silent. | ✅ Clean: `noise_pool_test.go` runs a differential table test pinning pooled == reference output, plus parallel and benchmark coverage — a drift fails the suite. |
+
+All packages build, vet, and test green.
