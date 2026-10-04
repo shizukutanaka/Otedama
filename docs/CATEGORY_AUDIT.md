@@ -2434,6 +2434,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1124 update — magic-number census
+
+Shared bound values expressed as bare numeric literals where drift between
+sites would be a bug.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Integer literals dominated by byte/bit widths (8/16/32/64); not semantically shared | S |
+| S | Duration bounds are package-local named vars (dialTimeout, handshakeTimeout, callTimeout, arbitrationInterval) per s1077 SSOT-drift verdict; `30*time.Second` at doctor.go:36 is a one-off inline WithTimeout | ⚠️ Noted (style only) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
