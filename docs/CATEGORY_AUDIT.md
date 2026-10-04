@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1124 update — magic-number census
+
+Shared bound values expressed as bare numeric literals where drift between
+sites would be a bug.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Integer literals dominated by byte/bit widths (8/16/32/64); not semantically shared | S |
+| S | Duration bounds are package-local named vars (dialTimeout, handshakeTimeout, callTimeout, arbitrationInterval) per s1077 SSOT-drift verdict; `30*time.Second` at doctor.go:36 is a one-off inline WithTimeout | ⚠️ Noted (style only) |
+
+All packages build, vet, and test green.
