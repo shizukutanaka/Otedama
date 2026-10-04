@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1242 — post-rename-name + chan-len + defer-in-init
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| post-rename-name | Wallet atomic save captures `tmp.Name()` pre-rename and only for Remove/Chmod on the temp path — no stale handle reliance (lightning/wallet.go:298) | Clean |
+| chan-len | No `len()`/`cap()` calls on shared channels — no racy sizing decisions | Clean |
+| defer-in-init | 4 `init()` fns (wordlist integrity, secp256k1/v1/v2 registration) — no defer inside init, all atomic | Clean |
