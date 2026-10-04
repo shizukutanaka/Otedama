@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 829 update — testmain + test-init + exit-test audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `TestMain` present but missing `m.Run()`/`os.Exit` — tests never run or wrong exit code. | ✅ Clean: no `TestMain` anywhere — per-test setup uses `t.TempDir`/`t.Cleanup` so no shared-fixture entry point is needed. |
+| S | `init()` inside test files — shared-state setup invisible to individual tests. | ✅ Clean: absent — all test fixtures are explicit per-test. |
+| M | `os.Exit` inside test code — kills the test binary, silently skipping remaining tests. | ✅ Clean: absent — no `TestMain` means no exit surface in test code. |
+
+All packages build, vet, and test green.
