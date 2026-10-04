@@ -3149,6 +3149,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1192 update — SPDX header census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `// SPDX-License-Identifier: Apache-2.0` on `.go` files | ✅ Clean — 146/146 files carry the header on line 1 |
+| S | Shell-script headers | ⚠️ Noted — `install.sh` carries a plain comment header but no `SPDX-License-Identifier` line; the CONTRIBUTING requirement names `.go` files only, so this is cosmetic, not a violation |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
