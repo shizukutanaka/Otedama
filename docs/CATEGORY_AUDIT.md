@@ -3458,6 +3458,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 740 update — lock-order + negative-uint + wg-add audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `RLock`→`Lock` upgrade / ABBA lock ordering — a read lock held while acquiring a write lock self-deadlocks. | ✅ Clean: all 14 `RLock` sites are leaf reads paired with `RUnlock` in-function; no function acquires `Lock` while holding `RLock`, and no two locks nest (each mutex guards its own struct). |
+| S | Negative input → uint field — `Atoi` result feeding a uint field wraps −1 to ~4.3B. | ✅ Clean: every conversion is either `ParseUint` (rejectable negatives → 0, id-lookup miss) or `Atoi` guarded by explicit range checks (`p < 1 || p > 65535`); the two error-discard sites are fail-safe by comment-documented design. |
+| S | `wg.Add` inside the spawned goroutine — `Wait` can return before the child registers. | ✅ Clean: all 8 spawn sites call `wg.Add(1)` before `go` — the canonical ordering. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
