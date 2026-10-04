@@ -2311,6 +2311,22 @@ No defect requiring a code change. All packages build, vet, and test green.
 
 ---
 
+## Session 1086 update — error-message style drift
+
+Go convention: error strings start lowercase, end without a period
+(they chain via `%w` / `:` separators). Census of all
+`errors.New`/`fmt.Errorf` literals in non-test code.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 264 error literals: zero uppercase starts (excluding acronyms/proper nouns like SV2/TLS/BIP) | S |
+| S | Zero trailing periods — chain-ready | S |
+| S | `%w` usage verified consistent (session 760 verdict: only at wrap points) | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
