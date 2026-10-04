@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1165 update — subcommand-invocation drift + gofmt hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | docs `otedama <sub>` invocations vs real subcommand set {run, version, config, service, doctor, wallet, completion, help} | ✅ Clean — `lightning` (ADR-007), `power`/`device` (ADR-008), `template` (ADR-009), `arb` (ADR-010) refs are all inside **Proposed** ADRs scoped to v3.5+; `migrate-from-v2`/`verson`/`rnu` hits are historical ledger prose recording the very fixes discussed |
+| M | `gofmt -l cmd internal` → 0 files | ✅ Clean — entire tree gofmt-formatted |
+
+All packages build, vet, and test green.
