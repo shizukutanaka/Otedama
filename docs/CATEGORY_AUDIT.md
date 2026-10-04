@@ -4729,6 +4729,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 978 update — decide-guard + yield-finite + determinism audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A NaN/Inf provider quote winning the sort or poisoning `TotalYield` — arbitration deciding on garbage. | ✅ Clean: `Yield.Effective` collapses non-finite and non-positive inputs to 0 via `!(x > 0)` guards (NaN comparisons are false → 0); a bad quote can never win. |
+| M | Non-finite/negative hysteresis margin or min-yield floor silently accepted — unpredictable switch behavior. | ✅ Clean: `Decide` rejects NaN/±Inf/negative for both knobs up front (the s325/s331 hardening). |
+| M | Duplicate device IDs silently deduplicated — one device's assignment overwriting another's. | ✅ Clean: duplicates are a hard error before any allocation. |
+| M | Map-order allocation output making Decide nondeterministic — flaky comparisons and diffs. | ✅ Clean: devices copied then sorted by ID before the loop; `prev` lookup is a keyed map, output order deterministic. |
+| M | A device missing from `YieldPerDevice` returning zero — the good stream scored as nothing. | ✅ Clean: `YieldFor` falls back to `DefaultYield`; `Accepts` is `slices.Contains` over declared families. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
