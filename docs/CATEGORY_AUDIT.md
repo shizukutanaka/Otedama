@@ -4239,6 +4239,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 837 update — regexp-absence + glob-pattern + match-input audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `regexp` on attacker-controlled input — catastrophic backtracking (ReDoS). | ✅ Clean: zero regexp usage in production code — string matching is exact/prefix/suffix. |
+| S | `filepath.Glob`/`path.Match` with a user-controlled pattern — traversal or resource exhaustion via glob metacharacters. | ✅ Clean: single glob (`wallet.go:267`) uses the fixed literal `.wallet-*.tmp` inside the wallet dir — no user pattern input. |
+| S | `MatchString` on untrusted text — same ReDoS surface via compiled patterns. | ✅ Clean: absent — no regexp anywhere. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
