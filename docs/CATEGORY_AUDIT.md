@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 890 update — milestone checkpoint 2
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Sessions 851–889 audited ~40 more defect classes (≈ 320 cumulative): env surface, flag/argv correctness, flag-set error policy, ANSI/TUI, logging, runtime/GC, container/big-int, embed, bufio/poller, exec env, setenv. | ✅ All clean or benign — zero new reachable defects. |
+| S | One real correction landed mid-run: session-864's "no flag package" claim was wrong — the grep missed `*Var` registrations; corrected on the s864 branch (still clean: FlagSets are per-subcommand with `ContinueOnError`). | ✅ Corrected in place, per the audit-ledger honesty rule. |
+| S | Real code fixes shipped to date: C1 control-char gap (#809), XDG systemd-manager env (#807), AEAD-per-frame re-derivation (#957). | ✅ All three verified by tests; ~320 classes clean against 3 real fixes — the mechanical audit keeps finding the codebase already correct. |
+
+All packages build, vet, and test green.
