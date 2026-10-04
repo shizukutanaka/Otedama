@@ -4771,6 +4771,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 982 update — poll-lifecycle + quote-freshness + yield-source audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A double `Start` racing the loop's device-set write — torn state or a second writer on quoteCh. | ✅ Clean: `launch` checks `p.cancel != nil` and runs `prepare` under `p.mu`, so a rejected start cannot mutate state the running loop reads; the loop goroutine is the sole channel writer. |
+| M | `Stop` on a never-started provider panicking, or `quoteCh` recreated while the loop still writes — send-after-close. | ✅ Clean: nil-cancel guard makes Stop a no-op; channel is recreated only after `wg.Wait()` under lock, so the writer has provably exited. |
+| M | A stalled arbitration reader blocking the polling loop forever — provider freezes. | ✅ Clean: `sendQuote` drops the oldest buffered quote when the channel is full, then sends the newest — freshest estimate always wins, loop never blocks; ctx-cancel aborts cleanly. |
+| M | Zero-GPU hosts publishing an attractive AI-inference quote — arbitration assigning work to a nonexistent device. | ✅ Clean: publishes an explicit zero-yield quote (`Confidence: 0` → `Effective() == 0`) so arbitration excludes the stream gracefully. |
+| M | Stale/absent network-hashrate or price feeds fabricating yields from thin air. | ✅ Clean: live feed wins only when `fresh && h > 0`, else the documented constant; measured device hashrate preferred over family estimates; non-SHA256d devices skipped; USD rate fallback documented. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
