@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 861 update — equal-method + time-eq + comparator-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `Equal`/`Compare`/`Less` method inconsistent with `==` or sort order — two notions of equality. | ✅ Clean: absent — no custom equality methods; all comparisons are scalar `==` or `time.Before/After` (correct, location-insensitive). |
+| M | `==`/`!=` on `time.Time` — wall+monotonic+location triple compare, false inequality on same instant. | ✅ Clean: zero `==` on times — all time comparisons use `Before`/`After`/`Equal` methods (sessions 611, 692). |
+| S | `strings.Compare`/`bytes.Compare` result compared to literal `-1`/`0`/`1` instead of `<0`/`==0`/`>0` — sign convention bug. | ✅ Clean: absent — `slices.SortFunc` comparators return `cmp.Compare`-style differences via `strings.Compare`... zero call sites; scalar ascending comparators subtract directly (verified s847). |
+
+All packages build, vet, and test green.
