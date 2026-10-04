@@ -2377,6 +2377,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 933 update — wire-primitive + length-prefix + postel-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `appendStr0_255`/`appendB0_*` writing an over-long length prefix (silent truncation or corrupt frame). | ✅ Clean: every appender bounds the value at the declared cap (255 or 32) before writing the prefix — oversized input errors, never encodes. |
+| M | `getStr0_255`/`getB0_255` allocating attacker-controlled length — the same DoS class as MsgLength. | ✅ Clean: the length prefix is one byte — max allocation is 255 B regardless of input; `io.ReadFull` governs truncation errors. |
+| S | Decode-side B0_32 absent — asymmetric bound risk. | ✅ Deliberate: Postel's-law comment documents strict-encode (32) vs lenient-decode (B0_255 accepts 33–255 with allocation safety) so a non-conformant pool's extranonce isn't a fatal error. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
