@@ -1072,3 +1072,19 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-887 ecosystem update (2026-10-02)
+
+**sv2-spec** — open=7, normative set unchanged: #236 (`SetTarget`
+max_target bound), #234 (authority key mgmt/rotation), #203 (coinbase
+payouts extension), #198 (`coinbase_witness` in `NewTemplate`).
+Editorial/WIP remainder {232, 186, 103}. No new normative activity.
+
+**sv2-apps** — open=27. Since the session-872 check only two merges:
+#900 (stratum-core bump) and #907 (docs). The #875 single-workspace
+consolidation noted at s872 is the last structural change; #881
+(JDS push-solution) remains open.
+
+**SRI** — v1.12.0 (2026-09-17) still latest.
+
+Quiet window continues — no action required.
