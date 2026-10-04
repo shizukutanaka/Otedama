@@ -1464,3 +1464,8 @@ as written; the next recheck is due around session 1200.
 ## Session-1201 ecosystem update (2026-10-02)
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1297 ecosystem update (2026-10-04)
+
+sv2-spec normative open set unchanged — #203 (coinbase transaction payouts extension, last updated 2026-09-15), #236 (SetTarget.target MUST NOT exceed max_target — still active, updated 2026-10-02), #234 (authority key management docs, 2026-09-25), #198 (coinbase_witness field, 2026-09-23) all remain open and unmerged; no new normative candidate merged since the s1287 recheck. SRI latest release re-confirmed as v1.12.0 (2026-09-17) — the earlier "v1.12.0 stale" note in the ledger was wrong; v1.12.0 stands as the current release with the hardening wave intact. sv2-apps latest = v0.8.0 (2026-09-17); open-PR count 27 with the hardening wave continuing (#903 buffer hardening, #856 bitcoin_core_sv2 hardening, #878 empty-coinbase-script rejection, #845 spec-field rename alignment, #881 JDS push-solution WIP). No action required — quiet window continues.
+
