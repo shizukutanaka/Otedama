@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1212 update — import-direction + forbidden-path census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Forbidden architecture paths in Go sources | ✅ Clean — zero references to `internal/providers/`, `pkg/`, `web/`, `internal/auth|render|scientific|observability|security/` in .go files. |
+| S | Import direction | ✅ Clean — all 5 `internal/engine` mentions outside internal/engine are comments, not imports; only cmd/otedama imports the engine. Fan-out sane (config 17, poolproto 15, hal 13). |
+| S | Forbidden paths in docs | ✅ Clean — `docs/architecture.md` target-architecture body carries the top-of-file disclaimer already (prior fix); remaining doc references are notes that the paths don't exist. |
+
+All packages build, vet, and test green.
