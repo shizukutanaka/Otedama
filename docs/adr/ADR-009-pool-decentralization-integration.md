@@ -1148,3 +1148,29 @@ SRI: still v1.12.0 (2026-09-17) — no new tag.
 sv2-apps: open set holds at 27. Recent merges are operational hygiene — #907 (docs), #900 (stratum-core bump), #875 (single cargo workspace), #871/#868 (CI version-bump gate), #869 (JDP docs). No client-facing behavior change for us.
 
 Takeaway: stable window continues — nothing actionable. Next recheck in ~2 weeks or on #236 movement.
+
+## Session-1251 ecosystem update (2026-10-02)
+
+sv2-spec: normative open set unchanged — #236 (`SetTarget.target` must
+not exceed `max_target`; still open, active), #234 (authority key
+management), #198, #203 (non-custodial coinbase payouts — still open).
+Repo open-issue count steady at 27. No new normative delta lands on a
+client-role implementation; #236 remains the one to watch (Otedama's
+max_target bound already satisfies its direction).
+
+SRI: still **v1.12.0** (2026-09-17) — no new tag.
+
+sv2-apps: open PR count dropped **27 → 17**. The workspace
+consolidation wave closed the stale tail — previously tracked items
+#881 (JDP push-solution) and #883 (fee-transparent config) are no
+longer in the open set. Remaining open work is hardening and
+monitoring: #310 (adapt apps to new extranonce APIs), #304 (migrate
+pool to dashmap), #414 (stratum-core bump), #367/#373/#368/#285/#338
+(monitoring JSON-API surface), #326/#325 (JD negotiation + coinbase
+round-trip tests), #247 (tProxy SetExtranoncePrefix fallback — draft).
+No client-facing behavior change for Otedama; the extranonce-API
+adaptation (#310) is the only one to keep on the watch list in case it
+signals a protocol-surface rename.
+
+Takeaway: stable window continues — nothing actionable. Next recheck
+in ~2 weeks or on #236 movement.
