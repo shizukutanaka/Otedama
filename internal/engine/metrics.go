@@ -74,6 +74,11 @@ type engineMetrics struct {
 	submitLatencyP95 *metrics.Gauge
 	submitLatencyP99 *metrics.Gauge
 
+	// sharesSubmitInFlight is the depth of the submit→ack pending set
+	// (len(submitTimes)); a sustained/growing depth means the pool is slow
+	// or not acknowledging submits at all.
+	sharesSubmitInFlight *metrics.Gauge
+
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
@@ -116,6 +121,11 @@ type engineMetrics struct {
 	// cost half of profitability. Constant for a run; set once at startup when
 	// both power and price are configured.
 	powerCostUSDPerHour *metrics.Gauge
+	// powerBreakevenFloor is the per-device profitability floor derived from
+	// power_watts × electricity_price_per_kwh ÷ BTC/USD (sats/sec), recomputed
+	// each arbitration round and folded into MinYieldSatsPerSec via max().
+	// 0 when power_watts or electricity_price_per_kwh is unset.
+	powerBreakevenFloor *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -173,8 +183,13 @@ type engineMetrics struct {
 
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	// rejectByReasonMu guards the map: V1 shares are submitted from
+	// per-share goroutines whose rejection path calls rejectReason, and
+	// updateShareRates reads the map from the stats loop — an unlocked
+	// map is a "concurrent map read/write" fatal under either pairing.
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -317,6 +332,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_submit_latency_milliseconds",
 			"Share-submission round-trip latency (submit→accept).",
 			map[string]string{"quantile": "0.99"}),
+		sharesSubmitInFlight: reg.NewGauge(
+			"otedama_shares_submit_in_flight",
+			"Shares submitted to the pool but not yet judged (in flight). "+
+				"A sustained or growing depth means the pool is slow or not "+
+				"acknowledging submits.",
+			nil),
 
 		shareAcceptanceRate: reg.NewGauge(
 			"otedama_share_acceptance_rate",
@@ -367,6 +388,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Estimated electricity cost: power_watts/1000 × electricity_price_per_kwh. "+
 				"Combine with the BTC/USD rate and revenue to see net profit. "+
 				"0 when power_watts or electricity_price_per_kwh is unset.",
+			nil),
+		powerBreakevenFloor: reg.NewGauge(
+			"otedama_power_breakeven_floor_sats_per_second",
+			"Per-device yield floor (sats/sec) derived from power_watts × "+
+				"electricity_price_per_kwh ÷ BTC/USD, split evenly across managed "+
+				"devices. Streams below it are treated as unprofitable (as if below "+
+				"min_yield_sats_per_sec). 0 when power data is unconfigured.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",
@@ -457,6 +485,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
 	if c, ok := m.rejectByReason[category]; ok {
 		return c
 	}
@@ -581,10 +611,12 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		return rate, judged
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
+	m.rejectByReasonMu.Lock()
 	var stale uint64
 	if c, ok := m.rejectByReason["stale"]; ok {
 		stale = c.Value()
 	}
+	m.rejectByReasonMu.Unlock()
 	m.staleRate.Set(float64(stale) / float64(judged))
 	return rate, judged
 }

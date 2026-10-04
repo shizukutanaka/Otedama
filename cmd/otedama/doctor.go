@@ -31,12 +31,12 @@ func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 		DataDir:        *dataDir,
 	}
 	fromFile := loadConfigFile(*configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, flags)
+	cfg := config.Resolve(&fromFile, nil, &flags)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile)}
+	runner := &doctor.Runner{Checks: doctor.DefaultChecks(&cfg, *configFile)}
 	report := runner.Run(ctx)
 	if *jsonOut {
 		_ = report.WriteJSON(stdout)
