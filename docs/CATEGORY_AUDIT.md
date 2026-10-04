@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1001 update — reconnect-backoff + handshake-bound + payout-mask audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A healthy multi-hour session dropping and inheriting a huge backoff — reconnect delayed for no reason. | ✅ Clean: `connectedThisAttempt` (set via `onConnected`) resets `backoff` to `reconnectBackoffInitial` before the failover branches; the doubling only ever penalizes a dead endpoint. |
+| S | A peer accepting TCP but never answering `SetupConnection`/`OpenMiningChannel` holding the failover loop forever. | ✅ Clean: `handshake` bounds the whole exchange with `SetDeadline(handshakeTimeout)` — read AND write — and clears it on return so steady-state reads are unbounded. |
+| S | The payout address leaking raw into a metric label or log line. | ✅ Clean: `setActivePayout` receives `maskAddr(addrs[addrIdx])`; the pool URL in the connect log goes through `StripUserinfo`. |
+| M | A pool rejection spinning the reconnect loop forever. | ✅ Clean: `SetupConnectionError`/`OpenMiningChannelError` become `fatalError`, which `runReconnectLoop` returns immediately via `isFatal` — no retry on a deterministic refusal; the quoted pool error text is retained for diagnosis. |
+| M | `NominalHashrate` declaring ~0 on a fresh session — pool seeds vardiff for a zero-rate miner. | ✅ Clean: when workers haven't hashed yet, the capability-derived `nominalHashrate` is declared instead; on reconnect the live rate wins. |
+
+All packages build, vet, and test green.
