@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 878 update — codec-census + binary-struct + encoding-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `encoding/gob`, `encoding/xml`, `encoding/csv`, `encoding/asn1`, `base32`/`base64` — alternate codecs deserializing wire data with own quirks. | ✅ Clean: absent — the only encoding imports are `json` (config/doctor/version), `hex` (address/seed display), `pem` (doctor cert probe test), `binary` (wire primitives). |
+| M | `binary.Size`/`binary.Read`/`binary.Write` on variable-layout structs — silent size mismatches vs spec. | ✅ Clean: absent — all wire layout is computed by explicit `append*`/`get*` primitives against spec constants (s741/824). |
+| S | Codec surface drift — different encodings used for the same kind of data in different places. | ✅ Clean: JSON for all structured config/report boundaries, hex for all byte display — no competing codec. |
+
+All packages build, vet, and test green.
