@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 982 update — poll-lifecycle + quote-freshness + yield-source audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A double `Start` racing the loop's device-set write — torn state or a second writer on quoteCh. | ✅ Clean: `launch` checks `p.cancel != nil` and runs `prepare` under `p.mu`, so a rejected start cannot mutate state the running loop reads; the loop goroutine is the sole channel writer. |
+| M | `Stop` on a never-started provider panicking, or `quoteCh` recreated while the loop still writes — send-after-close. | ✅ Clean: nil-cancel guard makes Stop a no-op; channel is recreated only after `wg.Wait()` under lock, so the writer has provably exited. |
+| M | A stalled arbitration reader blocking the polling loop forever — provider freezes. | ✅ Clean: `sendQuote` drops the oldest buffered quote when the channel is full, then sends the newest — freshest estimate always wins, loop never blocks; ctx-cancel aborts cleanly. |
+| M | Zero-GPU hosts publishing an attractive AI-inference quote — arbitration assigning work to a nonexistent device. | ✅ Clean: publishes an explicit zero-yield quote (`Confidence: 0` → `Effective() == 0`) so arbitration excludes the stream gracefully. |
+| M | Stale/absent network-hashrate or price feeds fabricating yields from thin air. | ✅ Clean: live feed wins only when `fresh && h > 0`, else the documented constant; measured device hashrate preferred over family estimates; non-SHA256d devices skipped; USD rate fallback documented. |
+
+All packages build, vet, and test green.
