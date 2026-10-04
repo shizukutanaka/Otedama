@@ -61,6 +61,7 @@ func TestSuggestSubcommand(t *testing.T) {
 		{"hlep", "help"},
 		{"--versio", "version"}, // leading dashes ignored
 		{"confg", "config"},
+		{"walet", "wallet"},
 		{"", ""},
 		{"xyzzy-plugh", ""}, // unrelated: no suggestion
 		{"abcd", ""},        // distance ≥3 to everything
