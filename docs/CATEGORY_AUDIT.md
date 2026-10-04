@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 825 update — byte-index + ascii-compare + rune-boundary audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Byte-index loop over a possibly-multibyte string — mid-rune split / mis-compare. | ✅ Clean: the only byte-index loop (`base58.go:47`) counts ASCII `'1'` leaders — Base58's alphabet is ASCII by definition. |
+| S | Byte comparison `s[i] == 'x'` where input can be multibyte — truncated-match bugs. | ✅ Clean: same site — ASCII domain. |
+| S | `len(s)` byte length vs rune/display width conflation in truncation paths. | ✅ Benign: `truncateToBudget` slices only ASCII-domain fields (pool URL, hash strings); rune-capped text uses `len(runes)` after conversion (`maxPoolTextRunes`/`maxNoticeRunes`); escape-aware columns pad by visible width (session-462, PR #544). |
+
+All packages build, vet, and test green.
