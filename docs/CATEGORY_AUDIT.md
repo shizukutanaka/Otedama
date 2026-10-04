@@ -2568,6 +2568,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1135 update — duplicate-string census
+
+Repeated string literals ≥4× — missed single-sourcing (typo drift).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | High-frequency literals are import paths and tag fields (excluded); meaningful repeats are level names (`info`/`warn`/`debug`/`error`) used as domain values per layer | S |
+| S | `"bc1"` HRP literal shared across btccrypto + two callers — a fixed protocol constant, single-sourcing a 3-char literal adds a dependency for no drift benefit | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
