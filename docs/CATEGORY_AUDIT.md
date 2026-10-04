@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 782 update — goroutine-ctx + spawn-ownership + wg-pairing audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Spawned goroutine running without a cancellation path — survives its parent's shutdown. | ✅ Clean: every `go func` site either captures `ctx`, is driven by a channel its owner closes, or is bounded by an explicit timeout/WaitGroup — no detached goroutine exists (verified sessions 553/563/585). |
+| P | `wg.Add`/`wg.Done` imbalance — Add inside the goroutine racing Wait, or missing Done leaking the counter. | ✅ Clean: all Add calls precede their `go` statement and every spawn `defer`s Done (verified sessions 585/740). |
+| P | Goroutine spawned in a loop without bounding — unbounded fan-out on repeated calls. | ✅ Clean: loop-spawn sites (fanin, doctor checks, rates gatherers) fan out over fixed-size collections and join via WaitGroup — spawn count equals input cardinality. |
+
+All packages build, vet, and test green.
