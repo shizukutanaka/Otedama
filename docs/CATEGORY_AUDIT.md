@@ -1731,3 +1731,22 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1082 update — full export-surface census
+
+Completes the over-export census started in session 1076 (which found
+`metrics.RuntimeCollector` unwired — fixed as PR #1158, now closed).
+This pass enumerates every exported identifier in all 19 `internal/`
+packages and checks for a reference anywhere in the tree (qualified,
+unqualified, or via the `messages` alias).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Naive qualified-grep (`pkg.Id`) false-positives: `i18n.*` is consumed via `i18n/messages` alias; `lightning.*` (EncryptSeed/DecryptSeed/UnmarshalEncryptedSeed) used intra-package by wallet.go — all verified referenced | ⚠️ Noted |
+| S | Sampled 12 borderline candidates (Policy, Lookup, SchemeForAddressType, Schemes, TaggedHash, Validate*Address, WorkerConfig, GPULinuxDriver, AllIDs, DetectLang, PriorityLanguages) — every one has ≥1 consuming file | S |
+| S | Exported-but-intra-package-only surface (hal.Registry, doctor.Report/Result/Status, i18n.Bundle/Catalog/Lang) — deliberate export for godoc surface + test seams, matching session-1076 verdict | ⚠️ Noted |
+| S | Zero exported identifiers with zero references | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
