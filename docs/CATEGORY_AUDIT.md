@@ -3071,3 +3071,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1299 update — forbidden-path + open-PR conflict-surface audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | CLAUDE.md forbidden paths | ✓ `git ls-files` against all 10 forbidden prefixes (pkg/, web/, internal/{providers,auth,render,scientific,observability,security}/, cmd/otedamad/, k8s/) — zero tracked files |
+| R | Live open-PR mergeability | ✓ merge-tree for the four newest open PRs (#1376–#1379) vs master after the ongoing merge wave — zero conflicts; ledger appends remain union-mergeable |
+
