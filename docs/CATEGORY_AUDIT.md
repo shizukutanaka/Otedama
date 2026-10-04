@@ -2242,6 +2242,18 @@ Everything else across concurrency, crypto, network, config, miner, doctor, hal,
 
 ---
 
+## Session 921 update — i18n-fallback + missing-id + template-fail audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Message ID missing in every catalog — silent empty string in the UI. | ✅ Clean: falls back `"!"+id+"!"` placeholder + error — visible in the UI and loud to the caller, never silently blank. |
+| M | Fallback chain skipping base-tag matching — `ja-JP` missing hits English before `ja`. | ✅ Clean: exact tag → base tag → English (the mandatory English catalog is required at `NewBundle`). |
+| S | Template execution failing on a missing placeholder — broken render reaching the UI. | ✅ Clean: returns the raw template string + the exec error; UI never shows a half-rendered message. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
