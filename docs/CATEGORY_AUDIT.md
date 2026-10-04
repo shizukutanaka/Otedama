@@ -2923,3 +2923,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1273 update — Go 1.24 unlock surface (post-#1344 pins)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| os.Root | Candidate confinement sites: `lightning` wallet dataDir writes (0700 dir + atomic temp+rename already) and `daemon` system-dir unit writes (root-owned absolute paths). Log-file path is user-supplied arbitrary → `os.Root` confinement inapplicable without breaking the flag. | ⚠️ Noted — evaluated, modest gain; not required |
+| runtime.AddCleanup / SetFinalizer | Zero call sites of either API; no GC-managed resource lifetimes | ✓ Clean |
+| testing/synctest | Zero usage; clock-sensitive paths already test via `internal/clock.Fake` injection — synctest would be an alternative seam, not a fix | ✓ Clean |
+
+All packages build, vet, and test green.
