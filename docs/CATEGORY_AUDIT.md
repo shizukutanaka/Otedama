@@ -3067,6 +3067,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1183 update — repo-config path census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | CODEOWNERS path targets | ✅ Clean — all 12 patterns (`/internal/lightning`, `/internal/btccrypto`, `/internal/poolproto`, `/internal/stratum/noise*`, `/.goreleaser.yaml`, `/Makefile`, `/install.sh`, docs, …) resolve to real files/dirs |
+| S | dependabot.yml ecosystems | ✅ Clean — gomod/github-actions/docker all target existing manifests (`go.mod`, `.github/workflows/`, `Dockerfile`); the no-`automerge` caveat is honestly documented |
+| S | `.github/` housekeeping | ✅ Clean — CODEOWNERS, ISSUE_TEMPLATE/, pull_request_template.md, workflows all present and consistent with CLAUDE.md |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
