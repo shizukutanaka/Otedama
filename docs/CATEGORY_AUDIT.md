@@ -2797,6 +2797,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1155 update — package-shadow census
+
+Local variables that shadow an imported package identifier, making the
+package unreferenceable in that scope.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero — no local `:=` binding collides with any imported package name in production code (the loose candidate list — `mnemonic`, `params`, `vendor`, `id` — are type/field names, not package identifiers) | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
