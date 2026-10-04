@@ -1950,6 +1950,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 896 update — uid-gid + home-dir + user-pkg audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Getuid`/`Geteuid`/`Getgroups`/`user.*` privilege checks — Windows/other-OS portability breaks. | ✅ Clean: absent — no uid/gid/user lookups; the daemon path is the only privilege boundary and it shells to `systemctl --user` (s807). |
+| M | `os.UserHomeDir` used where an env/dir override should win — ignores XDG_CONFIG_HOME. | ✅ Clean: the 6 sites are all fallbacks for the default path; the XDG_CONFIG_HOME/XDG override is layered above them (s807). |
+| S | `os.UserConfigDir`/`UserCacheDir` instead of the XDG-aware path — divergent location rules. | ✅ Clean: absent — the XDG handling is explicit in `config`, not via `UserConfigDir`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
