@@ -1072,3 +1072,17 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1116 ecosystem update (2026-10-02)
+
+**sv2-spec:** quiet window continues — no new normative merges since the
+session-1102 check; the normative open set remains #203 (non-custodial
+JDP payouts), #234 (key management), #198 (witness commitment). #203 is
+still the JDC-side extension ADR-009 phase 2 depends on; discussion on
+payout/output sizing (SEQ0_255 vs SEQ0_64K) continues in-thread.
+
+**SRI:** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps:** #881 (`handle_push_solution` on `jd_server_sv2`) still
+open/WIP; #883 (fee-transparent default coinbase) still open. No new
+blocking upstream items.
