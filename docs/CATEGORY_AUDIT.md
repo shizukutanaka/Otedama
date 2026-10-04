@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 910 update — domain-type + yield-dup + qualified-ref audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Domain-type census — ambiguous same-name types on the arbitration path. | ✅ Clean: 6 concrete types (Share/Job/Session/Yield/Quote) — all referenced by qualified name at every site. |
+| M | `arbitration.Yield` vs `provider.Yield` — two types with the same name diverging silently. | ✅ Intended layering, documented: `provider.Yield` carries gross+net (fee-aware), `arbitration.Yield` is the engine-facing SatsPerSecond+Confidence view; the boundary is `updateStream`'s explicit conversion, and every reference is qualified — no unqualified `Yield` anywhere. |
+| S | `Quote`/`Job`/`Share`/`Session` fields with zero-value ambiguity. | ✅ Clean: each field's godoc specifies its zero-value contract (verified at s629); no field reads a zero value as a meaningful state. |
+
+All packages build, vet, and test green.
