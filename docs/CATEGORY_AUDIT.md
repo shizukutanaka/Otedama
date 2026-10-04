@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 946 update — sv2-handshake + deadline-leak + write-bound audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `handshakeTimeout` read deadline leaking into the session read loop — steady-state jobs killed by a stale deadline. | ✅ Clean: `defer SetReadDeadline(time.Time{})` clears it on return; the session loop is governed by `Close`/`ctx` as documented. |
+| M | Handshake accepting a wrong-but-well-formed frame mid-state — type confusion (e.g. a `SetNewPrevHash` arriving where `SetupConnectionSuccess` is expected). | ✅ Clean: each phase checks the success type explicitly and fails on any other `MsgType` with `unexpected msg 0x..`; error-typed responses surface `ErrHandshakeFailed` with the pool text quoted. |
+| M | `sendMsg` blocking on a full kernel send buffer — wedged pool stalls the session writer. | ✅ Clean: `SetWriteDeadline(10s)` before every `Write` (mirroring the V1 bound); `isChannel` bit is set per-message-scope correctly (channel-scoped submit vs connection-scoped setup/open). |
+
+All packages build, vet, and test green.
