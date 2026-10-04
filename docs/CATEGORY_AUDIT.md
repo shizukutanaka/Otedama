@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1033 update — json-contract + origin-annotation + seam-injection audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `origins` key leaking into JSON output without `--origin`, or flag-layer values missing from it. | ✅ Clean both directions: `--json` alone asserts `origins` is nil-omitted; `--json --origin` asserts `origins.http_addr == "flag"` alongside the flag-supplied value — the annotation can't silently drift. |
+| M | `config show --json` flattening pools out of order or dropping them (file-only path never exercised). | ✅ Clean: `TestConfigShow_JSON_EmitsConfiguredPools` writes a real YAML via `t.TempDir` and asserts both URLs survive in order — covers the file→flatten path the flag-only tests never reach. |
+| M | Malformed numeric env warning vs. failing the run. | ✅ Clean: `TestRun_MalformedNumericEnvVar_WarnsAndSucceeds` pins warn-but-continue; `TestConfigValidate_MalformedNumericEnvVar_PrintsWarning` pins the same on validate — matching the EnvWarnings design. |
+| M | Service status tri-state (installed-stopped / running / not-installed) conflated. | ✅ Clean: three dedicated tests, one per state, each asserting its distinct output line; install/uninstall/status manager-error paths → `exitRuntime`, parse errors → `exitUsage` (injectable seams exercised). |
+| S | Origin annotations (default/file/env/flag) only partially pinned. | ✅ Clean: Default-values, Flag-, File-annotated, and NoOrigin each have a dedicated test — all four classes covered. |
+
+All packages build, vet, and test green.
