@@ -4581,6 +4581,18 @@ correct reason.
 
 ---
 
+## Session 865 update — map-key + hash-adjacency + key-normalize audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Map key type wider than needed or user-controlled without bound — memory/DoS or lookup misses. | ✅ Clean: keys are `string` (device IDs, metric names — bounded enumerated sets), `uint32`/`uint64` (request/sequence IDs — wire widths), or `ProtocolID` (closed enum); no user-unbounded key space. |
+| M | Case-sensitivity mismatch on keys — "FOO" and "foo" treated as different keys where they should not be. | ✅ Clean: every string-key map uses a canonical form at insert — IDs are lowercased at the wire boundary, metric names are literal constants, method names are spec-exact (s749/766). |
+| S | `map[string]func()` dispatch built per-call instead of at init — per-call map alloc. | ✅ Clean: dispatch maps are package-level vars built once (method dispatch s633, driver registry s524). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
