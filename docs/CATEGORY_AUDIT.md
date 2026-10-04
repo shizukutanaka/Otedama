@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 942 update — sv1-pending + call-timeout + late-response audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `s.pending[id]` entries leaking when a call never resolves — unbounded map growth per session. | ✅ Clean: entry is deleted on all three exits — write error, `ctx.Done()`, `callTimeout` expiry — plus `cancelPending` closes-and-deletes every entry on session end. No path leaves an entry. |
+| M | Dispatcher blocking sending a response to a call whose `pending` entry was already deleted (late answer after timeout). | ✅ Clean: `respCh` is buffered (cap 1) — the dispatcher's send never blocks, and a deleted entry is simply skipped; timeout and late-reply can't wedge the read loop. |
+| M | `Submit` wait unbounded or `en2` padding trusting a pool-controlled size. | ✅ Clean: `callTimeout` (60 s) bounds the wait alongside ctx and `cancelPending`; the `en2` pad clamps to `maxExtranonce2Size` — pool cannot inflate submit payload. |
+
+All packages build, vet, and test green.
