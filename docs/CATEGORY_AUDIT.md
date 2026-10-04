@@ -3865,6 +3865,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 800 update — range-mutation + json-skip + test-assert audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Field assignment on a `for _, v` value copy — mutation silently lost. | ✅ Clean: every value-range site uses the copy for reads only (`==` comparisons, map lookups) — zero write-back-intended mutations on copies (verified session 743). |
+| M | `json:"-"` field the wire expects — silently missing output. | ✅ Clean: zero `json:"-"` tags — every struct field is either marshaled or not marshaled by design; no expectation gap. |
+| S | `t.Errorf` where `t.Fatalf` needed — continuing past a broken precondition cascades failures. | ✅ Benign: test-assert style is a test-only concern; prior teardown-safety fix (session-705, t-methods-from-goroutine) covers the load-bearing case; remaining Error-vs-Fatal choices are per-test judgment. |
+
+Session-800 checkpoint: ~250 mechanical classes now on the ledger; the only real defects in the arc remain C1 control-char (#809) and XDG systemd-env (#807).
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
