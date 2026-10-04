@@ -3891,6 +3891,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 802 update — embed-collision + nested-map + double-send audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Embedded struct JSON field-name collision — outer/inner field silently shadowed on marshal. | ✅ Clean: all 25 json-tagged structs are flat (no embedded fields among the tagged types — the embedded message base structs carry no json tags, so no collision class exists) — verified by struct-embed grep. |
+| M | Nested-map write `m[a][b] = v` on a nil inner map — panic. | ✅ Clean: zero nested-map-write sites — all multi-key indices are `map[key]struct` reads or single-level sets. |
+| M | Two send cases in one `select` — nondeterministic choice hiding a required ordering. | ✅ Clean: zero multi-send select sites — every select pairs at most one send with `ctx.Done()`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
