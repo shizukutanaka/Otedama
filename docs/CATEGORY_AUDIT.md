@@ -2208,6 +2208,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1045 update — stratum-test wire-boundary + frame-limits + noise-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Wire decoders truncating mid-field accepted as valid input. | ✅ Clean: every SV2 message gets a roundtrip PLUS per-field-boundary truncation tests (`DecodeOpenMiningChannelSuccess_TruncatedAt{ReqID,ChannelID,Target,ExtraNonce2Size}` etc.) — the decode-reject surface is field-exhaustive, not spot-checked. |
+| M | Frame-layer bounds under-pinned (oversize, fragmentation, channel-bit). | ✅ Clean: oversized payload/frame reject, short dst/input reject, clean-close EOF vs `UnexpectedEOF` mid-header/mid-payload distinguished, **1-byte-reader fragmentation**, channel-bit + extension-ID mask + ChannelID extract/reject matrix. |
+| M | Noise transport contract untested (nonce reuse, tamper, wrong-AD). | ✅ Clean: nonce-increments, tampered-CT fails, wrong-AD fails, transport unusable pre-complete, write/read error paths, small-buffer drain, multi-message roundtrip, **HMAC-SHA256 known vector**; handshake `ReadMessage2` covers too-short/33B-compressed/65B-uncompressed (P-256 stub documented). |
+| M | HKDF chains producing non-distinct or non-deterministic keys. | ✅ Clean: hkdf2/hkdf3 output-size + determinism + input-sensitivity + output-distinctness; MixKey updates CK; DeriveTransportKeys populates both, keys differ, **nonces start at 0**. |
+| S | Dispatch coverage gaps (unknown type silently dropped, malformed-known mishandled). | ✅ Clean: per-type dispatch tests + unknown→error + malformed-known→error + lenient-extranonce boundary (B0_32) covered. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
