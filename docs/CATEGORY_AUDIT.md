@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 990 update — base58/bech32 checksum + witness-rules + classify audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A malformed payout string reaching address classification — wrong version byte, bad checksum, wrong network treated as payable. | ✅ Clean: `ValidateAddress` cascades bech32→base58 via `ErrNotBech32`/`ErrNotBase58` sentinels; base58 enforces the exact 25-byte layout + Hash256 checksum + 0x00/0x05 version gate (mainnet only); bech32 enforces mixed-case rejection (BIP-173), ≤90 chars, `bc` HRP, ≤16 witness version selecting bech32 vs bech32m (BIP-350), polymod checksum, and 2–40-byte program bounds. |
+| S | The big.Int radix decode costing O(n²) on an arbitrarily long `'1'…`/`'3'…` string before the length check runs. | ⏳ Tracked: the bound fix sits in open #633 (config input is operator-controlled, not remote-adversarial; decode precedes the 25-byte check). Ledger records the exposure, not a new defect. |
+| M | `ClassifyAddress` mislabeling a v0 program — P2WPKH shown as P2WSH. | ✅ Clean (display-only heuristic): `bc1q` ≥60 chars → P2WSH else P2WPKH — the two legal v0 program lengths; cryptographically gated by `ValidateAddress` upstream at config-load. |
+| M | Tagged-hash or sha256d convention drifting between call sites. | ✅ Clean: `Hash256`/`TaggedHash` are the single helpers (BIP-340 tagged + double-SHA256), called from one place each. |
+
+All packages build, vet, and test green.
