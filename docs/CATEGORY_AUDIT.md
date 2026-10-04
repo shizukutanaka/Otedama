@@ -3841,6 +3841,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 798 update — closed-recv + read-alias + drain-check audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Bare `v := <-ch` treating a closed channel's zero value as data — phantom entries after close. | ✅ Clean: all bare receives are barrier waits (`ctx.Done()`, `done`) — every *data* receive uses comma-ok or `range` (fanin.go:34-50 drains with `v, ok`, workers read via `range`); no value-typed bare receives exist. |
+| M | Slice into the read buffer outliving the next `Read` — aliasing corruption. | ✅ Clean: zero sites where a `buf[:n]` slice is retained past the next read — wire decodes copy into Frame payloads immediately (verified session 601). |
+| M | Busy `for len(q) > 0` drain polling — CPU burn waiting on producers. | ✅ Clean: all `len()` hits are one-shot capacity/emptiness checks — queue drains use blocking channel receives, not polling. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
