@@ -3031,6 +3031,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1180 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Coverage since s1171 | ✅ Clean — 9 rounds: sentinels/test-packages, ecosystem, release-config, dep-rationales, go-version pins, make-targets, deployment manifests, pkg godoc + lint config, HTTP endpoints + language surface; zero new defects |
+| M | Ledger state | ⚠️ Noted — master's ledger carries ~93 merged entries; all s1121+ entries ride on open in-flight PRs (merge-dependent visibility, by design) |
+| M | Real-defect ledger | ✅ Clean — open fixes still pending review: #633, #807, #809, #957, #1062, #1235, #1239, #1241 (rejected: #1158; do not re-deliver) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
