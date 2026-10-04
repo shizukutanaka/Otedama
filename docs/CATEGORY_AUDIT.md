@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 975 update — run-flags + wallet-env + signal-exit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `--help` output going to stderr (usage-error stream) or an unset flag indistinguishable from one set to its default — breaking the "flags > env" fallback logic. | ✅ Clean: `hasHelpFlag` pre-check routes help to stdout while parse errors stay on stderr; `fs.Visit` records only explicitly-set flags in `setFlags`. |
+| M | Wallet secrets living in `config.Config` — round-tripping through `config show` or landing in config.yaml. | ✅ Clean: both passphrases are CLI-only `runFlags` fields, deliberately excluded from the config struct; `applyRunEnvFallbacks` fills them from env only when the flag is empty (flag > env). |
+| M | A graceful SIGINT/SIGTERM being reported as a runtime failure — nonzero exit on a normal stop. | ✅ Clean: `signal.NotifyContext` + `defer cancel()`; `engine.Run` returning `context.Canceled` is filtered to `exitOK`. |
+| M | TUI/echo-attached behavior firing on a pipe or service journal — mojibake in logs. | ✅ Clean: `isTerminal` uses `os.ModeCharDevice` (stdlib-only, no x/term dep) — false on files/pipes/journal capture. |
+| M | `/readyz` reporting ready before the pool session is established, or panicking when the HTTP server is disabled. | ✅ Clean: `onReady` bridge is nil-guarded (`httpSrv != nil`) and only flips the ready flag the engine publishes. |
+
+All packages build, vet, and test green.
