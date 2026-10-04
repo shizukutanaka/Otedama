@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 896 update — uid-gid + home-dir + user-pkg audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Getuid`/`Geteuid`/`Getgroups`/`user.*` privilege checks — Windows/other-OS portability breaks. | ✅ Clean: absent — no uid/gid/user lookups; the daemon path is the only privilege boundary and it shells to `systemctl --user` (s807). |
+| M | `os.UserHomeDir` used where an env/dir override should win — ignores XDG_CONFIG_HOME. | ✅ Clean: the 6 sites are all fallbacks for the default path; the XDG_CONFIG_HOME/XDG override is layered above them (s807). |
+| S | `os.UserConfigDir`/`UserCacheDir` instead of the XDG-aware path — divergent location rules. | ✅ Clean: absent — the XDG handling is explicit in `config`, not via `UserConfigDir`. |
+
+All packages build, vet, and test green.
