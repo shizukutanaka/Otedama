@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 781 update — wrap-chain + sentinel-usage + unwrap-impl audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Error wrap chains losing the sentinel — `%v` or message-copy severing `errors.Is` reachability. | ✅ Clean: every wrap site uses `%w` so the chain stays traversable; no `%v`-stringification of an error that callers later `Is`-check. |
+| M | `errors.Is`/`As` against the wrong sentinel — a check that can never match because the sentinel isn't in the chain. | ✅ Clean: all targets are real sentinel values (`ErrNotBech32`, `ErrNotBase58`, `flag.ErrHelp`, `http.ErrServerClosed`, `os.ErrNotExist`, `io.EOF`, `context.DeadlineExceeded`) that upstream code actually produces and wraps with `%w`. |
+| M | Custom `Unwrap()` breaking the chain — returning nil early or a non-original error. | ✅ Clean: no custom `Unwrap` implementations — the stdlib chain alone determines traversal. |
+
+All packages build, vet, and test green.
