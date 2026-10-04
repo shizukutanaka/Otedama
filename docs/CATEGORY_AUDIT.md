@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1292 update — merged-fix invariant + workflow YAML parse
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | PR #1293 invariant | ✓ Holds: every push/PR branch filter on synced master now includes `master` (ci/ci-cd/test/security `[main, master, develop]`, deploy `[main, master]`) — no workflow still targets only nonexistent branches |
+| R | Workflow YAML integrity | ✓ All 8 files (ci, ci-cd, code-review, deploy, devin-direct-merge, release, security, test) parse cleanly via `yaml.safe_load` |
+
