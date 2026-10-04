@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 828 update — request-capture + marshal-loop + render-log audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Goroutine spawned inside an HTTP handler capturing `*http.Request` — request reused after handler returns (data race on Body/ctx). | ✅ Clean: zero handler-spawned goroutines — all handlers are synchronous request→response. |
+| P | `json.Marshal`/`Encode` inside a per-item loop — quadratic allocation churn. | ✅ Clean: zero in-loop marshal sites — marshalling is per-message at the wire boundary, never per element. |
+| S | Logging inside a render/format function — output interleaving and render-time side effects. | ✅ Clean: render/format functions are pure string builders; logging stays at call sites (verified session 735). |
+
+All packages build, vet, and test green.
