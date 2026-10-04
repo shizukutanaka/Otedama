@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1154 update — bool-map census
+
+`map[K]bool` as a set vs the `map[K]struct{}` idiom — absent-vs-false
+ambiguity surface.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 7 `map[K]bool` sites (setFlags, 3× seen dedup, 2× valid-count/break sets); every write is `= true` only — no `= false` is ever stored, so all `m[k]` truth tests are safe; the 2 `struct{}` sites coexist | ⚠️ Noted |
+
+All packages build, vet, and test green.
