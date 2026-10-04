@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 972 update — stats-window + accountant + latency-ring audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Share counter resetting on reconnect producing a negative hashrate, or zero/negative dt dividing by zero. | ✅ Clean: `hashrateWindow.observe` emits 0 when `total < lastTotal` (reset) or `dt <= 0`; first call primes and returns 0. |
+| M | Stats ticking non-uniformly (Goroutine scheduling) losing sub-second productive time, or idle/stalled time accruing as productive. | ✅ Clean: `uptimeAccountant` carries the sub-second remainder forward and flushes only whole productive seconds; `satsAccountant` gates on the same `productive` flag and retains fractional precision — the estimate never runs backwards. |
+| M | The "+1 sat per share" conflation of shares with earnings. | ✅ Clean by design: sats estimate integrates the arbitration yield rate over productive time; documented as an estimate vs pool-side accounting (KNOWN_LIMITATIONS §9). |
+| M | Latency ring buffer racing, negative samples corrupting quantiles, or the sort running under the lock. | ✅ Clean: `Record` drops `ms < 0`; mutex-guarded ring; `Quantile` copies the window under lock then sorts outside it — nearest-rank with clamped endpoints. |
+
+All packages build, vet, and test green.
