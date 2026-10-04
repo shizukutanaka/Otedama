@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 992 update — noise-nonce + frame-bound + read-drain + hasher-pool audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | AEAD nonce reuse across frames — catastrophic ChaCha20-Poly1305 key compromise. | ✅ Clean: `CipherState` carries a monotonic `n` counter serialized as LE u64 into the nonce's last 8 bytes and incremented on every Encrypt and every Decrypt (send/recv states stay in lockstep, matching Noise symmetric-state semantics). |
+| M | `chacha20poly1305.New` re-derived from the same static key on every frame — avoidable per-message cost on the write/read hot path. | ⏳ Tracked: perf fix is open #957 (transport-held AEAD); the ledger records the shape, correctness unaffected. |
+| S | A plaintext+tag overflowing the u16 length prefix silently truncated — stream desynchronisation, every subsequent frame undecryptable. | ✅ Clean: `Write` rejects `len(ct) > maxNoiseFrame` before emitting a byte; on any mid-frame write error the connection is fail-closed anyway. |
+| S | A wire length field coercing a huge allocation, or plaintext dropped when it doesn't fit the caller's buffer. | ✅ Clean: the u16 prefix inherently caps `ctLen` ≤ maxNoiseFrame; `Read` drains `readbuf` first and retains remainder — nothing is dropped. |
+| M | Pooled hasher state leaking into returned hashes, or HMAC key-block edge mishandled. | ✅ Clean: pool is borrowed/reset/returned correctly, keys >64 bytes are hashed first per HMAC, and the result slice is freshly allocated. |
+
+All packages build, vet, and test green.
