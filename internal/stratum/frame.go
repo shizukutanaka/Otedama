@@ -180,9 +180,9 @@ func EncodeHeader(dst []byte, h Header) error {
 	binary.LittleEndian.PutUint16(dst[0:2], h.ExtensionType)
 	dst[2] = h.MsgType
 	// U24 little-endian: low, mid, high.
-	dst[3] = byte(h.MsgLength)
-	dst[4] = byte(h.MsgLength >> 8)
-	dst[5] = byte(h.MsgLength >> 16)
+	dst[3] = byte(h.MsgLength) //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
+	dst[4] = byte(h.MsgLength >> 8) //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
+	dst[5] = byte(h.MsgLength >> 16) //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
 	return nil
 }
 

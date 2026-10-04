@@ -354,7 +354,7 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	// counter's low bytes (still rolling); sizes > 8 stay zero-padded
 	// at the head.
 	for i := 0; i < len(en2) && i < 8; i++ {
-		en2[len(en2)-1-i] = byte(n >> (8 * i))
+		en2[len(en2)-1-i] = byte(n >> (8 * i)) //nolint:gosec // masked byte extraction from a uint64 counter
 	}
 	coinbase := make([]byte, 0, len(j.Coinb1)+len(en1)+len(en2)+len(j.Coinb2))
 	coinbase = append(coinbase, j.Coinb1...)

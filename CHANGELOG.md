@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1314 — lint debt batch 4: gosec triage)
+
+Triaged all 22 gosec findings from the v2 lint run: `//nolint:gosec`
+with per-site justification for provably-bounded casts (G115 ×7),
+user-owned-datadir paths (G703 ×3), and UI message strings matching the
+credential regex (G101 ×9). Real hardening: the nonce-partition guard in
+`setup.go` now also requires `total > 0`.
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
