@@ -3312,3 +3312,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1303 update — open-PR mergeability sweep
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Mergeability of all 100 open PRs vs master `bf4f83bc6` (git merge-tree --write-tree, fetched refs/pull/*/head) | ✓ zero conflicts — all 33 non-docs fix/refactor/chore PRs and all 67 docs PRs merge cleanly; the queue is in-order mergeable as-is |
+| R | API `mergeable` field | ⚠️ Noted — GitHub computes it lazily (returns null on first GET); `git merge-tree` against fetched PR refs is the reliable oracle and was used instead |
+| R | Redundant fix pairs re-verified | ✓ the only overlap remains #1321 ⊂ #1329 (recorded s1301); no conflicting semantics among the 33 fix PRs |
+
