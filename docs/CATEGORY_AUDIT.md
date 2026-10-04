@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 879 update — ptr-tricks + go-directive + sys-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `unsafe`/`uintptr`/`reflect` in production — layout hacks, GC-pooler breakage, no checkptr coverage. | ✅ Clean: absent from production — `reflect.DeepEqual` appears in one fuzz test only (build/vet confirmed clean at s538/s687). |
+| M | `//go:linkname`/`//go:noinline`/`//go:generate` directives — hidden behavior, unreachable code, or stale generated files. | ✅ Clean: the only directives are `//go:build` platform tags (hal linux/stub, tui width_unix/width_windows/width_other) — correct mutually-exclusive coverage. |
+| S | Direct `syscall`/`x/sys` surface wider than needed — platform-coupled APIs leaking into core logic. | ✅ Clean: `x/sys/unix|windows` only in the build-tagged `tui/width_*.go` terminal-size helpers; `syscall.SIGTERM` only for the run-loop signal set. |
+
+All packages build, vet, and test green.
