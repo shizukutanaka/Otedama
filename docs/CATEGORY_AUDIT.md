@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 973 update — engine-metrics + lazy-series + payout-info audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Lazily-created per-category/per-device series racing on their backing map — the s509 rejectByReason race class. | ✅ Clean: every lazy series has a dedicated mutex (`rejectByReasonMu`, `lastRejectByReasonMu`, `sharesFoundPerDeviceMu`, `payoutInfoMu`); the counter/gauge mutation happens after the map guard is released. |
+| M | `otedama_payout_info` exposing the raw payout address as a label value — /metrics leaking the wallet destination. | ✅ Clean: the label is the masked form only (`setActivePayout(masked)`); empty masked is a no-op. |
+| M | Two payout series reading 1 simultaneously during failover — ambiguous active destination. | ✅ Clean: previous series is set to 0 before the new one is set to 1, under `payoutInfoMu`; unchanged address short-circuits. |
+| M | `shares_unaccounted` going negative when a stats tick races a burst of pool accepts — a meaningless negative gauge. | ✅ Clean: `unaccounted` is clamped at 0 (`found > judged` else 0), documenting that a tick can observe more judged-than-found. |
+
+All packages build, vet, and test green.
