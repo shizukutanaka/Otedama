@@ -1734,6 +1734,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 976 update — logger-default + ctx-injection + adapter audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `FromContext` racing `SetDefault` under `-race`, or two goroutines each allocating a default — split log streams. | ✅ Clean: `atomic.Pointer[Logger]`; cold path uses `CompareAndSwap` and the loser returns the winner (`defaultLoggerSlow` is extracted for deterministic testing). |
+| M | `IntoContext(ctx, nil)` storing a typed-nil that shadows the default — nil-pointer log call. | ✅ Clean: nil is a no-op (`return ctx`); `FromContext` also guards `l != nil` and falls back to the default. |
+| M | `SetDefault(nil)` clobbering the live default — every downstream `FromContext` suddenly nil. | ✅ Clean: nil input is ignored. |
+| M | `Discard` still emitting on a slow path, corrupting the TUI. | ✅ Clean: belt-and-suspenders — `io.Discard` writer AND `LevelError+1` threshold. |
+| M | `Adapter` mis-mapping a level string the engine emits (e.g. "warning"). | ✅ Clean: `strings.ToLower` then explicit debug/warn|warning/error cases, Info fallback. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
