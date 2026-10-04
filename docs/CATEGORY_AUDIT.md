@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1134 update — nesting-depth census
+
+Brace nesting ≥6 levels — readability/cyclomatic-complexity concern class.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 8 sites at raw depth ≥6; manual inspection shows the count includes composite literals, switch-based wire dispatch (run.go V2 message handler), and per-check doctor blocks — legitimate structure, no dead nesting | S |
+| S | Deepest sites are dispatch/fan-out code where further extraction would add indirection, not clarity | ⚠️ Noted |
+
+All packages build, vet, and test green.
