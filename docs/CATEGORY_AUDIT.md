@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 967 update — metric-name-valid + label-escape + type-collision audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A malformed metric/label name emitting a rejected line that silently kills the entire scrape. | ✅ Clean: `isValidMetricName` (Prometheus rule incl. `:`) and stricter `isValidLabelName` (no colon) are enforced at registration — panic on developer error, never on runtime input. |
+| M | Escape rules conflated between label values and HELP text — over- or under-escaping. | ✅ Clean: `escapeLabel` handles `\\`, `"`, `\n`; `escapeHelp` correctly omits the quote (not special in HELP) — exactly per the exposition spec. |
+| M | Caller mutating a label map after registration corrupting the stored series. | ✅ Clean: `cloneLabels` snapshots at registration (nil stays nil). |
+| M | Same name registered as both counter and gauge — two TYPEs under one name, whole-scrape corruption; or nondeterministic label order breaking dedup. | ✅ Clean: counter/gauge name collision is a registration panic; `metricKey`/`renderLabels` sort label keys so ordering and dedup are deterministic. |
+
+All packages build, vet, and test green.
