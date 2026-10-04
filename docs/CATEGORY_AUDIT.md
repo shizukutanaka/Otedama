@@ -2607,6 +2607,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1138 update — nil-nil return census
+
+`return nil, nil` in error paths — silently swallowing real errors.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 5 sites, all documented empty-set/fallback semantics (absent DRM tree, empty driver set, nil extra-CA → secure default); none swallow real errors | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
