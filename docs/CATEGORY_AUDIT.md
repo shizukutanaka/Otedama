@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 843 update — encoder-boundary + nopcloser + writeheader-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `json.Encoder.Encode` error ignored on the write boundary — client gets a truncated body with a 200. | ✅ Clean: every Encoder's `Encode` error is checked and propagated (`doctor.go:216`, `version.go:25`, `config.go:166`); wire encoders return the payload error before send. |
+| S | `io.NopCloser` wrapping a real `resp.Body` — leaks the underlying connection. | ✅ Clean: absent — response bodies are real `Close` calls (verified session 572). |
+| M | `Write` before `WriteHeader` — implicit 200 sent before the intended status code. | ✅ Clean: all four handler sites call `WriteHeader(status)` before any body write (server.go:175-196). |
+
+All packages build, vet, and test green.
