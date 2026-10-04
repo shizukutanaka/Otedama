@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 873 update — rate-limiter + token-bucket + clock-doc audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Token-bucket limiter bugs — starts empty, blocks on take, unbounded refill, or ignores ctx. | ✅ Clean: `submitLimiter` starts full, `take()` is non-blocking (drop + counter), refill is ticker-driven and capped at `submitBurst`, and the refill goroutine exits on `ctx.Done()` (engine/run.go:1847-1880). |
+| M | `clock.NewRateLimiter` referenced in the clock doc comment — phantom API? | ✅ Benign: exists only inside a doc-comment example illustrating how a caller injects `clock.Clock` — not a symbol in the package. |
+| S | Rate limit on a non-Clock wall clock — untestable drift. | ✅ Benign: `submitLimiter` uses `time.NewTicker` directly; shares are real-time events, `take()` is non-blocking so injection adds no value. |
+
+All packages build, vet, and test green.
