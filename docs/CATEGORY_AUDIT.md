@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1170 update — mechanical-audit checkpoint
+
+Ledger stands at ~93 merged entries on master (in-flight entries on unmerged PRs excluded from this count). The mechanical drift/defect family continues:
+
+- Doc↔code numeric-claim census (s1166–s1169) found two real drifts and shipped both: CLAUDE.md workflow inventory missing `devin-direct-merge.yml` (#1248) and the stale OSS-Fuzz "one more fuzz target needed" criterion (#1250). All other documented numerics verified true (17 doctor checks, 15 run flags, 10 language catalogs, 4 config layers, ADR-001–011).
+- Doc path-reference existence (s1167): 297 backtick-quoted paths checked — zero actual missing references; every nominal miss is a labeled planned/forbidden path, a self-flagged KNOWN_LIMITATIONS gap, or historical ledger prose.
+- Test-fixture + benchmark + config-example parity (s1167–s1169): zero drift.
+
+Real fixes remain rare and mechanical-drift class coverage stays near-total; next: continue the class census and the periodic ADR-009 ecosystem recheck (~s1172).
+
+All packages build, vet, and test green.
