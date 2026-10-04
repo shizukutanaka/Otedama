@@ -2389,6 +2389,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 934 update — handshake-decode + field-attribution + fixed-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Decode errors untraceable to the offending field — "read past end" alone gives no clue which of the five STR0_255 fields overran. | ✅ Clean: every field read wraps `%w` with `<Message>.<Field>` (the `fields`/`names` parallel arrays keep the loop generic without losing attribution). |
+| M | `NominalHashrate` read as a length-prefixed or wrong-width field — wire-format drift vs the spec's 4-byte LE float. | ✅ Clean: fixed `[4]byte` `io.ReadFull` + `binary.LittleEndian.Uint32` + `float32frombits` — exactly the spec layout. |
+| M | A pool's >32-byte `Extranonce` dropping the connection — spec-lenient interop failure. | ✅ Clean: decode uses `getB0_255` (accepts 33–255 B, still bounded) while encode uses strict `appendB0_32`; the Postel rationale is documented on the field. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
