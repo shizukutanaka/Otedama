@@ -1072,3 +1072,36 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+
+## Session-989 ecosystem update (2026-10-02)
+
+**sv2-spec (open normative set unchanged)** — the spec's quiet
+window continues: the normative open PRs are still #236
+(`SetTarget.target` MUST NOT exceed channel `max_target`), #234
+(authority-key management §4.8 — first normative split of authority
+key vs server static Noise key), #203 (coinbase-transaction payouts
+extension), and #198 (`coinbase_witness` field on `NewTemplate`).
+The remaining open items are editorial: #232 and #186 (table-cell
+formatting) and the WIP #103 (Proxy Annex). No conformance-affecting
+merges since the last recheck; Otedama's documented gaps (certificate
+parsing deferred to the secp256k1 migration, KNOWN_LIMITATIONS §2)
+stand unchanged.
+
+**SRI** — v1.12.0 (2026-09-17) remains the newest tag.
+
+**sv2-apps** — open set still at 27 PRs. The five tracked items are
+all still open: #881 (WIP `handle_push_solution` on jd_server +
+bitcoin_core — the piece phase-2 JDC submits through), #839 (JDS
+binds job tokens to `user_identity` and checks on
+`SetCustomMiningJob`), #845 (target-field rename matching spec #228 —
+the same direction as Otedama #704), #856 (`bitcoin_core_sv2`
+hardening), #883 (community-multisig payout examples).
+Notable new opens: #903 "Buffer sv2 hardening", #908 (B08 type
+support in `bitcoin_core_sv2`), #718 (pool backs off `accept()` on
+descriptor exhaustion — the same graceful-degradation class as
+Otedama's submit-limiter), #802 (`blocks_found` decrement on channel
+disconnect), #820/#803 (Prometheus per-channel share work and opt-in
+per-SV1-client hashrate metrics). The upstream hardening wave
+continues in Otedama's direction: bounded resources, fail-closed
+validation, observable drops rather than silent ones.
