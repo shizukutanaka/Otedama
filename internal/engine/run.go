@@ -31,10 +31,12 @@ import (
 	"cmp"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,6 +69,12 @@ const (
 // device→stream assignment in the absence of a fresh quote.
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
+
+// jobStallWarnAfter is how long the engine tolerates a connected pool not
+// delivering any job before warning once per episode — a silent pool starves
+// revenue the same way extreme difficulty does, but without rejects. It is a
+// var (not const) so tests can shrink it to milliseconds.
+var jobStallWarnAfter = 10 * time.Minute
 
 // poolDialTimeout bounds a single pool dial attempt — TCP connect for
 // plaintext, connect + TLS handshake for TLS schemes. A blackholed
@@ -156,7 +164,7 @@ type Options struct {
 // When the data is untrustworthy the engine holds the last trusted state.
 //
 // A threshold of 0 (or negative) disables curtailment entirely.
-func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (next bool, changed bool) {
+func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (next, changed bool) {
 	if threshold <= 0 || !fresh || rate <= 0 {
 		return curr, false
 	}
@@ -218,7 +226,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 1: Lightning wallet -----
-	walletFingerprint := setupWallet(opts, log)
+	walletFingerprint := setupWallet(&opts, log)
 
 	// ----- Phase 2: Hardware detection (CPU + GPU) -----
 	devices, err := detectDevices(ctx, log)
@@ -299,14 +307,16 @@ func Run(ctx context.Context, opts Options) error {
 					}
 					log("info", fmt.Sprintf(
 						"engine: curtailed — BTC/USD $%.0f below threshold $%.0f; hashing paused",
-						rate, threshold))
+						rate, threshold,
+					))
 					if m != nil {
 						m.curtailed.Set(1)
 					}
 				} else {
 					log("info", fmt.Sprintf(
 						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
-						rate, threshold))
+						rate, threshold,
+					))
 					if m != nil {
 						m.curtailed.Set(0)
 					}
@@ -316,7 +326,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 5: Providers -----
-	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, hashFetcher, devices, workers, log)
+	miningProvider, akashProvider := startProviders(ctx, &opts.Config, rateFetcher, hashFetcher, devices, workers, log)
 	defer miningProvider.Stop()
 	defer akashProvider.Stop()
 
@@ -358,9 +368,14 @@ func Run(ctx context.Context, opts Options) error {
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
-		activityMu:    &activityMu,
-		activity:      activity,
-		paused:        arbPaused,
+		powerWatts:    opts.Config.PowerWatts,
+		// powerPricePerKWh completes the power-breakeven floor; both must be
+		// set for the derived constraint to engage (see arbitrationLoopOpts).
+		powerPricePerKWh: opts.Config.ElectricityPricePerKWh,
+		rateSource:       rateFetcher,
+		activityMu:       &activityMu,
+		activity:         activity,
+		paused:           arbPaused,
 	})
 
 	// ----- Phase 7: TUI dashboard -----
@@ -433,8 +448,8 @@ type reconnectOpts struct {
 // exponential backoff (capped at reconnectBackoffMax) until ctx is cancelled, a fatal
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
-	pools := poolURLs(r.opts.Config)
-	addrs := payoutAddresses(r.opts.Config)
+	pools := poolURLs(&r.opts.Config)
+	addrs := payoutAddresses(&r.opts.Config)
 	poolIdx := 0
 	addrIdx := 0
 	addrConnected := false // has the active address ever established a session?
@@ -567,7 +582,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 					"engine: payout address %s (%d/%d) could not establish a session on any pool; "+
 						"failing over to %s (%d/%d)",
 					maskAddr(addrs[prev]), prev+1, len(addrs),
-					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs)))
+					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs),
+				))
 				continue // try next address immediately, no backoff
 			}
 			// Wrapped through every address; none connected. Back off and
@@ -575,7 +591,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			addrConnected = false
 			r.log("warn", fmt.Sprintf(
 				"engine: none of the %d configured payout addresses could connect; "+
-					"backing off %v and retrying from the primary", len(addrs), backoff))
+					"backing off %v and retrying from the primary", len(addrs), backoff,
+			))
 		case len(pools) > 1:
 			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
 		default:
@@ -649,7 +666,7 @@ type sessionOpts struct {
 
 // isCurtailed reports whether hashing is currently paused by the
 // curtail_below_btc_usd threshold. Safe to call with a nil gate.
-func (o sessionOpts) isCurtailed() bool {
+func (o *sessionOpts) isCurtailed() bool {
 	return o.curtailGate != nil && o.curtailGate.Load()
 }
 
@@ -678,7 +695,7 @@ func (o sessionOpts) allArbPaused() bool {
 // otedama_up==0 for real stalls without being paged during a price-driven or
 // yield-floor pause. Returns whether the miner is in a fault stall (for the
 // dashboard badge); always false while intentionally idle.
-func (o sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate float64) bool {
+func (o *sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate float64) bool {
 	if o.isCurtailed() || o.allArbPaused() {
 		if o.m != nil {
 			o.m.up.Set(1)
@@ -709,8 +726,10 @@ type poolMsg struct {
 //
 // Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
 // poolproto.DialURL so the protocol abstraction is load-bearing for V1.
-// The Stratum V2 path uses the existing inline framing code until the
-// V2 poolproto dialer completes Step 3b (docs/KNOWN_LIMITATIONS.md §3).
+// The Stratum V2 path keeps the existing inline framing: the
+// poolproto/stratumv2 dialer exists (KNOWN_LIMITATIONS §3, resolved), but
+// bridging it into the engine's session loop is a separate piece of work
+// still pending.
 func runSession(ctx context.Context, opts sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
 	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
@@ -833,6 +852,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	var hashWindow hashrateWindow
 	// Accumulate productive (actually-hashing) time for effective-uptime accounting.
 	var uptime uptimeAccountant
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
 	// Tripwire for pool-assigned difficulty starving share production.
 	var starvedWarned bool
 
@@ -860,7 +884,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
 	// tip (prev_hash + network nBits + ntime, via SetNewPrevHash) are
-	// known. Jobs without min_ntime are *future jobs*: they activate only
+	// known. Jobs without ntime_start are *future jobs*: they activate only
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
@@ -899,7 +923,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped))
+					dropped-lastDropped,
+				))
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
@@ -914,7 +939,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			estSats = uint64(satsAcc.observe(time.Now(), expectedYieldRate, currentHashRate > 0 && !stalled))
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, estSats, latency, stalled))
+				opts.dashboard.Update(buildStats(&opts, currentHashRate, estSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
@@ -922,7 +947,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
 					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
 					float64(opts.m.productiveSeconds.Value()),
-					opts.m.uptime.Value()))
+					opts.m.uptime.Value(),
+				))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				// J/TH efficiency: only meaningful when power is configured and
 				// the miner is running (avoids division-by-zero and spurious 0).
@@ -937,10 +963,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// "acceptable" band (industry guidance: >1% reject ≈
 				// <99% acceptance warrants attention).
 				rate, judged := opts.m.updateShareRates()
+				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
-						rate*100, opts.m.sharesAccepted.Value(), judged))
+						rate*100, opts.m.sharesAccepted.Value(), judged,
+					))
 				}
 				// Publish pool difficulty and estimated share interval so
 				// operators can distinguish "hardware is slow" from "the pool
@@ -959,11 +987,24 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				} else {
 					starvedWarned = false
 				}
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
-					latency.Quantile(0.50), p95, latency.Quantile(0.99)))
+					latency.Quantile(0.50), p95, latency.Quantile(0.99),
+				))
 				if opts.m != nil {
 					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
 					opts.m.submitLatencyP95.Set(p95)
@@ -990,17 +1031,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
+				lastJobAt = time.Now()
 				prevLen := len(jobs)
 				jobOrder = storeBoundedJob(jobs, jobOrder, j)
 				if len(jobs) < prevLen {
 					opts.log("debug", fmt.Sprintf("engine: evicted oldest pending job (cap %d)", jobsCap))
 				}
 				switch {
-				case j.HasMinNtime && havePrev:
+				case j.HasNtimeStart && havePrev:
 					// Job for the current chain tip: mine it now. Its own
-					// min_ntime supersedes the tip's (it is never older).
-					startJob(j, j.MinNtime)
-				case !j.HasMinNtime:
+					// ntime_start supersedes the tip's (it is never older).
+					startJob(j, j.NtimeStart)
+				case !j.HasNtimeStart:
 					// Future job: valid only for a chain tip we have not
 					// seen yet. Hold until SetNewPrevHash names it.
 					opts.log("info", fmt.Sprintf("engine: job %d stored (future job, awaiting prev-hash)", j.JobID))
@@ -1029,9 +1071,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				if named != nil {
 					jobs[p.JobID] = named
 					jobOrder = append(jobOrder, p.JobID)
-					ntime := p.MinNtime
-					if named.HasMinNtime && named.MinNtime > ntime {
-						ntime = named.MinNtime
+					ntime := p.NtimeStart
+					if named.HasNtimeStart && named.NtimeStart > ntime {
+						ntime = named.NtimeStart
 					}
 					startJob(named, ntime)
 					opts.log("info", fmt.Sprintf("engine: new prev-hash, job %d nBits=0x%08X",
@@ -1047,7 +1089,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				shareTarget = miner.Hash(pm.msg.SetTarget.Target)
 				if active != nil && havePrev {
 					// Re-issue the current job so workers compare against
 					// the new share target immediately.
@@ -1190,6 +1232,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 			}
+			if opts.m != nil {
+				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
+			}
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
 		}
 	}
@@ -1226,7 +1271,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			creds.TLSRootCAsPEM = pem
 		}
 	}
-	sess, err := poolproto.DialURL(ctx, opts.poolURL, creds)
+	sess, err := poolproto.DialURL(ctx, opts.poolURL, &creds)
 	if err != nil {
 		return fmt.Errorf("engine: %w", err)
 	}
@@ -1255,6 +1300,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
+	// Starvation tripwire: a pool-assigned difficulty so high that the
+	// expected share interval exceeds an hour starves income silently —
+	// no rejects, no disconnect, just nothing credited. Warn once per
+	// episode and re-arm when the interval recovers.
+	var starvedWarned bool
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
@@ -1285,7 +1340,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped))
+					dropped-lastDropped,
+				))
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
@@ -1298,7 +1354,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			estSats = uint64(satsAcc.observe(time.Now(), expectedYieldRate, currentHashRate > 0 && !stalled))
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, estSats, latency, stalled))
+				opts.dashboard.Update(buildStats(&opts, currentHashRate, estSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
@@ -1306,7 +1362,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
 					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
 					float64(opts.m.productiveSeconds.Value()),
-					opts.m.uptime.Value()))
+					opts.m.uptime.Value(),
+				))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				if opts.powerWatts > 0 {
 					opts.m.powerWatts.Set(opts.powerWatts)
@@ -1318,17 +1375,41 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
-						rate*100, opts.m.sharesAccepted.Value(), judged))
+						rate*100, opts.m.sharesAccepted.Value(), judged,
+					))
 				}
 				// Publish pool difficulty and estimated share interval so
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
+				if iv := opts.m.estimatedShareIntervalSeconds.Value(); iv > 3600 {
+					if !starvedWarned {
+						starvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: pool difficulty implies ~%.0f min between shares — income is effectively zero; the pool should lower difficulty or retarget",
+							iv/60))
+					}
+				} else {
+					starvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
-					latency.Quantile(0.50), p95, latency.Quantile(0.99)))
+					latency.Quantile(0.50), p95, latency.Quantile(0.99),
+				))
 				if opts.m != nil {
 					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
 					opts.m.submitLatencyP95.Set(p95)
@@ -1358,17 +1439,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			// V2 path for rationale). lastJobReceivedAt still updates because
 			// the pool connection remains alive.
 			if opts.isCurtailed() {
-				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
+				opts.log("debug", fmt.Sprintf("engine: V1 job %q ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, opts.arbPaused, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				if err := applyJob(opts.workers, opts.arbPaused, &job, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
-				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
+				opts.log("info", fmt.Sprintf("engine: V1 job %q nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 			}
+			lastJobAt = time.Now()
 
 		case share, ok := <-opts.merged:
 			if !ok {
@@ -1401,7 +1483,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID:      fmt.Sprintf("%d", capturedShare.JobID),
+					JobID:      strconv.FormatUint(uint64(capturedShare.JobID), 10),
 					Nonce:      capturedShare.Nonce,
 					NTime:      capturedShare.NTime,
 					ExtraNonce: capturedShare.ExtraNonce,
@@ -1691,7 +1773,7 @@ func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, paused *pauseSet, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, chanID uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
@@ -1722,13 +1804,13 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job poolproto.Job, chan
 }
 
 // rollNTime rolls a stale pool-declared ntime forward to the local wall
-// clock. SRI 1.12.0 tightened share validation to enforce min_ntime/nTime
+// clock. SRI 1.12.0 tightened share validation to enforce ntime_start/nTime
 // bounds on every channel type: a share stamped with the job's original
 // (aging) ntime lands outside the pool's acceptance window once the job
 // has been grinding for a while — a guaranteed reject that burns
 // hashrate for nothing. Rolling ntime forward is standard miner
 // behaviour (it is part of the effective nonce space); a future ntime
-// is kept verbatim since undershooting min_ntime is itself a reject.
+// is kept verbatim since undershooting ntime_start is itself a reject.
 func rollNTime(declared uint32) uint32 {
 	if now := uint32(time.Now().Unix()); declared < now {
 		return now
@@ -1744,7 +1826,10 @@ func parseHost(url string) (string, error) {
 	return host, nil
 }
 
-func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
+func isFatal(err error) bool {
+	var fe *fatalError
+	return errors.As(err, &fe)
+}
 
 type fatalError struct{ msg string }
 

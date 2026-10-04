@@ -21,7 +21,7 @@
 //	0  — success
 //	1  — runtime error (engine failure, I/O error, network unreachable)
 //	64 — usage error (unknown subcommand, unknown flag, missing required argument)
-//	78 — configuration error (invalid bitcoin address, unrecognised log level, etc.)
+//	78 — configuration error (invalid bitcoin address, unrecognized log level, etc.)
 //
 // The doctor subcommand uses a narrower three-value scale:
 //
@@ -38,10 +38,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Exit codes following sysexits.h conventions.
@@ -73,7 +75,7 @@ func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Wri
 	}
 	fs.SetOutput(out)
 	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return false, exitOK
 		}
 		return false, exitUsage
@@ -82,20 +84,20 @@ func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Wri
 }
 
 // hasHelpFlag reports whether args requests help, matching the exact
-// spellings flag.FlagSet.Parse recognises (-h, -help, --help) before
+// spellings flag.FlagSet.Parse recognizes (-h, -help, --help) before
 // falling through to its own ErrHelp path. It scans every token rather
 // than stopping at the first argument that doesn't look like a flag:
 // every flag these subcommands define takes a value in the space-separated
 // "--flag value" form (e.g. "--bitcoin-address bc1q..."), so the token
 // right after a flag is that flag's value, not a positional argument
-// signalling the end of flags — stopping there produced false negatives
+// signaling the end of flags — stopping there produced false negatives
 // for the common case of --help appearing after any flag with a value.
 // Scanning still stops at a literal "--", the unambiguous end-of-flags
 // marker, since that ends flag.Parse's own scanning too.
 func hasHelpFlag(args []string) bool {
 	for _, a := range args {
 		switch a {
-		case "-h", "-help", "--help":
+		case "-h", "-help", helpFlag:
 			return true
 		case "--":
 			return false
@@ -128,14 +130,62 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case "help", helpFlag, "-h":
 		printUsage(stdout)
 		return exitOK
 	default:
 		fmt.Fprintf(stderr, "otedama: unknown subcommand %q\n", args[0])
+		if s := suggestSubcommand(args[0]); s != "" {
+			fmt.Fprintf(stderr, "otedama: did you mean %q?\n", s)
+		}
 		printUsage(stderr)
 		return exitUsage
 	}
+}
+
+// knownSubcommands mirrors the dispatch switch in run(). Keep in sync —
+// it is only used to offer a "did you mean" hint on typos.
+var knownSubcommands = []string{
+	"run", "version", "config", "service", "doctor", "wallet", "completion", "help",
+}
+
+// suggestSubcommand returns the closest known subcommand to what the user
+// typed, or "" when nothing is close enough to be a plausible typo.
+// Leading dashes are ignored so "--versio" still resolves. Two edits
+// covers transpositions ("rnu" → "run") and single dropped or mistyped
+// characters without suggesting on unrelated input.
+func suggestSubcommand(typed string) string {
+	t := strings.TrimLeft(typed, "-")
+	best, bestDist := "", 3 // suggest only at edit distance ≤ 2
+	for _, c := range knownSubcommands {
+		if d := levenshtein(t, c); d < bestDist {
+			best, bestDist = c, d
+		}
+	}
+	return best
+}
+
+// levenshtein returns the edit distance between a and b counting
+// insertions, deletions, and substitutions. A transposition is two edits.
+func levenshtein(a, b string) int {
+	ar, br := []rune(a), []rune(b)
+	prev := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i, ca := range ar {
+		cur := make([]int, len(br)+1)
+		cur[0] = i + 1
+		for j, cb := range br {
+			cost := 1
+			if ca == cb {
+				cost = 0
+			}
+			cur[j+1] = min(cur[j]+1, prev[j+1]+1, prev[j]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(br)]
 }
 
 func printUsage(w io.Writer) {

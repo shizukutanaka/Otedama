@@ -74,6 +74,11 @@ type engineMetrics struct {
 	submitLatencyP95 *metrics.Gauge
 	submitLatencyP99 *metrics.Gauge
 
+	// sharesSubmitInFlight is the depth of the submit→ack pending set
+	// (len(submitTimes)); a sustained/growing depth means the pool is slow
+	// or not acknowledging submits at all.
+	sharesSubmitInFlight *metrics.Gauge
+
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
@@ -116,6 +121,11 @@ type engineMetrics struct {
 	// cost half of profitability. Constant for a run; set once at startup when
 	// both power and price are configured.
 	powerCostUSDPerHour *metrics.Gauge
+	// powerBreakevenFloor is the per-device profitability floor derived from
+	// power_watts × electricity_price_per_kwh ÷ BTC/USD (sats/sec), recomputed
+	// each arbitration round and folded into MinYieldSatsPerSec via max().
+	// 0 when power_watts or electricity_price_per_kwh is unset.
+	powerBreakevenFloor *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -322,6 +332,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_submit_latency_milliseconds",
 			"Share-submission round-trip latency (submit→accept).",
 			map[string]string{"quantile": "0.99"}),
+		sharesSubmitInFlight: reg.NewGauge(
+			"otedama_shares_submit_in_flight",
+			"Shares submitted to the pool but not yet judged (in flight). "+
+				"A sustained or growing depth means the pool is slow or not "+
+				"acknowledging submits.",
+			nil),
 
 		shareAcceptanceRate: reg.NewGauge(
 			"otedama_share_acceptance_rate",
@@ -372,6 +388,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Estimated electricity cost: power_watts/1000 × electricity_price_per_kwh. "+
 				"Combine with the BTC/USD rate and revenue to see net profit. "+
 				"0 when power_watts or electricity_price_per_kwh is unset.",
+			nil),
+		powerBreakevenFloor: reg.NewGauge(
+			"otedama_power_breakeven_floor_sats_per_second",
+			"Per-device yield floor (sats/sec) derived from power_watts × "+
+				"electricity_price_per_kwh ÷ BTC/USD, split evenly across managed "+
+				"devices. Streams below it are treated as unprofitable (as if below "+
+				"min_yield_sats_per_sec). 0 when power data is unconfigured.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",

@@ -34,7 +34,7 @@ type MiningProvider struct {
 	// per-family estimate (ASIC/GPU/CPU constants), making the yield quote
 	// reflect actual hardware performance rather than a family average.
 	// Zero or negative return values cause publish() to fall back to the
-	// static estimate, preserving the pre-wiring behaviour when the engine
+	// static estimate, preserving the pre-wiring behavior when the engine
 	// has not yet produced a hashrate measurement (e.g. first few seconds).
 	// Setting this field after Start is called is not safe.
 	HashrateFunc func(deviceID string) float64
@@ -75,10 +75,10 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 //   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
 func (p *MiningProvider) publish(ctx context.Context) {
-	rate, fresh := p.rates.BTCUSDRate()
-	if rate <= 0 {
-		rate = 95000 // fallback estimate
-	}
+	// Mining yield is BTC-native (sats/sec from hashrate share × block
+	// reward) — the USD rate itself is unused; only its freshness feeds
+	// the quote's confidence.
+	_, fresh := p.rates.BTCUSDRate()
 	confidence := 0.7
 	if fresh {
 		confidence = 0.95
@@ -138,8 +138,7 @@ func (p *MiningProvider) publish(ctx context.Context) {
 				Confidence:       confidence,
 			},
 		}
-		_ = rate // used for future USD display
-		if !p.sendQuote(ctx, q) {
+		if !p.sendQuote(ctx, &q) {
 			return
 		}
 	}

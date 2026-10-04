@@ -64,7 +64,7 @@ type Stats struct {
 	WalletFingerprint string
 	// EstSatsEarned is an ESTIMATE of cumulative earnings, integrated from
 	// the engine's forecast yield rate over productive time — not a figure
-	// from the pool. It is labelled "est." in the dashboard accordingly; the
+	// from the pool. It is labeled "est." in the dashboard accordingly; the
 	// pool's own accounting is authoritative. See docs/KNOWN_LIMITATIONS.md §9.
 	EstSatsEarned uint64
 
@@ -165,9 +165,9 @@ func (d *Dashboard) Stop() {
 
 // Update delivers a new stats snapshot. Non-blocking: if the dashboard
 // update queue is full the oldest entry is discarded.
-func (d *Dashboard) Update(s Stats) {
+func (d *Dashboard) Update(s *Stats) {
 	select {
-	case d.updateCh <- s:
+	case d.updateCh <- *s:
 	default:
 		// Drain one stale entry then enqueue.
 		select {
@@ -175,7 +175,7 @@ func (d *Dashboard) Update(s Stats) {
 		default:
 		}
 		select {
-		case d.updateCh <- s:
+		case d.updateCh <- *s:
 		default:
 		}
 	}
@@ -199,7 +199,7 @@ func (d *Dashboard) renderLoop() {
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
-			d.render(s)
+			d.render(&s)
 		}
 	}
 }
@@ -224,7 +224,7 @@ const (
 	restoreCursor = "\x1b[u"
 )
 
-func (d *Dashboard) render(s Stats) {
+func (d *Dashboard) render(s *Stats) {
 	d.detectWidth()
 	var sb strings.Builder
 	cols := d.cols
@@ -272,7 +272,7 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 	d.writeLine(sb, line, cols)
 }
 
-func (d *Dashboard) miningLine(s Stats, cols int) string {
+func (d *Dashboard) miningLine(s *Stats, cols int) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	if s.DevicesIdle > 0 {
@@ -303,7 +303,7 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 	}
 }
 
-func (d *Dashboard) poolLine(s Stats, cols int) string {
+func (d *Dashboard) poolLine(s *Stats, cols int) string {
 	statusPlain := "✗ disconnected"
 	status := red + statusPlain + reset
 	if s.Connected {
@@ -357,7 +357,7 @@ func truncateToBudget(s string, budget int) string {
 	return s[:budget-3] + "..."
 }
 
-func (d *Dashboard) earningsLine(s Stats) string {
+func (d *Dashboard) earningsLine(s *Stats) string {
 	satsPerSec := s.HashRate * defaultSatsPerHash()
 	satsPerDay := satsPerSec * 86400
 
@@ -382,7 +382,7 @@ func (d *Dashboard) providerLine(p ProviderStats) string {
 	return fmt.Sprintf("  %-30s  %-12s  %s", p.Name, rate, active)
 }
 
-func (d *Dashboard) walletLine(s Stats) string {
+func (d *Dashboard) walletLine(s *Stats) string {
 	fp := s.WalletFingerprint
 	if fp == "" {
 		fp = "not initialized"
@@ -390,7 +390,7 @@ func (d *Dashboard) walletLine(s Stats) string {
 	return fmt.Sprintf("  Fingerprint: %s%s%s", cyan, fp, reset)
 }
 
-func (d *Dashboard) footer(s Stats, cols int) string {
+func (d *Dashboard) footer(s *Stats, cols int) string {
 	uptime := formatDuration(s.Uptime)
 	hint := dim + "Ctrl+C to exit" + reset
 	left := fmt.Sprintf("  uptime: %s", uptime)
@@ -483,7 +483,7 @@ func visibleLen(s string) int {
 			// A CSI sequence ends at its final byte, any character in the
 			// range '@'..'~' (0x40-0x7E) — not only 'm'. The '[' introducer
 			// and the numeric/';' parameter bytes (< '@') are consumed
-			// silently. Ending on any final byte means a non-colour escape
+			// silently. Ending on any final byte means a non-color escape
 			// (e.g. "\x1b[2J") can't swallow the rest of the string.
 			if r >= '@' && r <= '~' && r != '[' {
 				inEsc = false

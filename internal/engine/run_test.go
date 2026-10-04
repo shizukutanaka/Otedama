@@ -116,7 +116,7 @@ func (fp *fakePool) serve() {
 	encoded, _ = stratum.EncodeFrame(outF)
 	conn.Write(encoded) //nolint:errcheck
 
-	// 5. Send NewMiningJob (future job: no min_ntime) followed by the
+	// 5. Send NewMiningJob (future job: no ntime_start) followed by the
 	// SetNewPrevHash that activates it — the full SV2 activation
 	// sequence. The all-0xFF channel target from step 4 means every
 	// header hash qualifies as a share, so the CPU finds one instantly.
@@ -136,10 +136,10 @@ func (fp *fakePool) serve() {
 	conn.Write(encoded) //nolint:errcheck
 
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     1,
-		MinNtime:  0x60000000,
-		NBits:     0x207fffff, // network compact target (easiest, for realism)
+		ChannelID:  1,
+		JobID:      1,
+		NtimeStart: 0x60000000,
+		NBits:      0x207fffff, // network compact target (easiest, for realism)
 	}
 	for i := range prev.PrevHash {
 		prev.PrevHash[i] = byte(0xA0 + i%16)
@@ -288,7 +288,7 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 				t.Errorf("submitted NVersion = 0x%08X, want 0x20000004 (the job's version)", s.NVersion)
 			}
 			if s.NTime < 0x60000000 {
-				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash min_ntime floor; stale values roll forward — see rollNTime)", s.NTime)
+				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash ntime_start floor; stale values roll forward — see rollNTime)", s.NTime)
 			}
 			if s.JobID != 1 {
 				t.Errorf("submitted JobID = %d, want 1", s.JobID)
@@ -331,14 +331,14 @@ func TestDefaultPoolURL_UsesConfiguredPool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://custom.pool:3336"}},
 	}
-	got := defaultPoolURL(cfg)
+	got := defaultPoolURL(&cfg)
 	if got != "stratum+v2://custom.pool:3336" {
 		t.Errorf("got %q, want custom pool", got)
 	}
 }
 
 func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
-	got := defaultPoolURL(config.Config{})
+	got := defaultPoolURL(&config.Config{})
 	if got == "" {
 		t.Error("default pool URL is empty")
 	}
@@ -388,7 +388,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
 		}
 		if s.NTime < 0x60000000 {
-			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (min_ntime floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
+			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (ntime_start floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
 		}
 	case <-ctx.Done():
 		t.Fatal("no share within 3s at the easiest share target — share target not honored")
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, nil, job, 1, 0); err != nil {
+	if err := applyJob(workers, nil, &job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, nil, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -453,11 +453,11 @@ func TestApplyJob_BadNBits(t *testing.T) {
 
 func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// applyJob must accept a positive difficulty without error (SetWork is
-	// safe without Start; behavioural proof that the right target is chosen
+	// safe without Start; behavioral proof that the right target is chosen
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, nil, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }
@@ -470,7 +470,7 @@ func TestRollNTime(t *testing.T) {
 		wantAt   string // "now" | "declared"
 	}{
 		{"stale ntime rolls forward to now", now - 3600, "now"},
-		{"future ntime kept verbatim (min_ntime floor)", now + 3600, "declared"},
+		{"future ntime kept verbatim (ntime_start floor)", now + 3600, "declared"},
 		{"exactly now unchanged", now, "declared"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -492,7 +492,7 @@ func TestRollNTime(t *testing.T) {
 func TestV1JobTarget_ZeroDifficulty_FallsBackToNBitsTarget(t *testing.T) {
 	// Before any mining.set_difficulty, SuggestedDifficulty() is 0. The
 	// target must be the nBits-derived block target, matching pre-wiring
-	// behaviour.
+	// behavior.
 	const nBits = 0x1d00ffff
 	got, err := v1JobTarget(nBits, 0)
 	if err != nil {
@@ -602,7 +602,7 @@ func TestTransitionReject(t *testing.T) {
 }
 
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
-	urls := poolURLs(config.Config{})
+	urls := poolURLs(&config.Config{})
 	if len(urls) != 1 {
 		t.Fatalf("empty config: got %d URLs, want 1 default", len(urls))
 	}
@@ -619,7 +619,7 @@ func TestPoolURLs_PreservesOrder(t *testing.T) {
 			{URL: "stratum+tcp://backup2.example.com:3333"},
 		},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 3 {
 		t.Fatalf("got %d URLs, want 3", len(urls))
 	}
@@ -640,7 +640,7 @@ func TestPoolURLs_SinglePool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://only.example.com:3336"}},
 	}
-	urls := poolURLs(cfg)
+	urls := poolURLs(&cfg)
 	if len(urls) != 1 || urls[0] != "stratum+v2://only.example.com:3336" {
 		t.Errorf("single pool: got %v", urls)
 	}
@@ -952,7 +952,7 @@ func TestPayoutAddresses_PrimaryFirstThenList(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"bc1qbackup100000000000000000000000000000", "bc1qbackup200000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	want := []string{
 		"bc1qprimary00000000000000000000000000000",
 		"bc1qbackup100000000000000000000000000000",
@@ -973,7 +973,7 @@ func TestPayoutAddresses_DedupAndSkipEmpty(t *testing.T) {
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
 		BitcoinAddresses: []string{"", "bc1qprimary00000000000000000000000000000", "bc1qbackup100000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	// primary + one unique backup; empty and duplicate-of-primary dropped.
 	if len(got) != 2 {
 		t.Fatalf("got %d addresses, want 2 (dedup + skip empty): %v", len(got), got)
@@ -987,7 +987,7 @@ func TestPayoutAddresses_ListOnlyNoPrimary(t *testing.T) {
 	cfg := config.Config{
 		BitcoinAddresses: []string{"bc1qonly000000000000000000000000000000000"},
 	}
-	got := payoutAddresses(cfg)
+	got := payoutAddresses(&cfg)
 	if len(got) != 1 || got[0] != "bc1qonly000000000000000000000000000000000" {
 		t.Fatalf("list-only config: got %v, want single backup as the active address", got)
 	}
@@ -1440,7 +1440,7 @@ func TestSetupWallet_EmptyPassphraseReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "", Config: config.Config{DataDir: "/tmp"}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty passphrase = %q, want empty", fp)
 	}
@@ -1454,7 +1454,7 @@ func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
 	log := func(_, m string) { logs = append(logs, m) }
 
 	opts := Options{WalletPassphrase: "correct-horse-battery-staple", Config: config.Config{DataDir: ""}}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with empty DataDir = %q, want empty", fp)
 	}
@@ -1472,7 +1472,7 @@ func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple",
 		Config:           config.Config{DataDir: "/dev/null/impossible"},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp != "" {
 		t.Errorf("setupWallet with unwritable DataDir = %q, want empty", fp)
 	}
@@ -1496,7 +1496,7 @@ func TestSetupWallet_NewWalletReturnsFingerprint(t *testing.T) {
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: dir},
 	}
-	fp := setupWallet(opts, log)
+	fp := setupWallet(&opts, log)
 	if fp == "" {
 		t.Error("setupWallet should return a non-empty fingerprint for a new wallet")
 	}
@@ -1533,7 +1533,7 @@ func TestSetupWallet_NewWalletPrintsRecoveryPhrase(t *testing.T) {
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
 	}
-	fp := setupWallet(opts, func(_, _ string) {})
+	fp := setupWallet(&opts, func(_, _ string) {})
 	if fp == "" {
 		t.Fatal("setupWallet returned an empty fingerprint for a new wallet")
 	}
@@ -1577,7 +1577,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	nop := func(_, _ string) {}
 
 	var first bytes.Buffer
-	fp1 := setupWallet(Options{
+	fp1 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &first,
@@ -1587,7 +1587,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 	}
 
 	var second bytes.Buffer
-	fp2 := setupWallet(Options{
+	fp2 := setupWallet(&Options{
 		WalletPassphrase: pass,
 		Config:           config.Config{DataDir: dir},
 		Output:           &second,
@@ -1608,7 +1608,7 @@ func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
 func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 	var out bytes.Buffer
 	var logs []string
-	setupWallet(Options{
+	setupWallet(&Options{
 		WalletPassphrase: "correct-horse-battery-staple-engine-test",
 		Config:           config.Config{DataDir: t.TempDir()},
 		Output:           &out,
@@ -2529,7 +2529,7 @@ func (fp *responsivePool) serve() {
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
 
 	// SV2 activation order: the job is sent first as a future job (no
-	// min_ntime), then SetNewPrevHash names it to activate — matching how
+	// ntime_start), then SetNewPrevHash names it to activate — matching how
 	// a real pool stages jobs ahead of the chain tip that will use them.
 	// Sending SetNewPrevHash before its job exists hits the engine's
 	// "names unknown job" guard (a real defensive path, but not what this
@@ -2545,10 +2545,10 @@ func (fp *responsivePool) serve() {
 
 	// Network nBits 0x207fffff is the easiest possible target.
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     1,
-		MinNtime:  0x60000000,
-		NBits:     0x207fffff,
+		ChannelID:  1,
+		JobID:      1,
+		NtimeStart: 0x60000000,
+		NBits:      0x207fffff,
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
@@ -2600,8 +2600,8 @@ func (fp *responsivePool) serve() {
 				// new epoch stays nearly-max so workers keep producing
 				// shares under it.
 				st := stratum.SetTarget{ChannelID: share.ChannelID}
-				for i := range st.MaxTarget {
-					st.MaxTarget[i] = 0xFE
+				for i := range st.Target {
+					st.Target[i] = 0xFE
 				}
 				payload, _ = st.Encode()
 				fp.emit(conn, stratum.MsgSetTarget, true, payload)
@@ -2927,6 +2927,93 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 }
 
+// TestRunSession_JobStallWarnsOnce exercises the silent-pool tripwire on the
+// V2 path: after the pool's one job, silence past jobStallWarnAfter must
+// produce exactly one warning per episode no matter how many ticks run.
+func TestRunSession_JobStallWarnsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	old := jobStallWarnAfter
+	jobStallWarnAfter = 50 * time.Millisecond
+	defer func() { jobStallWarnAfter = old }()
+
+	fp := newResponsivePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns []string
+	logFn := func(level, msg string) {
+		if level != "warn" {
+			return
+		}
+		mu.Lock()
+		warns = append(warns, msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      logFn,
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := len(warns)
+			mu.Unlock()
+			if n > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	time.Sleep(200 * time.Millisecond) // several more ticks — once-per-episode is the assertion
+	cancel()
+	<-runDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	var stallWarns int
+	for _, w := range warns {
+		if strings.Contains(w, "no new job") {
+			stallWarns++
+		}
+	}
+	if stallWarns == 0 {
+		t.Errorf("silent-pool warning never fired; warns=%v", warns)
+	}
+	if stallWarns > 1 {
+		t.Errorf("silent-pool warning fired %d times, want once per episode", stallWarns)
+	}
+}
+
 // TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
 // tripwire: a near-impossible share target must produce exactly one warning
 // per episode no matter how many stats ticks run.
@@ -3081,7 +3168,7 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
 		payload, _ = job.Encode()
 		emit(stratum.MsgNewMiningJob, true, payload)
-		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, NtimeStart: 0x60000000, NBits: 0x207fffff}
 		payload, _ = prev.Encode()
 		emit(stratum.MsgSetNewPrevHash, true, payload)
 

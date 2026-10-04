@@ -129,9 +129,15 @@ Otedama registers itself under the service name `Otedama` with
 
 To view logs:
 
-```powershell
-Get-EventLog -LogName Application -Source Otedama -Newest 50
-```
+**Correction (session 485):** this section previously suggested
+`Get-EventLog -LogName Application -Source Otedama`, but Otedama
+never registers a Windows event source — that command fails with
+"Cannot find source". The SCM-launched service's stdout is also
+discarded (the generated `binPath` passes no `--log-file`), so
+today there is no persistent log for the Windows service. To
+capture logs, run `otedama run --log-file C:\ProgramData\Otedama\otedama.log`
+in a console, or wrap the service binary in a redirecting
+launcher. Service-side log capture is a maintainer-owned gap.
 
 ---
 
@@ -159,7 +165,7 @@ docker run -d \
   --restart unless-stopped \
   -v otedama-data:/var/lib/otedama \
   -p 127.0.0.1:9090:9090 \
-  -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
+  -e OTEDAMA_BITCOIN_ADDRESS=<your-bitcoin-address> \
   -e OTEDAMA_DATA_DIR=/var/lib/otedama \
   ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1 \
   run --http-addr=0.0.0.0:9090
@@ -182,13 +188,23 @@ services:
       - run
       - --http-addr=0.0.0.0:9090
     environment:
-      OTEDAMA_BITCOIN_ADDRESS: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+      # Replace with YOUR address — the placeholder fails config
+      # validation loudly. (Previously this file shipped the real
+      # genesis-block coinbase address as the example; a verbatim copy
+      # would pass validation and send all rewards to an unspendable
+      # address. — session 500)
+      OTEDAMA_BITCOIN_ADDRESS: "<your-bitcoin-address>"
       OTEDAMA_LOG_FORMAT: json
       OTEDAMA_DATA_DIR: /var/lib/otedama
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
       - otedama-data:/var/lib/otedama
+    # `otedama doctor` exits 1 on warnings and 2 on failures, so a
+    # routine single-pool config (which warns on "Pool diversity")
+    # reports the container as unhealthy. That is intentional if you
+    # want warn-as-degraded; drop the healthcheck or gate on exit 2
+    # in an orchestrator if you only want hard failures.
     healthcheck:
       test: ["CMD", "/usr/local/bin/otedama", "doctor"]
       interval: 5m
@@ -292,8 +308,47 @@ metadata:
   name: otedama-secrets
 type: Opaque
 stringData:
-  bitcoin-address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+  # Replace with YOUR address — see the note in docker-compose.yaml above.
+  bitcoin-address: "<your-bitcoin-address>"
   wallet-passphrase: your-strong-passphrase-here
+```
+
+### PersistentVolumeClaim
+
+The Deployment above mounts `otedama-data` — it must exist:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+### Service
+
+The `ServiceMonitor` below selects `app: otedama`, so a `Service` fronting
+the pod is required for scraping to work (previously missing from this
+example — a ServiceMonitor selects Services, not pods):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama
+  labels:
+    app: otedama
+spec:
+  selector:
+    app: otedama
+  ports:
+  - name: metrics   # must match ServiceMonitor.endpoints[].port
+    port: 9090
+    targetPort: metrics
 ```
 
 ### ServiceMonitor (Prometheus Operator)
@@ -336,8 +391,11 @@ trust docs/SPECIFICATION.md §6.
 
 ### Dashboards
 
-A reference Grafana dashboard lives at
-`contrib/grafana/otedama-dashboard.json` (TODO for v3.1.0).
+A reference Grafana dashboard is planned for `contrib/grafana/`
+in v3.1.0 — **correction (session 485):** this section previously
+said the dashboard "lives at" `contrib/grafana/otedama-dashboard.json`,
+but `contrib/` does not exist yet; the path is a target, not a
+current file.
 
 ### Alerts
 
@@ -418,11 +476,21 @@ otedama wallet verify
 For production deployments:
 
 - [ ] Binary SHA-256 verified against published checksums.
-- [ ] Binary cosign signature verified.
+  (Note, session 485: today's `release.yml` does not produce
+  checksums, signatures, or SBOMs — see KNOWN_LIMITATIONS. Until
+  the release pipeline ships them, verify provenance via the
+  GitHub Actions build log instead.)
+- [ ] Binary cosign signature verified — **not currently possible:**
+  no release pipeline signs binaries (correction, session 485).
 - [ ] Running as a dedicated, non-root user.
 - [ ] Wallet passphrase passed via secret store (not `--wallet-passphrase` on command line).
 - [ ] Data directory permissions are 0700.
 - [ ] Firewall restricts inbound traffic; only outbound to pool + rate sources.
 - [ ] Prometheus scrape port bound to localhost or private network.
-- [ ] Automatic updates via Dependabot for the Otedama container image tag.
+- [ ] Pin the deployed container image to an immutable tag/digest and
+  update it deliberately. (Correction, session 485: this item
+  previously suggested "Dependabot for the Otedama container image
+  tag" — the repo's Dependabot `docker` ecosystem only updates the
+  *build* base-image pins in `Dockerfile`; it does not update an
+  operator's deployed image.)
 - [ ] Monthly review of `otedama doctor` output.

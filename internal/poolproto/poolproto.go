@@ -120,9 +120,9 @@ var knownSchemes = []struct {
 	{"datum://", ProtocolDATUM},
 }
 
-// StripScheme removes a recognised pool URL scheme prefix and returns
+// StripScheme removes a recognized pool URL scheme prefix and returns
 // the remaining host[:port] portion. It returns ErrUnknownProtocol if
-// the scheme is not recognised. This is the canonical way to get the
+// the scheme is not recognized. This is the canonical way to get the
 // dial target from a pool URL, replacing ad-hoc per-package parsing.
 func StripScheme(url string) (host string, err error) {
 	for _, s := range knownSchemes {
@@ -298,7 +298,7 @@ type Dialer interface {
 
 	// Dial opens a Connection. The url is the full pool URL; the
 	// dialer parses scheme and host:port from it.
-	Dial(ctx context.Context, url string, creds Credentials) (Connection, error)
+	Dial(ctx context.Context, url string, creds *Credentials) (Connection, error)
 
 	// Negotiate performs the protocol handshake on an established
 	// Connection. On success the Connection's Protocol() returns the
@@ -379,7 +379,7 @@ func Available() []ProtocolID {
 // DialURL is the high-level entry point: identify the protocol from
 // the URL, look up its Dialer, dial, and negotiate. Returns the
 // resulting Session ready to receive jobs.
-func DialURL(ctx context.Context, url string, creds Credentials) (Session, error) {
+func DialURL(ctx context.Context, url string, creds *Credentials) (Session, error) {
 	proto := FromURL(url)
 	if proto == ProtocolUnknown {
 		return nil, fmt.Errorf("%w: cannot infer protocol from %q", ErrUnknownProtocol, url)

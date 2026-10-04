@@ -19,7 +19,7 @@ import (
 	"math/big"
 	"os"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -130,7 +130,7 @@ func nominalMiningHashrate(devices []hal.Device, workers []*miner.Worker) float6
 // When non-empty, a closure over workers is set on the MiningProvider's
 // HashrateFunc so each publish() call samples the live worker.Stats().HashRate
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, hashSource provider.NetworkHashrateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
+func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provider.RateSource, hashSource provider.NetworkHashrateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
 	if hashSource != nil {
 		miningProvider.NetworkHashrateFunc = hashSource.CurrentHashrate
@@ -163,7 +163,7 @@ func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider
 // wallet fingerprint, or an empty string if no wallet was configured
 // or initialisation failed (errors are logged, not propagated, so the
 // engine can run mining without a wallet).
-func setupWallet(opts Options, log func(level, msg string)) string {
+func setupWallet(opts *Options, log func(level, msg string)) string {
 	if opts.WalletPassphrase == "" || opts.Config.DataDir == "" {
 		return ""
 	}
@@ -174,7 +174,8 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	}
 	wm, err := lightning.NewWalletManager(
 		opts.Config.DataDir, opts.WalletPassphrase, nil, wl,
-		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase))
+		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase),
+	)
 	if err != nil {
 		log("warn", fmt.Sprintf("wallet: %v", err))
 		return ""
@@ -302,7 +303,7 @@ func pickWordPositions(n, k int) []int {
 		seen[i] = struct{}{}
 		out = append(out, i)
 	}
-	sort.Ints(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -364,7 +365,7 @@ func verifyBackupPositions(in io.Reader, out io.Writer, mnemonic lightning.Mnemo
 
 // defaultPoolURL returns the first configured pool URL, or the built-in
 // default when none is configured.
-func defaultPoolURL(cfg config.Config) string {
+func defaultPoolURL(cfg *config.Config) string {
 	if len(cfg.Pools) > 0 {
 		return cfg.Pools[0].URL
 	}
@@ -376,7 +377,7 @@ func defaultPoolURL(cfg config.Config) string {
 // the next pool when the current one fails (matching the multi-pool
 // failover behaviour of cgminer/bfgminer/Braiins). Falls back to the
 // built-in default when no pools are configured.
-func poolURLs(cfg config.Config) []string {
+func poolURLs(cfg *config.Config) []string {
 	if len(cfg.Pools) == 0 {
 		return []string{config.DefaultPoolURL}
 	}
@@ -393,7 +394,7 @@ func poolURLs(cfg config.Config) []string {
 // rotates to the next address only when the current one has never
 // established a session (see runReconnectLoop), so a working payout
 // address is never abandoned due to a transient pool or network failure.
-func payoutAddresses(cfg config.Config) []string {
+func payoutAddresses(cfg *config.Config) []string {
 	seen := make(map[string]bool)
 	var addrs []string
 	add := func(a string) {

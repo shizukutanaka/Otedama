@@ -20,7 +20,7 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 1 | Source builds without warnings on Go 1.22+ | `go build ./...` at repo root | Exit code 0, no output |
+| 1 | Source builds without warnings on Go 1.24+ | `go build ./...` at repo root | Exit code 0, no output — **Correction (session 488):** this row said "Go 1.22+" but `go.mod` requires ≥1.24 (`godebug tlsmlkem` fails to parse under older toolchains) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
 | 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
@@ -36,6 +36,7 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are tag refs (`@v4`, one `@master`) — no SHA pins yet |
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Gap:** release.yml produces no signatures — VERIFY.md documents the unsigned status |
@@ -85,20 +86,25 @@ If any row does not pass, open a security advisory.
 ## CI gate summary
 
 This is the set of checks a PR must pass before merge. An auditor can
-verify these are enforced by inspecting `.github/workflows/ci.yml`:
+verify these are enforced by inspecting `.github/workflows/ci.yml`.
+**Correction (session 488):** the list below previously claimed standalone
+`go vet`, `staticcheck`, and `govulncheck` jobs — none exist in `ci.yml`.
+`govet` and `staticcheck` run only as linters inside `golangci-lint run`
+(a standalone `go vet` step exists only in `test.yml`); `govulncheck` is
+absent from all workflows (Makefile local target only). The accurate gate is:
 
-- `go vet ./...`
-- `staticcheck ./...`
-- `golangci-lint run`
-- `govulncheck ./...`
-- `gosec ./...`
-- `go test -race -timeout 5m ./...`
-- `go build ./...` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+- `golangci-lint run` (Lint job; includes `govet` + `staticcheck` via `.golangci.yml`)
+- `gosec` (Security Scan job, SARIF upload)
+- `go fmt` check + `go mod tidy` check (Lint job)
+- `go test -v -timeout 10m -race ./...` on Linux/macOS; without `-race` on Windows
+- `go build` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 (Build job matrix)
 
-Nightly additional checks:
-
-- 30-min fuzz of `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`
-- PR-time benchmark comparison vs main (5% regression threshold)
+Nightly additional checks: **none exist.** `FuzzDecodeHeader` and
+`FuzzDecoder_ReadFrame` are real fuzz targets in
+`internal/stratum/frame_fuzz_test.go`, but no workflow schedules them —
+`make fuzz` is local-only. The Benchmark job runs benchmarks and uploads
+`benchmark.txt` (artifact `benchmark-results`); it does not compare against main
+or gate on a regression threshold.
 
 ---
 
