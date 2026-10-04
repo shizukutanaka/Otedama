@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 830 update — iota-bitmask + nil-sentinel + spec-bit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `iota` constants used as bit flags — sequential 0,1,2,3 OR'd into a broken bitmask. | ✅ Clean: all five iota blocks are closed enums (Policy, AddressType, Status, Format, ValueOrigin) — never combined with `\|`; the single bit op (`channelMsgBit`) is an explicit `0x8000` protocol-spec constant. |
+| S | `errors.Is(err, nil)` / `errors.As(err, nil)` — meaningless call returning err!=nil / panicking. | ✅ Clean: absent — every Is/As has a concrete target (verified session 618). |
+| S | Bitwise ops on sequential iota enums — treat flag OR as membership test, wrong result. | ✅ Clean: no bitwise ops on any iota enum — the mask site is wire-protocol. |
+
+All packages build, vet, and test green.
