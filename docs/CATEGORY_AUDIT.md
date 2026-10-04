@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1000 update — milestone checkpoint: deep-package pass complete
+
+s951–s999 pivoted from mechanical class sweeps to a per-package deep read of the runtime surface (engine, miner, stratum, stratumv1, stratumv2, poolproto, lightning, config, daemon, doctor, hal, provider, rates, tui, httpserver, metrics, logger, arbitration, btccrypto, run/cmd). Findings:
+
+- **Depth verdict:** every funds-adjacent and hot-path file (seedstore, noise transport, V1 session, V2 dialer, miner grind, arbitration loop, wallet save/unlock) reads clean — bounds, sentinels, deadlines, nonce discipline, and oracle indistinguishability all hold on direct inspection, not just by class sweep.
+- **Open tracked items (fixes already in flight):** AEAD-per-frame re-derivation → #957; `XDG_CONFIG_HOME` systemd path → #807; `quoteToken` C1 range → #809; `base58Decode` length bound → #633. Each is recorded in the owning session's row; nothing new surfaced unowned.
+- **Ledger integrity:** 50 deep-package sessions produced zero new unowned defects — the post-hardening surface (sessions ~240–500 fixes) is holding under adversarial re-read.
+
+All packages build, vet, and test green.
