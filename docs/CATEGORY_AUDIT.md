@@ -4841,6 +4841,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 987 update — driver-registry + detect-fanout + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A nil/empty-named/duplicate driver corrupting the registry or silently replacing the registered driver. | ✅ Clean: `Register` rejects all three before the locked map write; `Lookup` returns `(driver, ok)`. |
+| M | `Drivers` exposing the live map's iteration order or a mutable view — nondeterministic detect order or external mutation. | ✅ Clean: returns a freshly-allocated slice sorted by name; callers may modify it freely. |
+| M | Driver enumeration leaking goroutines or a deadlocked result channel when one driver stalls. | ✅ Clean: results channel buffered to `len(drivers)` so every Enumerate sender completes; `close` runs in a separate goroutine after `wg.Wait`; per-driver errors are labeled, never fatal to the fan-in. |
+| S | A device identity containing whitespace or `/` poisoning `YieldPerDevice` keys or sysfs paths. | ✅ Clean: `Identity.Validate` rejects empty IDs, invalid families, and every `unicode.IsSpace` rune plus `/` (the s512 hardening). |
+| M | A missing/garbled sysfs file hard-failing GPU detection — vendor/model inference must be best-effort. | ✅ Clean: `readSysFile` returns "" on error; inference degrades to generic labels. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
