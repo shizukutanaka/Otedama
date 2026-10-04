@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1171 update — error-sentinel naming + test-package declaration census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Error sentinel naming conventions | ✅ Clean — all 8 exported sentinels (`btccrypto.Err{UnknownScheme,InvalidPublicKey,InvalidSignature,SchemeNotImplemented,NotBech32,NotBase58,UnrecognisedAddress}`, `lightning.ErrWrongPassphrase`) use `Err` prefix + package-prefixed message + `errors.Is` matching (documented in godoc) |
+| S | Test-package declarations (`package foo` vs `foo_test`) | ✅ Clean — 72/73 test files use white-box `package foo`; the single `config_test` (external) in `config_file_test.go` deliberately exercises only the exported surface |
+| M | `var X = errors.New` outside sentinel blocks | ✅ Clean — only test-local `errInjected`/`errIO` helpers; no anonymous literals masquerading as sentinels |
+
+All packages build, vet, and test green.
