@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 881 update — ansi-escape + tui-state + cursor-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Raw `\x1b[` escapes in user-facing output — malformed sequences corrupt the terminal. | ✅ Clean: escapes live behind named constants (`esc`/`reset`/`bold`/…) and a `stripANSI` that terminates on any non-`m` CSI end byte — verified by the formatters tests (clear-screen and truncated-sequence cases). |
+| M | TUI cursor/screen state diverging from what was drawn — flicker, leftover cells, or a permanently garbled dashboard. | ✅ Clean: `clearScreen` saves cursor → moves home → clears below → restores; the saved position is re-written every refresh, so a resize can only widen the cleared region, never narrow it. |
+| S | ANSI emitted on non-terminal output — escape noise in log files and pipes. | ✅ Clean: the dashboard only runs when `--no-tui` is unset and output is a terminal; the plain `logln` path emits no escapes. |
+
+All packages build, vet, and test green.
