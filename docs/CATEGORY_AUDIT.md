@@ -3757,6 +3757,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 787 update — panic-census-2 + recover-absence + must-helper audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `panic` reachable from network input — a crafted frame crashing the process. | ✅ Clean: all 12 panics are programmer-error or integrity guards (duplicate Start, double-registered scheme/dialer/metric, wordlist checksum, invalid label name) — none sits on a wire-data path (re-verified; session 733). |
+| M | `recover()` swallowing a panic — masking a real bug as a return code. | ✅ Clean: zero recover sites in production code — failures surface as errors, panics as panics. |
+| M | `Must*` helper invoked at runtime — a convenience wrapper panicking mid-operation. | ✅ Clean: no `Must*` helpers exist — all fallible construction returns errors. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
