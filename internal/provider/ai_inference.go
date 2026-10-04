@@ -96,7 +96,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 	if len(p.devices) == 0 {
 		// No GPU devices — send a zero-yield quote so arbitration can
 		// exclude this provider gracefully.
-		p.sendQuote(ctx, Quote{
+		p.sendQuote(ctx, &Quote{
 			ProviderID:       p.id,
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
 			At:               time.Now(),
@@ -135,7 +135,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 				Confidence:       confidence,
 			},
 		}
-		if !p.sendQuote(ctx, q) {
+		if !p.sendQuote(ctx, &q) {
 			return
 		}
 	}
