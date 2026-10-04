@@ -2581,6 +2581,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1136 update — zero-comparison census
+
+Struct-vs-zero-value comparison (`x == T{}`) and `reflect.DeepEqual` —
+both mask field-level intent and break when the type gains slices.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `x == T{}` sites and zero `reflect.DeepEqual` in production code; empty states are checked field-by-field or via sentinel errors | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
