@@ -2489,6 +2489,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1128 update — log-style census
+
+Log-message style consistency: capitalized first word, trailing punctuation,
+or missing `component:` prefix.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero uppercase-initial or trailing-punctuation messages; all log lines follow the `component: lowercase message` convention | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
