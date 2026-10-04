@@ -191,9 +191,19 @@ func (es EncryptedSeed) Marshal() ([]byte, error) {
 
 // UnmarshalEncryptedSeed decodes the byte slice produced by Marshal.
 func UnmarshalEncryptedSeed(b []byte) (EncryptedSeed, error) {
-	const minLen = 1 + 16 + 12
+	const (
+		minLen = 1 + 16 + 12
+		// The v1 payload is exactly 80 bytes (64-byte seed + 16-byte GCM
+		// tag); 4 KiB leaves generous headroom for future versions while
+		// keeping a corrupt or adversarial wallet.dat from forcing an
+		// unbounded allocation below.
+		maxLen = 4 << 10
+	)
 	if len(b) < minLen {
 		return EncryptedSeed{}, fmt.Errorf("lightning: EncryptedSeed too short: %d bytes, need at least %d", len(b), minLen)
+	}
+	if len(b) > maxLen {
+		return EncryptedSeed{}, fmt.Errorf("lightning: EncryptedSeed too large: %d bytes, need at most %d", len(b), maxLen)
 	}
 	var es EncryptedSeed
 	es.Version = b[0]
