@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1203 update — DEPLOYMENT.md flag/env parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `--flag` names in DEPLOYMENT | ✅ Clean — every flag (`--config`/`--log-file`/`--http-addr`/`--log-format`/`--data-dir`/`--wallet-passphrase`; `--name`/`--restart`/`--home`/`--shell`/`--system` are useradd/service flags, not product flags) maps to implementation |
+| S | `OTEDAMA_*` env names in DEPLOYMENT | ✅ Clean — `BITCOIN_ADDRESS`/`DATA_DIR`/`LOG_FORMAT`/`WALLET_PASSPHRASE` all implemented (passphrase env is read in run.go:120, not the config layer — verified) |
+
+All packages build, vet, and test green.
