@@ -1731,3 +1731,10 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1247 — setup-flags-subset (real defect fixed)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| setup-flags-subset | `SetupConnectionSuccess.Flags` decoded but never checked: client offers 0 flags, so any nonzero return demands an unhonorable feature (same fail-open class as sv2-apps #695 / s1239 UsedVersion) | **S: fixed** — reject `Flags &^ sc.Flags != 0` with `ErrHandshakeFailed`; test `TestDialer_Negotiate_UnhonoredFlags` |

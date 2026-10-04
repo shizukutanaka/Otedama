@@ -141,6 +141,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	// SetupConnectionSuccess.flags is the subset of the offered flags the
+	// server requires. We offer none, so any nonzero value demands a
+	// feature we cannot honor — reject rather than silently ignore.
+	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
+		return nil, fmt.Errorf("%w: pool requires flags 0x%08x outside offered set 0x%08x",
+			poolproto.ErrHandshakeFailed, msg.SetupConnectionSuccess.Flags, sc.Flags)
+	}
 
 	// OpenMiningChannel.
 	omc := stratum.OpenMiningChannel{
