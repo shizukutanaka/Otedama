@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 791 update — hot-path-observability + share-drop + nonce-roll audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Observability cost inside the nonce loop — logging/labeling per hash. | ✅ Benign: the grind loop contains only `hashCount.Add` (one atomic per ~200ns+ SHA256d — small vs hash cost) plus `shareCount`/`dropCount` on share-hit only; zero logging, labeling, or allocation inside the batch (verified sessions 533/534/545). |
+| P | Share send blocking the grind loop — backpressure stalling hashing. | ✅ Clean: non-blocking `select` send with `default` — on full buffer the share drops into `dropCount` (observable counter) rather than stalling the thread. |
+| P | Nonce-wrap mishandled — rehashing identical work after u32 wrap. | ✅ Clean: `nonce < prev` detection rolls `ntimeRoll` and rebuilds the header time — distinct work continues (verified session 370). |
+
+All packages build, vet, and test green.
