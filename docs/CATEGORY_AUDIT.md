@@ -1794,6 +1794,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 882 update — sleep-lock + sleep-busywait + print-under-lock audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Sleep` in a lock-held or hot path — stalls other goroutines. | ✅ Clean: the only sleep is worker.go:269's `time.Sleep(10ms)` on the `localWork == nil` wait — no lock held, cold idle path. |
+| M | `for` + sleep/`time.After` as a busy-wait — burns CPU polling a flag. | ✅ Clean: same single sleep is the yield-retry pattern on the work assignment — no other sleeps, no `time.After` loops in prod. |
+| M | `fmt.Print`/`Fprintf` while holding a mutex — output stalls hold the lock. | ✅ Clean: no `fmt.*` calls inside any `mu.Lock` scope — verified by both grep and the lock-region read at s863/864. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
