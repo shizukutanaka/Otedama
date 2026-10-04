@@ -2190,6 +2190,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 917 update — validate-aggregate + nonfinite-guard + failover-validate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Validate` returning on the first failure — one bad field masks the rest. | ✅ Clean: collects `issues []string` and returns them all (aggregated error); `TestValidate_AggregatesMultipleIssues` pins the behavior. |
+| M | NaN/±Inf sailing through `< 0` range checks — poisoned arbitration math. | ✅ Clean: explicit `IsNaN || IsInf` sweep over all five float fields *before* the numeric range checks (the comparison-trap documented inline). |
+| S | Failover addresses validated only when reached — typo sits latent until a failover. | ✅ Clean: `BitcoinAddresses` loop validates each entry at config time with index-attributed errors. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
