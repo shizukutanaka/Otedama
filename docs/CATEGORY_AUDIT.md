@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 784 update — eof-handling + read-contract + write-result audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `io.EOF` surfaced as a hard error — end-of-stream treated as failure rather than termination. | ✅ Clean: the only site (`configfile.go:42`) explicitly isolates EOF via `errors.Is` and treats it as normal end-of-input; frame decoders handle short-read per session-602 contract. |
+| S | `Read` return values mishandled — using `n>0` bytes without checking `err`, or assuming `err==nil` means full read. | ✅ Clean: all production reads go through `io.ReadFull`/the frame decoder where `n,err` semantics are handled centrally (verified sessions 602/669). |
+| S | `Write` result discarded — partial write or error dropped, silent truncation on the wire. | ✅ Clean: network writes check `err` (noise.go:292/295, run.go:1665); `hash.Hash.Write` discards are contract-impossible (verified session 745). |
+
+All packages build, vet, and test green.
