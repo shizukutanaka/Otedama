@@ -2094,6 +2094,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 909 update — metric-key + label-escape + exposition-sort audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `metricKey` colliding two distinct label sets — silent series merge. | ✅ Clean: `metricKey` joins sorted `name,k=v` pairs; label *names* are validated `[a-zA-Z_][a-zA-Z0-9_]*` at registration (metrics.go:147) so a literal `,` or `=` cannot forge a separator — distinct label sets cannot collide. |
+| M | Unescaped label values breaking the exposition parser. | ✅ Clean: `escapeLabel` replaces `\\`, `"`, `\n` — the three characters special in the Prometheus text format — inside `renderLabels` on every emit. |
+| S | `renderLabels`/`metricKey` output nondeterministic — flaky scrapes/diffs. | ✅ Clean: both sort label keys before join — stable order per label set; `WriteText` sorts full series by precomputed key. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
