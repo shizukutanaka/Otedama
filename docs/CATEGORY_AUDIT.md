@@ -2935,6 +2935,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1171 update — error-sentinel naming + test-package declaration census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Error sentinel naming conventions | ✅ Clean — all 8 exported sentinels (`btccrypto.Err{UnknownScheme,InvalidPublicKey,InvalidSignature,SchemeNotImplemented,NotBech32,NotBase58,UnrecognisedAddress}`, `lightning.ErrWrongPassphrase`) use `Err` prefix + package-prefixed message + `errors.Is` matching (documented in godoc) |
+| S | Test-package declarations (`package foo` vs `foo_test`) | ✅ Clean — 72/73 test files use white-box `package foo`; the single `config_test` (external) in `config_file_test.go` deliberately exercises only the exported surface |
+| M | `var X = errors.New` outside sentinel blocks | ✅ Clean — only test-local `errInjected`/`errIO` helpers; no anonymous literals masquerading as sentinels |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
