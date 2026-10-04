@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 778 update — mutable-global + pkg-map + test-cleanup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Mutable package-level `var` racing concurrent readers — a global mutated while others read. | ✅ Benign: package vars are (a) computed constants like `diff1Target`, (b) deliberate test-seam knobs (timeouts, resolvers, probe URLs — verified session 745), or (c) a shared `*http.Client` that is concurrency-safe by design; none is mutated after package init outside tests. |
+| M | Package-level `map` written after init — read during unsynchronized mutation. | ✅ Clean: `DefaultHashrates` and `validEntropyBits` are write-once lookup tables populated at declaration and only read afterwards. |
+| M | `t.Cleanup`/`t.Setenv` ordering — cleanup running before parallel subtests finish. | ✅ Clean: all 64 sites are in serial tests (no `t.Parallel` mixing — verified session 732); cleanup ordering is per-test correct. |
+
+All packages build, vet, and test green.
