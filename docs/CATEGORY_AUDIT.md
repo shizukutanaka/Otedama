@@ -4155,6 +4155,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 829 update — testmain + test-init + exit-test audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `TestMain` present but missing `m.Run()`/`os.Exit` — tests never run or wrong exit code. | ✅ Clean: no `TestMain` anywhere — per-test setup uses `t.TempDir`/`t.Cleanup` so no shared-fixture entry point is needed. |
+| S | `init()` inside test files — shared-state setup invisible to individual tests. | ✅ Clean: absent — all test fixtures are explicit per-test. |
+| M | `os.Exit` inside test code — kills the test binary, silently skipping remaining tests. | ✅ Clean: absent — no `TestMain` means no exit surface in test code. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
