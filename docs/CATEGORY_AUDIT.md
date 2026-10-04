@@ -1994,6 +1994,29 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1030 update — production-tree deep-pass checkpoint
+
+Sessions 1018–1029 completed the file-by-file deep pass over the remaining production surface: `internal/metrics/runtime.go` + `metrics.go`, `cmd/otedama/{service,run,main,configfile,config,completion,logfile,version}.go`, `internal/{version,clock,logger}/`, `internal/engine/fanin.go`, `internal/lightning/english_wordlist.go`, `internal/i18n/messages/bundle.go`, and the `internal/config` resolve/validate region.
+
+Cumulative verified defect classes now exceed **510** (~500 mechanical classes + ~15 deep-file findings since the s1020 checkpoint at ~495). Real defects discovered and fixed across the entire program remain the eight tracked items:
+
+- C1 control-char gap in `quoteToken` — open #809.
+- XDG/systemd-manager environment resolution — open #807.
+- AEAD re-derivation per frame — open #957.
+- `knownSubcommands` missing `wallet` — open #1062.
+- base58 length bound before `big.Int` decode — open #633.
+- session-253 mnemonic-never-printed — merged (#498).
+- missing `--config` warn — proposed and rejected (closed unmerged #551); still open by that decision, tracked here.
+- net-yield bridge — proposed and rejected (closed unmerged #1091); recorded as proposed-and-rejected.
+
+No new defects were found in this segment. Notable design verifications: the metrics registry's whole-scrape-corruption guards (panic-at-registration, cross-type name rejection, dual escapers, defensive label cloning, `IsInf`/`IsNaN`-first float rendering), the logger's typed-nil double-guard and atomic default, fanIn's double-`ctx.Done()` selects, and the config resolver's `numericEnvVars` single-source-of-truth keeping the applied-set ≡ warned-set.
+
+Remaining surface: test files, generated message catalogs, and newly-merged code as it lands. Next axes: test-file audit pass, then another mechanical-class axis, then the next ADR-009 ecosystem cadence.
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
