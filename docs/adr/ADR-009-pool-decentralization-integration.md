@@ -1072,3 +1072,30 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-761 ecosystem update (2026-10-03)
+
+**sv2-spec:** the open normative set is unchanged in membership —
+`#236` (`SetTarget.target` ≤ `max_target`, last touched 2026-10-02 —
+still under wording iteration), `#234` (authority key management),
+`#203` (coinbase payouts extension), and `#198` (`coinbase_witness`)
+remain open with no new normative additions; the issue tracker adds
+only editorial items (#216 `excess_data` drop, #219 non-ASCII `STR0_255`,
+#217 custom-job-validation TDP message — none merged). Posture:
+`SetTarget` clamping is already implemented (see
+`internal/engine/observability.go` and the session-256 clamp), so the
+set's eventual landing requires no code change.
+
+**SRI releases:** still `v1.12.0` (2026-09-17); no new tag.
+
+**sv2-apps:** the open-PR set moved 26 → 27. Since session-746 two
+tracked items landed: **#857 merged (2026-09-24)** — pool payout
+policy isolation for solo mining, completing the separation tracked
+since session-668 — and **#900 merged (2026-09-26)** — stratum-core
+bump to `28149a8`. Still open and relevant: `#903` (sv2 buffer
+hardening), `#904` (monitoring/config/release edge cases), `#902`
+(Windows CI), `#881` (JDS `handle_push_solution`), `#839` (mining-job
+tokens bound to `user_identity`), `#845` (target-field rename, spec
+cleanup), `#856` (`bitcoin_core_sv2` hardening), `#878` (reject empty
+coinbase reward scripts — Otedama already rejects empty scripts at
+job decode). The merged set raises no conformance gap for Otedama.
