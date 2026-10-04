@@ -4263,6 +4263,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 839 update — wrap-verb + chain-loss + verb-consistency audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `fmt.Errorf("...%v", err)` — error chain dropped, `errors.Is/As` broken for callers. | ✅ Benign: one site (`config.go:769`) where the wrapped error is a `net/url` parse detail rendered for the user — the call boundary treats it as an opaque validation message (recorded session 815). `service.go:471` formats `args` with `%v` and properly wraps `err` via `%w`. |
+| S | Mixed `%w`/`%v` wrapping style — some errors inspectable, others not. | ✅ Clean: 104 `%w` sites; the sole `%v`-on-error site is the user-facing validation surface above — consistent policy (wrap for callers, render for users). |
+| S | `errors.New(fmt.Sprintf(...))` — verb-in-Errorf duplicate + lost %w chance. | ✅ Clean: absent (verified session 810). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
