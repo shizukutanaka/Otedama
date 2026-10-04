@@ -232,10 +232,10 @@ jobs:
 
 **Scorecard で監視する項目（OpenSSF Security Scorecard）：**
 - Dependency-Update-Tool（Renovabot設定済み → 自動高スコア）
-- Signed-Releases（cosign設定済み → 自動高スコア）
+- Signed-Releases（cosign未設定 → 低スコア）**訂正 (session 488)**: `.goreleaser.yaml` に cosign 設定は残るが `release.yml` が goreleaser を一切呼ばないため dead code — 署名リリースは存在せず Scorecard では低スコアのまま
 - Branch-Protection（mainブランチのPR必須ルール → 設定必要）
 - Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → CIで継続実行 → 設定済み）
+- Fuzzing（go test -fuzz → 未設定）**訂正 (session 488)**: `.github/workflows/` にファズジョブは一切存在しない — `make fuzz` はローカル実行のみ
 
 ### 2.3 インシデント対応の事前設計
 
@@ -560,18 +560,23 @@ Otedamaがその罠に入らないために：
 ### 7.1 CODEOWNERS の設計
 
 ```
-# .github/CODEOWNERS
+# .github/CODEOWNERS — 実ファイルと同じ構成（2026-09 時点）
 # Global fallback: メンテナが全PRをレビュー
 *                           @shizukutanaka
 
 # セキュリティ領域：メンテナ必須（将来は2名以上）
-/internal/security/         @shizukutanaka
 /internal/lightning/        @shizukutanaka
-/internal/auth/             @shizukutanaka
+/internal/btccrypto/        @shizukutanaka
+/internal/poolproto/        @shizukutanaka
+/internal/stratum/noise*    @shizukutanaka
 
-# ドキュメント：コミュニティコントリビューターで対応可
-/docs/                      @shizukutanaka
+# CI/リリース自動化
+/.github/                   @shizukutanaka
 ```
+
+注: `/internal/security/`・`/internal/auth/` というパッケージは存在しない
+（CLAUDE.md のアーキテクチャマップで作成禁止パスとして明記）。CODEOWNERS に
+記載してもマッチしないため、実ファイルは存在するパスのみを列挙している。
 
 ### 7.2 コアコントリビューター昇格基準
 
@@ -648,7 +653,7 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
 対策：
-- `govulncheck` は週次で自動実行済み
+- `govulncheck` は週次自動実行**未**設定（訂正 session 488：CI に govulncheck/osv-scanner ジョブは一切存在せず Makefile ローカルのみ — 第2層の週次ワークフロー例がそのまま必要）
 - LDKのセキュリティアドバイザリをGitHub Watch経由で監視
 - ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
 
