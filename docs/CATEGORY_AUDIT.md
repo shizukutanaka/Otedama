@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 903 update — net-pkg + pprof-gate + net-residual audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net/mail`/`smtp`/`textproto`/`httputil`/`rpc` — accidental alternative-protocol imports. | ✅ Clean: absent — only `net/http` (+httptest in tests) appears. |
+| M | `net/http/pprof` registered unconditionally — profiling surface always exposed. | ✅ Clean: import exists but pprof is gated behind `--pprof` (server.go:47 nolint:gosec + :44 comment verified s871); loopback-bind warning s393. |
+| S | `net/fmtp`/`netip` misuse or double-parse of `netip.Addr`. | ✅ Clean: `netip` is the single parse point (s711/891); no re-parse or fallback. |
+
+All packages build, vet, and test green.
