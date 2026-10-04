@@ -4689,6 +4689,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 876 update — readslice + line-ceiling + alias-copy audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbounded line reads on an untrusted stream — memory exhaustion via one long line. | ✅ Clean: V1 `readLine` uses `bufio.ReadSlice` + `ErrBufferFull` → terminate on >`maxLineBytes`; the buffer can never accumulate (documented at stratumv1.go:189-197). |
+| M | `ReadSlice` result used after the next read — buffer alias corruption. | ✅ Clean: the line is copied into a fresh slice before return (`out := make; copy`) — the reader's buffer may be reused safely. |
+| S | `ReadString` on interactive stdin — unbounded operator input. | ✅ Benign: `engine/setup.go` mnemonic-verify reads the operator's own stdin; bounded by the physical paste, cold path only. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
