@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 771 update — byte-order + truncate-cast + encode-bound audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `binary.*Endian` chosen per-field wrongly — a consensus/SV2 field serialized with the wrong byte order. | ✅ Clean: all block-header and SV2 fields use `LittleEndian` per the Bitcoin/SV2 wire specs; the noise counter is LE per the frame layout — no mixed-endian misuse. |
+| S | `byte(uint32)`/`byte(int)` truncation cast — a value above 255 silently wrapping into one byte. | ✅ Clean: zero direct `byte(int/uint)` casts; all narrowing goes through `binary.AppendUint*`/`PutUint*` which encode the full field width. |
+| S | `hex.EncodeToString` on unbounded data — a huge buffer dumped to hex for logging/memory blow-up. | ✅ Clean: all encodes target fixed-size digests (32B hash, 4B MAC tag, wordlist hash, extranonce ≤ 16B) — none touch unbounded input. |
+
+All packages build, vet, and test green.
