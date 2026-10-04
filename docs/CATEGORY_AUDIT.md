@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1097 update — (T, error) contract census
+
+Functions returning `(T, error)` must not hand back a partially-valid value
+masked as success; err is the authoritative failure signal.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All `return v, err` sites return err as the signal — callers check err first by convention; error paths return zero/empty values (`0`, `T{}`, `""`) | S |
+| S | `hal.Detect` returns accumulated devices **with** `ctx.Err()` on cancellation — documented "errors do not prevent other drivers" contract; partial results with err is a deliberate aggregation design | ⚠️ Noted (documented contract, err checked first) |
+| S | `ValidateAddress` returns attempted `AddressType` + err; `fetchOne` returns `rate, skewSecs, err` — all err-authoritative | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
