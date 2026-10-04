@@ -2529,6 +2529,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1132 update — empty-branch census
+
+Empty `if`/`else`/`for` bodies — dead code or inverted-condition typos.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero empty branch bodies; `{}` matches are `struct{}`/`map[K]T{}` composite literals and typed-nil returns, not empty blocks | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
