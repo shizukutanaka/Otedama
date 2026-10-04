@@ -1739,6 +1739,6 @@ All packages build, vet, and test green.
 | Cat | Finding | Disposition |
 |---|---|---|
 | S | `// SPDX-License-Identifier: Apache-2.0` on `.go` files | ✅ Clean — 146/146 files carry the header on line 1 |
-| S | Shell-script headers | ✅ Clean — `install.sh`/`.sweep.sh` carry SPDX or matching header convention |
+| S | Shell-script headers | ⚠️ Noted — `install.sh` carries a plain comment header but no `SPDX-License-Identifier` line; the CONTRIBUTING requirement names `.go` files only, so this is cosmetic, not a violation |
 
 All packages build, vet, and test green.
