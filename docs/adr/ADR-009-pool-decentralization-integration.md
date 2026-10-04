@@ -1208,3 +1208,25 @@ consolidation noted at s872 is the last structural change; #881
 **SRI** — v1.12.0 (2026-09-17) still latest.
 
 Quiet window continues — no action required.
+
+## Session-908 ecosystem update (2026-10-04)
+
+### sv2-spec
+
+Open set is **unchanged at 7** — identical to s887:
+
+- **Normative-track** (4): #236 `SetTarget.target` MUST NOT exceed `max_target`; #234 authority key management + rotation; #203 coinbase payouts extension; #198 `coinbase_witness` in `NewTemplate`.
+- **Editorial / WIP** (3): #232, #186, #103.
+- Nothing newly merged or newly opened; the spec quiet window persists (~3 weeks).
+
+### SRI (stratum-mining/stratum)
+
+Latest release remains **v1.12.0** (2026-09-17). No v1.13.x yet.
+
+### sv2-apps
+
+- **Open = 27** — 4 new since s887, all infra/quality: #908 B08 type in `bitcoin_core_sv2`; #904 monitoring/config/release edge cases; #903 Buffer sv2 hardening; #902 Windows CI support. None changes the wire surface Otedama implements.
+- **Recently merged**: #907 (AGENTS.md docs, 10-02), #900 (stratum-core bump, 09-26) — both hygiene.
+- #881 JDS push-solution and #856 bitcoin-core-sv2 hardening still open — tracked.
+
+**Disposition**: no change required in Otedama; continue tracking #236/#234 (normative) and #881 (JDS).
