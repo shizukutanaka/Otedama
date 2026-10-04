@@ -2872,6 +2872,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1164 update — codegen freshness + make parity + nolint justification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `rg 'Code generated\|DO NOT EDIT'` → zero files; zero `go:generate` directives | ✅ Clean — completion scripts are hand-maintained (`cmd/otedama/completion.go`) and pinned by `completion_test.go` verb-list tests; nothing generated to drift |
+| M | docs `make <target>` references vs Makefile targets — referenced set {build, lint, setup, test, fuzz, audit, security, test-integration} all exist | ✅ Clean — no phantom targets; `migrate-from-v2` target exists and was previously corrected (#543) |
+| L | `//nolint` recheck — 18 prod sites (stratum/bech32 bound-casts, noise len, gosec suppressions, nilerr on sc.exe, gocritic quoting) | ✅ Clean — every suppression carries an inline bound justification; none masks an actionable diagnostic |
+| P | doc `--flag` tokens vs `fs.*Var` registrations — all 15 run flags + subcommand subsets documented | ✅ Clean — inverse drift (unimplemented flag names) found only in `SUSTAINABILITY.md` §7 planned-artifact prose; corrected on session 1163 (#1245) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
