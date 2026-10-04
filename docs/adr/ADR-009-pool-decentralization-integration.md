@@ -1072,3 +1072,7 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1201 ecosystem update (2026-10-02)
+
+Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
