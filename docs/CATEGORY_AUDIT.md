@@ -3314,6 +3314,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 728 update — container-pkg + readdir-order + pprof-mount audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `container/heap`/`list`/`ring` invariant bugs — a heap used as a queue without `heap.Fix` after in-place mutation, or a list/ring whose zero value is misused. | ✅ Absent: zero `container/` imports — bounded FIFOs are plain slices (sessions 717/723); no heap/list/ring surface exists. |
+| L | `os.ReadDir` callers assuming an order other than filename-sorted, or assuming POSIX `Readdir` semantics. | ✅ Clean: both sites (hal GPU enumeration, doctor GPU count) iterate every entry and filter by `renderD` prefix — pure membership scans, order-insensitive; hal additionally dedups via `EvalSymlinks` canonical path. |
+| S | pprof handlers exposed via `net/http/pprof`'s `init()` onto `DefaultServeMux` (silent global registration), or mounted without a loopback gate. | ✅ Clean: handlers are mounted explicitly on the custom mux (the import comment documents the deliberate non-blank import), gated by `--pprof`, riding the http server that warns on non-loopback bind. Zero `flag.Var`/`Func`/`BoolFunc`/`TextVar` — standard FlagSet types only. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
