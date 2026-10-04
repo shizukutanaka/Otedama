@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 952 update — bip39-entropy + mnemonic-checksum + seed-derive audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | Non-BIP-39 entropy length or word count silently accepted — a malformed mnemonic that cannot reproduce the wallet. | ✅ Clean: `GenerateEntropy`/`Entropy.Validate` gate to {128,160,192,224,256} bits; `MnemonicToEntropy` gates word count to {12,15,18,21,24}; `NewWordList` requires exactly 2048 unique non-empty words. |
+| L | Checksum bits appended/verified wrong — transcription typos not caught, or a valid mnemonic rejected. | ✅ Clean: `EntropyToMnemonic` appends the first `ENT/32` bits of `SHA-256(entropy)` and slices the stream into 11-bit indices; `MnemonicToEntropy` recomputes and compares bit-by-bit — any single-word change fails the checksum. |
+| L | Wrong KDF for seed derivation — seeds diverging from every other BIP-39 wallet. | ✅ Clean: `MnemonicToSeed` is PBKDF2-HMAC-SHA512 with 2048 iterations and `"mnemonic" + passphrase` salt per spec; the 25th-word decoy behavior is documented for the UI. |
+| L | Secret buffers (entropy bit array, mnemonic string) left for the GC. | ✅ Clean: the scratch `bits` buffer is wiped via `defer zeroBytes`; derivation intermediates in `seedstore.go` follow the same pattern (session-951). |
+
+All packages build, vet, and test green.
