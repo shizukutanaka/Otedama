@@ -11,7 +11,7 @@ on:
     - cron: '0 0 * * 0' # Weekly security scan
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24.x'
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.20', '1.21']
+        go: ['1.24.x']
     
     steps:
     - name: Checkout code
