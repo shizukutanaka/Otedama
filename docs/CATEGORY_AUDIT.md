@@ -4311,6 +4311,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 843 update — encoder-boundary + nopcloser + writeheader-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `json.Encoder.Encode` error ignored on the write boundary — client gets a truncated body with a 200. | ✅ Clean: every Encoder's `Encode` error is checked and propagated (`doctor.go:216`, `version.go:25`, `config.go:166`); wire encoders return the payload error before send. |
+| S | `io.NopCloser` wrapping a real `resp.Body` — leaks the underlying connection. | ✅ Clean: absent — response bodies are real `Close` calls (verified session 572). |
+| M | `Write` before `WriteHeader` — implicit 200 sent before the intended status code. | ✅ Clean: all four handler sites call `WriteHeader(status)` before any body write (server.go:175-196). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
