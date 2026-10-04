@@ -1734,6 +1734,27 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 719 update — error-receiver + unwrap-cycle + racy-len audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Error()` on the wrong receiver kind — a pointer-receiver `Error()` on a type passed by value (interface never satisfied), or value-receiver on a type whose address errors can't compare. | ✅ Clean: one prod `Error()` — `(*fatalError).Error()` on the unexported sentinel — is constructed and propagated as `*fatalError` throughout; test-only sites match their own usage. No value/pointer mismatch. |
+| M | Custom `Unwrap() error` returning itself or forming a cycle — infinite `errors.Is/As` loops. | ✅ Absent: zero custom `Unwrap` implementations — all wrapping goes through `%w` in `fmt.Errorf`, which cannot cycle. |
+| P | `len(ch)`/`cap(ch)` channel probes or `len(map)` reads used as flow control across goroutines — racy snapshots racing producers/deleters. | ✅ Absent: zero `len(ch)`/`cap(ch)` sites; the `len()` checks that do exist are owner-local invariants (job-FIFO caps under the owning goroutine/lock — same scopes s553/s672 verified) or wire/buffer bounds on local slices. |
+## Session 720 update — float-trunc + rune-width + round-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `int(float)` truncation toward zero on yield/duration/rate math — silently flooring fractional values (or inverting sign expectation on negatives). | ✅ Clean: the only float→int casts are the documented sats *display* estimate (`uint64(satsAcc.observe(...))`, whole-sat presentation) and `int(d.Seconds())%60` TUI formatting; all other `int()`/`uint32()` casts are on integer/bounded fields (MsgLength, Threads, ioctl Col). |
+| S | `[]rune`/`[]byte` width confusion — iterating bytes where runes were meant (mangling multibyte pool text or validation positions). | ✅ Clean: rune conversion happens exactly where needed — the two pool-text sanitizers (`poolproto.go`, `stratumv1/parse.go`) and the `[]rune` Levenshtein in `did-you-mean` — and all `[]byte` conversions are on ASCII-canonical data (hashes, protocol names, KDF inputs). |
+| P | `Truncate`/`Round`/`Floor` direction errors on staleness or rate math (rounding a bound the wrong way). | ✅ Clean: all four sites are presentation-side — `quiet.Truncate(time.Second)` and `.Round(time.Millisecond)` format durations/latency for display; no truncation feeds a staleness or pricing comparison. |
+## Session 721 update — marshal-impl + pem-decode + bench-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `MarshalJSON`/`UnmarshalJSON`/`MarshalText`/`UnmarshalText`/`MarshalBinary` implementations — hand-rolled codecs that can panic on hostile input or round-trip lossily. | ✅ Absent: zero custom marshal/unmarshal methods — all wire/serialization goes through `json`/`yaml` tags on stock codecs; no hand-rolled codec exists to misbehave. |
+| S | `pem.Decode`/`AppendCertsFromPEM` misuse on CA-file loading — unchecked return accepting a garbage/empty cert pool, or block-type confusion accepting non-CERTIFICATE blocks. | ✅ Clean: all 3 sites (`stratum/tls.go`, `stratumv1/tls.go`, `doctor/checks.go`) use `AppendCertsFromPEM` (not raw `pem.Decode`) and branch on its bool — failure surfaces as an explicit "no valid CA certificates" error. The API itself handles block filtering and multi-block PEMs; partial garbage is tolerated only when ≥1 valid CERTIFICATE parses. |
+| M | Benchmark-loop misuse — missing `b.N` iteration, setup inside the timed region, or unreported allocations skewing results. | ✅ Clean: all 11 benchmarks use the canonical `for i := 0; i < b.N; i++` loop, hoist setup before `b.ResetTimer()` where needed, and call `b.ReportAllocs()` — no timing-region pollution. |
 ## Session 722 update — time-add + error-discard + blank-import audit
 
 | Cat | Finding | Disposition |
