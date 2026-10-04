@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 795 update — errorsas-target + string-concat + map-increment audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `errors.As` with a non-pointer target — always returns false (or panics). | ✅ Clean: the sole `errors.As` site (`run.go:1830`) passes `&fe` — a valid pointer target. |
+| P | `s += x` string concatenation in a loop — quadratic copy on a hot path. | ✅ Clean: zero string `+=` inside loops — all loop accumulators are numeric (hashrate/shares totals); string building uses `strings.Builder` where needed (verified session 767). |
+| M | `m[k]++` on a possibly-nil map — panic on first write. | ✅ Clean: zero unguarded map-increment sites — every counter map is initialized at construction (verified sessions 640/700). |
+
+All packages build, vet, and test green.
