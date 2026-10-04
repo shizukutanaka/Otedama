@@ -4799,6 +4799,21 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 984 update — wallet-verify + rotate + secret-input audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `wallet verify`/`change-passphrase` invoking `NewWalletManager` on an absent wallet.dat — silently creating a fresh wallet instead of inspecting the real one. | ✅ Clean: both verbs `os.Stat` first and exit with "no wallet found"; verify prefers the fingerprint sidecar so no decrypt happens at all. |
+| S | A mistyped recovery phrase passing through to fingerprint compare — half-valid input treated as "wrong wallet". | ✅ Clean: `MnemonicToEntropy` validates the BIP-39 checksum before any comparison. |
+| S | Fingerprint comparison short-circuiting per-byte — a timing oracle on a wallet identifier. | ✅ Clean: `subtle.ConstantTimeCompare`; mismatch prints both fingerprints, no early exit. |
+| S | Passphrases accepted on argv — process lists / shell history exposing the wallet key. | ✅ Clean: env-only (`OTEDAMA_WALLET_PASSPHRASE`/`_NEW_PASSPHRASE`); the error text itself teaches "never on argv". |
+| M | A prompt echoing into piped/captured output, or the phrase reader unreplacable in tests. | ✅ Clean: prompt goes to stderr only when stdin is a real terminal (`isTerminal` on `*os.File`); the reader is injected (`io.Reader`). |
+| M | `service` subcommand dispatch mishandling help or unknown verbs. | ✅ Clean: `help/--help/-h` → stdout; unknown → stderr + usage, exit 64. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
