@@ -2277,6 +2277,23 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1084 update — log-level ↔ severity drift
+
+Census of level strings (`"debug"`/`"info"`/`"warn"`/`"warning"`/`"error"`)
+at every structured-log call site, checking severity matches the event.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `"error"` emitted exactly once — cmd/otedama/run.go:241 at the fatal startup boundary; engine internals never use it because session failures are retry/failover events, not process errors | S |
+| S | `"warning"` (11 sites) vs `"warn"` (57 sites) — both are documented `ParseLevel` aliases resolving to `LevelWarn` (logger.go:79, :148) | S |
+| S | `"warn"` semantics — session ended→failover, all-pools-failed backoff, plaintext-transport advisory, tls_ca_file unreadable: all recoverable degradations | S |
+| S | `"info"` — lifecycle milestones only (devices detected, connecting/connected, transport protocol) | S |
+| S | No error-path logged at `info`/`debug`; no benign event at `error` | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
