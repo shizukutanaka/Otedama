@@ -35,7 +35,7 @@ import (
 //
 // stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
 // indicator in the TUI so operators see the warning immediately.
-func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
+func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) *tui.Stats {
 	var sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
@@ -66,7 +66,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	// (see arbitrationLoopOpts.activity). Nil activityMu (no arbitration
 	// loop wired, e.g. some tests) renders every provider inactive rather
 	// than defaulting back to the old unconditional true.
-	var providerStats []tui.ProviderStats
+	providerStats := make([]tui.ProviderStats, 0, len(opts.providers))
 	for _, p := range opts.providers {
 		ps := tui.ProviderStats{Name: p.Name()}
 		if opts.activityMu != nil {
@@ -79,7 +79,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		providerStats = append(providerStats, ps)
 	}
 
-	return tui.Stats{
+	return &tui.Stats{
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
@@ -106,8 +106,8 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 // it correctly; nothing was ever driving it). Hashrate/shares/earnings are
 // left at zero rather than echoing stale pre-disconnect values, since this
 // snapshot does not know the true current state of any of them.
-func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) tui.Stats {
-	return tui.Stats{
+func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) *tui.Stats {
+	return &tui.Stats{
 		PoolURL:           poolproto.StripUserinfo(poolURL),
 		Connected:         false,
 		WalletFingerprint: wallet,
@@ -255,7 +255,7 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
-// rejectClass categorises a pool's share-rejection reason. The category
+// rejectClass categorizes a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
 // classification (community field taxonomy, e.g. D-Central's guide):
@@ -263,6 +263,15 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 // invalid→hardware.
 func rejectClass(reason string) (category, diagnosis string) {
 	r := strings.ToLower(reason)
+	// Canonical SV2 SubmitSharesError error codes (sv2-spec MiningProtocol):
+	// check them before substring heuristics — e.g. "invalid-job-id" would
+	// otherwise match "invalid" → hardware, but it is a stale-class reject.
+	switch r {
+	case "stale-share", "invalid-job-id", "invalid-channel-id":
+		return "stale", "likely cause: stale work (job superseded or channel closed)"
+	case "difficulty-too-low":
+		return "difficulty", "likely cause: share below negotiated difficulty"
+	}
 	switch {
 	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
 		return "stale", "likely cause: network latency / stale work"
@@ -275,6 +284,29 @@ func rejectClass(reason string) (category, diagnosis string) {
 	default:
 		return "other", "cause unclassified — check pool documentation"
 	}
+}
+
+// transitionReject reports whether a share rejection is a retarget
+// artifact rather than a genuine reject (ESP-Miner #212): the share was
+// produced under a different target than the pool's current share target,
+// meaning the pool changed difficulty/target while the share was in
+// flight, and the reason falls in the "above target" family (rejectClass
+// "difficulty"). The work was valid under the difficulty epoch it was
+// issued in, so the reject is benign: it is excluded from the reject-rate
+// counters and surfaced only in the per-reason breakdown as
+// "difficulty-transition".
+//
+// issued is the share's issue-time target (miner.Share.Target); current
+// is the pool's latest share target. A zero issued target (synthetic or
+// pre-field shares) cannot establish the epoch and is not eligible.
+func transitionReject(category string, issued, current miner.Hash) bool {
+	if category != "difficulty" {
+		return false
+	}
+	if issued == (miner.Hash{}) {
+		return false
+	}
+	return issued != current
 }
 
 // acceptanceRate computes the share acceptance rate — accepted /
@@ -440,7 +472,8 @@ func (m *HashrateMonitor) Observe(hashrate float64) {
 				m.log("warn", fmt.Sprintf(
 					"engine: hashrate stalled at %s for %d consecutive samples — "+
 						"check device health, cooling, and pool connection",
-					miner.HashRateString(hashrate), m.stallCount))
+					miner.HashRateString(hashrate), m.stallCount,
+				))
 			}
 		}
 		return
@@ -473,7 +506,7 @@ type rateStats interface {
 // skew into their respective gauges. The rate gauge uses the fetcher's fallback
 // before the first successful fetch, so it is never left at zero. The skew
 // gauge is updated whenever the fetcher has seen at least one HTTP Date header
-// from a source (0 until then, signalling "not yet observed").
+// from a source (0 until then, signaling "not yet observed").
 func publishBTCRate(m *engineMetrics, f rateStats) {
 	if rate, _ := f.BTCUSDRate(); rate > 0 {
 		m.btcUSDRate.Set(rate)
