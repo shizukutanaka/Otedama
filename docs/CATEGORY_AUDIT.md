@@ -2425,6 +2425,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 938 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `hashPool` returning a hasher with stale state from a previous borrower — first `Write` could mix in old key material. | ✅ Clean: `getHasher` calls `h.Reset()` before handing out every pooled hasher — residual state cannot leak into the next HMAC. The long-key path (`len(key) > blockSize`) hashes the key down first per RFC 2104. |
+| M | Pooled hashers retaining key-derived state while idle in the pool — secret residue on the free list. | ✅ Benign: the residue is sha256's internal block state, which holds no more recoverable key material than the key bytes already live in memory; `Reset` on checkout makes it correctness-neutral. Zeroing hash state is not a Go stdlib convention anywhere (same class as `secret-format` audit, session-614). |
+| S | `hmacSHA256Pooled` correctness drifting from `hmacSHA256` — a pooled-impl regression going silent. | ✅ Clean: `noise_pool_test.go` runs a differential table test pinning pooled == reference output, plus parallel and benchmark coverage — a drift fails the suite. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
