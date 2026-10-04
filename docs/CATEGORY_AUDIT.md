@@ -2619,6 +2619,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1139 update — param-count census
+
+Functions with ≥6 parameters — param-object/refactor smell.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Only 2 functions at ≥6: `handshake` (6, cohesive wire-orchestration params) and `startProviders` (8, one-shot DI fan-out in setup) — both single-call-site internals where a params struct adds indirection without clarity | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
