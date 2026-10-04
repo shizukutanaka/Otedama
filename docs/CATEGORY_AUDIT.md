@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1241 — http-request-ctx + unmarshal-reuse + url-construction
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| http-request-ctx | All 3 `http.NewRequest` sites are `NewRequestWithContext` (rates fetcher, hashrate, doctor skew probe) — no detached context | Clean |
+| unmarshal-reuse | Every `json.Unmarshal`/`yaml` site decodes into a fresh per-call local — no stale-field residue across calls | Clean |
+| url-construction | No `url.URL{}` literal, `RawQuery` mutation, or manual query assembly — provider/pool URLs parsed once via `net/url.Parse` + validated | Clean |
