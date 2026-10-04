@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 773 update — sleep-busywait + nil-error-receiver + chan-ownership audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Sleep` in a production loop — unbounded busy-wait masking a missing wakeup primitive. | ✅ Benign: the single `Sleep(10ms)` in `miner/worker.go:269` yields only while no job is assigned (first-job gap); the inner hash loop itself is batch-driven — no wakeup is being masked. |
+| S | `Error()` on a nil-receiver error type — `err.Error()` panic when the value is nil. | ✅ Clean: `fatalError` is constructed non-nil at its single site and `Error()` dereferences a guaranteed field; no typed-nil can reach it (verified session 640). |
+| S | Producer channel never closed — a `for range` consumer hanging forever after the last element. | ✅ Clean: all 18 `make(chan)` sites were ownership-verified (sessions 638/641/722) — each has a documented closer or is a bounded-scoped signal channel. |
+
+All packages build, vet, and test green.
