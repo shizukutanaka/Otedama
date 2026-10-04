@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 719 update — error-receiver + unwrap-cycle + racy-len audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Error()` on the wrong receiver kind — a pointer-receiver `Error()` on a type passed by value (interface never satisfied), or value-receiver on a type whose address errors can't compare. | ✅ Clean: one prod `Error()` — `(*fatalError).Error()` on the unexported sentinel — is constructed and propagated as `*fatalError` throughout; test-only sites match their own usage. No value/pointer mismatch. |
+| M | Custom `Unwrap() error` returning itself or forming a cycle — infinite `errors.Is/As` loops. | ✅ Absent: zero custom `Unwrap` implementations — all wrapping goes through `%w` in `fmt.Errorf`, which cannot cycle. |
+| P | `len(ch)`/`cap(ch)` channel probes or `len(map)` reads used as flow control across goroutines — racy snapshots racing producers/deleters. | ✅ Absent: zero `len(ch)`/`cap(ch)` sites; the `len()` checks that do exist are owner-local invariants (job-FIFO caps under the owning goroutine/lock — same scopes s553/s672 verified) or wire/buffer bounds on local slices. |
+
+All packages build, vet, and test green.
