@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1006 update — hysteresis-space + held-accuracy + policy-score audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Hysteresis compared in raw yield while selection runs on policy score — a privacy/BTC-preferred stream switching on a "meaningful improvement" that isn't one under the active policy. | ✅ Clean: the incumbent check compares `policyScore` on both sides (`bestScore <= incScore*(1+hysteresis)`), so "better" means the same metric space that chose the candidate — under MaximizeEarnings the score *is* raw yield. |
+| M | An incumbent-best outcome counted as a hysteresis "hold" — inflating the suppressed-better-stream count. | ✅ Clean: `held` requires `best.stream.ID != c.stream.ID`; when the incumbent itself is best the reason is "incumbent is best; stayed" and no hold is recorded. |
+| M | `ForegoneSatsPerSec` computed in policy-score space — overstating what was actually sacrificed. | ✅ Clean: `maxRaw` is taken over raw `Effective()` yields before the policy sort, so foregone always measures the yield-max reference point. |
+| S | A NaN or ±Inf quote winning the sort or poisoning `TotalYield`. | ✅ Clean: `Yield.Effective` returns 0 for `!(SatsPerSecond > 0)` or `!(Confidence > 0)` (NaN fails both) and for an Inf product — the session-325/#437 collapse. |
+| M | Policy bonuses mis-documented vs. arithmetic, or unbounded premium overriding revenue. | ✅ Clean: `btcStackBonus = 1.05` (near-tie edge only) and `ratingBonusPerPoint = 0.01` (≤10% at rating 10) — constants extracted after a real doc/arith divergence ("~10% per point" vs applied 1%) was caught; a rating can tip a near-tie but never beat a materially better yield. |
+
+All packages build, vet, and test green.
