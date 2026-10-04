@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1226 update — governance-doc ↔ enforcement parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | CODEOWNERS path restrictions | ✅ Clean — MAINTAINERS.md's "committers cannot land lightning/btccrypto/poolproto/stratum-noise without lead review" claim maps to real CODEOWNERS patterns covering exactly those paths; every pattern still resolves to an existing path (re-verified post s1281). |
+| S | Release/tag rules | ✅ Clean — GOVERNANCE.md's tagging rules (patch self-service, minor consensus, CHANGELOG-Unreleased staging) match the single-maintainer CODEOWNERS reality and the unsigned-release state it already discloses honestly. |
+| M | Signing posture | ✅ Clean — GOVERNANCE.md correctly labels cosign/keyless signing as *intended*, not current (release.yml doesn't invoke goreleaser — recorded residual). |
+
+All packages build, vet, and test green.
