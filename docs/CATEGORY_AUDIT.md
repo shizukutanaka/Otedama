@@ -2696,6 +2696,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1146 update — range-index census
+
+`for i, v := range x` where `i` is never used in the loop body
+(should be `for _, v := range` or `for v := range`).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero unused index vars in production code; zero in tests — every two-var range uses both bindings | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
