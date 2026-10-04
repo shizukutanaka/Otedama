@@ -3673,6 +3673,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 780 update — timer-lifecycle + context-value + unmarshal-freshness audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `time.NewTimer`/`AfterFunc` leak — a created timer never stopped on the non-firing path. | ✅ Clean: all NewTicker sites `defer .Stop()` (verified session 758); both NewTimer sites explicitly Stop — `run.go:605` even documents the `time.After`-in-select GC pitfall it avoids; `stratumv1.go:529` pairs `defer timer.Stop()`. |
+| P | `context.WithValue` with a string/int key — collisions across package boundaries. | ✅ Clean: the single site uses the unexported `loggerKey` type — collision-proof by design; no string keys anywhere. |
+| P | `json.Unmarshal` reusing a shared destination struct — stale fields surviving between messages. | ✅ Clean: every unmarshal targets a fresh local (`&p`, per-field `&x`) — no shared decode structs exist. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
