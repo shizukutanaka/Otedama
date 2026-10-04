@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1127 update — new-vs-make census
+
+`new(T)` where T is map/chan/slice/func (produces nil-able pointer to an
+uninitialized type — panic on use).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 9 `new(...)` sites, all on value-struct types (big.Int ×5, big.Float ×3, atomic.Bool ×1) — `new` is the correct zero-value idiom | S |
+| S | Zero `new(map|chan|slice|func)` | S |
+
+All packages build, vet, and test green.
