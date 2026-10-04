@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1142 update — len-idiom census
+
+Emptiness-test style: `len(x) != 0` vs `> 0` vs `== 0` vs `>= 1`.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Mixed `!= 0` (16), `> 0` (17), `== 0` (17) — all semantically correct; one `len(p) >= 1` (parse.go:260) equivalent to `> 0`; `len(payload) < 16` is a real bound check not an emptiness test | ⚠️ Noted (style-only inconsistency, no defect) |
+
+All packages build, vet, and test green.
