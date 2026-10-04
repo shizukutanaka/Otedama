@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 849 update — ptr-format + legacy-atomic + spawn-count audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%p` in log output — pointer addresses leaking into logs (non-deterministic, sometimes security-relevant). | ✅ Clean: absent — all formatting uses value verbs. |
+| M | Legacy `atomic.AddUint32`/`LoadInt64` free functions — untyped, misalignment hazards on 32-bit. | ✅ Clean: zero legacy free-function calls — all atomics are the typed `atomic.IntN/Bool/Pointer` wrappers (verified sessions 565, 739). |
+| M | `go func()` spawned without explicit arg capture — loop-variable capture bug. | ✅ Clean: 20 spawn sites verified across earlier sweeps — explicit param capture where loop-bound (worker.go:155-170), safe per-iteration vars under go1.22 semantics elsewhere (sessions 757, 816). |
+
+All packages build, vet, and test green.
