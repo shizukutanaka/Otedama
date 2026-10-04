@@ -1734,6 +1734,30 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GOMAXPROCS`/`debug.SetGCPercent`/`FreeOSMemory` — hidden global tuning the operator cannot see. | ✅ Clean: absent — no runtime knobs are mutated; scheduling/GC stay under the Go runtime's defaults (README documents GOMAXPROCS as the env lever). |
+| M | `runtime.NumCPU()` used where a bounded worker count was intended — thread explosion on big machines. | ✅ Clean: `miner` uses `NumCPU` only as the `Threads: 0` default (documented); operator flags can cap it. |
+| S | `runtime.GOOS` sprinkled through production logic — untestable platform forks. | ✅ Clean: production GOOS dispatch lives in `daemon/service_paths.go` behind build-tagged platforms; elsewhere it appears only in test skips. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 878 update — codec-census + binary-struct + encoding-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `encoding/gob`, `encoding/xml`, `encoding/csv`, `encoding/asn1`, `base32`/`base64` — alternate codecs deserializing wire data with own quirks. | ✅ Clean: absent — the only encoding imports are `json` (config/doctor/version), `hex` (address/seed display), `pem` (doctor cert probe test), `binary` (wire primitives). |
+| M | `binary.Size`/`binary.Read`/`binary.Write` on variable-layout structs — silent size mismatches vs spec. | ✅ Clean: absent — all wire layout is computed by explicit `append*`/`get*` primitives against spec constants (s741/824). |
+| S | Codec surface drift — different encodings used for the same kind of data in different places. | ✅ Clean: JSON for all structured config/report boundaries, hex for all byte display — no competing codec. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 879 update — ptr-tricks + go-directive + sys-surface audit
 
 | Cat | Finding | Disposition |
