@@ -2073,6 +2073,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1036 update — fake-clock concurrency + contract-edges + torn-read audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Concurrent readers observing a torn `time.Time` (non-atomic struct read under the mutex). | ✅ Clean: `TestFake_ConcurrentReadsAreConsistent` runs 50 readers × 500 reads against a writer cycling 4 discrete values and asserts every observation ∈ the writer's set — the torn-read class is directly falsified, not just race-detected. |
+| M | Fake clock drifting with wall time (defeats determinism). | ✅ Clean: `TestFake_Now_DoesNotAdvanceByItself` sleeps 10 ms and asserts equality — self-advance is pinned impossible. |
+| M | Documented edges untested (negative/backward, idempotent, zero). | ✅ Clean: `Advance(-5s)`, `Set` idempotent ×3, `Advance(0)`, 100-year advance, `Set` to a different year — the contract's documented caveats each have a pin. |
+| S | Zero-value `System` panicking despite the doc promise. | ✅ Clean: `TestSystem_ZeroValueIsUsable` constructs both `var c System` and `System{}` — the documented contract is enforced by test. |
+| S | Interface drift caught only in tests, not build. | ✅ Clean: compile-time `var _ Clock` assertions exist in both source and test — belt and suspenders, documented as such. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
