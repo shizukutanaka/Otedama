@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1213 update — release-path parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `release.yml` does not invoke goreleaser; `.goreleaser.yaml` signs/sboms/checksums are dead config | ⚠️ Noted — documented residual (sessions 480/488/516); VERIFY.md's top-of-file status block already discloses this accurately. Open maintainer decision: wire goreleaser into release.yml or keep inline builds. |
+| S | VERIFY.md ↔ actual release surface | ✅ Clean — the "not yet live" block correctly states release.yml builds plain tarballs, ci-cd.yml attaches an unsigned `checksums.txt` (ci-cd.yml:211–214), and install.sh tries `checksums.txt` then goreleaser-style names (install.sh:144). |
+| S | Asset-name parity | ✅ Clean — doc examples (`otedama_<ver>_checksums.txt`, `.sbom.*`) are presented as intended-flow only; no current-tense claim contradicts the actual `otedama-<os>-<arch>.tar.gz` / `.deb` / `.rpm` uploads. |
+
+All packages build, vet, and test green.
