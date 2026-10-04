@@ -2556,6 +2556,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 971 update — version-injection + clock-abstraction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | ldflags-injected values declared `const` — linker silently can't set them, or a bare `go build` producing an empty/absent version. | ✅ Clean: all three fields are `var` with meaningful dev defaults (`v3.0.0-alpha.1-dev`, `unknown`); Makefile injects via `-X` at release; VERSION-file alignment fixed in #546. |
+| M | `runtime.Version()`/GOOS/GOARCH being injectable — a release build lying about its toolchain. | ✅ Clean: `Info.GoVersion`/`Platform` come from `runtime` at call time, not ldflags — cannot be forged by the build script. |
+| M | The `String()` format drifting and breaking downstream tooling that parses `--version`. | ✅ Clean: format is documented as stable by contract; `Get()` returns a snapshot so post-hoc var mutation can't corrupt output. |
+| M | `clock.Fake` racing under concurrent Now/Advance, or callers assuming monotonicity that `Set`/`Advance(-d)` can violate. | ✅ Clean: RWMutex-guarded (Now=RLock, mutations=Lock); non-monotonicity is explicitly documented; `System` is a zero-value-usable passthrough; compile-time satisfaction asserted. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
