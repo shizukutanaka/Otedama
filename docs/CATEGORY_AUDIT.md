@@ -2406,6 +2406,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1122 update — short-circuit census
+
+`&&`/`||` right-hand operands: side-effecting calls, expensive calls placed
+before cheap guards, or logic relying on evaluation order.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All 46 call-bearing operands are guard-first: nil/err/len checks precede method calls; no side effects on the right side | S |
+| S | Ordering is cheap→expensive throughout (e.g. `err == nil && fi.Mode()&CharDevice`, `err != nil || len(b) == 0`) | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
