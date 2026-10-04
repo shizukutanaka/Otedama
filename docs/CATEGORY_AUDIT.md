@@ -1731,3 +1731,22 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1090 update — mechanical-audit family checkpoint
+
+Checkpoint: the ledger now holds **93 session entries**. The s1069–s1089
+mechanical family (plumbing drift + lint-grammar axes) adds ~21 classes
+with zero new defects beyond the RuntimeCollector gap (PR rejected;
+verdict recorded as the export surface's only true orphan, now resolved
+by s1085's census showing every export has a production reference).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Plumbing-drift subfamily (s1069–s1074): Options/Config/env/flag/i18n/metrics — all fields consumed; 11 unwired i18n IDs recorded as ⚠️ Noted | S |
+| S | Mechanical subfamily (s1077–s1089): SSOT, doc-claims, stale markers, unused params, named consts, export surface, iface guards, log levels, test-only exports, error style, godoc, deprecated stdlib, receiver names — clean | S |
+| S | Findings logged honestly: MinQuoteInterval name/enforcement drift (⚠️ Noted — advisory const), "warning" alias verified as documented ParseLevel input | ⚠️ Noted |
+| S | Cumulative real defects across the audit: C1 gap (#809), XDG env (#807), AEAD derivation (#957), wallet suggestion (#1062), base58 bound (#633), RuntimeCollector (#1158, rejected) — all tracked in PRs | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
