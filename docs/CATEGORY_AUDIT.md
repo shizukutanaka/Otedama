@@ -1731,3 +1731,21 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1068 update — merged-fix invariant re-verification on master
+
+Spot-checked that six previously-merged hardening fixes still hold their
+invariants on current master (regression surface of ~20 releases):
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | V1 `notify` malformed required header fields zero-filling a job (merged fix). | ✅ Holds: `parse.go:109-158` rejects on undecodable prevhash/version/nbits/ntime/merkle_branch rather than zero-fill. |
+| M | Pool-controlled `extranonce2_size` bound (merged fix). | ✅ Holds: `extranonce2SizeOK` enforces `(0, maxExtranonce2Size]` at both subscribe-result and set_extranonce paths (`parse.go:151-161,301-307`). |
+| M | V2 pending-job map unbounded growth (merged fix). | ✅ Holds: `dialer.go:238-302` — map rebuilt on job swap, FIFO `pendingOrder` eviction. |
+| M | Per-session submit rate cap (merged fix). | ✅ Holds: `submitLimiter` token bucket, one token per 125ms up to burst (`run.go:1835-1860`). |
+| M | Pool share-target difficulty not reaching workers/metrics (merged fix). | ✅ Holds: `shareTarget` flows handshake→`updateWork`→`publishDifficulty`, and `SetTarget` updates it live (`run.go:802,910,978,1091`). |
+| M | `SubmitSharesSuccess.LastSequenceNumber` validated before crediting (merged fix). | ✅ Holds: downward/unsent sequence numbers are dropped like SubmitSharesError (`run.go:1099-1141`). |
+
+All packages build, vet, and test green.
