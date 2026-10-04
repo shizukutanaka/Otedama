@@ -1830,6 +1830,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 885 update — container + math-bits + bigint-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `container/heap`/`list`/`ring` in prod — hand-rolled data structures with brittle invariants. | ✅ Clean: absent — no `container/` import; the grep hits were comment text. |
+| M | `math/bits` low-level intrinsics — bit tricks that hide overflow/rotate bugs. | ✅ Clean: absent — spec bit ops use raw shifts/masks, verified at s772. |
+| S | `math/big` on a hot path — allocation-heavy arbitrary-precision math per share. | ✅ Clean: `big.Int` appears only on cold paths — target/decode (sha256d, base58, cert test helpers, engine setup) — verified at s792. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
