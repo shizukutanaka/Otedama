@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1039 update — arbitration-test guard-rails + tri-state + property-coverage audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Decide` guard rails under-pinned (invalid policy, non-finite, negative, duplicates). | ✅ Clean: invalid policy, negative hysteresis, non-finite margins, negative min-yield, duplicate device IDs, and empty input each have a dedicated reject test — every documented fail-fast is exercised. |
+| M | `Held` flag tri-state conflated (suppressed vs. incumbent-best vs. actual switch). | ✅ Clean: three dedicated tests — suppressed-alternative → true, incumbent-best → false, actual switch → false — the three-state contract can't collapse into a boolean mess. |
+| M | `ForegoneSatsPerSec` semantics drifting (zero/gap/idle). | ✅ Clean: zero-when-best, gap-when-held, quantifies-policy-deviation, zero-when-idle, plus the never-negative property — the economic-accounting output is pinned from all four angles. |
+| M | Determinism broken by input ordering (map iteration leaking into output). | ✅ Clean: `DeterministicUnderShuffledDeviceInput` shuffles device order and asserts identical allocation — plus identical-input determinism and never-incompatible-family / ≥-greedy / no-idle / total-yield-sum / floor property tests (6 `Property_` tests). |
+| S | Policy names (log-greppable contract) allowed to drift. | ✅ Clean: `TestPolicy_String_Stable` pins all four names verbatim, with the comment noting operators grep for them — wire-visible strings are tested as API surface. `Yield.Effective` table covers NaN collapse and negative sats/confidence → 0. |
+
+All packages build, vet, and test green.
