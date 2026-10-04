@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 768 update — atomic-api + raw-bypass + strconv-tolerance audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Mixing legacy `atomic.LoadInt32`-style functions with typed `.Load()` — inconsistent access discipline. | ✅ Clean: zero free-function atomic calls; all 36 accesses use the typed `atomic.Bool`/`Int`/`Uint`/`Pointer` method API (verified session 739). |
+| M | Raw field access bypassing the atomic wrapper — a non-atomic read racing a CAS write. | ✅ Clean: flag fields (`started`, `ready`, etc.) are accessed exclusively through the atomic methods — no raw reads found. |
+| M | `strconv` errors ignored leaving zero-value fields — a malformed pool/config value read as 0 and used. | ✅ Benign: the two unchecked sites are fail-closed — `client.reconnect` string-port failure leaves `Port=0`, rejected downstream by the host:port requirement (session 486); `uintID` parse failure yields an id that can't match `pending`. |
+
+All packages build, vet, and test green.
