@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1111 update — compiler-directive census
+
+`//go:` directives (embed/generate/noinline/linkname) and unsafe/surface
+recheck.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `//go:` directives other than `//go:build` (hal linux/!linux, tui unix/windows splits — exhaustive pairs verified at s1092) | S |
+| S | Zero `go:embed`, `go:generate`, `go:linkname`, `unsafe.` outside tests — no file-embedded assets (wordlist is Go source) | S |
+| S | Zero `json:",string"` tags, zero `yaml:",inline"` | S |
+
+All packages build, vet, and test green.
