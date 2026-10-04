@@ -2953,3 +2953,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1280 update — end-to-end binary smoke (post-merge master)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| build | `go build ./cmd/otedama` on synced master: clean; binary reports `otedama v3.0.0-alpha.1-dev` | ✓ Clean |
+| commands | `version`, `config validate` (correctly rejects missing bitcoin_address), `completion bash`, `service`, `wallet`, `run --help` — all behave per contract | ✓ Clean |
+| doctor | all 17 checks execute; 4 pass / 2 expected fails (no address configured, sandbox DNS) / warnings sane — matches designed exit path | ✓ Clean |
+| CI note | #1344 (Go-pin root fix): 21 checks still queued ~14h after the merge-wave backlog — observation only | ⚠️ Noted |
+
+Smoke run on darwin/arm64 go1.27.1 from synced master.
