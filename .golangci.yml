@@ -1,159 +1,135 @@
-# golangci-lint configuration for Otedama.
-# https://golangci-lint.run/usage/configuration/
-
+version: "2"
 run:
-  timeout: 5m
-  tests: true
-  # Go toolchain version — go.mod requires >=1.24 (toolchain + tlsmlkem).
   go: "1.24"
-
-# Output format.
+  tests: true
 output:
   formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  sort-results: true
-
-# Linters enabled by default in golangci-lint + additional curated set.
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    # Essential — catches real bugs.
-    - errcheck         # unchecked errors
-    - govet            # Go's own static analyser
-    - ineffassign      # unused assignments
-    - staticcheck      # multi-purpose static analyser
-    - unused           # unused code
-    - typecheck        # compilation check
-
-    # Security.
-    - gosec            # security scanner
-    - bodyclose        # forgotten Body.Close on HTTP responses
-    - rowserrcheck     # forgotten sql.Rows.Err()
-
-    # Code quality.
-    - goconst          # repeated strings → constants
-    - gocritic         # opinionated but valuable
-    - revive           # golint successor
-    - unconvert        # unnecessary type conversions
-    - unparam          # unused function parameters
-    - dogsled          # excessive blank identifiers
-    - dupl             # duplicate code
-    - gocyclo          # cyclomatic complexity
-    - misspell         # catches typos
-    - nakedret         # naked returns in long funcs
-    - prealloc         # slice capacity hints
-    - gosimple         # simplifications
-
-    # Formatting.
-    - gofmt
-    - gofumpt          # stricter gofmt
-    - goimports        # import grouping
-
-    # Error handling.
-    - errorlint        # errors.Is/As usage
-    - nilerr           # returning nil when error != nil
-
-    # Modernity.
-    - usestdlibvars    # use stdlib constants (http.MethodGet etc.)
-    - wastedassign     # wasted assignments
-
-# Per-linter configuration.
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-
-  goconst:
-    min-len: 4
-    min-occurrences: 4
-
-  dupl:
-    threshold: 150
-
-  revive:
-    severity: warning
+    - bodyclose
+    - dogsled
+    - dupl
+    - errcheck
+    - errorlint
+    - goconst
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - nilerr
+    - prealloc
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+  settings:
+    dupl:
+      threshold: 150
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+    goconst:
+      min-len: 4
+      min-occurrences: 4
+    gocritic:
+      disabled-checks:
+        - unnamedResult
+        - whyNoLint
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+        - opinionated
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      excludes:
+        - G104
+        - G601
+    misspell:
+      locale: US
+    revive:
+      severity: warning
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        arguments:
-          - disableStutteringCheck
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-      - opinionated
-    disabled-checks:
-      - unnamedResult   # named returns are sometimes clearer
-      - whyNoLint       # we prefer succinct disable comments
-
-  gofumpt:
-    module-path: github.com/shizukutanaka/Otedama
-    extra-rules: true
-
-  misspell:
-    locale: US
-
-  errorlint:
-    errorf: true
-    asserts: true
-    comparison: true
-
-  gosec:
-    excludes:
-      # G104 (unchecked error) is caught by errcheck with more context.
-      - G104
-      # G601 (implicit memory aliasing in for loop) — we've audited
-      # every loop body for correctness.
-      - G601
-
-# Issue filtering.
+      - linters:
+          - dupl
+          - errcheck
+          - goconst
+          - gocyclo
+          - gosec
+          - unparam
+        path: _test\.go
+      - path: internal/miner/worker\.go
+        text: cyclomatic complexity
+      - linters:
+          - goconst
+        path: internal/version/version\.go
+      - linters:
+          - misspell
+        path: internal/lightning/english_wordlist\.go
+      # The message catalogs are authored in 10 languages; a US-English
+      # spell-checker cannot evaluate non-English string literals.
+      - linters:
+          - misspell
+        path: internal/i18n/
+    paths:
+      - vendor
+      - dist
+      - bin
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  # Don't waste CPU analysing generated or vendored code.
-  exclude-dirs:
-    - vendor
-    - dist
-    - bin
-  # Show all issues, not just a sample.
   max-issues-per-linter: 0
   max-same-issues: 0
-
-  exclude-rules:
-    # Relax rules for test files.
-    - path: _test\.go
-      linters:
-        - errcheck      # tests often ignore Close errors intentionally
-        - gosec         # test fixtures use weak RNG by design
-        - dupl          # tests are often repetitive by nature
-        - goconst       # repeated literals are clearer in tests
-        - unparam       # test helpers often have unused returns
-        - gocyclo       # long table-driven tests
-
-    # The CPU worker's main loop is inherently complex.
-    - path: internal/miner/worker\.go
-      text: "cyclomatic complexity"
-
-    # Version metadata fields are filled by ldflags; they are empty at
-    # compile time by design.
-    - path: internal/version/version\.go
-      linters:
-        - goconst
-
-    # english_wordlist.go embeds the canonical BIP-39 English wordlist
-    # verbatim (its SHA-256 is integrity-checked at init); "artefact" etc.
-    # are wordlist entries, not prose, and must never be "corrected".
-    - path: internal/lightning/english_wordlist\.go
-      linters:
-        - misspell
-
-# Severity — which issues block the PR.
 severity:
-  default-severity: warning
+  default: warning
   rules:
     - linters:
         - errcheck
         - gosec
         - staticcheck
-        - typecheck
       severity: error
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      module-path: github.com/shizukutanaka/Otedama
+      extra:
+        group-params: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - dist
+      - bin
+      - third_party$
+      - builtin$
+      - examples$

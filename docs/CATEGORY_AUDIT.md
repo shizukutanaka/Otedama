@@ -3849,3 +3849,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1310 update — trim/sort census + golangci-lint v2 migration
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `strings.TrimSpace`/`Trim` result discarded — whitespace-only input slipping through a validation that was meant to reject empties. | ✅ Clean: every Trim call's result is used (validate paths, parse loops); no discarded-trim sites remain after the s797 census. |
+| M | `sort.` legacy API residue — `sort.Strings`/`Ints`/`Slice` where `slices` is the repo convention. | ✅ Clean: zero `sort.` imports — modernization is complete repo-wide (the last `sort.Ints` was converted in merged #1235). |
+| **S: fixed** | **golangci-lint permanently broken three ways: v2 binary vs v1 config, ci.yml's `v1.55.2` pin too old to decode go1.25+ export data, and `make setup` installing the v1 module path (`@latest` still resolves v1.x).** | **Fixed: migrated `.golangci.yml` to the v2 schema via `golangci-lint migrate` (all 23 linters, settings, exclusion rules, severity map carried over); replaced ci.yml's curl-install with `golangci-lint-action@v9`; bumped `test.yml`/`ci-cd.yml` `@v3`→`@v9`; pointed `make setup` at `/v2/cmd/golangci-lint`; dropped the migrate tool's `.golangci.bck.yml` backup; updated KNOWN_LIMITATIONS.** |
+| S | Migration surfaces previously-invisible debt: golangci-lint v2.14 reports ~111 real findings the dead job was hiding (misspell 46, gosec 22, gocyclo 15, gocritic 13, goconst 6, staticcheck 5, errorlint 3, errcheck 1). | ⚠️ Noted: the lint job is now *meaningfully* red — tracked in KNOWN_LIMITATIONS for staged paydown. `internal/i18n/` misspell false positives (10-language catalogs vs a US-English dictionary) were excluded at migration, matching the `english_wordlist.go` precedent. |
+
+All packages build, vet, and test green.

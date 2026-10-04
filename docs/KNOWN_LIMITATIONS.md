@@ -555,17 +555,19 @@ no-op":
   build Otedama," but the `tlsmlkem=1` godebug (a 1.24 knob) already
   makes `go.mod` unparseable by any toolchain < 1.24 — so that stated
   intent is not actually achievable as long as the godebug is pinned.
-- **golangci-lint is pinned at two different stale versions, both ≥1
-  major release behind upstream.** `ci.yml` curl-installs `v1.55.2`;
-  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3` (a v1.x-era
-  action); local tooling is v1.64.8. Upstream is at v2.13.x — v2.13.0
-  (2026-08-19) added go1.27 support, which is also what the local
-  go1.27.1 toolchain needs (v1.64.8's typecheck cannot decode go1.27
-  export data; run it under `GOTOOLCHAIN=go1.26.8`). v2 additionally
-  uses a new `version: "2"` config format, so upgrading the linter
-  implies migrating `.golangci.yml` and bumping both CI pin sites
-  together — a maintainer decision, since the workflow files are the
-  pin owners.
+- **golangci-lint v2 migration landed; the lint job now reports ~111
+  real findings instead of crashing.** `.golangci.yml` was migrated
+  to the v2 schema (`version: "2"`), `ci.yml` now uses
+  `golangci-lint-action@v9` (`version: latest`), `test.yml`/`ci-cd.yml`
+  were bumped from `@v3`, and `make setup` installs the `/v2/` module
+  path. All three prior failure modes are resolved: v1.x binaries
+  cannot decode go1.27 export data, v2 binaries reject the v1 config,
+  and the Makefile's v1 install path always fetched the wrong major.
+  The migration surfaces a pre-existing debt the dead job was hiding:
+  ~111 findings (misspell 46, gosec 22, gocyclo 15, gocritic 13,
+  goconst 6, staticcheck 5, errorlint 3, errcheck 1) — the lint job
+  stays red until they are paid down, but it is now *meaningfully*
+  red rather than permanently broken.
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
@@ -592,10 +594,7 @@ since the pattern matches this repo's own legitimate loopback/example
 addresses — `127.0.0.1` in flag help text, `1.1.1.1` in doctor's DNS
 reachability check — not just genuine leaks).
 
-**Not fixed:** everything above lives in `.github/workflows/`, which
-the automation making these corrections cannot push to (the GitHub App
-lacks the `workflows` permission — verified repeatedly this session).
-Each item also carries a maintainer decision:
+**Not fixed:** the remaining items each carry a maintainer decision:
 
 - **The Go-version mismatch is the one-line, highest-value fix:** set
   every workflow's Go version to **`1.24.x`** (matching `go.mod`'s
