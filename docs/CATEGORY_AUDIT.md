@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 891 update — ip-parse + dial-bound + resolver audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net.ParseIP` misuse in a security check — loopback detection that misses IPv6 brackets or "localhost". | ✅ Clean: `isLoopbackAddr` (run.go:346-360) does `SplitHostPort` → `Trim "[]"` → `localhost` → `ParseIP().IsLoopback()`; the only caller is the `--http-addr`/`--pprof` warn (s504). |
+| M | `net.Dialer` without a timeout or ctx — pool dials that can hang forever. | ✅ Clean: every prod dial sets `d.Timeout`/`DialContext(ctx,…)` and runs inside `poolDialTimeout` (engine run.go:776-793; stratumv2 dialer; tls Dialer). |
+| S | `net.Resolve*`/`Lookup*` DNS in prod — unbounded resolution outside the dial path. | ✅ Clean: absent — resolution happens only inside `DialContext`. |
+
+All packages build, vet, and test green.
