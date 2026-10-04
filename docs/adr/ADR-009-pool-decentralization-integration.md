@@ -1072,3 +1072,33 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+---
+
+## Session-1091 ecosystem update (2026-10-04)
+
+**sv2-spec:** The tracked **#231 "clarify Server/Client relationship across
+roles" has merged** — the previously undefined `Client -> Server` /
+`Server -> Client` message labels are now normative, and the upstream-facing
+role is canonically named `Mining Pool Server` (short forms `Pool Server`,
+`Pool`). Editorial/wire-invariant; when Otedama docs next touch role
+references they can adopt the canonical name. The Oct-1 normative batch
+(#223/#225/#226/#227/#228) plus housekeeping merges #224 (editorial) and
+#233 (`AGENTS.md` conventions) are already recorded. The open normative set
+is stable: **#203** non-custodial payouts extension (the ADR-009 phase-2
+watch item — push-based `RequestPayoutOutputs` design avoids RTT latency;
+open discussion on output-count scaling), **#234** authority-key
+management/rotation, **#198** `coinbase_witness` (TDP-side only).
+
+**SRI:** v1.12.0 (2026-09-17) remains the latest release — the
+`channels_sv2` hardening pass, codec/framing refactor, BIP323 adaptations,
+and AES-256-GCM removal already tracked in prior entries.
+
+**sv2-apps:** housekeeping only — **#907** merged (docs warning against
+comment-stealing when inserting items). **#881** (JDS `handle_push_solution`
+— the piece a phase-2 JDC submits through) remains open WIP; **#883**
+(reference-pool payout transparency) still open. No new normative surface.
+
+Otedama alignment unchanged: V1/V2 client surface conforms to the merged
+spec; the JD/DATUM phase-2 plan awaits the #203 payout extension and the
+#234 authority-key model.
