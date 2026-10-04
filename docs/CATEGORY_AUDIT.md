@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1131 update — bare-return census
+
+`return err` propagating an error with no added context — context loss if
+the upstream error doesn't identify the operation.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 48 sites concentrated in leaf I/O helpers where the stdlib error already carries the operation (os.OpenFile path, io.ReadFull, bufio slice); operation boundaries wrap with `component:`-prefixed context | S |
+| S | No double-wrap (no `fmt.Errorf("engine: %w", err)` on already-prefixed errs) | S |
+
+All packages build, vet, and test green.
