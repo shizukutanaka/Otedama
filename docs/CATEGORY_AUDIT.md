@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1219 update — fuzz-target ↔ decoder-surface parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Stratum V2 decode surface | ✅ Clean — all 14 exported decoders (`DecodeHeader`, `Decoder.ReadFrame`, 6 handshake decoders, 6 steady-state message decoders) are exercised by `frame_fuzz_test.go`/`handshake_fuzz_test.go`/`messages_fuzz_test.go`/`roundtrip_fuzz_test.go`. |
+| S | Cross-package fuzz inventory | ✅ Clean — 21 `Fuzz*` entrypoints across 13 files cover every boundary parser (config YAML, BIP-39 mnemonic, rate JSON, V1 notify/parse, base58/bech32 addresses, arbitration inputs, miner bit-math). |
+| S | OSS-Fuzz readiness claim | ✅ Clean — `.github/oss-fuzz-integration.md` checklist satisfied (21 ≥ required count), consistent with #1250's ledger entry. |
+
+All packages build, vet, and test green.
