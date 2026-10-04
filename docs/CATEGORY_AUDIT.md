@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1245 — json-id-precision + any-assertion + raw-decode
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| json-id-precision | V1 `rpcMessage.ID any` decodes numbers as float64 — exact for the client's own `nextID` sequence; pool-sent non-matching ids fail closed at the pending-map lookup | Clean |
+| any-assertion | `arr[2].(float64)` for extranonce2_size feeds `min(..., maxExtranonce2Size)` — bounded before use (parse.go:299) | Clean |
+| raw-decode | `Params`/`Result`/`Error` stay `json.RawMessage`/`any` and are unmarshalled into concrete types per site — no float64 trap for struct fields | Clean |
