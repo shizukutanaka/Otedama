@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1236 update — ADR body parity audit (ADR-001〜011)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| adr002-v1-claim | "No V1 fallback is provided" conflicts with shipped `internal/poolproto/stratumv1/` + DialURL; ADR-009 referenced a nonexistent ADR-002 erratum | **S: fixed** — Erratum 1 added: V2-preference not V2-only |
+| adr003-dep-whitelist | Title's dep list missing `golang.org/x/sys` (used by tui width_* for terminal-width ioctl); erratum's "deferred" yaml migration actually completed in #444 | **S: fixed** — Erratum 2 added: yaml migration done + x/sys in effective whitelist |
+| adr007/008/009/010 | Proposed status correct — none of the proposed surfaces exist in code | Clean |
+| adr001/004/005/006/011 | Accepted status + claims verified against implementation; ADR-011 errata current | Clean |
+
+All packages build, vet, and test green.
