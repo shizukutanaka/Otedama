@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1295 update — ldflags symbol-path surface census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Correct sites | ✓ Makefile, Dockerfile, `.goreleaser.yaml` all inject `internal/version.{Version,Commit,BuildDate}` — the real symbols (#1275-era fix already landed in these three) |
+| R | Dead-symbol sites | ⚠️ 4 sites still inject nonexistent `main.{Version,GitCommit,BuildTime}`: `.github/workflows/release.yml:92`, `ci-cd.yml:126`, `ci.yml:278`, `ci.yml:334` — binaries built by these jobs report `dev`. Fix already queued in open PR #1275 (its diff covers all 4 sites verbatim); no duplicate PR opened |
+
