@@ -1464,3 +1464,12 @@ as written; the next recheck is due around session 1200.
 ## Session-1201 ecosystem update (2026-10-02)
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1274 ecosystem update (2026-10-02)
+
+- sv2-spec normative open set reshaped: **#202 (non-custodial payouts) and #195 (Dynamic Coinbase Outputs 0x0003) were both CLOSED unmerged** (28–29 Jul 2026) — the payout-extension work consolidated into **#203 (coinbase transaction payouts extension, still open)**. Blitzpool continues to run extension 0x0003 in production per the #202 discussion.
+- Still open and relevant to Otedama: **#236** (`SetTarget.target` MUST NOT exceed `max_target` — our s1269 audit recorded that we deliberately declare no `max_target`), **#234** (authority key management/rotation), **#198** (`coinbase_witness` in NewTemplate), #186 (markdown table fix), #103 draft (Proxy Annex).
+- SRI release line: latest is **v1.11.1** (22 Jul 2026) — confirms the session-1268 re-anchor; earlier ledger mentions of a "v1.12.0" were unverifiable and are stale. v1.11.1's SV1-difficulty-conversion fix ("no longer rounds up") matches our `DifficultyFromTarget` truncation semantics — no action.
+- sv2-apps: 27 open; hardening wave continues — new since last recheck: #908 (B08 in `bitcoin_core_sv2`), #904 (monitoring/config/release edge cases), #902 (Windows CI). Tracked items #881 (handle_push_solution + bitcoind), #883 (community multisig payout), #839 (JDS job-token identity binding) still open.
+- Japanese-source scan (Qiita/Zenn, SV2 + non-custodial mining): no new Otedama-relevant material.
+- Net: no protocol change required; payout-extension consolidation narrows the design surface we track to #203.
