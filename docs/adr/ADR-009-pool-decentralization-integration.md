@@ -1138,3 +1138,13 @@ payout-policy isolation for solo mining — landed; the tracked isolation
 item), **#871** (version-bump check only on PRs). The session-793 open
 tracking items (#881 JDP push-solution, #883 fee-transparent config)
 stay on the watch list.
+
+## Session-833 ecosystem update (2026-10-02)
+
+sv2-spec: the normative open set is unchanged — #236 (SetTarget `target` must not exceed `max_target`; still active, updated Oct-2), #234 (authority key management), #198, #203. Since the last check the merged batch is #227 (spec-gap normative clarifications, Oct-1), #228 (field renames — tracked since our wire-field rename), #231 (Server/Client roles clarified, Oct-2), #233 (shared AGENTS.md, editorial). #232 remains an open editorial pass. No new constraint lands on the client side; #236 stays the one to watch.
+
+SRI: still v1.12.0 (2026-09-17) — no new tag.
+
+sv2-apps: open set holds at 27. Recent merges are operational hygiene — #907 (docs), #900 (stratum-core bump), #875 (single cargo workspace), #871/#868 (CI version-bump gate), #869 (JDP docs). No client-facing behavior change for us.
+
+Takeaway: stable window continues — nothing actionable. Next recheck in ~2 weeks or on #236 movement.
