@@ -3903,6 +3903,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 803 update — flag-dup + exec-argv + contains-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate flag registration in one FlagSet — panic at parse-init. | ✅ Clean: `data-dir`/`config` repeat across *different* FlagSets (`run.go` fs vs `wallet.go` fs — one FlagSet per subcommand, legal); within each set every name is distinct. |
+| M | `exec.Command` argv0/argument confusion — name included in args or unquoted injection. | ✅ Clean: all exec sites invoke fixed OS tools (`systemctl`, `launchctl`, `sc.exe`) with literal argv — `service.go:469` passes `args...` correctly after `name`; no shell expansion anywhere. |
+| P | `slices.Contains`/`Index` inside a loop — O(n²) membership where a set-map belongs. | ✅ Clean: zero in-loop linear-scan membership sites. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
