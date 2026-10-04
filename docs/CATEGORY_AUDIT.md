@@ -2359,6 +2359,20 @@ No defect requiring a code change. All packages build, vet, and test green.
 
 ---
 
+## Session 1089 update — receiver-name consistency census
+
+Go convention: all methods on a type share one receiver name (golangci
+`recvcheck`). Drift (`func (r *Run)` vs `func (e *Run)`) signals copy-paste
+merge and hurts readability.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Census of every `(name Type)`/`(name *Type)` method pair across non-test code: **zero** types with multiple distinct receiver names | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
