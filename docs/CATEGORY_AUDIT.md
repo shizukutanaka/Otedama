@@ -4347,6 +4347,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 846 update — defer-in-loop + defer-in-select + replacer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defer` inside a `for range ch` loop — defers pile up until function exit, resources held. | ✅ Clean: absent — channel consumers release per-iteration explicitly. |
+| M | `defer` inside a `for { select }` loop — same unbounded defer pileup. | ✅ Clean: absent — verified zero sites. |
+| S | `strings.Replacer` ordering bug — a replacement rule's output feeding a later rule, or double-escaping. | ✅ Clean: three sites all order `&`/`\` first — `xmlEscape` (service.go:457) escapes `&` before `<`/`>` so entities are not re-escaped, `escapeLabel`/`escapeHelp` (metrics.go:377,390) escape `\` first; `escapeHelp` deliberately excludes `"` per the exposition format. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
