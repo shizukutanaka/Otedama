@@ -1072,3 +1072,39 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1186 ecosystem update (2026-10-02)
+
+### sv2-spec (github.com/stratum-mining/sv2-spec)
+
+The non-custodial-payout extension conversation is unchanged since
+session-1172: #203 (push-based, plebhash) remains open with the
+SEQ0_255 vs B0_64K payout-set scalability question still debated in
+thread; #202 (RequestPayoutOutputs, GitGab19) remains the open
+request-response alternative and has accumulated an epoch-freshness /
+exact-sum rounding review thread; #195 (Dynamic Coinbase Outputs,
+warioish) remains the original draft. All three encode the same
+strategic direction ADR-009 already records; none has merged, so the
+normative message set Otedama's dialer implements is unchanged.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+Latest release is still v1.12.0 (2026-09-17): the hardening wave over
+`channels_sv2` (bounded job storage on every axis, `min_ntime`/nTime
+share-validation bounds, consensus-invalid coinbase fixes), BIP323
+adaptations, the `codec_sv2`/`framing_sv2` `MessageFrame`/`SerializedFrame`
+split, and the `noise_sv2` AES-256-GCM removal leaving
+ChaCha20-Poly1305 as the sole cipher — matching Otedama's
+`noise_primitives.go` cipher set. No v1.13.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+Latest release is still v0.7.0 (alpha). The repo's open-issue count
+remains in the high-170s; the tracked items from earlier updates
+(#881/#839/#845/#856/#883) continue as the open set of record. No
+release-level change affecting this ADR's client-side scope.
+
+### Assessment
+
+Quiet window confirmed — no action. ADR-009's proposal sections stand
+as written; the next recheck is due around session 1200.
