@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 997 update — sv2-dial + handshake-bound + pending-cap + emit-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `stratum+v2tls://` silently downgrading to plaintext, or TLS running without certificate verification. | ✅ Clean: the TLS path goes through `stratum.DialTLS` with a nil config — system roots, TLS 1.2+, ServerName from the dial address, and no plaintext fallback in the helper. |
+| S | A peer that accepts TCP but never answers `SetupConnection` hanging `DialURL` (and the engine's reconnect loop) forever. | ✅ Clean: `handshakeTimeout` bounds the Negotiate reads and the deadline is explicitly cleared on return — steady-state is governed by `Close`/ctx, not deadlines. |
+| S | A chatty peer flooding `NewMiningJob` growing the `pending` map unboundedly. | ✅ Clean: `pendingOrder` insertion-order FIFO evicts at `pendingCap`; re-registered IDs don't duplicate queue entries. |
+| S | A job emitted before its `SetNewPrevHash` — shares computed against a missing tip. | ✅ Clean: a job is emittable only when `NewMiningJob` AND `havePrev` are both true; future jobs (no `ntime_start`) hold until the naming `SetNewPrevHash`, which then takes the max of the two ntime values. |
+| M | A wedged pool blocking `sendMsg`'s write forever, or `readLoop` dying on one malformed frame. | ✅ Clean: every `sendMsg` sets `writeTimeout`; undecodable frames are skipped (`continue`) — the loop survives malformed input. |
+
+All packages build, vet, and test green.
