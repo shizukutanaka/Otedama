@@ -1734,6 +1734,13 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 719 update — error-receiver + unwrap-cycle + racy-len audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Error()` on the wrong receiver kind — a pointer-receiver `Error()` on a type passed by value (interface never satisfied), or value-receiver on a type whose address errors can't compare. | ✅ Clean: one prod `Error()` — `(*fatalError).Error()` on the unexported sentinel — is constructed and propagated as `*fatalError` throughout; test-only sites match their own usage. No value/pointer mismatch. |
+| M | Custom `Unwrap() error` returning itself or forming a cycle — infinite `errors.Is/As` loops. | ✅ Absent: zero custom `Unwrap` implementations — all wrapping goes through `%w` in `fmt.Errorf`, which cannot cycle. |
+| P | `len(ch)`/`cap(ch)` channel probes or `len(map)` reads used as flow control across goroutines — racy snapshots racing producers/deleters. | ✅ Absent: zero `len(ch)`/`cap(ch)` sites; the `len()` checks that do exist are owner-local invariants (job-FIFO caps under the owning goroutine/lock — same scopes s553/s672 verified) or wire/buffer bounds on local slices. |
 ## Session 720 update — float-trunc + rune-width + round-direction audit
 
 | Cat | Finding | Disposition |
