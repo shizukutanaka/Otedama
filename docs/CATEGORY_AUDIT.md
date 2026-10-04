@@ -2461,6 +2461,28 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 960 update — milestone checkpoint (~420 audit classes verified clean)
+
+Sessions 941–960 closed the protocol-depth sweep: the stratumv1 session
+(readLoop line cap, pending-RPC lifecycle, extranonce boundary, dial/TLS
+precedence), stratumv2 dialer (pending-map FIFO, tip activation,
+handshake deadlines, write bounds), miner (nonce residue classes, ntime
+roll, header wire format, nBits decode), btccrypto (address dispatch,
+checksums, witness rules), lightning (atomic wallet save, seed-store
+encryption, BIP-39 round-trip), engine (work-target selection, stream
+merge, fan-in cancellation, worker partitioning, provider lifecycle),
+and rates (plausibility rails, single-flight).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Real defects fixed in the sweep so far | C1 control-char gap (#809), XDG systemd-manager env (#807), AEAD per-frame re-derivation (#957) |
+| M | Tracked (not defects) | noise.go x-only fallback → v3.1.0 secp256k1 NX (KNOWN_LIMITATIONS §2); noise_pool secret residue (key material only) |
+| M | Cumulative verdicts | ~420 mechanical defect classes verified clean across ~120 entries |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
