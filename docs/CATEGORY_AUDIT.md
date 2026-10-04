@@ -2115,6 +2115,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1039 update — arbitration-test guard-rails + tri-state + property-coverage audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Decide` guard rails under-pinned (invalid policy, non-finite, negative, duplicates). | ✅ Clean: invalid policy, negative hysteresis, non-finite margins, negative min-yield, duplicate device IDs, and empty input each have a dedicated reject test — every documented fail-fast is exercised. |
+| M | `Held` flag tri-state conflated (suppressed vs. incumbent-best vs. actual switch). | ✅ Clean: three dedicated tests — suppressed-alternative → true, incumbent-best → false, actual switch → false — the three-state contract can't collapse into a boolean mess. |
+| M | `ForegoneSatsPerSec` semantics drifting (zero/gap/idle). | ✅ Clean: zero-when-best, gap-when-held, quantifies-policy-deviation, zero-when-idle, plus the never-negative property — the economic-accounting output is pinned from all four angles. |
+| M | Determinism broken by input ordering (map iteration leaking into output). | ✅ Clean: `DeterministicUnderShuffledDeviceInput` shuffles device order and asserts identical allocation — plus identical-input determinism and never-incompatible-family / ≥-greedy / no-idle / total-yield-sum / floor property tests (6 `Property_` tests). |
+| S | Policy names (log-greppable contract) allowed to drift. | ✅ Clean: `TestPolicy_String_Stable` pins all four names verbatim, with the comment noting operators grep for them — wire-visible strings are tested as API surface. `Yield.Effective` table covers NaN collapse and negative sats/confidence → 0. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
