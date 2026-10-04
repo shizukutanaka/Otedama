@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1216 update — i18n catalog + locale-declaration parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Language set vs CLAUDE.md | ✅ Clean — `PriorityLanguages()` returns exactly the ten declared languages (en/ja/zh/ko/es/fr/de/pt/ru/ar); a unit test pins the count. Catalogs exist for all ten (en.go, ja.go, zh.go, ko.go, es.go, ru_ar.go, other_langs.go). |
+| S | BCP-47 doc claims | ✅ Clean — DetectLang handles tag→base-language fallback (`ja-JP`→`ja`) as documented; `--language` flag and `BCP 47` mentions in API.md/MIGRATING-FROM-V2.md match. |
+| S | Machine-translation claim | ⚠️ Noted — CLAUDE.md's "機械翻訳で1,000言語以上" is a policy statement about doc translation, not a code surface; no in-code claim contradicts it. |
+
+All packages build, vet, and test green.
