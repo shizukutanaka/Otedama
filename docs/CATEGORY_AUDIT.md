@@ -4493,6 +4493,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 859 update — time-since + tuple-assign + sub-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Now().Sub(t)` instead of `time.Since(t)` — skips monotonic-clock reading, and legacy idiom. | ✅ Clean: zero `Now().Sub` — all 16 elapsed-time sites use `time.Since`/`time.Until`, which read the monotonic component. |
+| M | `a, b = b, a` tuple assignment with a RHS that mutates — order-of-evaluation surprises. | ✅ Clean: sole multi-assign (main.go:162 `best, bestDist = c, d`) binds independent loop vars — no aliased mutation. |
+| M | `t1.Sub(t2)` reversed (negative duration interpreted as positive) — sign-flip in age checks. | ✅ Clean: every `Sub` call has receiver = later time (age measurements compare `t.After(...)`/positive durations; sessions 611/758 verified). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
