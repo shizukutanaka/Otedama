@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 803 update — flag-dup + exec-argv + contains-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate flag registration in one FlagSet — panic at parse-init. | ✅ Clean: `data-dir`/`config` repeat across *different* FlagSets (`run.go` fs vs `wallet.go` fs — one FlagSet per subcommand, legal); within each set every name is distinct. |
+| M | `exec.Command` argv0/argument confusion — name included in args or unquoted injection. | ✅ Clean: all exec sites invoke fixed OS tools (`systemctl`, `launchctl`, `sc.exe`) with literal argv — `service.go:469` passes `args...` correctly after `name`; no shell expansion anywhere. |
+| P | `slices.Contains`/`Index` inside a loop — O(n²) membership where a set-map belongs. | ✅ Clean: zero in-loop linear-scan membership sites. |
+
+All packages build, vet, and test green.
