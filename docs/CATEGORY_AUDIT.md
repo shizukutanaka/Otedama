@@ -4215,6 +4215,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 835 update — bare-http + client-timeout + default-transport audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Bare `http.Get`/`http.Post` — no timeout, hangs forever on a stalled peer. | ✅ Clean: zero convenience calls — every outbound request goes through an explicit `http.Client`. |
+| M | `http.Client` without `Timeout` — same hang risk one level down. | ✅ Clean: three clients — hashrate (10s), fetcher (10s + redirect refusal), clock-skew doctor check (redirect refusal + per-request ctx deadline upstream). |
+| S | `http.DefaultClient`/`DefaultTransport` mutation — global-state coupling. | ✅ Clean: referenced only in comments; no shared-client mutation. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
