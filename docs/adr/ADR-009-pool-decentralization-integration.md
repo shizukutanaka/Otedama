@@ -1073,6 +1073,47 @@ and (c) treat static-key rotation as transparent to the session.
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
 
+## Session-775 ecosystem update (2026-10-03)
+
+**sv2-spec:**
+- **#236 (open, active)** — `SetTarget.target` MUST NOT exceed the
+  channel's `max_target`: still open after the 2026-10-02 update;
+  Otedama already clamps pool-set targets to the block-target bound
+  (sessions 256/736), so conformance unaffected if it merges.
+- Normative open set unchanged: #236, #234 (authority key mgmt),
+  #203 (coinbase payout extension), #198 (coinbase_witness) —
+  quiet window continues; no new protocol requirement since #231.
+
+**SRI:** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps:** open set holds at 27. Since the session-761 check:
+- **#907 (merged)** — docs-only agents-file guidance; no protocol
+  impact.
+- **#908 (open)** — B08 type support in `bitcoin_core_sv2`: block-
+  template version coverage for newer core releases; worth tracking
+  for V2 job-source compatibility.
+- **#845 (open, updated)** — renames target message fields to match
+  the spec cleanup Otedama already adopted (session 704).
+- **#856 (open, updated)** — `bitcoin_core_sv2` hardening continues.
+- Tracked #881/#839/#903/#904/#902/#878/#883 remain open; no new
+  merged protocol-affecting work beyond what session-761 recorded.
+
+No conformance gap detected — Otedama's SV2 wire surface stays
+current with the normative spec text.
+
+## Session-793 ecosystem update (2026-10-04)
+
+### sv2-spec
+- Normative open set unchanged: #236 (`SetTarget.target` ≤ `max_target` bound), #234 (authority-key management), #203 (coinbase payouts extension), #198 (`coinbase_witness` field) — all still open, no new conformance-relevant text.
+- Newly merged since last check: #231 (Server/Client relationship clarified across roles — documentation alignment only, no wire change for a downstream mining client), #233 (AGENTS.md conventions). New editorial PR #186 open (markdown table fix) — non-normative.
+- Otedama impact: none — the Oct-1 normative batch (session-678/#703) already covered the landed semantic changes; Otedama's SetTarget handling predates #236's bound and remains conformant.
+
+### stratum (SRI)
+- Latest release remains v1.12.0 (2026-09-17) — no new tag since last check.
+
+### sv2-apps
+- Open PR count steady at 27. Recently merged: #875 (crates consolidated into a single cargo workspace), #865 (`bitcoin_core_sv2` bumped to 0.6.0), #907 (docs: agent-comment guidance). No protocol-surface change affecting Otedama's client role.
+
 ## Session-817 ecosystem update (2026-10-04)
 
 **sv2-spec (upstream spec PRs):**
