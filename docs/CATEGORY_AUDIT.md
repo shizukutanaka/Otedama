@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 935 update — job-decode + option-field + fixed-layout audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `DecodeNewMiningJob` slicing before a length check — out-of-bounds on a truncated job frame. | ✅ Clean: `minNeed` (45 B) checked before any slice; the OPTION byte is then `switch`-ed (0 absent / 1 present / other → error) with a second length check inside the present branch — an invalid OPTION count can't read past bounds or parse garbage. |
+| M | `SetNewPrevHash` activation semantics undocument — a caller hashing before the first prev-hash arrives. | ✅ Clean: struct doc states the miner "MUST NOT hash anything" until the first `SetNewPrevHash` arrives — the spec's activation rule is on the type. |
+| M | Fixed-layout decoders (`SetTarget`, `SubmitSharesStandard`) panicking on short payloads. | ✅ Clean: both check `len(payload) < need` first and only then touch fixed offsets — the same pre-bound pattern as `DecodeNewMiningJob`. |
+
+All packages build, vet, and test green.
