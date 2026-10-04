@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1093 update — struct tag symmetry census
+
+YAML↔JSON tag-name drift: config structs tagged for both encodings could
+expose the same field under different names.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `internal/config.Config` is yaml-only by design (config file is YAML); JSON output uses a shaped view struct in cmd/otedama/config.go:113 | S |
+| S | Tag names identical where fields overlap — `bitcoin_address`/`log_level`/`data_dir`/`language`/`http_addr`/arbitration+power fields all snake_case both sides | S |
+| S | Pools collapse to sanitized `[]string` of URLs (`StripUserinfo`) — per-pool fields (url/user/password/name/payout_scheme/tls_ca_file/workers) intentionally not mirrored, documented in the emit function | S |
+| S | `bitcoin_addresses` present with `,omitempty` matching the yaml optional-list semantics | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
