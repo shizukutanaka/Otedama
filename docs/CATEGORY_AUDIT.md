@@ -2734,6 +2734,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1149 update — assignment-idiom census
+
+`x = x op y` expanded form vs compound `x op= y`; also loop-increment
+idiom coverage.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero expanded-form reassignments — compound `op=` used throughout; the `4 + 4 + 1 + 4 + 32`-style const sums document wire-field widths and are intentional | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
