@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 925 update — effective-yield + policy-score + rating-scale audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | NaN/±Inf quote winning the sort or poisoning `TotalYield`. | ✅ Clean: `Yield.Effective()` collapses `!(s>0) || !(c>0) || IsInf` to 0 — bad quotes can never win; the s325/s331 fix is in-tree. |
+| M | Rating bonus scale inconsistent with docs (e.g. "~10% yield" comment vs "1% applied" code). | ✅ Clean: constants extracted — `ratingBonusPerPoint=0.01`, max rating 10 → 10% total premium; comment and arithmetic now share one source of truth. |
+| S | `policyScore` on an unknown policy panicking or zeroing the ranking. | ✅ Clean: `default` returns raw yield — degrades to earnings ranking (and `Decide` rejects invalid policy upstream anyway). |
+
+All packages build, vet, and test green.
