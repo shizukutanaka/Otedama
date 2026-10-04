@@ -3685,6 +3685,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 781 update — wrap-chain + sentinel-usage + unwrap-impl audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Error wrap chains losing the sentinel — `%v` or message-copy severing `errors.Is` reachability. | ✅ Clean: every wrap site uses `%w` so the chain stays traversable; no `%v`-stringification of an error that callers later `Is`-check. |
+| M | `errors.Is`/`As` against the wrong sentinel — a check that can never match because the sentinel isn't in the chain. | ✅ Clean: all targets are real sentinel values (`ErrNotBech32`, `ErrNotBase58`, `flag.ErrHelp`, `http.ErrServerClosed`, `os.ErrNotExist`, `io.EOF`, `context.DeadlineExceeded`) that upstream code actually produces and wraps with `%w`. |
+| M | Custom `Unwrap()` breaking the chain — returning nil early or a non-original error. | ✅ Clean: no custom `Unwrap` implementations — the stdlib chain alone determines traversal. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
