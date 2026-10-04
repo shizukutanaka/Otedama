@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1099 update — bare-bool parameter census
+
+Functions taking `bool` params whose meaning is invisible at call sites —
+the classic bool-parameter trap.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Most bool returns are idiomatic comma-ok (`(T, bool)`) — not the trap | S |
+| S | Bool params are all named and self-documenting (`pad`, `clean`, `enablePprof`, `ready`, `stalled`, `curr`, `fresh`) or spec terms (`clean` = SV2 CleanJobs) | S |
+| S | 7 literal-bool call sites: atomic CAS idiom (4× — both values required), spec-explicit `pad=false`/`clean=false,true` (2×), doc comment | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
