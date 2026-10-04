@@ -3103,6 +3103,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1187 update — CHANGELOG currency census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | CHANGELOG `[Unreleased]` coverage | ⚠️ Noted — the section's newest entry covers ~session 323 while master has merged ~370 session PRs since (through ~session 700); docs-audit PRs conventionally skip CHANGELOG, so the ledger is the record of truth — stale Unreleased documented as a doc-currency gap, not a code defect |
+| S | Release-section numbering | ✅ Clean — `[3.0.0-alpha.1]` (2026-04-24) and `[2.1.9]` headings well-formed; Keep-a-Changelog format intact |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
