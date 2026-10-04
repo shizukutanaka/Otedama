@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 868 update — transport + client-timeout + package-client audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `RoundTripper`/`http.Transport` with a poisoned proxy or TLS downgrade. | ✅ Clean: absent — all outbound HTTP uses the default transport via `http.Client`. |
+| M | `http.Client` without `Timeout` — hung responses block forever. | ✅ Clean: all three client literals (`doctor` clock-skew probe, `rates` hashrate + fetcher) set an explicit `Timeout` (s581/835). |
+| M | `http.Get`/`http.Post`/`DefaultClient` — unconfigurable timeouts and shared state. | ✅ Clean: absent — every request goes through an owned `&http.Client{...}` with redirect refusal (s343). |
+
+All packages build, vet, and test green.
