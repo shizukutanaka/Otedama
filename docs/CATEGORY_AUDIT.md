@@ -2861,6 +2861,16 @@ All packages build, vet, and test green.
 | S | Cross-doc ADR references | ✅ Clean — every `ADR-NNN` reference in KNOWN_LIMITATIONS/AUDIT_CHECKLIST resolves to a real file; AUDIT_CHECKLIST's "ADR-001, -002, -003 present" is a spot-check row, not a count claim. |
 
 All packages build, vet, and test green.
+---
+## Session 1219 update — fuzz-target ↔ decoder-surface parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Stratum V2 decode surface | ✅ Clean — all 14 exported decoders (`DecodeHeader`, `Decoder.ReadFrame`, 6 handshake decoders, 6 steady-state message decoders) are exercised by `frame_fuzz_test.go`/`handshake_fuzz_test.go`/`messages_fuzz_test.go`/`roundtrip_fuzz_test.go`. |
+| S | Cross-package fuzz inventory | ✅ Clean — 21 `Fuzz*` entrypoints across 13 files cover every boundary parser (config YAML, BIP-39 mnemonic, rate JSON, V1 notify/parse, base58/bech32 addresses, arbitration inputs, miner bit-math). |
+| S | OSS-Fuzz readiness claim | ✅ Clean — `.github/oss-fuzz-integration.md` checklist satisfied (21 ≥ required count), consistent with #1250's ledger entry. |
+
+All packages build, vet, and test green.
 
 ---
 
