@@ -1762,6 +1762,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1016 update — wallet-atomicity + oracle + sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A killed mid-write leaving a half-written wallet.dat. | ✅ Clean: CreateTemp→Write→Sync→Close→Chmod(0600)→Rename in the same dir (same filesystem); Close errors are honored because the final flush can happen there; every failure path removes the temp file; `sweepStaleTempFiles` reaps >1-minute leftovers at startup without touching a live writer. |
+| S | The wallet file briefly world-readable between write and chmod. | ✅ Clean: Chmod(0600) happens **before** the rename, so the final path is never visible with loose permissions; data dir itself is MkdirAll 0700. |
+| S | Decrypt errors leaking an oracle (wrong passphrase vs corrupt file distinguishable). | ✅ Clean: `loadExisting` and `ChangePassphrase` collapse `DecryptSeed` failures into opaque fixed strings ("wallet unlock failed", "incorrect old passphrase"); the documented intent is oracle-resistance. |
+| S | A restored-backup wallet.dat losing fingerprint identity checks. | ✅ Clean: missing `wallet.fingerprint` is recreated from the decrypted seed on load — but never overwritten when present, since a mismatching fingerprint is a signal, not a bug to mask. |
+| M | The BIP-39 25th-word silently deriving a different seed. | ✅ Documented benign: `WithMnemonicPassphrase` spells out the decoy-wallet property (wrong phrase → valid-looking different seed, no error) and why it is creation-only (the phrase is folded into the stored seed). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
