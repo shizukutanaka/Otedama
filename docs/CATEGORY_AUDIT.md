@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 934 update — handshake-decode + field-attribution + fixed-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Decode errors untraceable to the offending field — "read past end" alone gives no clue which of the five STR0_255 fields overran. | ✅ Clean: every field read wraps `%w` with `<Message>.<Field>` (the `fields`/`names` parallel arrays keep the loop generic without losing attribution). |
+| M | `NominalHashrate` read as a length-prefixed or wrong-width field — wire-format drift vs the spec's 4-byte LE float. | ✅ Clean: fixed `[4]byte` `io.ReadFull` + `binary.LittleEndian.Uint32` + `float32frombits` — exactly the spec layout. |
+| M | A pool's >32-byte `Extranonce` dropping the connection — spec-lenient interop failure. | ✅ Clean: decode uses `getB0_255` (accepts 33–255 B, still bounded) while encode uses strict `appendB0_32`; the Postel rationale is documented on the field. |
+
+All packages build, vet, and test green.
