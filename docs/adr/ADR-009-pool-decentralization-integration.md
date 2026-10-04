@@ -1072,3 +1072,26 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1144 ecosystem update (2026-10-02)
+
+### sv2-spec
+
+- #203 (non-custodial payouts extension) still open; active discussion on
+  SEQ0_255 payout-set scalability for large pools. #202 and draft #195 remain
+  the competing designs. Normative set unchanged — no new landed spec text
+  affecting Otedama's wire layer.
+
+### SRI
+
+- Still v1.12.0 (2026-09-17); no v1.13. The ChaCha20-Poly1305-only cipher
+  posture continues to match Otedama's Noise implementation.
+
+### sv2-apps
+
+- #582 (PoolRuntime typestate refactor of the pool start loop) open.
+- #585 (all config options as env vars) and #576 (binary_sv2 cleanup) merged —
+  config-surface and codec hygiene aligning with Otedama's own
+  env-over-file precedence.
+
+No Otedama action required.
