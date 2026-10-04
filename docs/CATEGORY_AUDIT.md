@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1074 update — metrics registration↔update parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Metrics registered via `reg.NewCounter`/`reg.NewGauge` but never written — a gauge that reports a permanent zero while looking live. | ✅ Clean: all 44 registered engine metrics have a write path. 43 are direct `Set`/`Add`/`Inc`/`SetToCurrentTime` call sites; `productiveSeconds` is written indirectly — passed to `uptimeAccountant.observe` (stats.go:194-208) which fractionalizes wall-clock elapsed time and calls `counter.Add(whole)` once per whole second. |
+| S | Collector-registered series never fed. | ✅ Clean: `RegisterCollector` is used only by `runtime.go` (Go runtime gauges, derived live at scrape time — no stale backing store to feed). |
+
+All packages build, vet, and test green.
