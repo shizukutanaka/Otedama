@@ -3136,3 +3136,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1300 update — post-merge-wave master verification (checkpoint)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | build/vet/gofmt on master HEAD | ✓ `go build ./...`, `go vet ./...` green; `gofmt -l` zero across cmd+internal after the #1104–#1115 merge wave |
+| R | test -race (heavy packages) | ✓ `go test -race` arbitration 1.1s / stratum 1.1s / engine 30.0s — all pass at HEAD `2ae99feab`+ |
+| R | Merge-wave composition | ✓ last ~30 merges are docs-only ledger PRs; prior code merges (#677/#704/#714/#957/#1235/#1239/#1241/#1293 etc.) re-verified green together — no interaction defect |
+
