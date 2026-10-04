@@ -21,13 +21,9 @@ import (
 // operation. The pool is keyed on the hasher interface so the same
 // pool can be used for the inner and outer hash in HMAC.
 //
-// Status: hmacSHA256Pooled is implemented, correctness-tested, and
-// benchmarked (see noise_pool_test.go), but hkdf2/hkdf3 in noise.go
-// still call the unpooled hmacSHA256 — this pooling is not yet wired
-// into the live handshake path. noise.go and noise_pool.go together
-// fall under CLAUDE.md's CODEOWNERS-gated funds-critical review
-// requirement, so wiring hmacSHA256Pooled into hkdf2/hkdf3 is left as
-// a deliberate, reviewed follow-up rather than made here.
+// hkdf2/hkdf3 in noise.go call hmacSHA256Pooled; the unpooled
+// hmacSHA256 remains as the reference implementation the tests
+// compare against.
 var hashPool = sync.Pool{
 	New: func() any {
 		return sha256.New()
@@ -49,7 +45,7 @@ func putHasher(h hash.Hash) {
 	hashPool.Put(h)
 }
 
-// hmacSHA256Pooled is an allocation-minimising version of hmacSHA256.
+// hmacSHA256Pooled is an allocation-minimizing version of hmacSHA256.
 // The result is a freshly allocated 32-byte slice; the hashers are
 // pooled.
 func hmacSHA256Pooled(key, data []byte) []byte {
