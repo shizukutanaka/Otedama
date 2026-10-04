@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 818 update — request-ctx + json-number + strict-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `http.NewRequest` (Background-bound) where caller ctx should flow — cancellability lost. | ✅ Clean: zero bare `http.NewRequest(` — all 5 sites use `NewRequestWithContext`. |
+| S | `json.Decoder.UseNumber`/`json.Number` — float precision or int-vs-float misdecode on wire values. | ✅ Clean: absent — V1 numbers decode into `float64`/`json.RawMessage` with explicit per-field conversion (difficulty is spec-defined as f64). |
+| M | Missing `DisallowUnknownFields` on wire structs — typo'd pool fields silently ignored. | ✅ Benign: not applicable — JSON-RPC notifications are extensible by spec; V1 params decode through `[]json.RawMessage` positionally (not name-keyed structs). |
+
+All packages build, vet, and test green.
