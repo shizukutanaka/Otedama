@@ -1072,3 +1072,16 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-856 ecosystem update (2026-10-02)
+
+### sv2-spec
+Open set unchanged: 7 PRs — normative {236 SetTarget `max_target` bound (active, updated 10-02), 234 authority key mgmt, 198 `coinbase_witness`, 203 payouts extension}, editorial/WIP {103 Proxy Annex, 186 table consolidation, 232 cell unwrap}. No new client-impacting merges since s833 (#231 already recorded).
+
+### SRI
+Still v1.12.0 (2026-09-17) — no new release.
+
+### sv2-apps
+open=27; one merge since s833: #907 (docs/agents hygiene). No client-relevant changes.
+
+**Verdict**: quiet window continues; no action required. Next scheduled recheck ~s872.
