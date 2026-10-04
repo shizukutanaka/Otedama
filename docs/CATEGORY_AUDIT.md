@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 859 update — time-since + tuple-assign + sub-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Now().Sub(t)` instead of `time.Since(t)` — skips monotonic-clock reading, and legacy idiom. | ✅ Clean: zero `Now().Sub` — all 16 elapsed-time sites use `time.Since`/`time.Until`, which read the monotonic component. |
+| M | `a, b = b, a` tuple assignment with a RHS that mutates — order-of-evaluation surprises. | ✅ Clean: sole multi-assign (main.go:162 `best, bestDist = c, d`) binds independent loop vars — no aliased mutation. |
+| M | `t1.Sub(t2)` reversed (negative duration interpreted as positive) — sign-flip in age checks. | ✅ Clean: every `Sub` call has receiver = later time (age measurements compare `t.After(...)`/positive durations; sessions 611/758 verified). |
+
+All packages build, vet, and test green.
