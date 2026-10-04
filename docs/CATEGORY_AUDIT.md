@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1244 — t.Fatal-in-goroutine + wg-capture + bench-error
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| t.Fatal-in-goroutine | 26 test files spawn `go func` — none call `t.Fatal`/`t.Fatalf` inside; post-teardown goroutine writes use `t.Errorf`-free helpers or channels (post-#705 contract) | Clean |
+| wg-capture | WaitGroups shared with spawned goroutines are Add-before-spawn | Clean |
+| bench-error | Benchmark bodies don't call `t.Error`-family from helper goroutines | Clean |
