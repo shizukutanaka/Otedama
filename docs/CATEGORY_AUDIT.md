@@ -2342,6 +2342,23 @@ No defect requiring a code change. All packages build, vet, and test green.
 
 ---
 
+## Session 1088 update — deprecated stdlib census
+
+Deprecated stdlib identifiers (`ioutil.*`, `strings.Title`, `rand.Seed`,
+`math/rand` in production paths, bare `http.Get`, `os.SEEK_*`, weak
+`crypto/md5`/`sha1` imports) would be modernization drift.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `ioutil.*`, `strings.Title`, `rand.Seed`, `os.SEEK_*`, `Deprecated` markers in production code | S |
+| S | `math/rand` absent from production (hash/timing use `crypto/rand` or time) | S |
+| S | No bare `http.Get/Post/DefaultTransport` — all outbound clients are configured instances | S |
+| S | No `crypto/md5`/`crypto/sha1` imports — mining uses sha256d exclusively | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
