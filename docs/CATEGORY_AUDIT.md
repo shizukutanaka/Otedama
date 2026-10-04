@@ -2947,6 +2947,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1173 update — release-config path + asset-name parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `.goreleaser.yaml` referenced files | ✅ Clean — `extra_files` (README.md / CHANGELOG.md / LICENSE) and Dockerfile's `COPY ... /src/LICENSE /src/NOTICE` all exist; `checksums.txt`/`SBOM`/`cosign` templates internally consistent |
+| S | `install.sh` asset names vs `.goreleaser.yaml` `name_template` | ✅ Clean — script covers both `otedama_${TAGVER}_...` and `otedama_${VERSION}_...` plus both checksum filenames (`checksums.txt` for ci-cd, `otedama_<ver>_checksums.txt` for goreleaser) |
+| M | Docker `COPY` source paths | ✅ Clean — `go.mod`, `go.sum`, `LICENSE`, `NOTICE`, `zoneinfo` all resolvable in build context |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
