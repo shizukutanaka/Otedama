@@ -1731,3 +1731,23 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 970 update — milestone checkpoint (~430 audit classes clean)
+
+Checkpoint after s960 (which closed at ~420 classes). The last 10 sessions
+covered the operational boundaries: doctor check dispatch and per-index
+result slots, sysfs GPU enumeration and the deliberate `SHA256d=false`
+gate, http-server timeout/readiness lifecycle, TUI stop/update
+concurrency, daemon service-definition generation (argv quoting, plist
+XML escaping, `ReadWritePaths` carve-out), Prometheus exposition
+validity/escaping, i18n fallback/template degradation, and the four-layer
+config precedence model.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Real defects since s960. | None — all ~10 new classes clean or tracked to pending fixes (#809 C1 quoting, s937/s938 rows). |
+| S | Deferred/unowned rows. | None — every tracked row names its owning PR or limitation entry. |
+
+All packages build, vet, and test green.
