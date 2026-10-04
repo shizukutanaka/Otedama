@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 790 update — builtin-minmax + cmp-adoption + clamp-form audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Hand-rolled `min`/`max` duplicated where go1.21 builtins suffice — divergent clamp logic. | ✅ Benign: builtins `min`/`max`/`clear`/`cmp.*` are already adopted where semantically apt (arbitrate max-fold, stratumv1 clamp, `cmp.Or` defaults, `cmp.Compare` sort keys, `clear` map reset); remaining `if`-form sites are guard checks not pure min/max assignments — conversion adds nothing. |
+| S | `clear(m)` missing where a map is manually re-created — needless reallocation. | ✅ Clean: `arbitrate.go:221` uses `clear()` for the activity map; no manual empty-map re-creation exists in hot loops. |
+| S | `cmp` package unused where `Compare`/`Or` would simplify — hand-rolled three-way compare. | ✅ Clean: `cmp.Compare` drives every comparator and `cmp.Or` drives defaults — adoption is complete. |
+
+All packages build, vet, and test green.
