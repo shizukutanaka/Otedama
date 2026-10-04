@@ -3300,6 +3300,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1188 update — docs internal-link + badge census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Relative Markdown links in repo docs | ✅ Clean — 18 relative `](path)` links all resolve to existing files |
+| S | README workflow badges | ✅ Clean — badge URLs name only workflows present in `.github/workflows/` |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
