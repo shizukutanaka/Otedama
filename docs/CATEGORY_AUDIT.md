@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 966 update — daemon-argv + plist-escape + status-probe audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A path/value containing spaces splitting into extra service args — wrong ExecStart or ProgramArguments. | ✅ Clean: `serviceArgv` is the canonical slice; launchd emits each element as its own `<string>`; `serviceArgs` joins with `quoteToken` only where needed, and `%q` quoting is skipped for the Windows binPath (which would escape path separators — the nolint is justified). |
+| M | XML-significant chars in an argument breaking out of `<string>` — plist injection. | ✅ Clean: every `ProgramArguments` entry and both log paths pass through `xmlEscape` (all five specials). |
+| M | `ReadWritePaths` hardening blocking wallet.dat writes under $HOME — ProtectHome=read-only vs the documented default data dir. | ✅ Clean: `effectiveDataDir` mirrors the runtime default-resolution (`config.DefaultDataDir()` when unset) and is carved out explicitly. |
+| M | `sc.exe query`/`launchctl list` failing on non-Windows/non-macOS being surfaced as an error. | ✅ Clean: probe failures return `ServiceStatus{}` "not installed" — matching status semantics, nolint justified; launchd log path falls back to `~/Library/Logs` (not world-readable /tmp) with /tmp only as degradation. |
+| M | C1 (0x80–0x9F) control chars in tokens — not caught by the `r < ' '` check. | ⏳ Tracked: pending fix in open PR #809 (`unicode.IsControl`); recorded as deferred, not a new finding. |
+
+All packages build, vet, and test green.
