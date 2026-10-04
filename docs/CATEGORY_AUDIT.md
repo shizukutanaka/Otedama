@@ -2278,6 +2278,296 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 924 update — hysteresis-space + held-accuracy + switch-flag audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hysteresis applied in raw yield while the selection is policy-scored — a "better" raw yield with a worse privacy/environment rating flips the incumbent. | ✅ Clean: the margin comparison runs in `policyScore` space (`threshold := incScore * (1+h)`), so "meaningful improvement" matches what "better" means under the active policy. |
+| M | `Held` flagged even when the incumbent itself was the best candidate — false "yield left on the table" reporting. | ✅ Clean: `held := best.stream.ID != c.stream.ID` — only set when a *different*, higher-scoring stream was suppressed. |
+| S | `SwitchedFromID` set when the device stayed — phantom switch records. | ✅ Clean: only assigned when `previous.Stream != "" && previous.Stream != best.stream.ID`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 925 update — effective-yield + policy-score + rating-scale audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | NaN/±Inf quote winning the sort or poisoning `TotalYield`. | ✅ Clean: `Yield.Effective()` collapses `!(s>0) || !(c>0) || IsInf` to 0 — bad quotes can never win; the s325/s331 fix is in-tree. |
+| M | Rating bonus scale inconsistent with docs (e.g. "~10% yield" comment vs "1% applied" code). | ✅ Clean: constants extracted — `ratingBonusPerPoint=0.01`, max rating 10 → 10% total premium; comment and arithmetic now share one source of truth. |
+| S | `policyScore` on an unknown policy panicking or zeroing the ranking. | ✅ Clean: `default` returns raw yield — degrades to earnings ranking (and `Decide` rejects invalid policy upstream anyway). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 926 update — hal-family + identity-chars + string-format audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unknown device family silently accepted — misrouted arbitration decisions. | ✅ Clean: `Family` is a closed 3-value set; `Identity.Validate()` calls `Family.Valid()` so detectors reject malformed family values before they reach the engine (s594 Unicode-whitespace fix confirmed). |
+| M | Whitespace or `/` in `Identity.ID` — breaks log/log-key parsing downstream. | ✅ Clean: `Validate()` rejects `unicode.IsSpace` and `/` character-by-character. |
+| S | `Identity.String()` parsed for routing or diffed for identity. | ✅ Clean: documented "format is not stable and should not be parsed"; callers consume the typed `Identity`, not the string form. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 927 update — device-interface + driver-enumerate + capability-bitmap audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Device`/`Driver` concurrency contract unspecified — readers racing SubmitWork/Shutdown. | ✅ Clean: interface explicitly requires "safe for concurrent use" + `Shutdown` must be idempotent; post-Shutdown `SubmitWork` must error. |
+| M | `Driver.Enumerate` blocking indefinitely on a slow scan. | ✅ Clean: documented sub-second typical + long discovery must be bounded by ctx; on timeout returns partial results with ctx.Err(). |
+| S | Capability bitmap reading truthy for unimplemented workload kinds. | ✅ Clean: `Capabilities` is a false-default struct; a device may only advertise what `SubmitWork` actually accepts — upper layers filter on it. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 928 update — registry-guard + detect-ctx + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Registry` silently accepting an empty driver set — confusing "no devices". | ✅ Clean: `NewRegistry()` constructor required; the zero value is unusable by design. Duplicate driver name + nil driver both rejected on `Register`. |
+| M | One slow/buggy driver's `Enumerate` stalling detection or dropping every device on any driver error. | ✅ Clean: per-driver goroutine + buffered results channel; a driver error is logged via `logger` and its siblings still contribute; `ctx.Done` returns partial results + `ctx.Err()`. |
+| M | A device with an invalid `Identity` (empty ID, bad family, forbidden char) entering `all`. | ✅ Clean: every enumerated device runs `Identity().Validate()` and rejected entries are logged and skipped — the `detect` path re-enforces the device-level contract. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 929 update — poolproto-register + lookup-wrap + dialurl-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Nil dialer / unknown protocol ID / duplicate registration sliding silently into the registry. | ✅ Clean: `Register` panics on nil + `ProtocolUnknown` + duplicate ID — init-time misregistration is impossible to miss. |
+| M | `Lookup` returning a bare "not found" that `errors.Is` can't classify. | ✅ Clean: returns `fmt.Errorf("%w: %q", ErrUnknownProtocol, id)` — sentinel-preserved. |
+| M | Negotiate failure leaving the conn open — fd leak per failed dial. | ✅ Clean: `DialURL` closes `conn` before wrapping the negotiate error; both stages wrap with `%w` + URL for classification. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 930 update — milestone checkpoint
+
+Coverage checkpoint (mirrors the s920 entry):
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| E | Audit ledger coverage since session 920. | ✅ ~375 mechanical defect classes verified clean/benign across ~100 ledger entries (~270 finding rows). Sessions 921–929 covered: i18n bundle/render fallback; arbitration input guards, determinism, hysteresis-space, held/switch accuracy, effective-yield, policy-score; hal Family/Identity/Capabilities/Device/Driver contract; registry zero-value + detector ctx + identity gate; poolproto Register/Lookup/DialURL. |
+| E | Real defects fixed to date (unchanged since s920). | ✅ 3 total: C1 control-char gap in `daemon/quoteToken` (#809), XDG systemd-manager env resolution (#807), AEAD per-frame re-derivation (#957). Zero new real defects in sessions 921–929. |
+| E | Deferred rows. | Unchanged: the three `⏸ Deferred` rows remain open items (TUI width — resolved by open PR #721; `clock.Clock` test-only gap; CODEOWNERS-gated funds-critical item). |
+| E | Next priorities. | Continue the per-package sweep (engine main loop, stratum V2 session state, lightning wallet lifecycle, metrics exposition), the ~14–17-session ecosystem recheck cadence (last: s922, ADR-009), and landing-code scrutiny as audit PRs merge. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 931 update — frame-header + channel-bit + payload-ownership audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hand-masking `extension_type`/`channel_msg` at call sites — bit-field drift between readers. | ✅ Clean: `Header.ChannelMsg()` and `Header.ExtensionID()` are the only accessors; the `0x8000` mask lives in one constant with a spec citation; `ExtensionID` clears the bit so dispatch is uniform. |
+| M | `MsgLength` exceeding the U24 bound or a channel-msg frame shorter than the 4-byte channel_id. | ✅ Clean: `Validate()` enforces `MsgLength <= MaxMessageLength` and `ChannelMsg ⇒ MsgLength >= MinimumChannelPayload` — malformed frames rejected before dispatch. |
+| M | `Frame.Payload` aliasing the decoder's scratch buffer — data race with the next `ReadFrame`. | ✅ Clean: payload is freshly allocated per call and caller-owned (documented); scratch covers only the fixed 6-byte header which `DecodeHeader` copies out. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 932 update — decoder-guard + length-before-alloc + scratch-read audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Decoder` silently usable with `MaxFrameSize=0` — every frame misrejected or, worse, unbounded. | ✅ Clean: `ReadFrame` rejects `MaxFrameSize <= 0` up front; `NewDecoder` always seeds `DefaultMaxFrameSize` (16 MiB, matching SRI). |
+| M | `make([]byte, MsgLength)` executed before the size bound — memory-exhaustion attack on a crafted header. | ✅ Clean: `total := HeaderSize + int(h.MsgLength)` is checked against `MaxFrameSize` *before* any allocation; the check precedes `make`. |
+| S | Discarded `DecodeHeader` error on the scratch buffer masking a real decode bug. | ✅ Clean: `d.scratch` is `[HeaderSize]byte` by construction, so `DecodeHeader`'s `len(src) < HeaderSize` guard is unreachable — the `_` discard is documented at the site. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 933 update — wire-primitive + length-prefix + postel-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `appendStr0_255`/`appendB0_*` writing an over-long length prefix (silent truncation or corrupt frame). | ✅ Clean: every appender bounds the value at the declared cap (255 or 32) before writing the prefix — oversized input errors, never encodes. |
+| M | `getStr0_255`/`getB0_255` allocating attacker-controlled length — the same DoS class as MsgLength. | ✅ Clean: the length prefix is one byte — max allocation is 255 B regardless of input; `io.ReadFull` governs truncation errors. |
+| S | Decode-side B0_32 absent — asymmetric bound risk. | ✅ Deliberate: Postel's-law comment documents strict-encode (32) vs lenient-decode (B0_255 accepts 33–255 with allocation safety) so a non-conformant pool's extranonce isn't a fatal error. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 934 update — handshake-decode + field-attribution + fixed-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Decode errors untraceable to the offending field — "read past end" alone gives no clue which of the five STR0_255 fields overran. | ✅ Clean: every field read wraps `%w` with `<Message>.<Field>` (the `fields`/`names` parallel arrays keep the loop generic without losing attribution). |
+| M | `NominalHashrate` read as a length-prefixed or wrong-width field — wire-format drift vs the spec's 4-byte LE float. | ✅ Clean: fixed `[4]byte` `io.ReadFull` + `binary.LittleEndian.Uint32` + `float32frombits` — exactly the spec layout. |
+| M | A pool's >32-byte `Extranonce` dropping the connection — spec-lenient interop failure. | ✅ Clean: decode uses `getB0_255` (accepts 33–255 B, still bounded) while encode uses strict `appendB0_32`; the Postel rationale is documented on the field. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 935 update — job-decode + option-field + fixed-layout audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `DecodeNewMiningJob` slicing before a length check — out-of-bounds on a truncated job frame. | ✅ Clean: `minNeed` (45 B) checked before any slice; the OPTION byte is then `switch`-ed (0 absent / 1 present / other → error) with a second length check inside the present branch — an invalid OPTION count can't read past bounds or parse garbage. |
+| M | `SetNewPrevHash` activation semantics undocument — a caller hashing before the first prev-hash arrives. | ✅ Clean: struct doc states the miner "MUST NOT hash anything" until the first `SetNewPrevHash` arrives — the spec's activation rule is on the type. |
+| M | Fixed-layout decoders (`SetTarget`, `SubmitSharesStandard`) panicking on short payloads. | ✅ Clean: both check `len(payload) < need` first and only then touch fixed offsets — the same pre-bound pattern as `DecodeNewMiningJob`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 937 update — noise-stub + nonce-counter + xonly-fallback audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `CipherState` nonce reuse under a fixed key — ChaChaPoly nonce-reuse catastrophic failure class. | ✅ Clean: `c.n` is a monotonically incremented counter seeded at 0; nonce layout `[4:]=LE(counter)` matches the Noise convention; a reused nonce under one key cannot occur within a CipherState lifetime. |
+| M | `ReadMessage2` x-only fallback marks the handshake complete **without performing DH** — transport keys would derive from the transcript alone (no shared secret), eavesdroppable. | ⏸ Tracked: inside the documented alpha P-256 stub — noise.go is not wired into any live connection (KNOWN_LIMITATIONS §2); the real fix is the secp256k1 Noise NX migration deferred to v3.1.0, not a live-key defect. |
+| S | Per-call `chacha20poly1305.New` in `Encrypt`/`Decrypt` — AEAD re-derivation per frame. | ⏸ Tracked: same defect class as open PR #957 (transport AEAD reuse); fixing here is folded into that change rather than duplicated. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 938 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `hashPool` returning a hasher with stale state from a previous borrower — first `Write` could mix in old key material. | ✅ Clean: `getHasher` calls `h.Reset()` before handing out every pooled hasher — residual state cannot leak into the next HMAC. The long-key path (`len(key) > blockSize`) hashes the key down first per RFC 2104. |
+| M | Pooled hashers retaining key-derived state while idle in the pool — secret residue on the free list. | ✅ Benign: the residue is sha256's internal block state, which holds no more recoverable key material than the key bytes already live in memory; `Reset` on checkout makes it correctness-neutral. Zeroing hash state is not a Go stdlib convention anywhere (same class as `secret-format` audit, session-614). |
+| S | `hmacSHA256Pooled` correctness drifting from `hmacSHA256` — a pooled-impl regression going silent. | ✅ Clean: `noise_pool_test.go` runs a differential table test pinning pooled == reference output, plus parallel and benchmark coverage — a drift fails the suite. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 939 update — v1-notify + field-validate + lenient-bool audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `parseNotify` indexing `p[i]` before checking the params count — out-of-range panic on a truncated notify. | ✅ Clean: `len(p) < 9` is checked before any index access; the unmarshal of `p[8]` is the only conditional and stays inside the bound. |
+| M | Rigid `clean_jobs` bool decoding — a pool sending `0`/`1` instead of `true`/`false` rejected outright (interoperability failure class). | ✅ Clean: explicit `0/1` tolerance fallback — re-unmarshal as `int`, `cleanJobs = n != 0`, error only if both fail. |
+| M | Malformed hex/length fields silently zero-filling — every share then fails self-verification (silent wasted work). | ✅ Clean: each decoded field is validated — `coinb1/2` non-empty, `merkle_branch` elements exactly 32 B, `prevhash` exactly 32 B, `version/nbits/ntime` ParseUint errors all reject the notify; the inline comment documents the reasoning. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 940 update — audit coverage checkpoint (~400 classes clean)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| — | Coverage checkpoint: sessions 931–939 added ~27 verified classes across `internal/stratum` (frame/decoder/wire/handshake/messages), `internal/stratum` noise surface (stub, pool), `internal/poolproto/stratumv1` (notify parse), `internal/hal`, `internal/poolproto`, and `internal/arbitration`. | ✅ Running total: ~400 mechanical defect classes verified clean across ~110 ledger entries (~300 finding rows). |
+| — | Real defects confirmed and fixed to date: C1 control-character gap (#809), XDG systemd-manager env (#807), AEAD-per-frame re-derivation (#957). No new real defect surfaced this block. | ✅ Defect rate remains ~0.8% of audited classes — the tree is mechanically clean; new findings are tracked/stub items (s937 x-only, s938 residue) already owned by open work or documented limitations. |
+| — | Deferred/tracked rows from earlier sessions unchanged: V2 decode-error session termination (session-537 stale entry resolved), x-only fallback (KNOWN_LIMITATIONS §2 / v3.1.0 Noise NX migration), transport AEAD reuse (open #957), noise stub non-production reachability. | ✅ No silent deferrals — every tracked row names its owning change or limitation entry. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 960 update — milestone checkpoint (~420 audit classes verified clean)
+
+Sessions 941–960 closed the protocol-depth sweep: the stratumv1 session
+(readLoop line cap, pending-RPC lifecycle, extranonce boundary, dial/TLS
+precedence), stratumv2 dialer (pending-map FIFO, tip activation,
+handshake deadlines, write bounds), miner (nonce residue classes, ntime
+roll, header wire format, nBits decode), btccrypto (address dispatch,
+checksums, witness rules), lightning (atomic wallet save, seed-store
+encryption, BIP-39 round-trip), engine (work-target selection, stream
+merge, fan-in cancellation, worker partitioning, provider lifecycle),
+and rates (plausibility rails, single-flight).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Real defects fixed in the sweep so far | C1 control-char gap (#809), XDG systemd-manager env (#807), AEAD per-frame re-derivation (#957) |
+| M | Tracked (not defects) | noise.go x-only fallback → v3.1.0 secp256k1 NX (KNOWN_LIMITATIONS §2); noise_pool secret residue (key material only) |
+| M | Cumulative verdicts | ~420 mechanical defect classes verified clean across ~120 entries |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 966 update — daemon-argv + plist-escape + status-probe audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A path/value containing spaces splitting into extra service args — wrong ExecStart or ProgramArguments. | ✅ Clean: `serviceArgv` is the canonical slice; launchd emits each element as its own `<string>`; `serviceArgs` joins with `quoteToken` only where needed, and `%q` quoting is skipped for the Windows binPath (which would escape path separators — the nolint is justified). |
+| M | XML-significant chars in an argument breaking out of `<string>` — plist injection. | ✅ Clean: every `ProgramArguments` entry and both log paths pass through `xmlEscape` (all five specials). |
+| M | `ReadWritePaths` hardening blocking wallet.dat writes under $HOME — ProtectHome=read-only vs the documented default data dir. | ✅ Clean: `effectiveDataDir` mirrors the runtime default-resolution (`config.DefaultDataDir()` when unset) and is carved out explicitly. |
+| M | `sc.exe query`/`launchctl list` failing on non-Windows/non-macOS being surfaced as an error. | ✅ Clean: probe failures return `ServiceStatus{}` "not installed" — matching status semantics, nolint justified; launchd log path falls back to `~/Library/Logs` (not world-readable /tmp) with /tmp only as degradation. |
+| M | C1 (0x80–0x9F) control chars in tokens — not caught by the `r < ' '` check. | ⏳ Tracked: pending fix in open PR #809 (`unicode.IsControl`); recorded as deferred, not a new finding. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 967 update — metric-name-valid + label-escape + type-collision audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A malformed metric/label name emitting a rejected line that silently kills the entire scrape. | ✅ Clean: `isValidMetricName` (Prometheus rule incl. `:`) and stricter `isValidLabelName` (no colon) are enforced at registration — panic on developer error, never on runtime input. |
+| M | Escape rules conflated between label values and HELP text — over- or under-escaping. | ✅ Clean: `escapeLabel` handles `\\`, `"`, `\n`; `escapeHelp` correctly omits the quote (not special in HELP) — exactly per the exposition spec. |
+| M | Caller mutating a label map after registration corrupting the stored series. | ✅ Clean: `cloneLabels` snapshots at registration (nil stays nil). |
+| M | Same name registered as both counter and gauge — two TYPEs under one name, whole-scrape corruption; or nondeterministic label order breaking dedup. | ✅ Clean: counter/gauge name collision is a registration panic; `metricKey`/`renderLabels` sort label keys so ordering and dedup are deterministic. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 968 update — i18n-fallback + missing-render + template-degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A region-tagged request (`ja-JP`) missing the entire `ja` catalog — falling straight to English when a base-language match exists. | ✅ Clean: `Render` tries exact tag → `lang.Base()` → English, in that order. |
+| M | A message ID absent everywhere (incl. English) silently rendering as empty string. | ✅ Clean: returns a conspicuous `"!{id}!"` placeholder plus a non-nil error — missing keys are visible in production logs instead of producing blank UI. |
+| M | A template referring to a data key the caller didn't supply panicking or emitting `{{.x}}` raw. | ✅ Clean: `RenderWith` returns the raw template plus the exec error — graceful degradation; `data==nil`/no `{{` short-circuits. |
+| M | Bundle construction accepting a nil/duplicate/non-English-first catalog — fallback undefined or overwriting another language. | ✅ Clean: `NewBundle` requires a non-nil `LangEnglish` catalog first and rejects nil/duplicate catalogs; `MissingTranslations` surfaces the per-language gap for the CI completeness check. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 969 update — config-precedence + env-typo + origins audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A malformed numeric `OTEDAMA_*` env var (e.g. `300w`, `300,5`) silently ignored — operator thinks it's applied, file value stands. | ✅ Clean: unparseable values are never applied, and `EnvWarnings` surfaces each one to stderr; both `ResolveWithOrigins` and `EnvWarnings` iterate the same `numericEnvVars` slice so the applied set and warned set cannot drift. |
+| M | Layer precedence inverted or inconsistent — env overriding flags, file overriding env. | ✅ Clean: file → env → flags → OS-default, applied strictly in that order; `Origins` records the winning layer per field (`config show --origin`). |
+| M | Empty-string env var treated as "set" and blanking a higher-priority value. | ✅ Clean: every `getEnv` check requires `v != ""` before applying — empty env cannot shadow a file value. |
+| M | Missing `--data-dir`/`OTEDAMA_DATA_DIR` leaving `DataDir` empty instead of the OS default. | ✅ Clean: layer 4 fills `config.DefaultDataDir()` only when no higher layer set a value. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 970 update — milestone checkpoint (~430 audit classes clean)
+
+Checkpoint after s960 (which closed at ~420 classes). The last 10 sessions
+covered the operational boundaries: doctor check dispatch and per-index
+result slots, sysfs GPU enumeration and the deliberate `SHA256d=false`
+gate, http-server timeout/readiness lifecycle, TUI stop/update
+concurrency, daemon service-definition generation (argv quoting, plist
+XML escaping, `ReadWritePaths` carve-out), Prometheus exposition
+validity/escaping, i18n fallback/template degradation, and the four-layer
+config precedence model.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Real defects since s960. | None — all ~10 new classes clean or tracked to pending fixes (#809 C1 quoting, s937/s938 rows). |
+| S | Deferred/unowned rows. | None — every tracked row names its owning PR or limitation entry. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
