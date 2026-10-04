@@ -87,8 +87,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. ✅ **engine→poolproto wiring** — done (session 1282 verification):
+   `runSessionV1` calls `poolproto.DialURL` and drives the protocol-agnostic
+   `poolproto.Session` (Jobs/Submit); the V2 path is protocol-gated on
+   `ProtocolStratumV2/TLS`. Dialers are registered and load-bearing.
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -141,8 +143,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
-   to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+8. ✅ **Seed backup reminder / verification flow** — done (sessions 387/498):
+   first-run wallet setup prompts the user to re-enter a random subset of
+   recovery words (`verifyBackupPhrase`, internal/engine/setup.go), catching
+   unwritten or transposed seeds before funds depend on them.
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
