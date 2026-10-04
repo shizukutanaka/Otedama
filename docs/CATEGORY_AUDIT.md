@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1296 update — release-pipeline responsibility split
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | `.goreleaser.yaml` invocation | ⚠️ Noted: no workflow or Makefile target invokes goreleaser — release.yml hand-rolls create-release + cross-build + deb/rpm + brew/scoop instead. The file is valid config but orphaned unless the maintainer runs goreleaser manually |
+| R | Dead-ldflags blast radius | ✓ Bounded: binaries built with the four `main.*` sites fall back to `internal/version` defaults `v3.0.0-alpha.1-dev`/`unknown`/`unknown` — degraded metadata, not a broken binary |
+
