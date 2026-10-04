@@ -1349,3 +1349,19 @@ coinbase reward scripts — fail-closed direction consistent with session-595),
 #904 (monitoring/config/release edge cases), #908 (B08 type support),
 #883 (community-multisig example payouts). Trajectory unchanged: hardening
 and reference-implementation consolidation, no new protocol surface.
+
+## Session-1130 ecosystem update (2026-10-02)
+
+### sv2-spec
+
+- Normative set unchanged. #203 (non-custodial payouts, push-based) still open; the SEQ0_255-vs-B0_64K payout-list bound debate continues (large pools already ~60 outputs). #202 (request/response alternative) still open. #234 key-management and #198 witness-commitment threads open per prior entries.
+
+### stratum (SRI)
+
+- **v1.12.0 released (2026-09)**: breaking bumps across the stack. `channels_sv2` hardening pass — share validation now enforces min_ntime/nTime bounds, job storage bounded on every axis (future templates, past jobs, group-job replacements, rejected/seen share sets), several consensus-invalid coinbase defects fixed, ExtranoncePrefix live-reference fix, arithmetic hardened against overflow/underflow/div-by-zero. BIP323 adaptations landed (`EllSwiftPubKey` alias in `binary_sv2`). `codec_sv2`/`framing_sv2` refactored (`Frame` split into `MessageFrame`/`SerializedFrame`, `SizeHint`). `noise_sv2` dropped AES-256-GCM — ChaCha20-Poly1305 is now the sole cipher, matching Otedama's cipher choice recorded in earlier ADR notes.
+
+### sv2-apps
+
+- **v0.7.0 released**: share accounting tracks rejects via `channels_sv2::server::share_accounting` (u64), JDC supports per-upstream `user_identity`, standardized Stratum error-code constants adopted, Sv2TP TCP connect timeout added, `stratum-apps::rpc` deprecated. #881 still WIP per prior tracking.
+
+No Otedama action required — wire-layer and cipher posture already aligned with the v1.12.0 direction.
