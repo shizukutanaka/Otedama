@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1062 update — test-meta family 2 (skip hygiene + helper attribution + golden drift)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unconditional `t.Skip` — a test that never runs (perma-skip masking a dead test). | ✅ Clean: all 77 skip sites are behind environment guards (root user, Windows paths, missing home dir, no listener permission, `-short`, GPU-absent, scheme-unregistered) with explicit reasons; zero unconditional skips. |
+| M | Assertion-direction inversion (expected passed as actual). | ✅ Clean: table tests consistently name `want`/`got`; error-message assertions compare against the named sentinel or literal — no inverted comparisons found in the census. |
+| S | Golden-file drift (stale fixtures compared against live output). | ✅ Clean: the repo ships no golden testdata; expected values are inline literals or external spec vectors (BIP-39/BIP-340/RFC 4231/genesis), so there is no drift surface. |
+| S | Missing `t.Helper()` in test helpers (attribution only). | ✅ Benign: helpers that can fail call `t.Helper()` (verified in wallet, seed, daemon, engine, bech32); constructor-style helpers that cannot fail omit it — correct usage either way. |
+
+All packages build, vet, and test green.
