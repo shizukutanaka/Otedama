@@ -1790,6 +1790,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1018 update — runtime-exposition + summary-substitute + escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go_gc_duration_seconds` silently mis-typed vs client_golang. | ✅ Clean: the summary this package cannot emit is deliberately re-expressed as two counters (`_total` pause seconds + `_total` cycles) — the rate()-able form dashboards actually use; the substitution is documented at the top of the file. |
+| M | A Go version string breaking label syntax in `go_info`. | ✅ Clean: the label value goes through `escapeLabel` (Prometheus escaping), not `%q` — the nolint comment explains why the obvious-looking gocritic fix would be a bug. |
+| M | Dashboards keyed on client_golang names silently breaking. | ✅ Clean: all emitted names match the client_golang `go_*` surface; kind strings (gauge/counter) are per-entry, not a blanket type. |
+| S | An inconsistent snapshot mixing memstats from different instants. | ✅ Clean: one `ReadMemStats` + one `NumGoroutine` per scrape feeds all 12 metrics. |
+| M | Write failures swallowed mid-exposition. | ✅ Clean: `Fprintf` errors propagate to the collector caller. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
