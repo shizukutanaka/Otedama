@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1086 update — error-message style drift
+
+Go convention: error strings start lowercase, end without a period
+(they chain via `%w` / `:` separators). Census of all
+`errors.New`/`fmt.Errorf` literals in non-test code.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 264 error literals: zero uppercase starts (excluding acronyms/proper nouns like SV2/TLS/BIP) | S |
+| S | Zero trailing periods — chain-ready | S |
+| S | `%w` usage verified consistent (session 760 verdict: only at wrap points) | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
