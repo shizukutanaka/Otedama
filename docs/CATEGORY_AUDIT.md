@@ -3007,6 +3007,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1178 update — package-godoc + lint-config parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `// Package <name>` header per internal package | ✅ Clean — all 20 internal packages carry a package-level doc comment (single canonical file each, e.g. `provider/provider.go`) |
+| S | `.golangci.yml` linter names | ✅ Clean — all enabled linters are real, curated, and configured under `linters-settings` |
+| M | golangci-lint version pinning across workflows | ⚠️ Noted — `ci.yml` pins v1.55.2 while `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3 version: latest`; already recorded as a known divergence in KNOWN_LIMITATIONS §558-566 |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
