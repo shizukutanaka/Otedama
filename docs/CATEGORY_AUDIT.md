@@ -1731,3 +1731,22 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1078 update — godoc claim drift sweep
+
+Sweep for doc comments that make specific numeric or behavioral
+claims and verify each against the implementation it describes —
+stale constants in docs mislead operators as surely as stale code.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `dialer.go` claims the V2 write deadline matches "the same bound (10s)" as V1 — V1 applies `SetWriteDeadline(+10s)` at stratumv1.go:515; claim exact | S |
+| S | `provider/mining.go` doc cites 600s block time + 3.125 BTC reward — both literal constants match (`blockTimeSec=600.0`, `blockRewardBTC=3.125`) | S |
+| S | `provider.go` "~0.07 sats/s CPU" table — documented approximation of the live-hashrate yield path, corrected in session 243 to exclude GPU mining | ⚠️ Noted |
+| S | `width_other.go` claims width-detection failure returns 0 → caller falls back to compiled default — verified | S |
+| S | BIP-39 doc claims (entropy {128…256}, 2048-word list, unique words, checksum must match) — all pinned by wordlist tests + session-1017 audit | S |
+| S | `metrics.Registry` "Safe for concurrent use" + CollectFunc deadlock rule — mutex-backed registry verified in session-1037 atomicity audit | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
