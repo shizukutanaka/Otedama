@@ -1734,6 +1734,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1013 update — stop-race + update-drop + width-budget audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Stop` writing to `w` while the render loop still owns it. | ✅ Clean: CAS `started` is the single-shot gate (safe pre-Start and multi-call); `close(doneCh)` → `wg.Wait` → only then `showCursor`/`Fprintln` — no racing writer, documented inline. |
+| M | A full update channel blocking the engine's stats push. | ✅ Clean: `Update` drains one stale entry then enqueues — bounded loss is the documented contract (freshest wins, never blocks). |
+| M | A torn stats snapshot mid-render. | ✅ Clean: `lastStats` guarded by `mu`; the tick copies under lock then renders the copy. |
+| S | The critical pool-status field silently truncated at narrow widths. | ✅ Clean: every line is budget-truncated to `cols` and the key field is sized from a dynamic budget, not a fixed offset — safe at the documented 40-column minimum; live width re-probed per tick (TIOCGWINSZ / Windows counterpart), `SetWidth` locks detection for tests. |
+| S | Emoji section labels under-padding and leaving stale glyph fragments. | ✅ Clean: section labels are deliberately plain text — emoji render width-2 but `visibleLen` counts 1 rune; the mismatch is documented and avoided. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
