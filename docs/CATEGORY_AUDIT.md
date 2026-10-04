@@ -4383,6 +4383,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 849 update — ptr-format + legacy-atomic + spawn-count audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%p` in log output — pointer addresses leaking into logs (non-deterministic, sometimes security-relevant). | ✅ Clean: absent — all formatting uses value verbs. |
+| M | Legacy `atomic.AddUint32`/`LoadInt64` free functions — untyped, misalignment hazards on 32-bit. | ✅ Clean: zero legacy free-function calls — all atomics are the typed `atomic.IntN/Bool/Pointer` wrappers (verified sessions 565, 739). |
+| M | `go func()` spawned without explicit arg capture — loop-variable capture bug. | ✅ Clean: 20 spawn sites verified across earlier sweeps — explicit param capture where loop-bound (worker.go:155-170), safe per-iteration vars under go1.22 semantics elsewhere (sessions 757, 816). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
