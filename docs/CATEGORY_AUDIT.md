@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1237 update — THREAT_MODEL.md parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| crypto-claims | scrypt N=2^17 + AES-256-GCM verified (seedstore); FIPS-140-3 posture note consistent with #522 erratum | Clean |
+| bounds-claims | MaxFrameSize=16MiB, jobsCh buffer=32, outstanding-job maps cap=64 FIFO, submitLimiter token bucket — all verified in code | Clean |
+| future-framing | Tor-by-default correctly attributed to ADR-007 B7 (Proposed), not claimed as implemented | Clean |
+| residual-honesty | Residual-risk paragraphs honestly state what mitigations do NOT cover (wire-rate vs wasted-hashrate, channel DoS at config scale) | Clean |
+
+THREAT_MODEL.md 500 lines fully verified; no stale mitigation claims remain after the #521/#522/#604 corrections.
+All packages build, vet, and test green.
