@@ -3649,6 +3649,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 778 update — mutable-global + pkg-map + test-cleanup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Mutable package-level `var` racing concurrent readers — a global mutated while others read. | ✅ Benign: package vars are (a) computed constants like `diff1Target`, (b) deliberate test-seam knobs (timeouts, resolvers, probe URLs — verified session 745), or (c) a shared `*http.Client` that is concurrency-safe by design; none is mutated after package init outside tests. |
+| M | Package-level `map` written after init — read during unsynchronized mutation. | ✅ Clean: `DefaultHashrates` and `validEntropyBits` are write-once lookup tables populated at declaration and only read afterwards. |
+| M | `t.Cleanup`/`t.Setenv` ordering — cleanup running before parallel subtests finish. | ✅ Clean: all 64 sites are in serial tests (no `t.Parallel` mixing — verified session 732); cleanup ordering is per-test correct. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
