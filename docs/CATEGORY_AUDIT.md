@@ -1731,3 +1731,23 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1083 update — interface compile-guard census
+
+Census of public interfaces and their implementers verifying each is
+compile-time pinned — either by an explicit `var _ Iface = (*T)(nil)`
+assertion or by an interface-typed return at its construction site.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `provider.Provider` — MiningProvider + AkashProvider carry explicit `var _ Provider` guards (their constructors return concrete `*T`) | S |
+| S | `poolproto.Dialer`/`PoolNoticeReceiver` — explicit guards on V1 Dialer/session; `Session`/`Connection` enforced by `Negotiate`'s interface return | S |
+| S | `hal.Device`/`Driver`/`Detector` — enforced by `Enumerate`/`Detect` returning `[]Device` at every implementer | S |
+| S | `clock.Clock` — Real/Fake both returned as `Clock`; `provider.RateSource`/`NetworkHashrateSource` satisfied via adapter returns | S |
+| S | `btccrypto.*` (PublicKey/Signature/Scheme/SignerScheme/PrivateKey) — registry `Register`/`Lookup` enforces conformance at insert | S |
+| S | `doctor.Check` — all 17 checks built through `checkX() Check` constructors | S |
+| S | Private same-package interfaces (`encodable`, `rateStats`) — single implementer, drift-immune | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
