@@ -3436,3 +3436,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1305 update — Makefile self-consistency + cross-references
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `.PHONY` coverage | ✓ all 41 real targets declared .PHONY (34 `.PHONY:` lines; flagged items were make variables, not targets) |
+| M | Dangling prerequisites / non-tab recipe lines | ✓ none; `make -n` parses every target |
+| R | Workflow `make` targets | ✓ build / build-all / fmt / test-integration all defined |
+| R | Doc-referenced `make` targets | ✓ the only non-prose reference to a missing target is `make test-e2e`, and every occurrence already carries the correction (skills/tdd.md session-483 note, CHANGELOG history, Makefile comment block) — no action needed |
+
