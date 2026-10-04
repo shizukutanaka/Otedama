@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1043 update — lightning-test seed-vectors + mnemonic-exposure + file-hygiene audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | BIP-39 conformance relying on round-trip only (a symmetric bug would pass). | ✅ Clean: **official BIP-39 test vectors** pinned (standard vector, all-zero-entropy, all-FF) + all-2048-words-reachable + boundary-word checks — conformance is anchored to the spec, not self-consistency. |
+| M | Mnemonic exposure surface unbounded (mnemonic available on every load). | ✅ Clean: `NewRunExposesMnemonic` vs `LoadedRunDoesNotExposeMnemonic` — the first-run-only contract is pinned both ways, plus not-all-zero seed and stable fingerprint. |
+| M | Wallet-file hygiene gaps (permissions, temp residue, fingerprint overwrite). | ✅ Clean: 0600/not-world-readable, stale-temp sweep, encrypt-failure leaves no temp, restore **never overwrites** existing fingerprint, corrupted+empty files fail clean. |
+| M | Encryption oracle/padding/tamper classes untested. | ✅ Clean: wrong-passphrase reject, **tampered-ciphertext detection**, distinct ciphertexts for identical input (nonce uniqueness), **no plaintext in ciphertext**, empty-passphrase reject, unknown-version + short + oversized-input rejects. |
+| S | Derivation options diverging (mnemonic passphrase vs. direct call). | ✅ Clean: with-passphrase ≡ `MnemonicToSeed` direct, no-option ≡ empty-passphrase, passphrase not needed on reload — the equivalence matrix is covered. |
+
+All packages build, vet, and test green.
