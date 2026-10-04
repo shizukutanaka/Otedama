@@ -1072,3 +1072,40 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-950 ecosystem update (2026-10-04)
+
+**sv2-spec** open count remains 7 — no movement since session-936.
+Normatively relevant open items are unchanged: #236 (`SetTarget.target`
+must not exceed the channel's `max_target`, actively edited), #234
+(authority key management documentation), #203 (coinbase payouts
+extension), #198 (`coinbase_witness` field). Editorial PRs #232, #186,
+#103 still open.
+
+**SRI** remains at v1.12.0 (2026-09-17) — the security-hardening
+release recorded in session-600 is still current.
+
+**sv2-apps** open count is 27 (28 entries listed). Since session-936:
+- **#907 (merged)** — docs(agents) warning against stealing comments
+  when inserting items.
+- **#845 (open, active)** — renames target message fields to align
+  with the post-#228 spec cleanup — the same field-naming convention
+  Otedama's wire structs already follow (session-622 refactor).
+- **#908 (open, active)** — adds B08 message-type support to
+  `bitcoin_core_sv2`.
+- **#856 (open, active)** — `bitcoin_core_sv2` hardening workstream.
+- **#839 (open, active)** — JDS binds mining job tokens to
+  `user_identity` and verifies it on `SetCustomMiningJob` — the
+  job-token/identity binding ADR-009's JDC work should mirror.
+- **#881 (open, WIP)** — `handle_push_solution` on `jd_server_sv2` +
+  `bitcoin_core_sv2` still in progress; remains the piece a future JDC
+  submits block solutions through.
+- **#903 (open)** — "Buffer sv2 hardening".
+- **#904 (open)** — monitoring/config/release edge-case handling.
+- **#878 (open)** — empty-coinbase-reward-script rejection (the merge
+  recorded in session-936 is not yet reflected upstream as merged).
+
+**Impact on Otedama:** none. The wire-format invariants audited in
+sessions 931–949 remain aligned with the current spec; no normative
+change landed, and the upstream JDS work (#839/#881) is still
+pre-merge. Next ecosystem check due ~session 964–967.
