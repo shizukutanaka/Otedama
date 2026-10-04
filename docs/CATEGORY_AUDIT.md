@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1182 update — cross-reference numbering census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `KNOWN_LIMITATIONS §N` citations across docs | ✅ Clean — all cited section numbers resolve to the intended entries (§1 simulated AI, §2 Noise, §4 GPU, §5 PQ-scaffold, §8 ASIC, §13 CI, §14 DATUM) |
+| S | `ADR-0NN` references across docs | ✅ Clean — every citation resolves to one of ADR-001..011; no dangling ADR numbers |
+| S | Intra-ledger §-refs inside KNOWN_LIMITATIONS | ✅ Clean — internal forward/backward references (§1↔§3, §2↔§4) still correct |
+
+All packages build, vet, and test green.
