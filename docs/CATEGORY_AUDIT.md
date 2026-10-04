@@ -2953,3 +2953,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1279 update — govulncheck + dependency-freshness verification
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| govulncheck | `govulncheck ./...` on synced master: **0 reachable vulnerabilities**; 23 CVE-class entries exist in required modules but none are reachable from our call graph | ✓ Clean |
+| dep freshness | x/crypto v0.23.0 / x/sys v0.20.0 (mid-2024) despite weekly dependabot — bumped to v0.48.0/v0.41.0 (newest keeping the go-1.24 floor) in session 1278 (#1359); latest releases require go 1.26 | ✓ Addressed |
+| go.mod | `go mod verify` all modules verified; `go mod tidy` clean | ✓ Clean |
+
+govulncheck v1.1.4, source analysis mode (calls into the vuln symbol are required to count).
