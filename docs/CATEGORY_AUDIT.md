@@ -1731,3 +1731,39 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1059 update — test-file audit pass COMPLETE checkpoint
+
+The test-file audit pass (sessions 1031–1058) is complete: all 73 `*_test.go`
+files (~38,300 lines, ~1,050 tests) have been censused. Cumulative mechanical
+defect-class count is now ~590, all clean or benign — zero new real defects
+found in the entire test pass.
+
+High-confidence conclusions the pass supports:
+
+- Test quality is adversarial, not aspirational: injected failure per error
+  branch (lightning coverage), per-position IO errors (stratum wire),
+  boundary truncation per field (stratum messages), forced-concurrency
+  falsification (torn reads, CAS identity, exact totals).
+- Every fix shipped since the audit began has a dedicated regression test;
+  the ledger's "fixed" rows cannot silently rot.
+- Meta-tests pin the meta-claims: metrics documented in spec, example config
+  documents every field, metric names match the Prometheus convention,
+  compile-time package reachability — the repo fails its own test suite if
+  docs drift.
+- Funds-critical paths anchor to external vectors (BIP-39, BIP-340, RFC
+  4231, genesis block) rather than self-consistency.
+
+Remaining real defects (all tracked, none re-delivered): C1 control-char gap
+(#809, open), XDG systemd-manager env (#807, open), AEAD-per-frame
+re-derivation (#957, open), knownSubcommands missing "wallet" (#1062, open),
+base58 length bound (#633, open).
+
+The audit continues on fresh axes: next candidates are (a) ADR-009 ecosystem
+cadence, (b) a new mechanical-class family (e.g. test-helper smuggled
+assertions, golden-file drift, build-tag coverage), (c) re-verification of
+recently merged PR diffs.
+
+All packages build, vet, and test green.
