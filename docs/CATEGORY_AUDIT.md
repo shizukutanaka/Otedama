@@ -2235,6 +2235,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1047 update — i18n-test completeness-gate + fallback-chain + detect-matrix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Per-language catalogs silently missing keys (runtime placeholder leak). | ✅ Clean: `AllCatalogs_CoverAllEnglishIDs` + `Japanese_CoversAllEnglishIDs` + `AllLanguages_CoverAllEnglishIDs` — completeness is asserted per catalog AND per language, plus placeholder-consistency-with-English and no-empty-messages gates. |
+| M | Fallback chain order wrong (exact → base → English). | ✅ Clean: each hop pinned — exact-match, base-lang (pt-BR→pt), English-fallback, partial-translation fallback, unknown-ID→placeholder; `NewBundle` rejects nil-English/non-English-fallback. |
+| M | Template injection corrupts render (bad template panics). | ✅ Clean: `RenderWith` covers nil-data/no-template/missing-ID→RenderError/bad-template→ParseError/exec-error — the degrade surface is per-error-class. |
+| M | Locale detection mishandling POSIX/subtags/case. | ✅ Clean: exact, subtag (pt-BR→pt), unknown→default, case-insensitive, **POSIX env precedence + normalization** — detection matrix covered; `StartupReadyIsDistinct` pins dedupe. |
+| S | Catalog immutability/concurrency unguarded. | ✅ Clean: `Catalog_IsImmutable` (mutation of returned map doesn't leak) + `ConcurrentRenderIsSafe`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
