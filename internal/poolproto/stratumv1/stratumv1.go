@@ -6,7 +6,7 @@
 // # Why V1 still matters in 2026
 //
 // Stratum V1 is a 14-year-old plaintext JSON-RPC-over-TCP protocol with
-// no standardisation document, no encryption, and no authentication of
+// no standardization document, no encryption, and no authentication of
 // the pool to the miner. It is also what >99% of Bitcoin mining pools
 // speak in 2026, and it will remain operational well beyond Otedama's
 // 10-year horizon because pool translation proxies make every SV2 pool
@@ -59,6 +59,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
+
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -110,11 +112,16 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// may be replaced by a mid-session mining.set_extranonce, which runs
+	// on the read goroutine while Submit reads them on the caller's.
+	extranonce1     atomic.Pointer[string]
+	extranonce2Size atomic.Int64
+	// en2Counter rolls extranonce2 per job so every job's coinbase (and
+	// hence merkle root) is unique even when the nonce space wraps.
+	en2Counter atomic.Uint64
 
-	// ctx controls the read-loop lifetime; cancelled on Close.
+	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
 }
@@ -124,6 +131,11 @@ var (
 	_ poolproto.Session            = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
 )
+
+// callTimeout bounds how long call waits for a pool response before
+// releasing the pending entry and the waiting goroutine. Var so tests
+// can shorten it.
+var callTimeout = 60 * time.Second
 
 func newSession(conn *connection) *session {
 	return &session{
@@ -143,7 +155,7 @@ func (s *session) start(ctx context.Context) {
 }
 
 // readLoop is the single goroutine that reads and dispatches V1 messages.
-// It runs until the connection closes or the context is cancelled.
+// It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
 	defer close(s.noticeCh)
@@ -236,7 +248,8 @@ func (s *session) dispatch(line []byte) {
 		if err != nil {
 			return
 		}
-		s.sendJob(job)
+		s.completeV1Job(&job)
+		s.sendJob(&job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -244,8 +257,8 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce1.Store(&en1)
+			s.extranonce2Size.Store(int64(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -273,13 +286,31 @@ func (s *session) dispatch(line []byte) {
 		// reconnect machinery uses to re-dial the configured pool list.
 		// We deliberately do NOT follow the pool-supplied Host:Port — see
 		// reconnectDirective for the rationale.
-		if d, ok := parseReconnect(msg.Params); ok {
-			s.lastReconnect.Store(&d)
-		}
+		d := parseReconnect(msg.Params)
+		s.lastReconnect.Store(&d)
 		go s.Close()
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
 	}
+}
+
+// maxReconnectWaitSeconds caps a pool-supplied reconnect wait so a
+// hostile pool cannot park the session indefinitely.
+const maxReconnectWaitSeconds = 300
+
+// ReconnectWait returns the pool-requested reconnect delay recorded by
+// the last client.reconnect/mining.reconnect notification, clamped to
+// [0, maxReconnectWaitSeconds]. Zero when no directive was received.
+// Implements poolproto.ReconnectWaiter.
+func (s *session) ReconnectWait() time.Duration {
+	d := s.lastReconnect.Load()
+	if d == nil || d.Wait <= 0 {
+		return 0
+	}
+	if d.Wait > maxReconnectWaitSeconds {
+		return maxReconnectWaitSeconds * time.Second
+	}
+	return time.Duration(d.Wait) * time.Second
 }
 
 // Jobs returns the channel of incoming jobs.
@@ -290,13 +321,61 @@ func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 // Implements poolproto.PoolNoticeReceiver.
 func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 
+// completeV1Job folds the negotiated extranonce1 + a fresh extranonce2
+// into the notify's coinbase parts and stores the resulting merkle root
+// on the job. Skipped (leaving MerkleRoot as received — the pool-side
+// merkle assumption) when the notify carried no coinbase parts or the
+// session never negotiated extranonces.
+//
+// extranonce2 rolls per job via en2Counter placed big-endian at the tail
+// of the en2 field, so every job's coinbase is unique. Shares echo the
+// same en2 back via Job.ExtraNonce → Work.ExtraNonce → Share.ExtraNonce
+// → ShareSubmission.ExtraNonce; the pool rebuilds the identical coinbase
+// and can actually verify the share (previously MerkleRoot stayed zero,
+// so no V1 share could ever validate).
+func (s *session) completeV1Job(j *poolproto.Job) {
+	// extranonce2Size is pool-controlled; anything above the observed
+	// maximum (8–12 bytes) falls back to the old behaviour instead of
+	// allocating a pool-dictated buffer per job.
+	en1s := s.extranonce1.Load()
+	sz := int(s.extranonce2Size.Load())
+	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
+		en1s == nil || *en1s == "" || sz <= 0 ||
+		sz > 64 {
+		return
+	}
+	en1, err := hex.DecodeString(*en1s)
+	if err != nil {
+		return
+	}
+	n := s.en2Counter.Add(1)
+	en2 := make([]byte, sz)
+	// Big-endian counter in the tail bytes of en2: sizes < 8 keep the
+	// counter's low bytes (still rolling); sizes > 8 stay zero-padded
+	// at the head.
+	for i := 0; i < len(en2) && i < 8; i++ {
+		en2[len(en2)-1-i] = byte(n >> (8 * i))
+	}
+	coinbase := make([]byte, 0, len(j.Coinb1)+len(en1)+len(en2)+len(j.Coinb2))
+	coinbase = append(coinbase, j.Coinb1...)
+	coinbase = append(coinbase, en1...)
+	coinbase = append(coinbase, en2...)
+	coinbase = append(coinbase, j.Coinb2...)
+	root := btccrypto.Hash256(coinbase)
+	for _, branch := range j.MerkleBranch {
+		root = btccrypto.Hash256(append(root[:], branch...))
+	}
+	j.MerkleRoot = root
+	j.ExtraNonce = en2
+}
+
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would
 // produce stale (rejected) shares, which is the #1 reject cause after
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
-func (s *session) sendJob(job poolproto.Job) {
+func (s *session) sendJob(job *poolproto.Job) {
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -309,7 +388,7 @@ func (s *session) sendJob(job poolproto.Job) {
 	}
 send:
 	select {
-	case s.jobsCh <- job:
+	case s.jobsCh <- *job:
 	default:
 		// Channel still full (clean_jobs=false, slow worker):
 		// drop oldest, push newest.
@@ -318,7 +397,7 @@ send:
 		default:
 		}
 		select {
-		case s.jobsCh <- job:
+		case s.jobsCh <- *job:
 		default:
 		}
 	}
@@ -336,7 +415,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
@@ -393,14 +472,14 @@ type rpcMessage struct {
 	Error  any             `json:"error"`
 }
 
-func (m rpcMessage) uintID() uint64 {
+func (m *rpcMessage) uintID() uint64 {
 	switch v := m.ID.(type) {
 	case float64:
 		return uint64(v)
 	case int:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case int64:
-		return uint64(v)
+		return uint64(v) //nolint:gosec // JSON-RPC ids are small positives; a negative wraps to an unmatched key only
 	case string:
 		n, _ := strconv.ParseUint(v, 10, 64)
 		return n
@@ -443,6 +522,12 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		return rpcResponse{}, fmt.Errorf("stratumv1: write: %w", err)
 	}
 
+	// Bound the wait itself: a pool that keeps the TCP connection alive
+	// but stops answering would otherwise leak this goroutine and the
+	// pending[id] entry for the whole session. 60 s is far beyond any
+	// legitimate submit latency while still releasing the goroutine.
+	timer := time.NewTimer(callTimeout)
+	defer timer.Stop()
 	select {
 	case r, ok := <-respCh:
 		if !ok {
@@ -454,6 +539,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
 		return rpcResponse{}, ctx.Err()
+	case <-timer.C:
+		s.pendingMu.Lock()
+		delete(s.pending, id)
+		s.pendingMu.Unlock()
+		return rpcResponse{}, fmt.Errorf("stratumv1: %s timed out after %s", method, callTimeout)
 	}
 }
 
