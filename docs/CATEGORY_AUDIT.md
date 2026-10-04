@@ -4505,6 +4505,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 860 update — verb-scope + cast-bound + conv-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%v` applied to the `error` itself inside `fmt.Errorf` — loses the wrap chain (`errors.Is/As` fail). | ✅ Clean: `%v` appears only on non-error args (difficulty float, Policy enum, arg list); the error arg always uses `%w` (104 sites; sole deliberate `%v`-on-error at config.go:769, documented opaque-message choice — s839). |
+| M | `float64→int`/`int→uint32` casts on pool-controlled values — truncation or sign flip. | ✅ Clean: all casts bounded upstream — quantile index clamps by construction, `NonceStep` = NumCPU, `MsgLength` payload pre-bounded, big.Int mantissa finite-checked. |
+| P | `string↔[]byte` conversion inside a hot loop — per-iteration allocation churn. | ✅ Clean: zero conversions inside loops — all conversion sites are cold-path (s758). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
