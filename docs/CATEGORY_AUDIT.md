@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1005 update — decide-input + determinism + floor-reason audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `Decide` accepting NaN/Inf/negative margin or floor — hysteresis silently disabling or flooring everything. | ✅ Clean: `HysteresisMargin` and `MinYieldSatsPerSec` each reject non-negative-finite violations before any work; nil Input and invalid Policy are errors too (the session-331/#443 guard). |
+| M | Duplicate device IDs silently ignored, or non-deterministic allocation order diffing as churn. | ✅ Clean: duplicates rejected up front; the device slice is copied and sorted by Identity.ID so identical inputs produce byte-identical Allocations (relied on by tests and log diffs). |
+| S | A device with streams that merely fail the profitability floor reported identically to one with no compatible stream — operator can't tell "nothing wanted me" from "not worth running". | ✅ Clean: `belowFloor` is tracked through the candidate pass and the idle `Reason` names the floor (`"all compatible streams below minimum yield floor %.4g sats/s"`). |
+| M | A hysteresis hold looking identical to "no better option existed" — margin cost invisible. | ✅ Clean: `Held` reports a suppressed strictly-better candidate (including exact-tie as not-held) while `ForegoneSatsPerSec` quantifies the yield magnitude sacrificed — count and cost are separate fields. |
+| M | Runtime degradation (all streams offline / none compatible) erroring instead of degrading. | ✅ Clean: Decide errors only on malformed input; unallocatable devices are left idle and counted in `SkippedDevice`. |
+
+All packages build, vet, and test green.
