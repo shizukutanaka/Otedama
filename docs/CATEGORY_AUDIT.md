@@ -3229,3 +3229,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1302 update — deprecated-API census wave 2
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `os.IsExist`/`os.IsPermission`/`os.IsTimeout`/`strings.Title`/`bytes.Title`/`io/ioutil` — legacy predicate & string APIs | ✓ zero call sites across the tree |
+| M | `os.IsNotExist` residual sites | ⚠️ Noted — fully covered by open PRs: #1382 (logfile_test:85, cmd wallet_test:136/172, lightning wallet_test:396) + #1333 (config_file_test:113/124); zero sites will remain once both merge |
+| R | `sort` package imports | ✓ zero — merged #1235/#619 completed the `slices` migration; only a comment mentions sorting |
+| R | `rand.Read`/`rand.Reader`/`rand.Int` sites | ✓ all crypto/rand (seed material, Noise ephemeral keys, test cert generation, `rand.Int` in engine/setup.go) — none deprecated; math/rand only in tests via `rand.New(rand.NewSource(seed))` for deterministic property/fuzz inputs (not deprecated; v2 migration optional) |
+
