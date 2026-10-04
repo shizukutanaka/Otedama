@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GOMAXPROCS`/`debug.SetGCPercent`/`FreeOSMemory` — hidden global tuning the operator cannot see. | ✅ Clean: absent — no runtime knobs are mutated; scheduling/GC stay under the Go runtime's defaults (README documents GOMAXPROCS as the env lever). |
+| M | `runtime.NumCPU()` used where a bounded worker count was intended — thread explosion on big machines. | ✅ Clean: `miner` uses `NumCPU` only as the `Threads: 0` default (documented); operator flags can cap it. |
+| S | `runtime.GOOS` sprinkled through production logic — untestable platform forks. | ✅ Clean: production GOOS dispatch lives in `daemon/service_paths.go` behind build-tagged platforms; elsewhere it appears only in test skips. |
+
+All packages build, vet, and test green.
