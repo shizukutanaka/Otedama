@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 826 update — int-to-rune + fmt-under-lock + id-string audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `string(int)` conversion — vet-flagged rune-vs-int bug producing a single unexpected rune. | ✅ Clean: all `string(x)` sites convert named string types (`ID`, `Language`) or `[]byte` — zero int-to-string casts (vet would also flag them). |
+| P | `Sprintf`/`Sprint` while holding a mutex — allocation + formatting under lock serializes the critical section. | ✅ Clean: `arbitrate.go:166-171` prunes under `streamsMu`, unlocks, *then* formats; `poolproto.go:346` defers unlock around a map mutation — no formatting inside either critical section (verified session 632). |
+| S | Named string types compared via `string(x)` round-trips — allocation and lost type safety. | ✅ Benign: `bundle.go:70` compares catalog language tags across package boundary where the underlying string comparison is the intent — one-off cold path. |
+
+All packages build, vet, and test green.
