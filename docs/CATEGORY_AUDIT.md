@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1061 update — test-meta defect family (goroutine asserts + env mutation + shared globals)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `t.Fatal`/`FailNow` inside a spawned goroutine (silently fails to stop the test; vet testinggoroutine class). | ✅ Clean: zero occurrences across the 26 test files that spawn goroutines; concurrent tests use the legal `t.Errorf` + `wg.Wait()` fan-in pattern (verified in wallet_extras, extractors, logger_extras, btccrypto, engine). |
+| M | `os.Setenv` without restore, or env mutation racing `t.Parallel`. | ✅ Clean: only three mutation sites (HOME ×2, OTEDAMA_CONFIG ×1), all save-old + `defer`-restore; the enclosing files contain zero `t.Parallel` calls so no cross-test env race exists. |
+| M | Shared package-level test globals mutated without restore. | ✅ Clean: all eight package-level vars are immutable error sentinels (`errInjected`, `errExhausted`, `errIO`), compile-time catalogs, or seam-savers (`realRunCmd`, `realGoos`) whose overrides are restored via `t.Cleanup`. |
+| S | Vet's `testinggoroutine` analyzer. | ✅ Clean: `go vet ./...` reports nothing for the class. |
+
+All packages build, vet, and test green.
