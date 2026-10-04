@@ -413,6 +413,35 @@ func TestDialer_Negotiate_PoolRejectsChannel(t *testing.T) {
 	}
 }
 
+func TestDialer_Negotiate_OutOfRangeVersion(t *testing.T) {
+	// A pool answering SetupConnectionSuccess with a version outside the
+	// client's declared [MinVersion, MaxVersion] must fail the handshake —
+	// subsequent frames would be misinterpreted under a protocol revision
+	// the client never claimed to speak.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 99})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Fatal("Negotiate should fail when pool negotiates an out-of-range version")
+	}
+	if !errors.Is(err, poolproto.ErrHandshakeFailed) {
+		t.Fatalf("expected ErrHandshakeFailed, got %v", err)
+	}
+}
+
 // ============================================================================
 // Session tests
 // ============================================================================

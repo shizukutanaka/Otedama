@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1239 update — sv2-apps v0.8.0 learning pass
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| setup-version-range | `SetupConnectionSuccess.UsedVersion` decoded but never checked against the declared [MinVersion, MaxVersion] — a pool could negotiate a revision the client doesn't speak (sv2-apps #695 same class) | **S: fixed** — dialer rejects out-of-range versions with ErrHandshakeFailed + test |
+| setup-frame-order | Handshake already rejects non-setup frames pre-setup and non-channel frames pre-open | Clean |
+| dns-try-all | `net.Dialer` already iterates resolved addresses (sv2-apps #847 class) — not applicable to Go client | Clean |
+
+Other v0.8.0 fixes reviewed and not applicable client-side (tProxy lifecycle, JDC extranonce allocator, share ordering).

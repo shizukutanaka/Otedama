@@ -141,6 +141,10 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
+		return nil, fmt.Errorf("%w: pool negotiated version %d outside declared range [%d, %d]",
+			poolproto.ErrHandshakeFailed, v, sc.MinVersion, sc.MaxVersion)
+	}
 
 	// OpenMiningChannel.
 	omc := stratum.OpenMiningChannel{
