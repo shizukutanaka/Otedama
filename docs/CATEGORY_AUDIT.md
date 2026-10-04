@@ -1745,3 +1745,75 @@ All packages build, vet, and test green.
 | M | `Adapter` mis-mapping a level string the engine emits (e.g. "warning"). | ✅ Clean: `strings.ToLower` then explicit debug/warn|warning/error cases, Info fallback. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 719 update — error-receiver + unwrap-cycle + racy-len audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Error()` on the wrong receiver kind — a pointer-receiver `Error()` on a type passed by value (interface never satisfied), or value-receiver on a type whose address errors can't compare. | ✅ Clean: one prod `Error()` — `(*fatalError).Error()` on the unexported sentinel — is constructed and propagated as `*fatalError` throughout; test-only sites match their own usage. No value/pointer mismatch. |
+| M | Custom `Unwrap() error` returning itself or forming a cycle — infinite `errors.Is/As` loops. | ✅ Absent: zero custom `Unwrap` implementations — all wrapping goes through `%w` in `fmt.Errorf`, which cannot cycle. |
+| P | `len(ch)`/`cap(ch)` channel probes or `len(map)` reads used as flow control across goroutines — racy snapshots racing producers/deleters. | ✅ Absent: zero `len(ch)`/`cap(ch)` sites; the `len()` checks that do exist are owner-local invariants (job-FIFO caps under the owning goroutine/lock — same scopes s553/s672 verified) or wire/buffer bounds on local slices. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 720 update — float-trunc + rune-width + round-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `int(float)` truncation toward zero on yield/duration/rate math — silently flooring fractional values (or inverting sign expectation on negatives). | ✅ Clean: the only float→int casts are the documented sats *display* estimate (`uint64(satsAcc.observe(...))`, whole-sat presentation) and `int(d.Seconds())%60` TUI formatting; all other `int()`/`uint32()` casts are on integer/bounded fields (MsgLength, Threads, ioctl Col). |
+| S | `[]rune`/`[]byte` width confusion — iterating bytes where runes were meant (mangling multibyte pool text or validation positions). | ✅ Clean: rune conversion happens exactly where needed — the two pool-text sanitizers (`poolproto.go`, `stratumv1/parse.go`) and the `[]rune` Levenshtein in `did-you-mean` — and all `[]byte` conversions are on ASCII-canonical data (hashes, protocol names, KDF inputs). |
+| P | `Truncate`/`Round`/`Floor` direction errors on staleness or rate math (rounding a bound the wrong way). | ✅ Clean: all four sites are presentation-side — `quiet.Truncate(time.Second)` and `.Round(time.Millisecond)` format durations/latency for display; no truncation feeds a staleness or pricing comparison. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 721 update — marshal-impl + pem-decode + bench-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `MarshalJSON`/`UnmarshalJSON`/`MarshalText`/`UnmarshalText`/`MarshalBinary` implementations — hand-rolled codecs that can panic on hostile input or round-trip lossily. | ✅ Absent: zero custom marshal/unmarshal methods — all wire/serialization goes through `json`/`yaml` tags on stock codecs; no hand-rolled codec exists to misbehave. |
+| S | `pem.Decode`/`AppendCertsFromPEM` misuse on CA-file loading — unchecked return accepting a garbage/empty cert pool, or block-type confusion accepting non-CERTIFICATE blocks. | ✅ Clean: all 3 sites (`stratum/tls.go`, `stratumv1/tls.go`, `doctor/checks.go`) use `AppendCertsFromPEM` (not raw `pem.Decode`) and branch on its bool — failure surfaces as an explicit "no valid CA certificates" error. The API itself handles block filtering and multi-block PEMs; partial garbage is tolerated only when ≥1 valid CERTIFICATE parses. |
+| M | Benchmark-loop misuse — missing `b.N` iteration, setup inside the timed region, or unreported allocations skewing results. | ✅ Clean: all 11 benchmarks use the canonical `for i := 0; i < b.N; i++` loop, hoist setup before `b.ResetTimer()` where needed, and call `b.ReportAllocs()` — no timing-region pollution. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 722 update — time-add + error-discard + blank-import audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `time.Add`/`AddDate` on unbounded or user-controlled durations — a far-future/wrapped deadline silently disabling a guard (or negative duration pre-expiring it). | ✅ Clean: every `time.Add` uses a compile-time or config-validated constant (`handshakeTimeout`, `10s`, `5m`, `-staleTempMaxAge`) — no unbounded duration reaches a deadline computation. |
+| S | `_ =` swallowing *error* values — a failed operation whose error was the only signal. | ✅ Clean: all discards are documented unactionables — HTTP health-endpoint writes (client disconnect can't be fixed), `fmt.Sscanf` where a malformed value fails validation downstream, bounded `io.Copy` drains before Close, and one explicitly commented `// intentionally ignored: non-fatal`. |
+| M | Blank imports (`import _ "..."`) with undocumented side effects — hidden init() work the reader can't see. | ✅ Clean: 2 sites, both `_ "internal/poolproto/stratumv1"` — the documented self-registration import (V1's init() registers its dialer into the poolproto registry); no hidden side effect beyond the deliberate one. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 723 update — builtin-adoption + chan-convention + slices-delete audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `clear`/`min`/`max` builtin misuse or non-adoption — `clear` on a map other code still views (wiping shared state), or hand-rolled clamps where the builtins belong. | ✅ Clean: the single `clear` (`opts.activity` in the arbitration loop) wipes a private per-round scratch map that is rebuilt each iteration — no shared view exists; the `min`/`max` sites are the canonical clamp idiom (yield floors, extranonce2 bound, Levenshtein DP). |
+| M | `chan bool` for pure signals — a bool channel implying a payload it doesn't carry (zero-size `struct{}` is the convention). | ✅ Uniform: zero `chan bool` — all ~40 signal channels (`done`, `started`, `runDone`, limiter tokens, test gates) are `chan struct{}`. |
+| P | `slices.Delete*`/`Insert`/`Replace` tail-pointer retention — a removed element's slot still referencing a live object (GC pin). | ✅ Absent: zero prod `slices.Delete`/`DeleteFunc`/`Insert`/`Replace` sites — removal goes through the bounded-FIFO `s[1:]` pattern (no tail retention beyond the cap) or map `delete`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 724 update — func-compare + raw-fd + header-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `f == g` comparing two func values — always false (or panics on some reflect paths), hiding a broken equality check. | ✅ Clean: zero func==func comparisons; the only `func` hits are method signatures and predicate arguments (`strings.IndexFunc`). |
+| M | `os.NewFile`/`f.Fd()` escapes — wrapping a raw fd whose ownership then competes with the GC'd `*os.File` (double-close). | ✅ Clean: zero `os.NewFile`; the 2 `Fd()` sites are the platform-split TTY-width ioctls (`unix.IoctlGetWinsize`, `windows.GetConsoleScreenBufferInfo`) — the fd is borrowed read-only for the call, no ownership transfer. |
+| L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
+
+All packages build, vet, and test green.
