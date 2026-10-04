@@ -2327,6 +2327,21 @@ No defect requiring a code change. All packages build, vet, and test green.
 
 ---
 
+## Session 1087 update — godoc presence census
+
+Exported package-level declarations (`func`/`type`/`var`/`const`) without
+a preceding doc comment would fail the repo's godoc requirement
+(CLAUDE.md: "internal/ 配下も主要な型とパブリック関数には godoc").
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Census across all non-test files: **zero** exported top-level declarations missing a doc comment | S |
+| S | `const`/`var` block members are documented at block level — convention holds | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
