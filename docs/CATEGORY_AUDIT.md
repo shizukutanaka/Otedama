@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1207 update — skills/*.md reference parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `otedama <cmd>` / `--flag` / `make <target>` refs | ✅ Clean — all real; the only matched gaps (`migrate-from-v2`, `make test-e2e`) are documented session-483 errata in-place, and `migrate-from-v2` is a real Make target (Makefile:331), not a phantom subcommand |
+
+All packages build, vet, and test green.
