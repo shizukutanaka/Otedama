@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 840 update — bits-absence + strconv-discard + embed-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `math/bits` low-level bit ops where a clear expression would do — readability vs speed trade. | ✅ Clean: absent — the one "bits" hit is a BIP-39 entropy comment; all bit ops are plain operators on protocol fields. |
+| M | `strconv.Atoi/ParseUint` with `_` error discard — non-numeric input silently becomes 0. | ✅ Benign: two discards — `parse.go:268` feeds `d.Port` from an already-structured host:port split (non-numeric yields 0 → rejected by downstream port validation); `stratumv1.go:484` parses a protocol counter where 0 is the safe fallback. All other 10+ parses check errors with explicit bit sizes. |
+| S | `//go:embed` of large/secret material — accidental binary bloat or secret embedding. | ✅ Clean: absent — no embed directives. |
+
+All packages build, vet, and test green.
