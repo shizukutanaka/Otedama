@@ -33,6 +33,7 @@
 package stratum
 
 import (
+	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/sha256"
@@ -49,7 +50,6 @@ import (
 // the CipherState pair ready for symmetric encryption.
 type HandshakeState struct {
 	localEphemeral *ecdh.PrivateKey
-	remoteStatic   *ecdh.PublicKey
 	h              [32]byte // running hash (h)
 	ck             [32]byte // chaining key
 	complete       bool
@@ -59,14 +59,25 @@ type HandshakeState struct {
 
 // CipherState encrypts/decrypts transport messages after the handshake.
 type CipherState struct {
-	key [32]byte
-	n   uint64 // nonce counter
+	key  [32]byte
+	n    uint64 // nonce counter
+	aead cipher.AEAD
+}
+
+// aeadFor returns the cipher's AEAD. Handshake-derived states carry one
+// built at derivation; states built from a raw key literal (tests) build
+// it per call, matching the original behavior.
+func (c *CipherState) aeadFor() (cipher.AEAD, error) {
+	if c.aead != nil {
+		return c.aead, nil
+	}
+	return chacha20poly1305.New(c.key[:])
 }
 
 // Encrypt encrypts plaintext with an additional data (AD) and returns
 // the authenticated ciphertext. n is automatically incremented.
 func (c *CipherState) Encrypt(ad, plaintext []byte) ([]byte, error) {
-	aead, err := chacha20poly1305.New(c.key[:])
+	aead, err := c.aeadFor()
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +90,7 @@ func (c *CipherState) Encrypt(ad, plaintext []byte) ([]byte, error) {
 // Decrypt decrypts ciphertext with an additional data (AD) and returns
 // the plaintext. Returns an error if authentication fails.
 func (c *CipherState) Decrypt(ad, ciphertext []byte) ([]byte, error) {
-	aead, err := chacha20poly1305.New(c.key[:])
+	aead, err := c.aeadFor()
 	if err != nil {
 		return nil, err
 	}
@@ -200,27 +211,36 @@ func (hs *HandshakeState) mixKey(inputKey []byte) {
 func (hs *HandshakeState) deriveTransportKeys() {
 	ck, k1, k2 := hkdf3(hs.ck[:])
 	_ = ck
-	hs.sendCipher = &CipherState{}
-	copy(hs.sendCipher.key[:], k1)
-	hs.recvCipher = &CipherState{}
-	copy(hs.recvCipher.key[:], k2)
+	var key [32]byte
+	copy(key[:], k1)
+	hs.sendCipher = newCipherState(key)
+	copy(key[:], k2)
+	hs.recvCipher = newCipherState(key)
+}
+
+// newCipherState builds a CipherState with its AEAD constructed up front:
+// chacha20poly1305.New performs the key schedule once per session rather
+// than once per message. The key is always 32 bytes so New cannot fail.
+func newCipherState(key [32]byte) *CipherState {
+	aead, _ := chacha20poly1305.New(key[:])
+	return &CipherState{key: key, aead: aead}
 }
 
 // hkdf2 returns two 32-byte outputs from HKDF using SHA-256.
 // Used for HKDF(ck, input) → (new_ck, output_key).
 func hkdf2(ck, input []byte) ([]byte, []byte) {
-	tempKey := hmacSHA256(ck, input)
-	out1 := hmacSHA256(tempKey, []byte{0x01})
-	out2 := hmacSHA256(tempKey, append(out1, 0x02))
+	tempKey := hmacSHA256Pooled(ck, input)
+	out1 := hmacSHA256Pooled(tempKey, []byte{0x01})
+	out2 := hmacSHA256Pooled(tempKey, append(out1, 0x02))
 	return out1, out2
 }
 
 // hkdf3 returns three 32-byte outputs (for split).
 func hkdf3(ck []byte) ([]byte, []byte, []byte) {
-	tempKey := hmacSHA256(ck, []byte{})
-	out1 := hmacSHA256(tempKey, []byte{0x01})
-	out2 := hmacSHA256(tempKey, append(out1, 0x02))
-	out3 := hmacSHA256(tempKey, append(out2, 0x03))
+	tempKey := hmacSHA256Pooled(ck, []byte{})
+	out1 := hmacSHA256Pooled(tempKey, []byte{0x01})
+	out2 := hmacSHA256Pooled(tempKey, append(out1, 0x02))
+	out3 := hmacSHA256Pooled(tempKey, append(out2, 0x03))
 	return out1, out2, out3
 }
 
@@ -289,7 +309,7 @@ func (c *EncryptedConn) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("noise: message too large: %d-byte ciphertext exceeds %d (plaintext %d)", len(ct), maxNoiseFrame, len(p))
 	}
 	var lenBuf [2]byte
-	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct)))
+	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct))) //nolint:gosec // len(ct) <= maxNoiseFrame is checked two lines above
 	if _, err := c.rw.Write(lenBuf[:]); err != nil {
 		return 0, err
 	}
