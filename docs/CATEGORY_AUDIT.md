@@ -2166,6 +2166,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 915 update — nbits-bitmath + difficulty-target + meets-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `TargetFromNBits` accepting a malformed compact target — grinding into a void job. | ✅ Clean: rejects negative-mantissa bit, `exp < 3`, zero mantissa (dead-end target), and >256-bit overflow — four distinct errors surfaced via `applyJob`/`updateWork`. |
+| M | `TargetFromDifficulty` on non-positive/NaN pool difficulty — panic or poisoned target. | ✅ Clean: `!(d > 0) || IsInf` reject; post-division non-positive and >32-byte targets rejected. |
+| S | `MeetsTarget` using `<` instead of `<=` — a hash exactly equal to the target falsely rejected. | ✅ Clean: `hash.LessOrEqual(target)` — the PoW spec's "≤ target" comparison. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
