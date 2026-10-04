@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 893 update — http-server-timeout + default-mux + bare-client audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `http.Server` without timeouts — slowloris + goroutine pileup under a hung client. | ✅ Clean: `httpserver` sets `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` 10s, `IdleTimeout` 60s. |
+| M | `http.DefaultServeMux`/`Handle`/`HandleFunc` on the global mux — pprof or handlers registering package-wide. | ✅ Clean: dedicated `http.NewServeMux`; the pprof comment at server.go:44 documents why `net/http/pprof`'s own init is avoided. |
+| S | `http.Get`/`Post`/`DefaultClient` — unbounded default client on outbound calls. | ✅ Clean: absent — every outbound request is `NewRequestWithContext` + a `&http.Client{Timeout: …}` (s835/836/868 verified). |
+
+All packages build, vet, and test green.
