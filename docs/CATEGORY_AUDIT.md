@@ -1854,6 +1854,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 888 update — embed-surface + unsafe2 + bit-intrinsic audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go:embed` shipping mutable config/data into the binary — stale defaults hidden in the image. | ✅ Clean: absent — nothing is embedded; `config.yaml.example` is documentation, loaded at runtime from the operator's filesystem. |
+| M | Pointer-trick packages (`unsafe`-backed helpers) — unchecked layout/size assumptions. | ✅ Clean: absent — s879 verified zero `unsafe`/`uintptr`/`reflect` in prod. |
+| S | `math/bits` intrinsics or hand-rolled bit tricks beyond spec ops. | ✅ Clean: absent — s885 verified; spec bit math uses raw shifts/masks only. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
