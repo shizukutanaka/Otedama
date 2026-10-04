@@ -7,6 +7,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -70,7 +71,7 @@ func (c *cappedLogFile) rotateLocked() error {
 	_ = c.f.Close()
 	oldPath := c.path + ".old"
 	_ = os.Remove(oldPath)
-	if err := os.Rename(c.path, oldPath); err != nil && !os.IsNotExist(err) {
+	if err := os.Rename(c.path, oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return c.openLocked()
 	}
 	c.size = 0
