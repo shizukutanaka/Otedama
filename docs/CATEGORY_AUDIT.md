@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 994 update — unit-path + binary-pin + token-quote audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A service unit pointing at a symlink that later swings — `ExecStart` silently running the wrong binary after an upgrade. | ✅ Clean: `NewManager` resolves `os.Executable` through `EvalSymlinks` once at install time, so the unit pins the real path. |
+| M | `systemdUnitPath` ignoring `XDG_CONFIG_HOME` — the unit lands outside the manager's own config root on non-default setups. | ⏳ Tracked: fix is open #807 (path join vs `config.DefaultDataDir` convention). |
+| S | A flag value or binary path containing whitespace/quote characters split into extra arguments by the service manager's parser. | ✅ Clean: `serviceArgv` forwards only non-empty flags; `serviceArgs` routes every token through `quoteToken`, which both systemd `ExecStart=` and `sc.exe binPath=` parse as one quoted argument. |
+| S | A value containing a control character landing raw in the unit file — a literal newline breaking out of `ExecStart=` into an injected directive. | ⏳ Tracked: `quoteToken` covers C0 + DEL but not the C1 range (0x80–0x9f); the `unicode.IsControl` fix is open #809. The XML-embedded launchd path is separately safe via `xmlEscape` (all five specials). |
+| M | `status` lying about state — a removed unit reported installed or a dead service reported running. | ✅ Clean: `Installed` is `os.Stat` on the unit file, `Running` is `systemctl --user is-active` — two independent signals reported separately. |
+
+All packages build, vet, and test green.
