@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1037 update — metrics-test atomicity + panic-contract + exposition-spec audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Counter concurrent increments losing updates (atomicity asserted, never falsified). | ✅ Clean: `TestCounter_ConcurrentIncIsAtomic` runs 50×200 `Inc()` and asserts the exact total — a lost update fails numerically, not just under `-race`. |
+| M | Duplicate registration silently splitting series. | ✅ Clean both types: `NewCounter`/`NewGauge` with identical name+labels returns the *same instance* — idempotent creation is pinned; different labels create distinct series. |
+| M | Panic-at-registration contract under-pinned (invalid names, cross-type). | ✅ Clean: invalid metric name, invalid label name, valid-name no-panic, **and** counter↔gauge cross-type detected *across different label sets* — every documented panic path is exercised. |
+| M | Exposition spec details drifting (escapes, ordering, special floats). | ✅ Clean: HELP escaping, label `{k="v"}` spec form, quote/backslash/newline escapes, deterministic sorted output, same-name label ordering, NaN/+Inf/-Inf emission — the wire format is fully pinned. |
+| S | WriteText writer/collector error swallowing. | ✅ Clean: type-line, sample-line, writer, and collector error paths each propagate — five propagation tests. Runtime collector: required metrics present, `go_info` carries the version label. |
+
+All packages build, vet, and test green.
