@@ -3939,6 +3939,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 810 update — tick-leak + defer-order + nil-empty audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Tick` used where a stoppable ticker is needed — leaks the ticker forever. | ✅ Clean: zero `time.Tick(` sites — every ticker is `time.NewTicker` with a `Stop` on exit (verified session 665). |
+| M | Resource acquired, early `return` taken before `defer release` is registered — leak on the early path. | ✅ Clean: every `defer` unlock/close sits immediately after the acquisition it pairs with; no acquisition precedes an early return without its defer (verified sessions 572/696). |
+| S | `x == nil` check for slices/maps where `len(x) == 0` is the real invariant — nil/empty conflation. | ✅ Benign: `nil` checks target pointers (`w == nil`) and wire fields (`remoteEph`); length checks are separate clauses — no `s == nil` used as the empty test on a slice. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
