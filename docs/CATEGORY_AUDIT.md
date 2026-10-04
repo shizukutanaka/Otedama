@@ -2278,6 +2278,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 925 update — effective-yield + policy-score + rating-scale audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | NaN/±Inf quote winning the sort or poisoning `TotalYield`. | ✅ Clean: `Yield.Effective()` collapses `!(s>0) || !(c>0) || IsInf` to 0 — bad quotes can never win; the s325/s331 fix is in-tree. |
+| M | Rating bonus scale inconsistent with docs (e.g. "~10% yield" comment vs "1% applied" code). | ✅ Clean: constants extracted — `ratingBonusPerPoint=0.01`, max rating 10 → 10% total premium; comment and arithmetic now share one source of truth. |
+| S | `policyScore` on an unknown policy panicking or zeroing the ranking. | ✅ Clean: `default` returns raw yield — degrades to earnings ranking (and `Decide` rejects invalid policy upstream anyway). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
