@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 999 update — arb-pause-persistence + stale-stream + merge-alias audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | An arbitration pause silently undone by the next pool job — `applyAllocation`'s one-shot `SetWork(nil)` re-armed by job dispatch. | ✅ Clean: `reconcileArbPauses` rewrites the shared `pauseSet` from every Decide result BEFORE `applyAllocation` runs, so dispatch sees the current allocation, not a stale one. |
+| S | A dead provider's last quote routing devices to a revenue source that no longer exists. | ✅ Clean: `pruneStaleStreams` expires streams not quoted in `streamStaleTimeout` (3 min = 3–6× cadence); pre-seeded streams with no recorded quote are never pruned, and `now` is injected for deterministic tests. |
+| M | `powerFloor` gating arbitration when power is unconfigured — a fail-closed zero-rate freezing all devices. | ✅ Clean: it returns 0 (no floor) when power data, rate source, or devices are absent — fail-open by design, with the heterogeneous-rig approximation documented. |
+| M | `Decide` hard-erroring crashing the loop, or panic on nil hysteresis/metrics. | ✅ Clean: Decide errors log warn and `continue`; `margin == 0` maps to `defaultHysteresisPct`; `minYield` takes `max(minYield, powerFloor)`. |
+| M | `streamsSlice` aliasing the live `YieldPerDevice` map — arbitration mutating engine state, or same-ID devices losing per-device yields. | ✅ Clean: entries sharing a StreamID are merged via a deep-copied `YieldPerDevice`; the comment explains why a naive first-seen drops all but one device's yields. |
+
+All packages build, vet, and test green.
