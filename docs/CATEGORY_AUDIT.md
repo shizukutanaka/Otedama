@@ -4023,6 +4023,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 818 update — request-ctx + json-number + strict-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `http.NewRequest` (Background-bound) where caller ctx should flow — cancellability lost. | ✅ Clean: zero bare `http.NewRequest(` — all 5 sites use `NewRequestWithContext`. |
+| S | `json.Decoder.UseNumber`/`json.Number` — float precision or int-vs-float misdecode on wire values. | ✅ Clean: absent — V1 numbers decode into `float64`/`json.RawMessage` with explicit per-field conversion (difficulty is spec-defined as f64). |
+| M | Missing `DisallowUnknownFields` on wire structs — typo'd pool fields silently ignored. | ✅ Benign: not applicable — JSON-RPC notifications are extensible by spec; V1 params decode through `[]json.RawMessage` positionally (not name-keyed structs). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
