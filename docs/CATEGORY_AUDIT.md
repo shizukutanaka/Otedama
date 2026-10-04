@@ -2722,6 +2722,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1148 update — duplicate-symbol census
+
+Same top-level name reused across packages — name-collision risk.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 74 duplicate names; every one is (a) in a different package so always qualified (`hal.Registry` vs `metrics.Registry`), (b) an intentional build-tag twin (`RegisterGPULinux`, `terminalWidth`), or (c) a documented seam mirror between engine's inline V2 path and poolproto's dialer (`sendMsg`, `readLoop`, `prevHash`, `prevNBits`, `handshakeTimeout`) | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
