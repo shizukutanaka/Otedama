@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1206 update — TROUBLESHOOTING.md parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `otedama <cmd>` references | ✅ Clean — every subcommand is dispatched; `--log-level` is a real flag (run.go/service.go) and the doc correctly notes doctor does not take it (L232-236) |
+| S | `--flag` names | ✅ Clean — all implemented |
+
+All packages build, vet, and test green.
