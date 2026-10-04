@@ -2684,6 +2684,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1145 update — import-grouping census
+
+Import block grouping: stdlib / external / internal separation.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero mixed-group imports — every file separates internal Otedama imports from stdlib; 7 external-dependency imports all correctly grouped | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
