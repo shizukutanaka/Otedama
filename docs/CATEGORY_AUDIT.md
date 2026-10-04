@@ -4047,6 +4047,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 820 update — pkg-shadow + comma-ok-sig + import-collision audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Local variable named after an imported package (`url :=`, `path :=`) — shadowing blocks later package use and misleads readers. | ✅ Benign: `path :=`/`url :=` appear only in files that import neither `path` nor `net/url` — no import collision; the names read naturally as locals. |
+| M | `(T, bool)` comma-ok returns where an `error` would carry needed detail — callers forced to guess the failure reason. | ✅ Clean: all 8 sites model *absence*, not failure — `Lookup`, `parse*`, `BTCUSDRate` return ok=false on "not present/not applicable" with real errors surfaced separately where they exist. |
+| S | Exported symbols colliding with stdlib package names in the same file scope. | ✅ Clean: none — identifiers shadow only non-imported packages. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
