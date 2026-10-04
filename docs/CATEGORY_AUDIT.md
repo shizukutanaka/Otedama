@@ -3529,6 +3529,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 762 update — ctx-rewrap + map-capacity + else-fallthrough audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Layered `context.WithTimeout/WithCancel` — an inner deadline longer than the outer silently extending runtime. | ✅ Clean: Go takes the earliest deadline across the chain — layered sites are deliberate tighter bounds (dial 15s, handshake 30s, per-request 5s) scoped to their phase; cancellation propagates to all children. |
+| P | `make(map)` without a capacity hint — repeated rehashing on growth-heavy maps. | ✅ Benign: the uncapped maps are all small bounded sets (per-stream counters, per-reason rejection counters, session job maps already depth-bounded) — the hint is a perf nicety only, never a correctness issue, and these maps stay tiny. |
+| M | `else`-chain fallthrough — a branch intended to return continuing into subsequent logic. | ✅ Clean: the codebase uses early-return style throughout; classification chains (verified sessions 754/749) are terminal per branch — no post-`else` continuation hazards found. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
