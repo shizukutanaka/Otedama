@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1189 update — workflow secret-name census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Kubeconfig secret naming | ⚠️ Noted — three schemes coexist: `KUBE_CONFIG` (ci-cd.yml), `KUBE_CONFIG_{STAGING,PRODUCTION}` (ci.yml), `{STAGING,PRODUCTION}_KUBECONFIG` (deploy.yml). Per-env credentials must be duplicated under both spellings or one pipeline's deploy step always no-ops (deploy.yml's `!= ''` guards make the miss graceful) |
+| S | Other secret names | ✅ Clean — `DOCKER_USERNAME`/`DOCKER_PASSWORD`, `SLACK_WEBHOOK`, `GITHUB_TOKEN` consistent across workflows; all job-level `permissions:` blocks present |
+
+All packages build, vet, and test green.
