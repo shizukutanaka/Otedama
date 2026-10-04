@@ -1731,3 +1731,21 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1081 update — named-bound constant census
+
+Census of `max*`/`min*`/`default*`/`timeout*` named constants verifying
+name ↔ value ↔ enforced-semantics parity.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `MaxMessageLength` (2^24-1 U24 bound) vs `DefaultMaxFrameSize` (16 MiB decoder cap) — different layers, both godoc-documented | S |
+| S | `maxReconnectWaitSeconds`=300 clamps pool `client.reconnect` wait at stratumv1.go:310 — name matches semantics | S |
+| S | `maxNoiseFrame`=65535 (Noise u16 frame), `maxLineBytes`=64KiB, `maxNoticeRunes`/`maxPoolTextRunes`=256, `DefaultEntropyBits`=256 — all match | S |
+| M | **`MinQuoteInterval`** (provider.go:83, 30s): godoc says providers slower than this are "treated as temporarily unavailable", but the enforced staleness bound is `streamStaleTimeout` = 3 min (arbitrate.go:113) — MinQuoteInterval is advisory only and consumed by no production code (compile-test guard only). Name also reads as a throttle (min spacing) while the doc uses it as a max gap | ⚠️ Noted — advisory constant; renaming/documenting would churn an exported symbol for no behavioral gain |
+| S | `defaultHysteresisPct`=0.05, `arbitrationInterval`=30s — values match their consuming paths | S |
+
+One advisory-level drift noted; no defect requiring a code change.
+All packages build, vet, and test green.
