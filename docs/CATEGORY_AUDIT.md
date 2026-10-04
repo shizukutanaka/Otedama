@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 831 update — break-select + labeled-exit + return-escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `break` inside a `select` case — exits only the select, loop spins on the dead channel. | ✅ Clean: the single select+loop site (`hal/registry.go:175-193`) uses labeled `break loop` — explicit and correct. |
+| S | `return` inside a `select` case — function exits before cleanup/defers? | ✅ Clean: 81 sites; Go `return` in a select case runs deferred calls normally — correct escape semantics. |
+| S | Unlabeled `break` inside `for-select` intending to exit the loop — infinite spin. | ✅ Clean: all loop-exit breaks are labeled (`break loop` at registry.go:178,193); remaining `break` occurrences are doc comments / non-select loops. |
+
+All packages build, vet, and test green.
