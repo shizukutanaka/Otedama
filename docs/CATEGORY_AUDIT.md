@@ -3915,6 +3915,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 804 update — any-assert + byte-iter + ptr-sort audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `v.(T)` assertion on `any` from `json.Unmarshal` — panic on wrong-type assumption (or float64-as-int surprise). | ✅ Clean: the only `any`-assertion sites (`parse.go:292/:299`) use comma-ok form and assert the types encoding/json actually produces (`string`, `float64`) — no int-from-JSON assumptions. |
+| M | Byte-indexing a string containing non-ASCII — slicing mid-rune corrupts text. | ✅ Clean: the flagged byte-index sites (`noise.go:236-238`, `noise_pool.go:66-68`) operate on `[64]byte` HMAC pads, not strings; the URL scheme-strip path touches ASCII-only prefixes. |
+| M | `SortFunc` on a pointer slice comparing pointer identity — nondeterministic order. | ✅ Clean: zero pointer-slice sorts — comparators dereference to value fields (`arbitration` candidates sort by score/ID). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
