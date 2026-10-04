@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1162 update — nil-surface + uintptr census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `uintptr` — zero usages anywhere; no unsafe-size plumbing | Clean |
+| M | V1 JSON-RPC `params` — all 4 call sites pass a non-nil `[]any` literal (`extranonce.subscribe` explicitly `[]any{}` → emits `[]`, never `null`) | Clean |
+| M | doctor JSON doc — `checks` slice starts nil and is append-built; `null` only reachable if zero checks registered (the 17-check registry makes it unreachable); consumed fields are summary+exit_code | ⚠️ Noted |
+
+All packages build, vet, and test green.
