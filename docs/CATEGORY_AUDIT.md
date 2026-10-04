@@ -4011,6 +4011,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 816 update — fatal-in-lib + goroutine-capture + named-snapshot audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `log.Fatal`/`os.Exit` inside library code — kills the host process, skipping cleanup. | ✅ Clean: zero calls in `internal/` (one doc comment mentions `os.Exit(report.ExitCode())` as caller guidance) — exit surface remains `main`-only (verified sessions 562/783). |
+| M | `go func()` closure capturing a mutable loop/outer variable — race or stale-value read. | ✅ Clean: worker spawn passes `threadID` as an explicit parameter; the V1 submit goroutine captures `capturedSess`/`capturedShare` — variables deliberately snapshotted before the `go` statement. |
+| S | Unsnapshotted captures elsewhere in `go func` bodies — implicit dependency on outer mutation. | ✅ Clean: the remaining `go func() {}` bodies read only stable fields (ctx, channels, immutable opts) — the `captured*` naming convention marks the few mutable reads. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
