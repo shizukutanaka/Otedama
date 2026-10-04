@@ -1818,6 +1818,41 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1020 update — milestone checkpoint (deep-package audit pass)
+
+Sessions 992–1019 completed a file-by-file deep read of every production
+package (the "deep audit pass" that began at session 992), adding ~45
+new mechanical-class rows on top of the ~450 verified through session
+991 — roughly **495 defect classes** now verified clean or documented
+benign, with the same `S/M/L/P/E` table and `All packages build, vet,
+and test green` footer on every entry.
+
+Real defects found during the deep pass remain tiny relative to the
+surface covered:
+
+- `updateStream` bridged gross `SatsPerSecond` instead of
+  `NetSatsPerSecond`, discarding provider fee differentials at the
+  arbitration boundary (fixed on the session-1009 branch).
+- All other candidate rows resolved to documented, intentional
+  behavior — e.g. the Akash "(simulated)" marker load-bearing until
+  v3.1.0, Render Network/io.net's documented exclusion from the
+  provider set, BIP-39's decoy-wallet property, and the wallet
+  fingerprint sidecar's recreate-but-never-overwrite rule.
+
+The pass leaves the codebase with: every `internal/` and `cmd/`
+package read end-to-end; known real-defect inventory unchanged apart
+from the item above (the C1 control-char fix #809, XDG manager-env
+fix #807, AEAD reuse #957, wallet-subcommand suggestion #1062, and
+base58 length bound #633 remain the standing open items).
+
+Next axes: keep the ADR-009 cadence; re-audit newly landed code as it
+merges; continue the mechanical-class sweep for any unvisited
+patterns; revisit tracked rows when their owning change lands.
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
