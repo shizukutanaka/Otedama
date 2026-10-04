@@ -3565,6 +3565,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 770 update — ioutil-absence + regexp-absence + fmt-conversion audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Legacy `io/ioutil` usage — deprecated API surviving the modernization sweep. | ✅ Clean: `ioutil.` absent (verified session 715's sweep — no reintroduction). |
+| S | `regexp.MustCompile` inside a hot function — per-call compilation cost. | ✅ Clean: no regexp package use in production code at all — parsers are hand-rolled byte/hex decoders. |
+| S | `fmt.Sprintf("%d"/"%s"/"%v")` for single-value conversion — allocation-heavy alternative to `strconv`. | ✅ Clean: every Sprintf site formats multi-verb output (unit labels, interpolated log lines); no bare single-conversion anywhere. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
