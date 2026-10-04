@@ -3019,6 +3019,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1179 update — HTTP-endpoint + language-surface parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Registered routes vs docs mentions | ✅ Clean — `/healthz` `/readyz` `/metrics` `/` and gated `/debug/pprof/*` are all documented; no phantom endpoints in docs |
+| S | Language surface parity | ✅ Clean — `--language` flag + `OTEDAMA_LANGUAGE` env + `language` yaml key all resolve to the same `config.Language` consumed by the 10-catalog bundle |
+| M | Route-gate documentation | ✅ Clean — pprof mount is behind the `--pprof` flag, matching DEPLOYMENT/API docs |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
