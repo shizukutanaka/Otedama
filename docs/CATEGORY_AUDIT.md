@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 762 update — ctx-rewrap + map-capacity + else-fallthrough audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Layered `context.WithTimeout/WithCancel` — an inner deadline longer than the outer silently extending runtime. | ✅ Clean: Go takes the earliest deadline across the chain — layered sites are deliberate tighter bounds (dial 15s, handshake 30s, per-request 5s) scoped to their phase; cancellation propagates to all children. |
+| P | `make(map)` without a capacity hint — repeated rehashing on growth-heavy maps. | ✅ Benign: the uncapped maps are all small bounded sets (per-stream counters, per-reason rejection counters, session job maps already depth-bounded) — the hint is a perf nicety only, never a correctness issue, and these maps stay tiny. |
+| M | `else`-chain fallthrough — a branch intended to return continuing into subsequent logic. | ✅ Clean: the codebase uses early-return style throughout; classification chains (verified sessions 754/749) are terminal per branch — no post-`else` continuation hazards found. |
+
+All packages build, vet, and test green.
