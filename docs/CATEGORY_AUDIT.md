@@ -1803,3 +1803,15 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1252 update — post-merge-wave integrity + convention-leftover audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Merge-wave semantic breakage — ~300 ledger/code PRs merged in one wave could reintroduce patterns newer fixes removed, or leave the tree unbuildable. | ✅ Clean: fresh `go build ./...`, `go vet ./...`, `go test ./...` on post-wave master — all green. Ledger dedupe: 99 `## Session` blocks, zero duplicate session numbers from the union-merge passes. |
+| M | Deprecated-pattern re-landing — merged code PRs branched from older masters can carry `os.IsNotExist`, `sort.Ints`, `interface{}`, `ioutil`, bare `fmt.Sprintf("%d"/"%q")` back in. | ⚠️ Noted (fixed): `sort.*`/`interface{}`/`ioutil`/`fmt.Sprintf` bare sites all zero — but `os.IsNotExist` ×2 in `internal/config/config_file_test.go` (original session-50 code, never covered by #1239) — modernized to `errors.Is(err, os.ErrNotExist)` this round. The `fmt.Errorf` verb-free literals that remain are by user decision (#1185 closed unmerged) — not a regression. |
+| L | `unicode.IsControl` + `strconv.Quote` divergence in `quoteToken` — master carried the strconv modernization while open #809 carried the C1 gap fix; an unmerged-order merge would lose one intent. | ✅ Clean: union-resolved on #809's branch to keep both intents (`unicode.IsControl` + `strconv.Quote`); pushed and mergeable. |
+
+All packages build, vet, and test green.
