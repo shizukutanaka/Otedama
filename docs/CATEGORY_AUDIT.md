@@ -3625,6 +3625,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 776 update — error-construct + import-shadow + init-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `errors.New(fmt.Sprintf(...))` — wrapping a formatter in a constructor instead of `fmt.Errorf`. | ✅ Clean: zero sites — formatted errors all use `fmt.Errorf` directly. |
+| S | Exported `var`/`const` shadowing an imported package name — accidental identifier capture in the package scope. | ✅ Clean: no package-level identifier collides with an imported package name. |
+| S | `fmt.Errorf` with no format verbs — needlessly formatting where `errors.New` suffices. | ✅ Benign: static-message sites deliberately use `fmt.Errorf` so all error construction reads one form (single-idiom consistency); semantics identical. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
