@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -55,6 +56,14 @@ func TestYield_Effective(t *testing.T) {
 		{"zero confidence", Yield{100, 0}, 0},
 		{"negative sats treated as zero", Yield{-50, 1.0}, 0},
 		{"negative confidence treated as zero", Yield{100, -0.5}, 0},
+		// A provider computing 0/0 upstream can hand back NaN; it must
+		// not win the sort or poison TotalYield — collapse to zero yield.
+		{"NaN sats treated as zero", Yield{math.NaN(), 1.0}, 0},
+		{"NaN confidence treated as zero", Yield{100, math.NaN()}, 0},
+		{"+Inf sats treated as zero", Yield{math.Inf(1), 1.0}, 0},
+		{"+Inf confidence treated as zero", Yield{100, math.Inf(1)}, 0},
+		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
+		{"negative sats and confidence treated as zero", Yield{-50, -0.5}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,16 +77,35 @@ func TestYield_Effective(t *testing.T) {
 // ----- Decide: malformed input -----
 
 func TestDecide_RejectsInvalidPolicy(t *testing.T) {
-	_, err := Decide(Input{Policy: Policy(99)})
+	_, err := Decide(&Input{Policy: Policy(99)})
 	if err == nil {
 		t.Fatal("Decide must reject invalid Policy")
 	}
 }
 
 func TestDecide_RejectsNegativeHysteresis(t *testing.T) {
-	_, err := Decide(Input{HysteresisMargin: -0.1})
+	_, err := Decide(&Input{HysteresisMargin: -0.1})
 	if err == nil {
 		t.Fatal("Decide must reject negative HysteresisMargin")
+	}
+}
+
+// Non-finite hysteresis/min-yield values must be rejected: NaN slips past
+// a bare `< 0` check (NaN < 0 is false) and would silently disable
+// hysteresis (NaN threshold is never met); +Inf would freeze the incumbent
+// forever; NaN min-yield silently disables the floor (y < NaN is false).
+func TestDecide_RejectsNonFiniteMargins(t *testing.T) {
+	for name, in := range map[string]Input{
+		"nan-hysteresis":  {HysteresisMargin: math.NaN()},
+		"inf-hysteresis":  {HysteresisMargin: math.Inf(1)},
+		"-inf-hysteresis": {HysteresisMargin: math.Inf(-1)},
+		"nan-minyield":    {MinYieldSatsPerSec: math.NaN()},
+		"inf-minyield":    {MinYieldSatsPerSec: math.Inf(1)},
+		"-inf-minyield":   {MinYieldSatsPerSec: math.Inf(-1)},
+	} {
+		if _, err := Decide(&in); err == nil {
+			t.Errorf("%s: Decide must reject non-finite margins", name)
+		}
 	}
 }
 
@@ -86,7 +114,7 @@ func TestDecide_RejectsDuplicateDeviceIDs(t *testing.T) {
 		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
 		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
 	}
-	_, err := Decide(Input{Devices: devs})
+	_, err := Decide(&Input{Devices: devs})
 	if err == nil {
 		t.Fatal("Decide must reject duplicate device IDs")
 	}
@@ -96,7 +124,7 @@ func TestDecide_RejectsDuplicateDeviceIDs(t *testing.T) {
 }
 
 func TestDecide_EmptyInputReturnsEmptyAllocation(t *testing.T) {
-	alloc, err := Decide(Input{Policy: PolicyMaximizeEarnings})
+	alloc, err := Decide(&Input{Policy: PolicyMaximizeEarnings})
 	if err != nil {
 		t.Fatalf("Decide on empty input failed: %v", err)
 	}
@@ -132,7 +160,7 @@ func TestDecide_AssignsEachDeviceToBestStream(t *testing.T) {
 		},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu, cpu},
 		Streams: []Stream{mining, ai},
 		Policy:  PolicyMaximizeEarnings,
@@ -160,7 +188,7 @@ func TestDecide_IdleWhenNoCompatibleStream(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"asic-0": {SatsPerSecond: 1000, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{asic},
 		Streams: []Stream{gpuOnly},
 		Policy:  PolicyMaximizeEarnings,
@@ -191,7 +219,7 @@ func TestDecide_ZeroYieldStreamIsIgnored(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{zero, nonZero},
 		Policy:  PolicyMaximizeEarnings,
@@ -212,7 +240,7 @@ func TestDecide_UsesDefaultYieldWhenDeviceNotListed(t *testing.T) {
 		DefaultYield:    Yield{SatsPerSecond: 50, Confidence: 0.8},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{s},
 		Policy:  PolicyMaximizeEarnings,
@@ -247,7 +275,7 @@ func TestDecide_StackBTCPolicy_PrefersBitcoinMining(t *testing.T) {
 	}
 
 	// 3% advantage for AI should not overcome the 5% BTC bonus under StackBTC.
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{mining, ai},
 		Policy:  PolicyStackBTC,
@@ -275,7 +303,7 @@ func TestDecide_PrivacyPolicy_PrefersHigherRating(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{private, kyc},
 		Policy:  PolicyMaximizePrivacy,
@@ -312,7 +340,7 @@ func TestDecide_HysteresisKeepsCurrentUnderMargin(t *testing.T) {
 		},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -347,7 +375,7 @@ func TestDecide_HysteresisAllowsSwitchAboveMargin(t *testing.T) {
 		},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -381,7 +409,7 @@ func TestDecide_HeldFlag_SetWhenBetterAlternativeSuppressed(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -415,7 +443,7 @@ func TestDecide_HeldFlag_FalseWhenIncumbentIsBest(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, weaker},
 		Previous:         prev,
@@ -444,7 +472,7 @@ func TestDecide_HeldFlag_FalseOnActualSwitch(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -477,7 +505,7 @@ func TestDecide_ForegoneSatsPerSec_ZeroWhenBestChosen(t *testing.T) {
 		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
 	}
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{hi, lo},
 		Policy:  PolicyMaximizeEarnings,
@@ -506,7 +534,7 @@ func TestDecide_ForegoneSatsPerSec_EqualsGapWhenHeld(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -545,7 +573,7 @@ func TestDecide_ForegoneSatsPerSec_QuantifiesPolicyDeviation(t *testing.T) {
 	}
 	// score(private) = 100*(1+9*0.01)=109; score(lucrative)=105*(1+2*0.01)=107.1
 	// → private wins on score, but sacrifices 5 raw sats/s.
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{private, lucrative},
 		Policy:  PolicyMaximizePrivacy,
@@ -570,7 +598,7 @@ func TestDecide_ForegoneSatsPerSec_ZeroWhenIdle(t *testing.T) {
 		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
 	}
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{asic},
 		Streams: []Stream{gpuOnly},
 		Policy:  PolicyMaximizeEarnings,
@@ -617,7 +645,7 @@ func TestDecide_HysteresisUsesPolicyScoreNotRawYield(t *testing.T) {
 		},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{incumbent, challenger},
 		Previous:         prev,
@@ -659,7 +687,7 @@ func TestDecide_HysteresisPolicyScore_AllowsSwitchWhenScoreGainExceedsMargin(t *
 		},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{incumbent, challenger},
 		Previous:         prev,
@@ -702,12 +730,12 @@ func TestDecide_DeterministicForIdenticalInput(t *testing.T) {
 		Policy: PolicyMaximizeEarnings,
 	}
 
-	first, err := Decide(in)
+	first, err := Decide(&in)
 	if err != nil {
 		t.Fatalf("first Decide failed: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		next, err := Decide(in)
+		next, err := Decide(&in)
 		if err != nil {
 			t.Fatalf("iteration %d Decide failed: %v", i, err)
 		}
@@ -734,10 +762,10 @@ func TestDecide_DeterministicUnderShuffledDeviceInput(t *testing.T) {
 		},
 	}
 
-	first, _ := Decide(Input{Devices: devs, Streams: streams, Policy: PolicyMaximizeEarnings})
+	first, _ := Decide(&Input{Devices: devs, Streams: streams, Policy: PolicyMaximizeEarnings})
 
 	shuffled := []DeviceRef{devs[2], devs[0], devs[1]}
-	second, _ := Decide(Input{Devices: shuffled, Streams: streams, Policy: PolicyMaximizeEarnings})
+	second, _ := Decide(&Input{Devices: shuffled, Streams: streams, Policy: PolicyMaximizeEarnings})
 
 	if !allocationsEqual(first, second) {
 		t.Error("shuffled input produced different allocation; engine is not input-order-deterministic")
@@ -752,7 +780,7 @@ func TestDecide_Property_NeverAssignsIncompatibleFamily(t *testing.T) {
 	r := rand.New(rand.NewSource(42))
 	for trial := 0; trial < 200; trial++ {
 		in := randomInput(r)
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue // random input may hit duplicate IDs; skip those trials
 		}
@@ -796,11 +824,11 @@ func TestDecide_Property_AllocationMatchesOrExceedsGreedy(t *testing.T) {
 		in.Previous = nil
 		in.Policy = PolicyMaximizeEarnings // invariant only holds for this policy
 
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue
 		}
-		greedy := greedyTotalYield(in)
+		greedy := greedyTotalYield(&in)
 		if alloc.TotalYield+1e-9 < greedy {
 			t.Fatalf("trial %d: engine yield %.4f < greedy %.4f", trial, alloc.TotalYield, greedy)
 		}
@@ -816,7 +844,7 @@ func TestDecide_Property_NoIdleWhenCompatibleStreamExists(t *testing.T) {
 		in.HysteresisMargin = 0
 		in.Previous = nil
 
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue
 		}
@@ -862,7 +890,7 @@ func TestDecide_TotalYield_EqualsSumOfExpectedYields(t *testing.T) {
 	}
 	// asic-0 has no compatible stream → idle (ExpectedYield = 0).
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu, cpu, asic},
 		Streams: streams,
 		Policy:  PolicyMaximizeEarnings,
@@ -887,7 +915,7 @@ func TestDecide_Property_ForegoneSatsPerSecNeverNegative(t *testing.T) {
 	r := rand.New(rand.NewSource(17))
 	for trial := 0; trial < 200; trial++ {
 		in := randomInput(r)
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue
 		}
@@ -920,7 +948,7 @@ func TestDecide_ReasonString_IncumbentIsBest_DoesNotSayHeld(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.best"}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{incumbent, weaker},
 		Previous:         prev,
@@ -958,7 +986,7 @@ func TestDecide_ReasonString_HeldOnSuppressedAlternative_ContainsHeld(t *testing
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins"}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{current, challenger},
 		Previous:         prev,
@@ -1000,7 +1028,7 @@ func TestDecide_EnvironmentFriendlyPolicy_PrefersHigherRating(t *testing.T) {
 		YieldPerDevice:      map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{gpu},
 		Streams: []Stream{green, dirty},
 		Policy:  PolicyEnvironmentFriendly,
@@ -1031,7 +1059,7 @@ func TestDecide_ZeroHysteresisExactTieStaysOnIncumbent(t *testing.T) {
 	}
 	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.a"}}}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:          []DeviceRef{gpu},
 		Streams:          []Stream{incumbent, challenger},
 		Previous:         prev,
@@ -1129,7 +1157,7 @@ func randomInput(r *rand.Rand) Input {
 	}
 }
 
-func greedyTotalYield(in Input) float64 {
+func greedyTotalYield(in *Input) float64 {
 	// For each device, take the max effective yield among compatible streams.
 	var total float64
 	for _, d := range in.Devices {
@@ -1151,7 +1179,7 @@ func greedyTotalYield(in Input) float64 {
 // ----- MinYieldSatsPerSec profitability floor -----
 
 func TestDecide_RejectsNegativeMinYield(t *testing.T) {
-	_, err := Decide(Input{MinYieldSatsPerSec: -1})
+	_, err := Decide(&Input{MinYieldSatsPerSec: -1})
 	if err == nil {
 		t.Fatal("Decide must reject negative MinYieldSatsPerSec")
 	}
@@ -1167,7 +1195,7 @@ func TestDecide_MinYieldFloor_IdlesDeviceBelowFloor(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 5, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:            []DeviceRef{cpu},
 		Streams:            []Stream{mining},
 		Policy:             PolicyMaximizeEarnings,
@@ -1200,7 +1228,7 @@ func TestDecide_MinYieldFloor_KeepsDeviceAtOrAboveFloor(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:            []DeviceRef{cpu},
 		Streams:            []Stream{mining},
 		Policy:             PolicyMaximizeEarnings,
@@ -1231,7 +1259,7 @@ func TestDecide_MinYieldFloor_ExcludesBelowFloorStreamFromChoice(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 50, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices:            []DeviceRef{cpu},
 		Streams:            []Stream{low, high},
 		Policy:             PolicyMaximizeEarnings,
@@ -1251,7 +1279,7 @@ func TestDecide_MinYieldFloor_ExcludesBelowFloorStreamFromChoice(t *testing.T) {
 
 func TestDecide_MinYieldFloor_ZeroDisablesFloor(t *testing.T) {
 	// With the floor at 0 (default), even a tiny positive yield is assigned —
-	// identical to the pre-floor behaviour.
+	// identical to the pre-floor behavior.
 	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
 	mining := Stream{
 		ID:              "mining.braiins",
@@ -1259,7 +1287,7 @@ func TestDecide_MinYieldFloor_ZeroDisablesFloor(t *testing.T) {
 		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 0.0001, Confidence: 1.0}},
 	}
 
-	alloc, err := Decide(Input{
+	alloc, err := Decide(&Input{
 		Devices: []DeviceRef{cpu},
 		Streams: []Stream{mining},
 		Policy:  PolicyMaximizeEarnings,
@@ -1283,7 +1311,7 @@ func TestDecide_Property_NonIdleAssignmentsClearFloor(t *testing.T) {
 		floor := r.Float64() * 50 // 0..50 sats/s
 		in.MinYieldSatsPerSec = floor
 
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue
 		}
@@ -1317,7 +1345,7 @@ func TestDecide_Property_AboveFloorStreamPreventsIdle(t *testing.T) {
 		floor := r.Float64() * 50 // 0..50 sats/s
 		in.MinYieldSatsPerSec = floor
 
-		alloc, err := Decide(in)
+		alloc, err := Decide(&in)
 		if err != nil {
 			continue
 		}

@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // writeYAML writes cfg as YAML to a temp file and returns its path.
-func writeYAML(t *testing.T, cfg config.Config) string {
+func writeYAML(t *testing.T, cfg *config.Config) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
 	if err != nil {
@@ -53,7 +53,7 @@ func TestConfigFile_RoundTrip(t *testing.T) {
 		Workers: config.WorkerConfig{Name: "rig-01"},
 		DataDir: "/tmp/otedama",
 	}
-	path := writeYAML(t, orig)
+	path := writeYAML(t, &orig)
 	got := loadYAML(t, path)
 
 	if got.BitcoinAddress != orig.BitcoinAddress {
@@ -82,7 +82,7 @@ func TestConfigFile_PrecedenceOverDefaults(t *testing.T) {
 		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		LogLevel:       "debug",
 	}
-	cfg := config.Resolve(fromFile, nil, config.FlagValues{})
+	cfg := config.Resolve(&fromFile, nil, &config.FlagValues{})
 	if cfg.LogLevel != "debug" {
 		t.Errorf("file LogLevel not applied: got %q", cfg.LogLevel)
 	}
@@ -96,7 +96,7 @@ func TestConfigFile_FlagOverridesFile(t *testing.T) {
 	flags := config.FlagValues{
 		BitcoinAddress: "bc1qfromflag00000000000000000000000000000000",
 	}
-	cfg := config.Resolve(fromFile, nil, flags)
+	cfg := config.Resolve(&fromFile, nil, &flags)
 	if cfg.BitcoinAddress != flags.BitcoinAddress {
 		t.Errorf("flag did not override file: got %q", cfg.BitcoinAddress)
 	}
