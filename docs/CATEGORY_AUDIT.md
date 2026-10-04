@@ -2672,6 +2672,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1143 update — bool-comparison census
+
+`x == true` / `x == false` / `!= true` / `!= false` redundant comparisons.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero sites in production and test code — codebase consistently uses bare `x`/`!x` | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
