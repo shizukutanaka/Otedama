@@ -28,7 +28,7 @@ func loadConfigFile(path string, stderr io.Writer) config.Config {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
 		}
 		return config.Config{}
