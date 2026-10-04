@@ -4629,6 +4629,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 869 update — http-optional-iface + cookie-surface + handler-stream audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Flusher`/`Hijacker`/`Pusher`/`ResponseController` misuse — broken HTTP semantics, premature flush, or hijack leaks. | ✅ Clean: absent — every handler writes a complete response via `w.Write`/marshal and returns. |
+| M | `Cookie`/`SetCookie` — session-fixation or unbounded cookie surface. | ✅ Clean: absent — `/healthz`, `/readyz`, `/metrics`, `/` endpoints set no cookies; no browser session. |
+| S | Handler keep-alive misuse — response written after `Hijack` or double `WriteHeader`. | ✅ Clean: no hijack; each handler issues exactly one header-write (single `WriteHeader` or implicit 200). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
