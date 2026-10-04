@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 905 update — strings-census + repeat-bound + builder-usage audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `strings.*` census — unbounded `Repeat`/`Join` on attacker input. | ✅ Clean: 20 functions across ~117 sites; the top three (HasPrefix/Join/Contains) are all on trusted config/log text. |
+| M | `strings.Repeat` on a pool-controlled size — memory amplification. | ✅ Clean: 7 sites all bounded — TUI column padding (≤ terminal width), doctor fingerprint elision (fixed 3), and V1 `extranonce2` padding clamped to `maxExtranonce2Size` (s411/428). |
+| S | `strings.Builder` misuse — `WriteString` error checked or buffer reused. | ✅ Clean: 10 sites all discard the always-nil WriteString error (contract); no Builder is shared or reused across calls. |
+
+All packages build, vet, and test green.
