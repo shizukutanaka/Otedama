@@ -1902,6 +1902,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 892 update — atomic-typed + atomic-free-func + atomic-float audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Untyped atomic fields (`atomic.Value`, plain ints + `atomic.AddInt*`) — the pre-Go-1.19 API that permits non-atomic access. | ✅ Clean: every atomic field is typed (`atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]`) — the field list is a full census; no untyped free-function sites. |
+| M | `atomic.Float64` misuse — float atomics used for counters where `Uint64` bits would be exact. | ✅ Clean: absent — all counters are `atomic.Uint64`; float64 metrics go through `Uint64` `Bits` helpers (s739). |
+| S | `atomic.Pointer` to a shared mutable target — pointer swap frees the old, but readers of a stale copy mutate freed state. | ✅ Clean: the only `atomic.Pointer` targets are `Logger`, `error`, `reconnectDirective` — all effectively immutable after store (pointer swap publishes a whole new object). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
