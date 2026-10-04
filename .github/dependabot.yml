@@ -33,8 +33,8 @@ updates:
     directory: "/"
     allow:
       - dependency-type: "direct"
-    automerge:
-      - dependency-type: "direct"
+    # Note: Dependabot has no `automerge` option — auto-merging requires
+    # repo-level auto-merge plus a workflow such as `gh pr merge --auto`.
     schedule:
       interval: "weekly"
       day: "monday"
