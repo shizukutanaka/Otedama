@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1187 update — CHANGELOG currency census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | CHANGELOG `[Unreleased]` coverage | ⚠️ Noted — the section's newest entry covers ~session 323 while master has merged ~370 session PRs since (through ~session 700); docs-audit PRs conventionally skip CHANGELOG, so the ledger is the record of truth — stale Unreleased documented as a doc-currency gap, not a code defect |
+| S | Release-section numbering | ✅ Clean — `[3.0.0-alpha.1]` (2026-04-24) and `[2.1.9]` headings well-formed; Keep-a-Changelog format intact |
+
+All packages build, vet, and test green.
