@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 788 update — reslice-reuse + wg-locality + select-defer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `x[:0]` reslice keeping stale elements reachable — reused backing leaking old contents into new appends' tails. | ✅ Clean: both reslice sites (`jobOrder`, `pendingOrder`) reuse their own wholly-owned backing purely for capacity retention across reconnect cycles — the resliced length-0 view cannot surface stale elements. |
+| M | `sync.WaitGroup` copied by value — Add/Done landing on different counters. | ✅ Clean: all `wg` are function-local `var`s or struct fields used by pointer — never passed by value (verified session 671 mutex-copy sweep). |
+| M | `defer` inside a `select` case — registration deferred until function exit, masking per-iteration leaks. | ✅ Clean: zero defer-in-select sites — defers live at function/loop scope only. |
+
+All packages build, vet, and test green.
