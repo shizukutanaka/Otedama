@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 957 update — driver-registry + detect-fanout + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate driver registration silently replaced — config bugs hidden; or `Drivers()` mutating registry order. | ✅ Clean: `Register` rejects nil/empty/duplicate names; `Drivers()` returns a sorted fresh slice (deterministic, mutation-safe). |
+| M | One driver's `Enumerate` failure dropping the whole detection or hanging the fan-out. | ✅ Clean: each driver's result flows through a `cap=len(drivers)` channel (producers never block), errors are logged per driver, and successful drivers' devices still land. |
+| M | A device with an invalid identity reaching the engine — `startMinerWorkers` indexing junk. | ✅ Clean: `Identity().Validate()` runs per enumerated device; invalid entries are skipped with a logged reason. |
+| M | Cancellation mid-detect leaving goroutines or the channel open forever. | ✅ Clean: `ctx.Done()` breaks the loop and returns the partial set plus `ctx.Err()`; `close(resultsCh)` follows `wg.Wait()` — no send-on-closed. |
+
+All packages build, vet, and test green.
