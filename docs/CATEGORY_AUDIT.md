@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 923 update — arb-input-guard + determinism + margin-floor audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Invalid Policy / negative or non-finite margin reaching the allocator — silent wrong allocation. | ✅ Clean: `Policy.Valid()` + non-negative/finite guards on `HysteresisMargin` and `MinYieldSatsPerSec` all fail fast on `Decide` entry (s331 non-finite fix confirmed in-tree). |
+| M | Nondeterministic allocation on identical input — undiffable logs, flaky tests. | ✅ Clean: `Assignments` emitted sorted by `DeviceID`; duplicate device IDs rejected as malformed input — documented byte-identical output. |
+| S | Min-yield floor treated as advisory — a device kept on a stream below the floor. | ✅ Clean: sub-floor streams are "as if they did not accept the device" — device goes idle and counts into `SkippedDevice`. |
+
+All packages build, vet, and test green.
