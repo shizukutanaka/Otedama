@@ -3216,6 +3216,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1199 update — CODEOWNERS path parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | CODEOWNERS paths vs disk | ✅ Clean — all 12 literal paths exist; `/internal/stratum/noise*` glob matches noise.go/noise_pool.go/noise_*_test.go; owner `@shizukutanaka` matches the repo owner |
+| S | Fund-critical coverage | ✅ Clean — lightning/, btccrypto/, poolproto/, stratum/noise* all covered (CLAUDE.md fund-critical set ⊆ CODEOWNERS) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
