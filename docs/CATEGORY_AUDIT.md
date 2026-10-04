@@ -4107,6 +4107,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 825 update — byte-index + ascii-compare + rune-boundary audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Byte-index loop over a possibly-multibyte string — mid-rune split / mis-compare. | ✅ Clean: the only byte-index loop (`base58.go:47`) counts ASCII `'1'` leaders — Base58's alphabet is ASCII by definition. |
+| S | Byte comparison `s[i] == 'x'` where input can be multibyte — truncated-match bugs. | ✅ Clean: same site — ASCII domain. |
+| S | `len(s)` byte length vs rune/display width conflation in truncation paths. | ✅ Benign: `truncateToBudget` slices only ASCII-domain fields (pool URL, hash strings); rune-capped text uses `len(runes)` after conversion (`maxPoolTextRunes`/`maxNoticeRunes`); escape-aware columns pad by visible width (session-462, PR #544). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
