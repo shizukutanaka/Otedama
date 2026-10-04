@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 987 update — driver-registry + detect-fanout + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A nil/empty-named/duplicate driver corrupting the registry or silently replacing the registered driver. | ✅ Clean: `Register` rejects all three before the locked map write; `Lookup` returns `(driver, ok)`. |
+| M | `Drivers` exposing the live map's iteration order or a mutable view — nondeterministic detect order or external mutation. | ✅ Clean: returns a freshly-allocated slice sorted by name; callers may modify it freely. |
+| M | Driver enumeration leaking goroutines or a deadlocked result channel when one driver stalls. | ✅ Clean: results channel buffered to `len(drivers)` so every Enumerate sender completes; `close` runs in a separate goroutine after `wg.Wait`; per-driver errors are labeled, never fatal to the fan-in. |
+| S | A device identity containing whitespace or `/` poisoning `YieldPerDevice` keys or sysfs paths. | ✅ Clean: `Identity.Validate` rejects empty IDs, invalid families, and every `unicode.IsSpace` rune plus `/` (the s512 hardening). |
+| M | A missing/garbled sysfs file hard-failing GPU detection — vendor/model inference must be best-effort. | ✅ Clean: `readSysFile` returns "" on error; inference degrades to generic labels. |
+
+All packages build, vet, and test green.
