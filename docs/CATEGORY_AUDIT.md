@@ -5110,3 +5110,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+---
+
+## Session 1316 update — gocyclo decomposition batch B (config/arbitration/doctor/cmd)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| F | gocyclo >15 — six remaining non-engine functions after batch A (#1396). | ✅ Fixed: `ResolveWithOrigins` 32→per-layer helpers `applyFileLayer`/`applyEnvLayer`/`applyFlagLayer`; `Config.Validate` 26→four `appendXxxIssues` domain appenders; `runArbitrationLoop` 21→`arbitrationTick` (Decide error keeps prevAlloc as hysteresis baseline, identical to the old `continue`); `cmdRun` 17→`resolveRunConfig`+`detectRunBundle`; `chooseForDevice` 16→`candidateStreams`+`incumbentHold` (hysteresis block); `checkPoolReachability` 17→`probePools`+`classifyProbes`+`reachabilityResult` (probe type promoted to `reachProbe`). Behavior unchanged; scoped tests green. |
+| F | Residual gocyclo — engine `run.go` monsters (`runSession` 88, `runSessionV1` 53, `runReconnectLoop` 26, `Run` 24) plus the five wire/codec functions covered by open #1396. | ⚠️ Noted: deferred to batch C — run.go needs state-plumbing care; wire/codec findings clear when #1396 merges. |
+
+All packages build, vet, and scoped-test green.

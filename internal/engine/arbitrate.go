@@ -163,88 +163,97 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
-			opts.streamsMu.Lock()
-			pruned := pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now())
-			streams := streamsSlice(opts.streamMap)
-			opts.streamsMu.Unlock()
-			for _, key := range pruned {
-				opts.log("info", fmt.Sprintf(
-					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
-					key, streamStaleTimeout,
-				))
-			}
-			opts.metrics.activeStreams.Set(float64(len(streams)))
-
-			margin := opts.hysteresisPct
-			if margin == 0 {
-				margin = defaultHysteresisPct
-			}
-			minYield := opts.minYield
-			if pf := opts.powerFloor(); pf > minYield {
-				minYield = pf
-			}
-			alloc, err := arbitration.Decide(&arbitration.Input{
-				Devices:            opts.devRefs,
-				Streams:            streams,
-				Previous:           prevAlloc,
-				Policy:             arbitration.PolicyMaximizeEarnings,
-				HysteresisMargin:   margin,
-				MinYieldSatsPerSec: minYield,
-			})
-			if err != nil {
-				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
-				continue
-			}
-			// Capture the previous idle count before overwriting prevAlloc, so a
-			// transition can be logged once (not every tick) for operators who
-			// watch logs rather than the otedama_devices_idle gauge.
-			prevSkipped := 0
-			if prevAlloc != nil {
-				prevSkipped = prevAlloc.SkippedDevice
-			}
-			prevAlloc = alloc
-			var foregone float64
-			for _, a := range alloc.Assignments {
-				if a.SwitchedFromID != "" {
-					opts.metrics.arbitrationSwitches.Inc()
-				}
-				if a.Held {
-					opts.metrics.arbitrationHolds.Inc()
-				}
-				foregone += a.ForegoneSatsPerSec
-			}
-			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
-			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
-			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
-			if opts.activityMu != nil && opts.activity != nil {
-				opts.activityMu.Lock()
-				clear(opts.activity)
-				for _, a := range alloc.Assignments {
-					if a.Idle() {
-						continue
-					}
-					opts.activity[string(a.Stream)] += a.ExpectedYield
-				}
-				opts.activityMu.Unlock()
-			}
-			if alloc.SkippedDevice != prevSkipped {
-				if alloc.SkippedDevice > 0 {
-					opts.log("info", fmt.Sprintf(
-						"arbitration: %d device(s) now idle (no viable stream, or below the effective profitability floor)",
-						alloc.SkippedDevice,
-					))
-				} else {
-					opts.log("info", "arbitration: all devices now have a viable stream")
-				}
-			}
-			// Keep the shared pause set in step with this allocation BEFORE
-			// applyAllocation runs: the set is what makes a pause survive the
-			// next pool job, so it must reflect the new Decide result even on
-			// the tick where the worker gets its one-shot SetWork(nil).
-			reconcileArbPauses(alloc, opts.paused)
-			applyAllocation(alloc, opts.workers, opts.log)
+			prevAlloc = arbitrationTick(&opts, lastQuoteAt, prevAlloc)
 		}
 	}
+}
+
+// arbitrationTick runs one arbitration interval: expire stale streams,
+// decide the new allocation, publish metrics and the activity map, and
+// apply it to the workers. It returns the allocation to carry into the
+// next tick as the hysteresis baseline — the previous allocation when
+// Decide fails (so a transient error does not reset hysteresis).
+func arbitrationTick(opts *arbitrationLoopOpts, lastQuoteAt map[string]time.Time, prevAlloc *arbitration.Allocation) *arbitration.Allocation {
+	opts.streamsMu.Lock()
+	pruned := pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now())
+	streams := streamsSlice(opts.streamMap)
+	opts.streamsMu.Unlock()
+	for _, key := range pruned {
+		opts.log("info", fmt.Sprintf(
+			"arbitration: stream %q expired (no quote in %s); no longer routing to it",
+			key, streamStaleTimeout,
+		))
+	}
+	opts.metrics.activeStreams.Set(float64(len(streams)))
+
+	margin := opts.hysteresisPct
+	if margin == 0 {
+		margin = defaultHysteresisPct
+	}
+	minYield := opts.minYield
+	if pf := opts.powerFloor(); pf > minYield {
+		minYield = pf
+	}
+	alloc, err := arbitration.Decide(&arbitration.Input{
+		Devices:            opts.devRefs,
+		Streams:            streams,
+		Previous:           prevAlloc,
+		Policy:             arbitration.PolicyMaximizeEarnings,
+		HysteresisMargin:   margin,
+		MinYieldSatsPerSec: minYield,
+	})
+	if err != nil {
+		opts.log("warn", fmt.Sprintf("arbitration: %v", err))
+		return prevAlloc
+	}
+	// Capture the previous idle count before overwriting prevAlloc, so a
+	// transition can be logged once (not every tick) for operators who
+	// watch logs rather than the otedama_devices_idle gauge.
+	prevSkipped := 0
+	if prevAlloc != nil {
+		prevSkipped = prevAlloc.SkippedDevice
+	}
+	var foregone float64
+	for _, a := range alloc.Assignments {
+		if a.SwitchedFromID != "" {
+			opts.metrics.arbitrationSwitches.Inc()
+		}
+		if a.Held {
+			opts.metrics.arbitrationHolds.Inc()
+		}
+		foregone += a.ForegoneSatsPerSec
+	}
+	opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
+	opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
+	opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
+	if opts.activityMu != nil && opts.activity != nil {
+		opts.activityMu.Lock()
+		clear(opts.activity)
+		for _, a := range alloc.Assignments {
+			if a.Idle() {
+				continue
+			}
+			opts.activity[string(a.Stream)] += a.ExpectedYield
+		}
+		opts.activityMu.Unlock()
+	}
+	if alloc.SkippedDevice != prevSkipped {
+		if alloc.SkippedDevice > 0 {
+			opts.log("info", fmt.Sprintf(
+				"arbitration: %d device(s) now idle (no viable stream, or below the effective profitability floor)",
+				alloc.SkippedDevice,
+			))
+		} else {
+			opts.log("info", "arbitration: all devices now have a viable stream")
+		}
+	}
+	// Keep the shared pause set in step with this allocation BEFORE
+	// applyAllocation runs: the set is what makes a pause survive the
+	// next pool job, so it must reflect the new Decide result even on
+	// the tick where the worker gets its one-shot SetWork(nil).
+	reconcileArbPauses(alloc, opts.paused)
+	applyAllocation(alloc, opts.workers, opts.log)
+	return alloc
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
