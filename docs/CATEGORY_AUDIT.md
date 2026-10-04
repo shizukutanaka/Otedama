@@ -2082,6 +2082,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 907 update — vendor + go-directive + nolint audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `vendor/` tree drift — vendored deps diverging from go.mod. | ✅ Clean: no `vendor/` directory — module resolution is the single source of truth. |
+| M | `//go:` directives beyond `//go:build` — hidden codegen/linkname/unsafe escapes. | ✅ Clean: only the three `//go:build` platform tags on `tui/width_*.go` (s547/650); `//go:generate|embed|noinline|norace|linkname|uintptrescapes|cgo_|fix|debug` all absent. |
+| S | `//nolint` suppression without a stated reason. | ✅ Clean: all ~12 sites carry the `//nolint:<linter>` tag plus a justification (verified at s631/549); none are bare. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
