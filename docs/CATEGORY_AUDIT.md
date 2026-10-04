@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1011 update — probe-fanout + sidecar-injection + coherence-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | An unbounded probe fanout turning doctor into a port scanner. | ✅ Clean: `maxReachabilityProbes` = 8, each dial bounded by a 5 s ctx-aware `net.Dialer`; results indexed per probe (no shared-slot race); reachable/unreachable/unparseable classified with graduated severity. |
+| M | A corrupt wallet-fingerprint sidecar injecting control characters into the report. | ✅ Clean: the fingerprint is printed only when it matches the `isFingerprint` 8-hex shape; malformed → "re-run to regenerate" rather than raw output. Wallet file mode checked `perm & 0o077` (Windows-gated) catching restored-backup 0644. |
+| M | `tls_ca_file` silently ignored on non-`stratum+tls://` pools. | ✅ Clean: `checkPoolTLSCA` warns on scheme mismatch and validates the PEM with the same `x509.CertPool.AppendCertsFromPEM` the dialer uses — diagnosis and live path agree on "valid". |
+| M | The clock-skew probe leaking or abandoning connections. | ✅ Clean: 5 s request ctx + bounded `io.LimitReader` drain before `Body.Close` so keep-alive reuse works and a hostile body can't cause an unbounded read (rationale documented inline). |
+| M | Pool URLs leaking userinfo into report text. | ✅ Clean: every pool surface passes `poolproto.StripUserinfo` + `stripScheme` before display. |
+
+All packages build, vet, and test green.
