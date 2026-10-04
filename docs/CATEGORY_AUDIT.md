@@ -3235,6 +3235,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1202 update — CONTRIBUTING.md command parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `make` targets referenced by CONTRIBUTING | ✅ Clean — `setup`/`build`/`test`/`lint` all exist in Makefile (L51/71/101/156) |
+| S | Inline tool commands (`golangci-lint run`) | ✅ Clean — matches `.golangci.yml` presence |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
