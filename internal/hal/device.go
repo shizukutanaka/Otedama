@@ -41,6 +41,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"unicode"
 )
 
 // Family identifies the high-level category of a mining device.
@@ -124,7 +125,7 @@ func (i Identity) Validate() error {
 		return fmt.Errorf("hal: Identity.Family %q is not a valid Family", i.Family)
 	}
 	for _, r := range i.ID {
-		if r == ' ' || r == '\t' || r == '\n' || r == '/' {
+		if unicode.IsSpace(r) || r == '/' {
 			return fmt.Errorf("hal: Identity.ID contains forbidden character %q", r)
 		}
 	}
