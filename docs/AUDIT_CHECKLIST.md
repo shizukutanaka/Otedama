@@ -20,7 +20,7 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 1 | Source builds without warnings on Go 1.22+ | `go build ./...` at repo root | Exit code 0, no output |
+| 1 | Source builds without warnings on Go 1.24+ | `go build ./...` at repo root | Exit code 0, no output — **Correction (session 488):** this row said "Go 1.22+" but `go.mod` requires ≥1.24 (`godebug tlsmlkem` fails to parse under older toolchains) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
 | 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
@@ -36,9 +36,11 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | Every `uses:` has `@<40-char-sha>` |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are tag refs (`@v4`, one `@master`) — no SHA pins yet |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** actions currently use `@vN` tags, not SHA pins — pinning is a hardening item, not present |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
+| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Gap:** release.yml produces no signatures — VERIFY.md documents the unsigned status |
+| 13 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install; optional cosign `verify-blob` path exists but signatures are not yet published by the release workflow |
 | 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
 | 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
@@ -47,17 +49,24 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 16 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
-| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
+| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `save()` | Atomic `os.CreateTemp` → `Sync` → `os.Chmod(0600)` → `os.Rename` |
 | 18 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
-| 19 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
-| 20 | No default password or pre-shared key | Grep for hardcoded strings | None found |
+| 19 | Mnemonic re-entry via stdin, never argv | `cmd/otedama/wallet.go` `readSecretLine` | `wallet verify` reads the phrase from stdin — `ps` never sees it; it is compared as a public fingerprint, so wallet.dat is not decrypted |
+| 20 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
+| 21 | No default password or pre-shared key | Grep for hardcoded strings | None found |
 
 ## Cryptography
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
+| 22 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
+| 23 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
+| 24 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
+| 25 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
+| 26 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
+| 27 | No home-grown cryptography | All crypto from `golang.org/x/crypto` or stdlib | Code review |
 | 21 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
-| 22 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
+| 22 | Key derivation uses scrypt | `internal/lightning/seedstore.go` | `scrypt.Key(..., N=131072 (2^17), r=8, p=1, keyLen=32)` |
 | 23 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
 | 24 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
 | 25 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
@@ -67,30 +76,35 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 27 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
-| 28 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
-| 29 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
-| 30 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
+| 28 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
+| 29 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
+| 30 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
+| 31 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
 
 ---
 
 ## CI gate summary
 
 This is the set of checks a PR must pass before merge. An auditor can
-verify these are enforced by inspecting `.github/workflows/ci.yml`:
+verify these are enforced by inspecting `.github/workflows/ci.yml`.
+**Correction (session 488):** the list below previously claimed standalone
+`go vet`, `staticcheck`, and `govulncheck` jobs — none exist in `ci.yml`.
+`govet` and `staticcheck` run only as linters inside `golangci-lint run`
+(a standalone `go vet` step exists only in `test.yml`); `govulncheck` is
+absent from all workflows (Makefile local target only). The accurate gate is:
 
-- `go vet ./...`
-- `staticcheck ./...`
-- `golangci-lint run`
-- `govulncheck ./...`
-- `gosec ./...`
-- `go test -race -timeout 5m ./...`
-- `go build ./...` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+- `golangci-lint run` (Lint job; includes `govet` + `staticcheck` via `.golangci.yml`)
+- `gosec` (Security Scan job, SARIF upload)
+- `go fmt` check + `go mod tidy` check (Lint job)
+- `go test -v -timeout 10m -race ./...` on Linux/macOS; without `-race` on Windows
+- `go build` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 (Build job matrix)
 
-Nightly additional checks:
-
-- 30-min fuzz of `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`
-- PR-time benchmark comparison vs main (5% regression threshold)
+Nightly additional checks: **none exist.** `FuzzDecodeHeader` and
+`FuzzDecoder_ReadFrame` are real fuzz targets in
+`internal/stratum/frame_fuzz_test.go`, but no workflow schedules them —
+`make fuzz` is local-only. The Benchmark job runs benchmarks and uploads
+`benchmark.txt` (artifact `benchmark-results`); it does not compare against main
+or gate on a regression threshold.
 
 ---
 
