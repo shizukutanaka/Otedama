@@ -2636,6 +2636,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1012 update — hashrate-plausibility + median + freshness audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A manipulated or unit-confused endpoint feeding an absurd network hashrate into the yield estimate. | ✅ Clean: `[1e18, 1e23]` H/s plausibility band rejects garbage before caching (~9.3e20 real in 2026 tolerates orders of legitimate drift); per-source failures are logged, not fatal. |
+| M | An unbounded endpoint response streaming into memory. | ✅ Clean: `maxHashrateBody` = 64 KiB caps both the body read and the non-200 drain path (drain kept for keep-alive reuse). |
+| M | A single bad source skewing the arbitration input. | ✅ Clean: parallel fetch → `slices.Sort` → median (even-count = mean of middle two, matching the price fetcher's convention); `results` channel buffered to len(sources) so senders never block. |
+| M | A stale hashrate reading silently staying "fresh". | ✅ Clean: `CurrentHashrate` returns `fresh=false` at ≥ `HashrateCacheDuration` (30 min, apt for fortnightly retargets) and `(0,false)` before first success — the provider's constant fallback takes over honestly. |
+| M | Background poller leaking or delaying the first reading. | ✅ Clean: immediate first `Fetch` then ticker select; `ctx.Done` exits, `ticker.Stop` deferred; RWMutex guards the cached pair. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
