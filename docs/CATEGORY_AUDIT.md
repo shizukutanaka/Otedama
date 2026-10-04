@@ -1842,6 +1842,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 886 update — slog-default + stdlib-log + logger-atomics audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `slog.SetDefault`/`slog.SetLogLoggerLevel` — global mutation outside the atomic pointer logger. | ✅ Clean: absent — default override goes through `logger.SetDefault` which stores into `atomic.Pointer`, keeping `FromContext` race-free under `-race`. |
+| M | Stdlib `log.New`/`log.Set`/`log.Print` — a second log path bypassing structured output. | ✅ Clean: absent — `log/slog` is the single logging stack (s733/735 verified no bare `log.` calls). |
+| S | `slog.New` handlers built per call — repeated handler construction cost. | ✅ Clean: handlers are built once in `New`/`Discard` at construction; the `Adapter`/`With` paths reuse them. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
