@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1002 update — rate-window + quantile + stall-monitor audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A counter reset on reconnect producing a negative or absurd hashrate sample. | ✅ Clean: `hashrateWindow.observe` primes on first call and leaves rate at 0 whenever `total < lastTotal` or `dt <= 0` — deltas, never absolute counters. |
+| M | Uptime/sats accountants accruing during downtime or running backwards on a backwards clock. | ✅ Clean: both gate on `productive` and `elapsed > 0`; fractional productive seconds carry forward (uptime) or are retained (sats), and each documents that pool accounting is the authoritative figure. |
+| M | `Quantile` indexing out of range on an adversarial q, or sorting under the lock. | ✅ Clean: q is multiplied into an index that both-end clamps cover (q≤0 → min, q≥1 → max); the samples are copied and the lock released before `slices.Sort`. |
+| M | A stalled miner warning every tick (log spam) or never warning at all. | ✅ Clean: `HashrateMonitor` counts consecutive at-floor samples, warns once per episode at `maxStall`, and resets with a "recovered" notice — one warn per episode, re-arms on recovery. |
+| M | Negative latency samples poisoning the ring, or a zero-size tracker panicking. | ✅ Clean: `Record` drops `ms < 0`; `NewLatencyTracker` floors size at 256. |
+
+All packages build, vet, and test green.
