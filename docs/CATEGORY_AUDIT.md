@@ -1974,6 +1974,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 898 update — clock-bypass + time-fallback + time-parse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Now()` inside logic the `clock` abstraction is meant to control — tests that can't freeze time. | ✅ Clean: the two prod uses (worker uptime, arbitrate quote-prune) are real-time by design; every decision-relevant timestamp goes through `opts.clock` (s579). |
+| M | `q.At` fallback `time.Now()` diverging from `lastQuoteAt`'s comparison clock. | ✅ Clean: `lastQuoteAt[key]` stores the same `ts` the prune loop compares against `time.Now()` — same clock domain, no skew. |
+| S | `time.Parse`/`ParseInLocation`/`LoadLocation`/`FixedZone`/`Local` in prod — timezone bugs. | ✅ Clean: absent — all output is `time.Since`/`UnixNano`; parsing stays in tests (s759). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
