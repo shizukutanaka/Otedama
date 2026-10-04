@@ -2510,6 +2510,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 968 update — i18n-fallback + missing-render + template-degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A region-tagged request (`ja-JP`) missing the entire `ja` catalog — falling straight to English when a base-language match exists. | ✅ Clean: `Render` tries exact tag → `lang.Base()` → English, in that order. |
+| M | A message ID absent everywhere (incl. English) silently rendering as empty string. | ✅ Clean: returns a conspicuous `"!{id}!"` placeholder plus a non-nil error — missing keys are visible in production logs instead of producing blank UI. |
+| M | A template referring to a data key the caller didn't supply panicking or emitting `{{.x}}` raw. | ✅ Clean: `RenderWith` returns the raw template plus the exec error — graceful degradation; `data==nil`/no `{{` short-circuits. |
+| M | Bundle construction accepting a nil/duplicate/non-English-first catalog — fallback undefined or overwriting another language. | ✅ Clean: `NewBundle` requires a non-nil `LangEnglish` catalog first and rejects nil/duplicate catalogs; `MissingTranslations` surfaces the per-language gap for the CI completeness check. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
