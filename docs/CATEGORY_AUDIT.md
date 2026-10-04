@@ -2046,6 +2046,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 904 update — bytes-census + bytes-equality + buffer-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `bytes.*` census — unbounded Buffer growth or missed comparisons. | ✅ Clean: 1 prod site — `bytes.Equal` on the base58 checksum; no `Buffer`, no `NewReader`, no `Index`/`Split`/`Trim`/`Replace` (all byte work lives in `strings` and the stratum codec). |
+| M | `bytes.Equal` on a secret — non-constant-time comparison. | ✅ Clean: the checksum is a 4-byte protocol field, not secret material; `crypto/subtle` remains the constant-time boundary for secrets (s841). |
+| S | `bytes.Buffer` as a shared sink — aliasing/pool issues. | ✅ Clean: absent — the stratum codec appends to plain `[]byte`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
