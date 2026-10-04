@@ -3613,6 +3613,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 774 update — nil-slice-json + map-iter-order + secret-quoting audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Nil slice marshaling to `null` instead of `[]` — JSON consumers tripping on a null array. | ✅ Benign: the only unguarded slice fields (`config.Pools`, `doctor.Checks`) marshal nil→null; both consumers are tolerant JSON readers — cosmetic only. |
+| S | Map iteration order reaching output — non-deterministic serialization or first-match ambiguity. | ✅ Clean: the `for range` sites iterate slices or iterate maps only for unordered exposition (Prometheus output) — no ordering-sensitive first-match path. |
+| S | `%q`-quoting secret material into error text — seed/key bytes echoed into logs. | ✅ Benign: `lightning` quotes only words that failed wordlist membership (non-seed typos, never valid seed words); `config` quotes only numeric-parse failures (non-secret numeric env vars). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
