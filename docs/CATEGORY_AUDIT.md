@@ -2462,6 +2462,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1126 update — condition-assignment census
+
+Single-`=` assignments inside `if`/`for` conditions (typo of `==`, or
+outer-variable masking via `=` vs `:=`).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `if x = ` / `for x = ` sites; all condition operators are `==`, `!=`, `<=`, `>=`, `&`, `&&`, `||` | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
