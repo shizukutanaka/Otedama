@@ -2953,3 +2953,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1290 update — working-tree + tracked-file hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Working-tree cleanliness | ✓ `git status --porcelain` = 0 entries on synced master — no stray edits |
+| R | Helper-script residue | ✓ `.sweep.sh` (the backlog union-merge helper) is absent from master and untracked anywhere — `git ls-files` confirms zero sweep artifacts in any index |
+| R | Stray top-level scripts | ✓ No untracked `*.sh` at repo root; only committed scripts/ paths exist |
+
