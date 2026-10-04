@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 937 update — noise-stub + nonce-counter + xonly-fallback audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `CipherState` nonce reuse under a fixed key — ChaChaPoly nonce-reuse catastrophic failure class. | ✅ Clean: `c.n` is a monotonically incremented counter seeded at 0; nonce layout `[4:]=LE(counter)` matches the Noise convention; a reused nonce under one key cannot occur within a CipherState lifetime. |
+| M | `ReadMessage2` x-only fallback marks the handshake complete **without performing DH** — transport keys would derive from the transcript alone (no shared secret), eavesdroppable. | ⏸ Tracked: inside the documented alpha P-256 stub — noise.go is not wired into any live connection (KNOWN_LIMITATIONS §2); the real fix is the secp256k1 Noise NX migration deferred to v3.1.0, not a live-key defect. |
+| S | Per-call `chacha20poly1305.New` in `Encrypt`/`Decrypt` — AEAD re-derivation per frame. | ⏸ Tracked: same defect class as open PR #957 (transport AEAD reuse); fixing here is folded into that change rather than duplicated. |
+
+All packages build, vet, and test green.
