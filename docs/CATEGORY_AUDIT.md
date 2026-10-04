@@ -2953,3 +2953,14 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1289 update — open-PR inventory + CI saturation observation
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | PR #1344 (critical toolchain fix) | ⚠️ Open, mergeable, but all 21 checks remain pending >14h after push — the Actions queue never drains; the "all-red" signature on new PRs is queue starvation, not a code failure |
+| R | Open-PR inventory | ✓ Ledger/fix/doc PRs from sessions 1263–1288 remain open (#1344–#1369); master head still at the #1302 merge — subsequent merges pending user review |
+| R | Dependency state | ✓ go.mod floor `go 1.24.0` + x/crypto v0.48.0 + x/sys v0.41.0 (PR #1359 branch) is at the 1.24-floor ceiling; further bumps need the Go 1.26 toolchain decision |
+
+CI saturation recorded honestly — the repo's Actions queue appears starved (jobs stay queued indefinitely), so "green CI" cannot currently be observed on any PR.
+
