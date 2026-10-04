@@ -4227,6 +4227,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 836 update — response-bound + drain-limits + body-reuse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbounded `io.ReadAll(resp.Body)` — hostile endpoint exhausts memory. | ✅ Clean: all three response reads are `io.LimitReader`-bounded (`maxHashrateBody`, 64KiB fetcher, 8KiB doctor discard). |
+| S | Response body left undrained — connection never reused, goroutine leak on keep-alive. | ✅ Clean: every site either reads the body fully or drains a bounded discard (`checks.go:904`, `hashrate.go:191`) before close — the documented keep-alive pattern. |
+| S | `json.Decoder` reading directly off the network without limit — unbounded alloc via field values. | ✅ Clean: decode happens on the LimitReader-bounded body bytes, not a raw `resp.Body` stream. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
