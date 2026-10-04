@@ -43,6 +43,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // WalletManager handles the secure creation and retrieval of the
@@ -59,6 +60,21 @@ const walletFile = "wallet.dat"
 
 // fingerprintFile stores the public fingerprint for UI use.
 const fingerprintFile = "wallet.fingerprint"
+
+// WalletFilePath returns the path of the encrypted wallet file under dataDir.
+// It exists so tools that must NOT create a wallet (e.g. `otedama wallet`)
+// can check for an existing one without calling NewWalletManager, whose
+// contract is "create when absent".
+func WalletFilePath(dataDir string) string {
+	return filepath.Join(dataDir, walletFile)
+}
+
+// FingerprintFilePath returns the path of the public fingerprint file written
+// at wallet creation. Reading it lets tools confirm wallet identity without
+// decrypting wallet.dat.
+func FingerprintFilePath(dataDir string) string {
+	return filepath.Join(dataDir, fingerprintFile)
+}
 
 // WalletOption configures optional NewWalletManager creation behaviour.
 // The zero value of every option's effect is the pre-existing behaviour,
@@ -123,15 +139,16 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 		opt(&wo)
 	}
 
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("lightning: create data dir %q: %w", dataDir, err)
 	}
+	sweepStaleTempFiles(dataDir)
 
 	wm := &WalletManager{dataDir: dataDir, wordList: wordList}
 
 	walletPath := filepath.Join(dataDir, walletFile)
 	_, err := os.Stat(walletPath)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		// First run: generate a new seed.
 		if err := wm.createNew(passphrase, wo.mnemonicPassphrase, reader); err != nil {
 			return nil, err
@@ -142,6 +159,16 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 		// Existing wallet: decrypt and load.
 		if err := wm.loadExisting(passphrase); err != nil {
 			return nil, err
+		}
+		// A wallet.dat restored from backup may arrive without its
+		// wallet.fingerprint sidecar (DEPLOYMENT.md's procedure copies
+		// only wallet.dat). Recreate it so fingerprint-based identity
+		// checks keep working without a decrypt. Best-effort like at
+		// creation, and never overwrites an existing file — a fingerprint
+		// that disagrees with wallet.dat is a signal, not a bug to mask.
+		fpPath := filepath.Join(wm.dataDir, fingerprintFile)
+		if _, err := os.Stat(fpPath); errors.Is(err, os.ErrNotExist) {
+			_ = os.WriteFile(fpPath, []byte(wm.Fingerprint()), 0o600)
 		}
 	}
 
@@ -196,7 +223,7 @@ func (wm *WalletManager) createNew(passphrase, mnemonicPassphrase string, reader
 	// the right mnemonic) and is recoverable from the seed at any time,
 	// so a write failure here must not fail wallet creation.
 	fpPath := filepath.Join(wm.dataDir, fingerprintFile)
-	if err := os.WriteFile(fpPath, []byte(Fingerprint(seed)), 0600); err != nil {
+	if err := os.WriteFile(fpPath, []byte(Fingerprint(seed)), 0o600); err != nil {
 		_ = err // intentionally ignored: non-fatal, see comment above
 	}
 	return nil
@@ -220,6 +247,33 @@ func (wm *WalletManager) loadExisting(passphrase string) error {
 	}
 	wm.seed = seed
 	return nil
+}
+
+// staleTempMaxAge bounds how old a leftover ".wallet-*.tmp" file must
+// be before startup sweeps it. A live save() holds its temp file for
+// milliseconds, so anything older than a minute is abandoned by a
+// crashed or failed write; removing only aged files also keeps the
+// sweep from unlinking a temp file mid-write in a second process that
+// shares the data dir.
+const staleTempMaxAge = time.Minute
+
+// sweepStaleTempFiles removes ".wallet-*.tmp" files older than
+// staleTempMaxAge left behind by a save() that was killed between
+// CreateTemp and Rename. Without the sweep they would accumulate
+// forever; their contents are ciphertext, but cruft in the data dir
+// confuses operators and backup tooling. Best-effort: a sweep failure
+// must never block wallet startup.
+func sweepStaleTempFiles(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, ".wallet-*.tmp"))
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleTempMaxAge)
+	for _, p := range matches {
+		if info, err := os.Stat(p); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(p)
+		}
+	}
 }
 
 // save encrypts seed and atomically writes it to wallet.dat.
@@ -263,7 +317,7 @@ func (wm *WalletManager) save(seed Seed, passphrase string, reader io.Reader) er
 
 	// Set restrictive permissions before the rename so the final file
 	// is never readable by other users, even momentarily.
-	if err := os.Chmod(tmpPath, 0600); err != nil {
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("lightning: chmod temp wallet file: %w", err)
 	}
