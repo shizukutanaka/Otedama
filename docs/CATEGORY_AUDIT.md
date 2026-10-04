@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1010 update — doctor-runner + status-dominance + json-mirror audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A check mislabeling its own result name or stomping a neighbor's result under concurrency. | ✅ Clean: `Runner.Run` indexes `results[idx]` per check and stamps `res.Name = chk.Name` after the run — the check's declared name is authoritative regardless of what `Run` returns. |
+| M | Exit-code ambiguity — warn vs fail dominance. | ✅ Clean: fail → 2 dominates warn → 1 dominates 0; a single `has` struct computes it unambiguously. |
+| S | An out-of-range `Status` value rendering misleading output. | ✅ Clean: `String()`/`symbol()` default to "unknown"/"−" — fail-visible, never silently passing. |
+| M | Machine output diverging from the human report. | ✅ Clean: `WriteJSON` reuses the same counters and exposes `exit_code` mirroring `ExitCode()`, so scripts never re-derive the verdict. |
+| L | A hung check stalling the whole report forever. | ✅ Accepted: bounded only by the caller's ctx — per-check timeouts are the Check contract (`Run(ctx)`), verified consistent across `checks.go`. |
+
+All packages build, vet, and test green.
