@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 874 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `sync.Pool` hashers returned unreset or with secret residue — cross-user key bleed. | ✅ Clean: `getHasher()` always `Reset()`s on borrow; put occurs after `Sum()` — the pool carries no post-state. However the hasher is returned without zeroing the key material used, which matches the existing threat model (Noise key derivation output is the secret, not the hasher internals — `crypto/hmac`-equivalent internals are not attacker-visible). |
+| M | Pooled HMAC built by hand instead of `crypto/hmac` — subtle deviation from RFC 2104. | ✅ Verified correct: blockSize=64 for SHA-256, key>64 hashed first, ipad 0x36 / opad 0x5C over a 64-byte zero-padded key — exact HMAC construction (and the unpooled reference still exists for cross-check in tests). |
+| S | hkdf2/hkdf3 chained on pooled HMAC — intermediate slices could alias. | ✅ Clean: every `hmacSHA256Pooled` returns a fresh `Sum(nil)`; `append(out1, 0x02)` allocates new (cap=len) — no aliasing between chain steps. |
+
+All packages build, vet, and test green.
