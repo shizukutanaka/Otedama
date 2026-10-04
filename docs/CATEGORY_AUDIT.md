@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 909 update — metric-key + label-escape + exposition-sort audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `metricKey` colliding two distinct label sets — silent series merge. | ✅ Clean: `metricKey` joins sorted `name,k=v` pairs; label *names* are validated `[a-zA-Z_][a-zA-Z0-9_]*` at registration (metrics.go:147) so a literal `,` or `=` cannot forge a separator — distinct label sets cannot collide. |
+| M | Unescaped label values breaking the exposition parser. | ✅ Clean: `escapeLabel` replaces `\\`, `"`, `\n` — the three characters special in the Prometheus text format — inside `renderLabels` on every emit. |
+| S | `renderLabels`/`metricKey` output nondeterministic — flaky scrapes/diffs. | ✅ Clean: both sort label keys before join — stable order per label set; `WriteText` sorts full series by precomputed key. |
+
+All packages build, vet, and test green.
