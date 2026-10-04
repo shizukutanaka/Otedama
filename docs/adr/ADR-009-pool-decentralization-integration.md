@@ -1365,3 +1365,26 @@ and reference-implementation consolidation, no new protocol surface.
 - **v0.7.0 released**: share accounting tracks rejects via `channels_sv2::server::share_accounting` (u64), JDC supports per-upstream `user_identity`, standardized Stratum error-code constants adopted, Sv2TP TCP connect timeout added, `stratum-apps::rpc` deprecated. #881 still WIP per prior tracking.
 
 No Otedama action required — wire-layer and cipher posture already aligned with the v1.12.0 direction.
+
+## Session-1144 ecosystem update (2026-10-02)
+
+### sv2-spec
+
+- #203 (non-custodial payouts extension) still open; active discussion on
+  SEQ0_255 payout-set scalability for large pools. #202 and draft #195 remain
+  the competing designs. Normative set unchanged — no new landed spec text
+  affecting Otedama's wire layer.
+
+### SRI
+
+- Still v1.12.0 (2026-09-17); no v1.13. The ChaCha20-Poly1305-only cipher
+  posture continues to match Otedama's Noise implementation.
+
+### sv2-apps
+
+- #582 (PoolRuntime typestate refactor of the pool start loop) open.
+- #585 (all config options as env vars) and #576 (binary_sv2 cleanup) merged —
+  config-surface and codec hygiene aligning with Otedama's own
+  env-over-file precedence.
+
+No Otedama action required.
