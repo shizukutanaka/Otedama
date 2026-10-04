@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1220 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Ledger state | ✅ Clean — 93 `## Session` verdict entries on master; every defect class re-verified this pass (doctor count, i18n catalog, ADR index, fuzz surface, spec defaults) is either clean or recorded as ⚠️ Noted with the reason. |
+| S | Real fixes since last checkpoint | ✅ Clean — #1293 (workflow branch filters → master), #1290 (`otedama_devices_idle` metric row), #1286 (`otedama completion` API doc), s1214 (SUSTAINABILITY flag names), s1217 (SPECIFICATION defaults) all delivered as independent PRs. |
+| S | Open residual defects | ⚠️ Noted — docker-verify script gaps (verify-docker.{sh,ps1} absent, build-arg names, grep formats), dead goreleaser config vs inline release.yml build, and the preexisting 8-job CI failure signature (go.mod `tlsmlkem`, Dependency graph) remain open maintainer decisions. |
+
+All packages build, vet, and test green.
