@@ -2129,6 +2129,29 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1040 update — test-file pass checkpoint (~535 audit classes clean)
+
+Checkpoint entry — no new axis rows this round; the note below is the cumulative record.
+
+The test-file pass launched at session 1031 is now well into its sweep: all eight `cmd/otedama` test files (~2650 lines) plus `internal/{clock,metrics,logger,arbitration}` test files (~3600 lines) are audited. **Verdict: uniform clean.** No test-assertion-integrity defect found: every sweep confirms tests assert real contracts (exact totals, membership in writer sets, tri-state enums, wire-format bytes, absence of side effects) rather than tautologies.
+
+**Classes now covered: ~535** (production deep-pass ~510 at s1030 + test-file rows since). Notable coverage confirmed this pass:
+
+- **Dispatch drift is test-guarded**: `completion_test.go` pins the full 8-command list, so the missing-"wallet" class (#1062) now fails at test time, not silently.
+- **No-mint contracts pinned**: `wallet verify` and `change-passphrase` both assert `wallet.dat` is NOT created on their no-wallet paths.
+- **Doc-drift guards exist**: `config_loading_test.go` asserts the literal API.md example parses.
+- **Fuzz invariant is real**: `FuzzLoadConfigFile` asserts `Validate()` can't panic on decoder output — not just "returns without panic".
+- **Race-adjacent classes falsified numerically**: counter exact-total, fake-clock torn-read set-membership, metrics atomicity, logger CAS winner-identity.
+- **Pure-function core is property-tested**: `Decide` has six `Property_` tests plus shuffled-input determinism and tri-state `Held`/`ForegoneSatsPerSec` coverage.
+
+**Real defects found to date stay at 8** (7 open: C1 control-char #809, XDG env #807, AEAD re-derivation #957, `knownSubcommands` #1062, base58 bound #633; plus earlier #498 merged and #1091/#551 closed-unmerged rejections). The test-file axis has found **zero** new defects in ~6250 lines — consistent with the production-pass result and with the maintainers' stated ≥90% coverage discipline.
+
+Remaining test-file surface: `internal/engine` (run+coverage+helpers+integration ~8.5k lines), `internal/doctor`, `internal/config`, `internal/{rates,daemon,lightning,provider,tui,i18n,poolproto,stratum,miner,hal,httpserver}` (~20k lines total). The pass continues on the same per-file cadence.
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
