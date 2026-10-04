@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 904 update — bytes-census + bytes-equality + buffer-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `bytes.*` census — unbounded Buffer growth or missed comparisons. | ✅ Clean: 1 prod site — `bytes.Equal` on the base58 checksum; no `Buffer`, no `NewReader`, no `Index`/`Split`/`Trim`/`Replace` (all byte work lives in `strings` and the stratum codec). |
+| M | `bytes.Equal` on a secret — non-constant-time comparison. | ✅ Clean: the checksum is a 4-byte protocol field, not secret material; `crypto/subtle` remains the constant-time boundary for secrets (s841). |
+| S | `bytes.Buffer` as a shared sink — aliasing/pool issues. | ✅ Clean: absent — the stratum codec appends to plain `[]byte`. |
+
+All packages build, vet, and test green.
