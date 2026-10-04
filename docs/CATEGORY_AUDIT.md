@@ -1738,7 +1738,7 @@ All packages build, vet, and test green.
 
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
-| M | Unbuffered `make(chan T)` between producer/consumer — coupling goroutine scheduling to correctness (deadlock on late receiver). | ✅ Clean: zero unbuffered channels — every `make(chan` specifies capacity ≥1, matching the three-pattern convention verified at s742. |
+| M | Unbuffered `make(chan T)` between producer/consumer — coupling goroutine scheduling to correctness (deadlock on late receiver). | ✅ Clean: zero unbuffered channels — every data channel specifies capacity ≥1 — the single `make(chan struct{})` (worker.go:140 `done`) is a broadcast channel signaled by `close()`, where capacity is meaningless. |
 | M | Buffered channel with capacity 0-vs-1 confusion in tests of the drain path. | ✅ Clean: all capacities are deliberate (1 for signals/notifications, larger for job queues). |
 | S | `chan` stored in structs without lifecycle ownership — ambiguous who closes. | ✅ Clean: every channel field has a documented owner that closes it (verified across s559/642/682/779). |
 
