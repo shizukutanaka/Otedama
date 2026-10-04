@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 796 update — if-scope + loop-return + int-truncation audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `if x := f(); cond` accidentally shadowing an outer name — outer value silently unused. | ✅ Benign: 131 scoped-init sites are idiomatic (fresh temp names per site); the earlier `shadow` analyzer run (session 536) reported zero genuine shadow defects. |
+| M | `return` inside a loop body skipping a per-iteration cleanup — leaked resources per element. | ✅ Clean: the only defer+return-in-loop match (`hashrate.go:141-146`) is a `defer wg.Done()` inside a spawned goroutine — it fires at goroutine exit, correctly; no per-iteration resource acquire exists. |
+| M | Signed integer division truncating toward zero on negative operands — off-by-one at boundaries. | ✅ Clean: no signed-int division sites on signed input — the flagged lines are comments/`nolint` bounds justifications only (hashrate/stats math is float64 or guarded non-negative). |
+
+All packages build, vet, and test green.
