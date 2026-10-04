@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1115 update — string-cut idiom census
+
+`SplitN(...,2)`/index-slice patterns vs `strings.Cut`; `HasPrefix` misuse as
+prefix-strip.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `SplitN(x, 2)` or manual `Index`+slice for split-once semantics; position-aware `Index`/`IndexRune` uses all need the index (charset maps, host/port bounds) | S |
+| S | `CutPrefix` used for prefix-strips (config.go:748, gpu_linux.go:157, checks.go:1024, parse.go:317); `HasPrefix` uses are classification-only — correctly not CutPrefix | S |
+
+All packages build, vet, and test green.
