@@ -3589,6 +3589,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 772 update — sign-shift + negative-guard + bit-op audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Signed↔unsigned conversion losing sign — negative cast to huge positive used as a bound. | ✅ Clean: no unchecked signed→unsigned casts; nonce-space stride arithmetic is guarded by `total <= 1<<31`; `int(nBits >> 24)` reads a field that is uint32-positive by construction. |
+| S | Negative value reaching an index/length — `arr[x]` or `x[:n]` with x/n possibly negative. | ✅ Clean: every negative-capable value is guarded (`pos < 0`, `idx < 0`, `ms < 0`, `fraction < 0`, `i < 0`) before use; float negativity in arbitration config is rejected with `IsNaN`/`IsInf`. |
+| S | Bit shifts on signed operands producing implementation-defined or sign-propagating results. | ✅ Benign: shifts operate on masked `uint32`/small-int bitfields in bech32/checksum and SV2 wire code — values are non-negative by masking before the shift. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
