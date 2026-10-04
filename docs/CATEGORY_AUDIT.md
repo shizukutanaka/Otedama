@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 963 update — httpserver-timeout + pprof-gate + readyz audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Bare `http.Server` — slowloris hangs tying up the goroutine; missing idle/read bounds. | ✅ Clean: `ReadHeaderTimeout 5s`, `Read/WriteTimeout 10s`, `IdleTimeout 60s` all set; `Shutdown` gives in-flight requests 5s. |
+| M | pprof blank-imported onto `http.DefaultServeMux` — debug surface leaking onto whatever else serves the default mux. | ✅ Clean: deliberate no-blank-import; handlers registered explicitly on the server's own mux only when `enablePprof` is set. |
+| M | `/readyz` reporting ready merely because the process started — orchestrator routes traffic into an unconnected engine. | ✅ Clean: ready is an `atomic.Bool` flipped by the engine only after a pool session is established (SetupConnection/OpenMiningChannel or V1 handshake). |
+| M | Port-0 bind silently losing the real address; background `Serve` error invisible to supervisors. | ✅ Clean: `boundAddr`/`serveErr` are `atomic.Pointer`s published from the serve goroutine — `Addr()` and `ServeError()` read them safely. |
+
+All packages build, vet, and test green.
