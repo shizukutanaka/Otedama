@@ -2070,6 +2070,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 906 update — dep-census + dep-rationale + dep-version audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | External dependency census — unvetted or duplicate-capability imports. | ✅ Clean: 3 external modules only — `go.yaml.in/yaml/v3` (config), `x/crypto` (KDF + AEAD), `x/sys` (TIOCGWINSZ/ConsoleScreenBufferInfo); each passes the 5-criteria gate and each `require` carries the rationale comment (s444/581). |
+| M | `gopkg.in/yaml.v3` lingering alongside `go.yaml.in/yaml/v3` — split decoder surface. | ✅ Clean: migrated at s444 — only the maintained `go.yaml.in` import remains. |
+| S | `x/crypto`/`x/sys` pins older than the security baseline. | ✅ Clean: v0.23.0/v0.20.0 pinned explicitly; dependabot tracks them and `govulncheck` is the gate — no stale-vuln hit on these pin levels. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
