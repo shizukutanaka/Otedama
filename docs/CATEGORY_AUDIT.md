@@ -2302,6 +2302,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 927 update — device-interface + driver-enumerate + capability-bitmap audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Device`/`Driver` concurrency contract unspecified — readers racing SubmitWork/Shutdown. | ✅ Clean: interface explicitly requires "safe for concurrent use" + `Shutdown` must be idempotent; post-Shutdown `SubmitWork` must error. |
+| M | `Driver.Enumerate` blocking indefinitely on a slow scan. | ✅ Clean: documented sub-second typical + long discovery must be bounded by ctx; on timeout returns partial results with ctx.Err(). |
+| S | Capability bitmap reading truthy for unimplemented workload kinds. | ✅ Clean: `Capabilities` is a false-default struct; a device may only advertise what `SubmitWork` actually accepts — upper layers filter on it. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
