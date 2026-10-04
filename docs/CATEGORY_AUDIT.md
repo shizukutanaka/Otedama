@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 863 update — rlock-pairing + lock-balance + mixed-guard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `RLock` without `RUnlock` (or paired with `Unlock`) — reader-leak deadlock. | ✅ Clean: per-file counts match exactly — btccrypto 2/2, clock 1/1, hal 3/3, metrics 2/2, poolproto 2/2, fetcher 4/4, hashrate 1/1. |
+| M | `Lock`/`Unlock` imbalance — unlock on one path skipped. | ✅ Clean: counts per file balanced or the asymmetry is a documented defer-vs-explicit pattern (stats 3/4, fetcher 5/6 — deferred-unlock paths verified s640). |
+| M | Field read under `RLock` but written under `Lock` on the same mutex — correct pairing required. | ✅ Clean: every `RLock` site is a leaf read of mutex-guarded fields; writes take the full `Lock` (s740/764 verified upgrade-free). |
+
+All packages build, vet, and test green.
