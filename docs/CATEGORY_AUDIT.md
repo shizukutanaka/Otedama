@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 864 update — flag-dup + exec-argv + exec-lookup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate `flag.X("name", ...)` registration — panic at init. | ✅ Clean: absent — no `flag` package use; argv parsing is a bespoke switch in `cmd/otedama` (verified s737/803). |
+| M | `exec.Command(name, args...)` with user-controlled `name` or interpolated `args` — argv injection. | ✅ Clean: all 4 call sites use fixed literal commands (`systemctl`, `launchctl`, `sc.exe`, plus the `runCmd` seam) with literal argument lists — no user input reaches argv (s690/764). |
+| M | `exec.LookPath`/relative command names — PATH-hijacked binaries. | ✅ Clean: commands resolve via PATH deliberately for service managers; unit names passed are compile-time constants, never user strings. |
+
+All packages build, vet, and test green.
