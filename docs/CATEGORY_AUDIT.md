@@ -2448,6 +2448,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1125 update — time.After census
+
+`time.After` in loops/hot paths leaks timers until fire (pre-1.23) and
+allocates a fresh channel per iteration.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | One site (engine/run.go:1431): one-shot reconnect-honor wait, ctx-cancellable, on the connection-close path (not a hot loop) | ⚠️ Noted (correct as-is) |
+| S | Hot-path select uses `time.NewTimer` + explicit `Stop`, with a code comment documenting the time.After pitfall (run.go:600) | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
