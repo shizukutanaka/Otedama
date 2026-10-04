@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 786 update — subslice-alias + append-backing + bytes-split audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Subslice escaping its parent — a `b[i:j]` retained while the parent is reused, corrupting the kept view. | ✅ Clean: subslices are either copied out immediately (hash/header encodes) or are owned buffer-advance patterns like `readbuf = readbuf[n:]` that deliberately share their backing (verified session 607). |
+| S | `append` onto a subsliced backing — growing into bytes the parent still uses. | ✅ Clean: zero `append(x[i:j])` sites — matches the session-607 append-aliasing verdict; every append targets a fresh or wholly-owned slice. |
+| S | `bytes.Split`/`Fields` results retained — returned views pinned to the input buffer's lifetime. | ✅ Clean: `bytes.Split`/`Fields`/`Trim` absent — no retained subslice views exist to pin. |
+
+All packages build, vet, and test green.
