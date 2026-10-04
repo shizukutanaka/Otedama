@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 792 update — bigint-alloc + sort-closure + target-path audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `big.Int` allocated inside the mining hot loop — per-hash GC pressure. | ✅ Clean: the grind loop compares `hash.LessOrEqual` on a fixed `[32]byte` target — zero big arithmetic per nonce; `big.Int` appears only in per-job target conversion (`TargetFromNBits`/`FromDifficulty`, per-job not per-hash), `diff1Target` is a package-level constant. |
+| P | `sort.Slice`/`slices.SortFunc` closures allocating per call in a loop. | ✅ Benign: all sort sites are cold — arbitration candidate ranking per round, i18n/stat listing — closure cost is trivial at that cadence. |
+| P | base58 `new(big.Int)` per decode — O(n) decode in hot path. | ✅ Benign: base58 decode is a cold-path address-validation step only — never in the share loop. |
+
+All packages build, vet, and test green.
