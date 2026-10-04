@@ -2648,6 +2648,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1141 update — switch-form census
+
+Single-case `switch` (should be `if`) and `switch true`-form usage.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero single-case switches; 25 tagless `switch { ... case cond: }` sites — the repo's established if-else-chain idiom | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
