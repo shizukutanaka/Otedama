@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 948 update — header-wire + hash-compare + nbits-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Header.Bytes()`/`ParseHeader` emitting a non-canonical wire layout — hashes computed over the wrong bytes. | ✅ Clean: field order and offsets follow Bitcoin serialisation ([0:4] version LE … [76:80] nonce LE); `ParseHeader` is the documented inverse and the genesis-block test pins the layout. |
+| M | `Hash.LessOrEqual` comparing in the wrong byte order — a valid share rejected or an invalid one accepted. | ✅ Clean: iterates index 31 → 0 — the numerical big-endian order over little-endian-stored bytes, matching `SHA256d` output and `TargetFromNBits` layout; equal falls through to `true` (hash ≤ target is valid). |
+| M | Malformed nBits producing a zero/negative/overflowing target — silent dead-end mining or accept-everything. | ✅ Clean: `TargetFromNBits` rejects the sign bit, `exp < 3`, `mant == 0`, and `len(b) > 32` overflow — every degenerate compact value errors instead of yielding an unreachable or all-accepting target. |
+
+All packages build, vet, and test green.
