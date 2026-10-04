@@ -279,12 +279,12 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 	}
 	if q.DeviceID != "" {
 		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
+			SatsPerSecond: q.Yield.NetSatsPerSecond,
 			Confidence:    q.Yield.Confidence,
 		}
 	}
 	existing.DefaultYield = arbitration.Yield{
-		SatsPerSecond: q.Yield.SatsPerSecond,
+		SatsPerSecond: q.Yield.NetSatsPerSecond,
 		Confidence:    q.Yield.Confidence,
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"

@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1009 update — yield-bridge + custodial-scope + doc-honesty audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The quote→stream bridge carrying gross `SatsPerSecond` into arbitration and discarding `NetSatsPerSecond` — so Decide compared providers pre-fee while every provider computes a net figure (mining ×0.99, Akash ×0.80) whose documented purpose is "what the arbitration engine uses for comparison". | 🔧 **Fixed this commit**: `updateStream` now bridges `NetSatsPerSecond` (contract-strict — a provider reporting net ≤ 0 is idle-side, never over-credited); test fakes updated to set net = gross per the field contract. |
+| S | Render Network / io.net being added later as providers despite being custodial and centrally priced. | ✅ Clean: both are named in the package doc as deliberately out of scope with primary sources cited — a naive future Provider implementation is preempted. |
+| S | The revenue-comparison doc claiming a reachable "GPU Bitcoin mining" path. | ✅ Clean: session-243 correction documents that `Capabilities.SHA256d` is false for every GPU (no compute dispatch — KNOWN_LIMITATIONS §4); the table lists only real-today paths and says routing is CPU-only until a dispatch driver lands. |
+
+All packages build, vet, and test green.

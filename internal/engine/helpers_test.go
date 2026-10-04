@@ -251,8 +251,8 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.099 (net bridges to arbitration)", y.SatsPerSecond)
 	}
 }
 
@@ -278,11 +278,11 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 
 	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
-		Yield: provider.Yield{SatsPerSecond: 0.1, Confidence: 0.9},
+		Yield: provider.Yield{SatsPerSecond: 0.1, NetSatsPerSecond: 0.1, Confidence: 0.9},
 	})
 	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
-		Yield: provider.Yield{SatsPerSecond: 0.2, Confidence: 0.95}, // updated
+		Yield: provider.Yield{SatsPerSecond: 0.2, NetSatsPerSecond: 0.2, Confidence: 0.95}, // updated
 	})
 
 	s := m[id+":"+dev]
