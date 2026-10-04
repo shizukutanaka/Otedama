@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1041 update — config-test layer-matrix + env-warning + ssot-equivalence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | 4-layer precedence under-pinned per field (silent shadowing in one layer). | ✅ Clean: dedicated per-field layer matrix — HTTPAddr/DataDir/Language each get file/env/flag + flag-over-env tests; `EmptyStringInHigherLayerDoesNotOverrideLower` and `FileLogFormatNotClobberedByFlagDefault` pin the two classic shadowing bugs. |
+| M | `ResolveWithOrigins` diverging from `Resolve` (two paths, one truth). | ✅ Clean: `TestResolveWithOrigins_ConsistentWithResolve` asserts identical inputs → identical config — the SSOT invariant is an explicit equivalence test, and per-field origin tracking (env/file/flag/default) is pinned. |
+| M | `EnvWarnings` mis-firing or under-firing on numeric env. | ✅ Clean: malformed cases flagged (unit-suffix typo `"300w"`, comma-decimal `"50,000"`), valid/unset → none, **non-numeric vars provably never flagged**, nil-env → process env — all four quadrants covered. |
+| M | `Validate` address/network checks weakened to accept-list-only. | ✅ Clean: valid-accept + invalid-reject + **checksum-typo reject on both primary and failover list** + empty-string-in-list + non-finite rejects + unknown-log-level + aggregates-multiple-issues — reject paths tested as hard as accept paths. |
+| S | Zero-config startup pathological case untested. | ✅ Clean: `TestZeroConfigurationStartup` + `IncludesLogFormat` assert bare defaults are valid end-to-end. |
+
+All packages build, vet, and test green.
