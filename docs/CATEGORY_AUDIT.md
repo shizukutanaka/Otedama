@@ -3470,6 +3470,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 741 update — mux-pattern + loop-resource + binary-codec audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | `http.ServeMux` pattern conflicts — overlapping patterns panic at registration (startup DoS). | ✅ Clean: dedicated mux (DefaultServeMux deliberately avoided); patterns are distinct literals (`/healthz`, `/readyz`, `/metrics`, `/`) plus `/debug/pprof/` subtree + named handlers — no overlap. |
+| S | Resource acquire inside a loop with release deferred to loop end — fd/handle exhaustion on iteration. | ✅ Absent: zero `os.Open*`/`net.Dial`/`http.*` calls inside loop bodies; all connections/files are opened on setup paths outside iteration. |
+| M | `binary.Read`/`binary.Write` on variable-width struct fields — silent truncation/mis-encoding on slices or interface fields. | ✅ Absent: zero call sites; all wire codec goes through the explicit `append*`/`get*` primitives which handle variable-length fields by hand. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
