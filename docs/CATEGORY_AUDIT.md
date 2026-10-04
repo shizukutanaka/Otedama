@@ -4035,6 +4035,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 819 update — sentinel-eq + ctx-err-poll + help-sentinel audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `err == X` comparing a wrapped error — identity test fails under wrapping. | ✅ Clean: the only non-nil `==` comparison is `err == flag.ErrHelp` — a stdlib sentinel returned unwrapped; `==` is the documented check. All other classification uses `errors.Is`/`As`. |
+| S | `ctx.Err()` polled in a loop instead of `<-ctx.Done()` — busy-wait / missed cancellation edge. | ✅ Clean: all 15 `ctx.Err()` sites are post-operation diagnostics (classifying a returned error as cancellation), never a wait loop — loops use `<-ctx.Done()` in `select` (verified sessions 563/571). |
+| S | Bare `==` on `io.EOF`-class sentinels where `errors.Is` is required by the io contract. | ✅ Clean: io error handling uses `err == io.EOF` nowhere — EOF surfaces via `io.ReadFull`'s documented returns checked with `errors.Is` (verified session 784). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
