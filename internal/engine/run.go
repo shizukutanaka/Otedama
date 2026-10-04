@@ -1013,7 +1013,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 		case pm, ok := <-inCh:
 			if !ok {
-				return fmt.Errorf("engine: pool closed connection")
+				return errors.New("engine: pool closed connection")
 			}
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
@@ -1432,7 +1432,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						}
 					}
 				}
-				return fmt.Errorf("engine: pool closed connection")
+				return errors.New("engine: pool closed connection")
 			}
 			// While curtailed, keep workers idle and ignore the job (see the
 			// V2 path for rationale). lastJobReceivedAt still updates because
@@ -1615,7 +1615,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		return 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
 	}
 	if msg.OpenMiningChannelSuccess == nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+		return 0, miner.Hash{}, errors.New("engine: channel open failed")
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes

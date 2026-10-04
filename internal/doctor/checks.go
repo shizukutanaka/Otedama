@@ -849,7 +849,7 @@ var clockSkewHTTPClient *http.Client
 // downgrade leaking the request and feeding the check an attacker Date.
 var clockSkewDefaultClient = &http.Client{
 	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-		return fmt.Errorf("doctor: redirects are not followed")
+		return errors.New("doctor: redirects are not followed")
 	},
 }
 

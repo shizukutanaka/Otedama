@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -54,7 +55,7 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 		if err != nil {
 			return nil, fmt.Errorf("engine: device detection interrupted: %w", err)
 		}
-		return nil, fmt.Errorf("engine: no devices detected")
+		return nil, errors.New("engine: no devices detected")
 	}
 	return devices, nil
 }
@@ -70,7 +71,7 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 		}
 	}
 	if len(sha256d) == 0 {
-		return nil, nil, fmt.Errorf("engine: no SHA256d-capable devices found")
+		return nil, nil, errors.New("engine: no SHA256d-capable devices found")
 	}
 	workers := make([]*miner.Worker, 0, len(sha256d))
 	shareChans := make([]<-chan miner.Share, 0, len(sha256d))

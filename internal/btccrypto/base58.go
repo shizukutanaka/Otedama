@@ -79,7 +79,7 @@ func ValidateBase58Address(addr string) (AddressType, error) {
 	checksum := raw[21:]
 	sum := Hash256(payload)
 	if !bytes.Equal(sum[:4], checksum) {
-		return AddressUnknown, fmt.Errorf("btccrypto: base58 checksum failed (likely a typo in the address)")
+		return AddressUnknown, errors.New("btccrypto: base58 checksum failed (likely a typo in the address)")
 	}
 	switch payload[0] {
 	case 0x00:

@@ -243,7 +243,7 @@ func (wm *WalletManager) loadExisting(passphrase string) error {
 	if err != nil {
 		// DecryptSeed returns a deliberately opaque error on wrong passphrase
 		// to prevent oracle attacks. Surface it directly.
-		return fmt.Errorf("lightning: wallet unlock failed — check your passphrase")
+		return errors.New("lightning: wallet unlock failed — check your passphrase")
 	}
 	wm.seed = seed
 	return nil
@@ -348,7 +348,7 @@ func (wm *WalletManager) ChangePassphrase(oldPassphrase, newPassphrase string, r
 	}
 	seed, err := DecryptSeed(es, oldPassphrase)
 	if err != nil {
-		return fmt.Errorf("lightning: incorrect old passphrase")
+		return errors.New("lightning: incorrect old passphrase")
 	}
 	if reader == nil {
 		reader = rand.Reader

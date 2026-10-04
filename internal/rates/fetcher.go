@@ -77,7 +77,7 @@ var defaultSources = []Source{
 				}
 				return parseRate(ticker.C[0])
 			}
-			return 0, fmt.Errorf("rates: kraken: no ticker data")
+			return 0, errors.New("rates: kraken: no ticker data")
 		},
 	},
 	{
@@ -93,7 +93,7 @@ var defaultSources = []Source{
 					return usd, nil
 				}
 			}
-			return 0, fmt.Errorf("rates: coingecko: missing bitcoin.usd field")
+			return 0, errors.New("rates: coingecko: missing bitcoin.usd field")
 		},
 	},
 }
@@ -185,7 +185,7 @@ func NewFetcher(fallback float64) *Fetcher {
 			// only be hostile (e.g. an https→http downgrade injecting a
 			// manipulated price), so refuse to follow any.
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return fmt.Errorf("rates: redirects are not followed")
+				return errors.New("rates: redirects are not followed")
 			},
 		},
 	}

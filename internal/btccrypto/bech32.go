@@ -20,6 +20,7 @@
 package btccrypto
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -91,7 +92,7 @@ func convertBits(data []int, from, to uint, pad bool) ([]int, error) {
 			out = append(out, (acc<<(to-uint(bits)))&maxv)
 		}
 	} else if bits >= int(from) || ((acc<<(to-uint(bits)))&maxv) != 0 { //nolint:gosec // from/to are the constant 5/8 group sizes
-		return nil, fmt.Errorf("btccrypto: convertBits: invalid padding")
+		return nil, errors.New("btccrypto: convertBits: invalid padding")
 	}
 	return out, nil
 }
@@ -113,7 +114,7 @@ func ValidateBech32Address(addr string) (AddressType, error) {
 	}
 	// BIP-173: reject mixed case; normalise to lower for decoding.
 	if addr != strings.ToLower(addr) && addr != strings.ToUpper(addr) {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 address has mixed case")
+		return AddressUnknown, errors.New("btccrypto: bech32 address has mixed case")
 	}
 	s := strings.ToLower(addr)
 
@@ -122,7 +123,7 @@ func ValidateBech32Address(addr string) (AddressType, error) {
 	}
 	pos := strings.LastIndexByte(s, '1')
 	if pos < 1 {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 address has no separator")
+		return AddressUnknown, errors.New("btccrypto: bech32 address has no separator")
 	}
 	hrp := s[:pos]
 	if hrp != "bc" {
@@ -131,7 +132,7 @@ func ValidateBech32Address(addr string) (AddressType, error) {
 	dataPart := s[pos+1:]
 	// 1 witness-version char + >=1 program + 6 checksum chars.
 	if len(dataPart) < 8 {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 data part too short")
+		return AddressUnknown, errors.New("btccrypto: bech32 data part too short")
 	}
 
 	data := make([]int, 0, len(dataPart))
@@ -154,7 +155,7 @@ func ValidateBech32Address(addr string) (AddressType, error) {
 		wantConst = bech32mConst
 	}
 	if got := bech32Polymod(append(bech32HrpExpand(hrp), data...)); got != wantConst {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 checksum failed (likely a typo in the address)")
+		return AddressUnknown, errors.New("btccrypto: bech32 checksum failed (likely a typo in the address)")
 	}
 
 	// Decode the witness program (everything after the version, minus the

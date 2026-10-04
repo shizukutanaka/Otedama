@@ -33,6 +33,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -730,7 +731,7 @@ func validateBitcoinAddress(addr string) error {
 	case strings.HasPrefix(addr, "3"):
 	case strings.HasPrefix(addr, "bc1"):
 	default:
-		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
+		return errors.New("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
 	// Checksum verification: bech32/bech32m for bc1…, Base58Check for
 	// 1…/3….
@@ -759,7 +760,7 @@ func validatePoolURL(raw string) error {
 // out-of-range ports — at config load rather than at first dial.
 func validatePoolTarget(rest string) error {
 	if rest == "" {
-		return fmt.Errorf("URL has no host after scheme")
+		return errors.New("URL has no host after scheme")
 	}
 	if strings.ContainsAny(rest, "@/?# \t") {
 		return fmt.Errorf("must be host:port with no userinfo, path, or whitespace (got %q)", rest)
@@ -769,7 +770,7 @@ func validatePoolTarget(rest string) error {
 		return fmt.Errorf("must be host:port (e.g. pool.example.com:3333): %v", err)
 	}
 	if host == "" {
-		return fmt.Errorf("host is empty")
+		return errors.New("host is empty")
 	}
 	p, err := strconv.Atoi(port)
 	if err != nil || p < 1 || p > 65535 {

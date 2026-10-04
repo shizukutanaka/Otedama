@@ -15,6 +15,7 @@ package stratumv1
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -92,17 +93,17 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 	b, err := hex.DecodeString(coinb1Hex)
 	if err != nil || len(b) == 0 {
-		return poolproto.Job{}, fmt.Errorf("notify: coinb1: malformed or empty")
+		return poolproto.Job{}, errors.New("notify: coinb1: malformed or empty")
 	}
 	job.Coinb1 = b
 	if b, err = hex.DecodeString(coinb2Hex); err != nil || len(b) == 0 {
-		return poolproto.Job{}, fmt.Errorf("notify: coinb2: malformed or empty")
+		return poolproto.Job{}, errors.New("notify: coinb2: malformed or empty")
 	}
 	job.Coinb2 = b
 	for _, h := range merkleBranchHexs {
 		b, err := hex.DecodeString(h)
 		if err != nil || len(b) != 32 {
-			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch: malformed or wrong length")
+			return poolproto.Job{}, errors.New("notify: merkle_branch: malformed or wrong length")
 		}
 		job.MerkleBranch = append(job.MerkleBranch, b)
 	}
@@ -125,7 +126,7 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
 	} else {
-		return poolproto.Job{}, fmt.Errorf("notify: prevhash: malformed or wrong length")
+		return poolproto.Job{}, errors.New("notify: prevhash: malformed or wrong length")
 	}
 	// MerkleRoot is completed by the session (completeV1Job) once the
 	// negotiated extranonce1/2 are folded into the coinbase.

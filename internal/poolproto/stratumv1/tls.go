@@ -19,7 +19,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
+	"errors"
 	"net"
 )
 
@@ -46,7 +46,7 @@ func tlsConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
 		pool = x509.NewCertPool()
 	}
 	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("stratumv1: tls_ca_file contains no valid PEM certificates")
+		return nil, errors.New("stratumv1: tls_ca_file contains no valid PEM certificates")
 	}
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
