@@ -4715,6 +4715,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 977 update — doctor-checkset + perm-gate + cross-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | The "17 parallel checks" count in docs drifting from `DefaultChecks`. | ✅ Clean: the slice lists exactly 17 — config, address, failover, datadir, wallet, reachability, diversity, endpoint-diversity, encryption, TLSCA, payout scheme, power, profitability floor, hardware, network, clock skew, env vars. |
+| M | doctor inspecting a different data dir than the engine uses — `DataDir` empty vs default-resolved mismatch. | ✅ Clean: `checkDataDir`/`checkWallet` mirror `config.DefaultDataDir()` exactly; empty with no home → Skip, not a false Fail. |
+| M | A restored 0644 wallet.dat passing the enclosing-directory check — readable encrypted seed. | ✅ Clean: `checkWallet` separately warns on `perm&0o077` for the file itself (non-Windows); fingerprint display is best-effort/non-fatal; constants mirrored without importing crypto. |
+| M | `tls_ca_file` set on a non-`stratum+tls://` pool silently ignored at dial time, or doctor and the dialer disagreeing on "valid PEM". | ✅ Clean: warns on scheme mismatch; validates with the same `x509.NewCertPool().AppendCertsFromPEM` the dialer uses. |
+| M | `power_watts` set without `electricity_price_per_kwh` (or vice versa) — a silently-dead cost metric the operator believes is live. | ✅ Clean: `checkPowerEconomics` validates the pair as cross-field intent, not each field alone; plaintext-pool warning redacts userinfo via `StripUserinfo` before display. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
