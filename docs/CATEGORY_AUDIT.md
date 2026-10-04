@@ -2326,6 +2326,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 929 update — poolproto-register + lookup-wrap + dialurl-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Nil dialer / unknown protocol ID / duplicate registration sliding silently into the registry. | ✅ Clean: `Register` panics on nil + `ProtocolUnknown` + duplicate ID — init-time misregistration is impossible to miss. |
+| M | `Lookup` returning a bare "not found" that `errors.Is` can't classify. | ✅ Clean: returns `fmt.Errorf("%w: %q", ErrUnknownProtocol, id)` — sentinel-preserved. |
+| M | Negotiate failure leaving the conn open — fd leak per failed dial. | ✅ Clean: `DialURL` closes `conn` before wrapping the negotiate error; both stages wrap with `%w` + URL for classification. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
