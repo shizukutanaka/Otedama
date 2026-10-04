@@ -1734,6 +1734,66 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GOMAXPROCS`/`debug.SetGCPercent`/`FreeOSMemory` — hidden global tuning the operator cannot see. | ✅ Clean: absent — no runtime knobs are mutated; scheduling/GC stay under the Go runtime's defaults (README documents GOMAXPROCS as the env lever). |
+| M | `runtime.NumCPU()` used where a bounded worker count was intended — thread explosion on big machines. | ✅ Clean: `miner` uses `NumCPU` only as the `Threads: 0` default (documented); operator flags can cap it. |
+| S | `runtime.GOOS` sprinkled through production logic — untestable platform forks. | ✅ Clean: production GOOS dispatch lives in `daemon/service_paths.go` behind build-tagged platforms; elsewhere it appears only in test skips. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 878 update — codec-census + binary-struct + encoding-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `encoding/gob`, `encoding/xml`, `encoding/csv`, `encoding/asn1`, `base32`/`base64` — alternate codecs deserializing wire data with own quirks. | ✅ Clean: absent — the only encoding imports are `json` (config/doctor/version), `hex` (address/seed display), `pem` (doctor cert probe test), `binary` (wire primitives). |
+| M | `binary.Size`/`binary.Read`/`binary.Write` on variable-layout structs — silent size mismatches vs spec. | ✅ Clean: absent — all wire layout is computed by explicit `append*`/`get*` primitives against spec constants (s741/824). |
+| S | Codec surface drift — different encodings used for the same kind of data in different places. | ✅ Clean: JSON for all structured config/report boundaries, hex for all byte display — no competing codec. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 879 update — ptr-tricks + go-directive + sys-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `unsafe`/`uintptr`/`reflect` in production — layout hacks, GC-pooler breakage, no checkptr coverage. | ✅ Clean: absent from production — `reflect.DeepEqual` appears in one fuzz test only (build/vet confirmed clean at s538/s687). |
+| M | `//go:linkname`/`//go:noinline`/`//go:generate` directives — hidden behavior, unreachable code, or stale generated files. | ✅ Clean: the only directives are `//go:build` platform tags (hal linux/stub, tui width_unix/width_windows/width_other) — correct mutually-exclusive coverage. |
+| S | Direct `syscall`/`x/sys` surface wider than needed — platform-coupled APIs leaking into core logic. | ✅ Clean: `x/sys/unix|windows` only in the build-tagged `tui/width_*.go` terminal-size helpers; `syscall.SIGTERM` only for the run-loop signal set. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 880 update — flag-dup-recheck + flagset-error + setflags audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate flag-name registration within a `flag.FlagSet` — init-time panic. | ✅ Clean: every name registers exactly once per FlagSet (run/doctor/service/version/config/completion). The quoted-string `uniq -d` hits in run.go are `setFlags` map lookups and log literals, not registrations. |
+| M | `flag.ExitOnError`/`flag.Parse` inside library code — `os.Exit` bypasses cleanup. | ✅ Clean: every FlagSet uses `flag.ContinueOnError`; parse errors return through `parseSubcommandFlags` to the dispatcher's exit-code path. |
+| M | `setFlags` map drift — a flag marked "set" that was never registered. | ✅ Clean: `setFlags` records only names passed to `fs.Visit`, i.e. flags actually parsed — cannot list unregistered names. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 881 update — ansi-escape + tui-state + cursor-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Raw `\x1b[` escapes in user-facing output — malformed sequences corrupt the terminal. | ✅ Clean: escapes live behind named constants (`esc`/`reset`/`bold`/…) and a `stripANSI` that terminates on any non-`m` CSI end byte — verified by the formatters tests (clear-screen and truncated-sequence cases). |
+| M | TUI cursor/screen state diverging from what was drawn — flicker, leftover cells, or a permanently garbled dashboard. | ✅ Clean: `clearScreen` saves cursor → moves home → clears below → restores; the saved position is re-written every refresh, so a resize can only widen the cleared region, never narrow it. |
+| S | ANSI emitted on non-terminal output — escape noise in log files and pipes. | ✅ Clean: the dashboard only runs when `--no-tui` is unset and output is a terminal; the plain `logln` path emits no escapes. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 882 update — sleep-lock + sleep-busywait + print-under-lock audit
 
 | Cat | Finding | Disposition |
