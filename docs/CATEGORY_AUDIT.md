@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1031 update — test-assert-quality + shrinkable-constant + cleanup-hygiene audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Completion scripts drifting from the dispatch list (the missing-"wallet" class). | ✅ Clean: `TestCompletion_EmitsPerShellScript` asserts the full 8-command string is present in the bash output — a drifted verb list fails at test time; zsh/fish asserted on their own anchors. |
+| M | Error paths still writing a script to stdout. | ✅ Clean: `TestCompletion_RejectsBadArgs` asserts `exitUsage` AND `out.Len() == 0` for `""`/unknown-shell/extra-args. |
+| M | `maxLogFileBytes` shrink-for-test leaking into other tests. | ✅ Clean: every test saves + `defer`-restores the var; no `t.Parallel` in the file, so the shared-var mutation can't race. |
+| M | Rotation invariants under-tested (marker, single generation, disk bound). | ✅ Clean: asserts backup non-empty + rotation marker + active ≤ cap + total ≤ 2×(cap+write) + `.old.old` absent + append-reopen preserves bytes + mode 0600 via `os.Stat`. |
+| S | `joinOr` edge cases (empty/single) producing a dangling "or". | ✅ Clean: `""` for 0-item, bare item for 1-item, "a or b" for 2 — all three pinned. |
+
+All packages build, vet, and test green.
