@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 958 update — provider-lifecycle + quote-drop + yield-source audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Double `Start` spawning a second publish loop writing into the same `quoteCh` — duplicate quotes and a close-order race. | ✅ Clean: `launch` rejects when `p.cancel != nil`; `quoteCh` is closed by the loop goroutine itself (sole writer) after it returns. |
+| M | `Stop` recreating `quoteCh` while the old writer is still live — concurrent access on restart. | ✅ Clean: `cancel()` → `wg.Wait()` → recreate channel — the sole writer provably exits before the new channel exists; safe to call before any `Start`. |
+| M | Full quote channel blocking the publish loop — a slow consumer freezing yield updates. | ✅ Clean: `sendQuote` drops the oldest buffered quote on full — freshest estimate always wins — and returns `false` on cancel. |
+| M | Stale/zero network-hashrate or device-hashrate values silently zeroing the mining yield. | ✅ Clean: live network hashrate used only when `fresh && h > 0` (else the 1e21 H/s constant); device hashrate uses `HashrateFunc` only when it returns > 0, else the per-family table. |
+
+All packages build, vet, and test green.
