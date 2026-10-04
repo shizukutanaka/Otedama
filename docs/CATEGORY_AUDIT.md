@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1122 update — short-circuit census
+
+`&&`/`||` right-hand operands: side-effecting calls, expensive calls placed
+before cheap guards, or logic relying on evaluation order.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All 46 call-bearing operands are guard-first: nil/err/len checks precede method calls; no side effects on the right side | S |
+| S | Ordering is cheap→expensive throughout (e.g. `err == nil && fi.Mode()&CharDevice`, `err != nil || len(b) == 0`) | S |
+
+All packages build, vet, and test green.
