@@ -4409,6 +4409,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 851 update — walk-dir + glob + open-mode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `filepath.Walk` in a hot path — calls `Lstat` per entry (slow vs `WalkDir`'s DirEntry). | ✅ Clean: absent — both directory scans use `os.ReadDir` (returns DirEntry lazily), which is the recommended primitive for a bounded flat listing. |
+| M | `filepath.Glob` with a user-controlled pattern — `ErrBadPattern` panic risk, unintended traversal. | ✅ Clean: sole site (wallet.go:267) uses a fixed literal `.wallet-*.tmp` — no user input. |
+| M | `os.OpenFile` with write flags but loose mode — credentials/data written world-readable. | ✅ Clean: two opens — logfile `O_CREATE|O_WRONLY|O_APPEND` at `0600`, configfile `os.Open` read-only; wallet file handled separately at `0600`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
