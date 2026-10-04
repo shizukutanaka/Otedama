@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 888 update — embed-surface + unsafe2 + bit-intrinsic audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go:embed` shipping mutable config/data into the binary — stale defaults hidden in the image. | ✅ Clean: absent — nothing is embedded; `config.yaml.example` is documentation, loaded at runtime from the operator's filesystem. |
+| M | Pointer-trick packages (`unsafe`-backed helpers) — unchecked layout/size assumptions. | ✅ Clean: absent — s879 verified zero `unsafe`/`uintptr`/`reflect` in prod. |
+| S | `math/bits` intrinsics or hand-rolled bit tricks beyond spec ops. | ✅ Clean: absent — s885 verified; spec bit math uses raw shifts/masks only. |
+
+All packages build, vet, and test green.
