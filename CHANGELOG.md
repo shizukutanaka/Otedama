@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1313 — lint debt batch 3: staticcheck + gocritic)
+
+Clear the mechanical classes the golangci-lint v2 migration (#1391)
+surfaced: all 5 staticcheck findings (De Morgan forms, `for ctx.Err() ==
+nil`, single-case select) and all 13 gocritic findings (hugeParam pointer
+receivers on `sessionOpts.allArbPaused`/`channelIDOf`, ifElseChain→switch,
+importShadow renames, httpNoBody, octalLiteral, zeroByteRepeat, initClause,
+offBy1 index guard). One deliberate test fixture (whitespace map key)
+annotated `//nolint:gocritic`.
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:

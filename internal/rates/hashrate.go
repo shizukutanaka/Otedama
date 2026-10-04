@@ -177,7 +177,7 @@ func (f *HashrateFetcher) Fetch(ctx context.Context) error {
 // fetchOne reads one endpoint, enforcing the body-size ceiling and the
 // plausibility band.
 func (f *HashrateFetcher) fetchOne(ctx context.Context, src HashrateSource) (float64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, http.NoBody)
 	if err != nil {
 		return 0, err
 	}

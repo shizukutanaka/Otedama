@@ -2989,7 +2989,7 @@ func TestChannelIDOf(t *testing.T) {
 		{"Empty", stratum.Message{}, 0, false},
 	}
 	for _, c := range cases {
-		got, ok := channelIDOf(c.msg)
+		got, ok := channelIDOf(&c.msg)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: channelIDOf = (%d, %v), want (%d, %v)", c.name, got, ok, c.want, c.ok)
 		}

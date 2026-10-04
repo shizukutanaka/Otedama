@@ -26,8 +26,8 @@ func TestDialer_Protocol(t *testing.T) {
 	if got := plain.Protocol(); got != poolproto.ProtocolStratumV2 {
 		t.Errorf("plaintext Protocol() = %q, want %q", got, poolproto.ProtocolStratumV2)
 	}
-	tls := &Dialer{useTLS: true}
-	if got := tls.Protocol(); got != poolproto.ProtocolStratumV2TLS {
+	tlsDialer := &Dialer{useTLS: true}
+	if got := tlsDialer.Protocol(); got != poolproto.ProtocolStratumV2TLS {
 		t.Errorf("TLS Protocol() = %q, want %q", got, poolproto.ProtocolStratumV2TLS)
 	}
 }

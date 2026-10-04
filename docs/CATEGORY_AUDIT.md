@@ -4604,3 +4604,24 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1313 update — golangci-lint v2 judgment classes (staticcheck + gocritic)
+
+Follow-up to #1391: the v2 migration exposed ~111 findings hidden by dead
+lint jobs. After #1392 (misspell) and #1393 (goconst/errcheck/errorlint),
+this batch clears the remaining mechanical classes — staticcheck (5) and
+gocritic (13). Findings verified against code before fixing.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| A | staticcheck QF1001/1006/S1000 — De Morgan on digit/hex check (doctor), `for ctx.Err() == nil` reconnect loop (engine), single-case select → `<-time.After` (engine test), index-order negation (metrics test), poll loop condition hoist (stratumv1 test). | **S: fixed** — all 5 rewritten to the canonical form; build+vet+pkg tests green; staticcheck now 0. |
+| B | gocritic hugeParam — `sessionOpts.allArbPaused` (256B receiver) and `channelIDOf(stratum.Message)` (104B param). | **S: fixed** — pointer receivers; matches sibling methods and both call sites already hold the value. |
+| C | gocritic ifElseChain/initClause — wallet Stat cascade (lightning), `if submits++;` in engine test. | **S: fixed** — `switch` on `errors.Is` and hoisted increment. |
+| D | gocritic importShadow — `os` param in daemon test, `tls` var in stratumv2 test. | **S: fixed** — renamed to `goosName`/`tlsDialer`. |
+| E | gocritic octalLiteral/httpNoBody/zeroByteRepeat — `0600`→`0o600` (doctor test), `nil`→`http.NoBody` (doctor + hashrate), `bytes.Repeat`→`make` (stratum test). | **S: fixed** — 5 sites, idiomatic forms. |
+| F | gocritic offBy1 — `line[:strings.Index(line, "✓")]` in tui test would slice to -1 if marker absent. | **S: fixed** — guarded with `idx < 0 → t.Fatalf`. |
+| G | gocritic mapKey — `"a1b2c3d "` whitespace key in fingerprint test map. | ⚠️ Noted — deliberate fixture proving `isFingerprint` rejects trailing whitespace; annotated `//nolint:gocritic`. gocritic now 0. |
+
+Verification: `go build`, `go vet`, and `go test` on all 10 touched
+packages pass. golangci-lint v2.14 recount: staticcheck 5→0, gocritic
+13→0 (remaining 46 misspell + 6 goconst are covered by open #1392/#1393;
+gosec 19 and gocyclo 15 remain for the next batch).
