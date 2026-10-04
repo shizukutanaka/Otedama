@@ -3227,6 +3227,14 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1200 update — mechanical-audit checkpoint
+
+The ledger holds 93 merged `## Session` entries on master covering roughly 700+ defect/drift classes. Sessions 1121–1199 (~78 entries) live on open, unmerged audit PRs — the append-conflict sweep convention applies when one lands. Findings since s1163: five real fixes shipped (SUSTAINABILITY flags, CLAUDE.md workflow list, OSS-Fuzz readiness, and this round's dead `main.*` ldflags in 3 workflows) plus three honest non-defects noted (stale CHANGELOG `[Unreleased]`, kubeconfig secret-name divergence, skills inventory gap, no-security-supported-alpha policy).
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
