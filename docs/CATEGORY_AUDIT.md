@@ -4323,6 +4323,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 844 update — duration-mult + backoff-cap + float-cast audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Duration` multiplied unchecked — exponential overflow wraps to a negative/huge duration. | ✅ Clean: the single exponential site (`run.go:613` `backoff *= 2`) is immediately capped at `reconnectBackoffMax` (64s) — can't overflow (verified session 636). |
+| S | `time.Duration(float)` conversion — fractional-nanosecond rounding and int64 overflow on huge floats. | ✅ Clean: `stats.go:58` casts `p50 * ms` where p50 is a bounded latency percentile — no overflow path; all literal durations use `N * unit` int form. |
+| S | Sleep-poll constants inline (`time.Sleep(10*ms)`) — magic numbers scattered. | ✅ Benign: the one inline sleep (`worker.go:269` bounded shutdown drain) is a documented poll interval, not a tunable. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
