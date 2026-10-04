@@ -1264,3 +1264,27 @@ tracking:
 No action items: the normative SV2 surface Otedama implements is
 unchanged, and the two tracked upstream convergence items (#845 field
 rename, #878 empty-script rejection) are already reflected in-tree.
+
+## Session-936 ecosystem update (2026-10-02)
+
+Re-checked after ~14 sessions.
+
+**sv2-spec** open=7, unchanged from session-922: normative candidates
+{#236 `SetTarget` max_target bound (still active, touched 10-02),
+#234 authority key management, #203 coinbase payouts, #198
+coinbase_witness}; editorial/WIP {#232 table unwrap, #186 cell
+consolidation, #103 proxy annex}. No merges since session-922 — the
+quiet normative window continues.
+
+**SRI** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps** open=27, unchanged in count. No merges since session-922's
+scan (#907 docs was the most recent merged, 10-02). Open items of note
+(tracked): #839 job-token→user_identity binding (touched 10-02), #845
+field-rename mirroring sv2-spec #228 cleanup (our PR #704 already
+followed), #878 empty coinbase reward script rejection, #881 WIP JDS
+push-solution (touched 10-02), #856 `bitcoin_core_sv2` hardening; newer
+untracked openings include #874 AGENTS.md docs, #902 Windows CI support,
+#903 "Buffer sv2" hardening, #904 monitoring/config/release edge cases,
+#908 B08 type support in `bitcoin_core_sv2`. The ecosystem continues
+hardening and infra work; nothing requires an Otedama change.
