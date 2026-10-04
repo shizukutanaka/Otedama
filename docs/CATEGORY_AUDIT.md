@@ -1892,6 +1892,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1023 update — exit-code-contract + help-detection + suggestion audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `otedama <cmd> --help` exiting like a usage error. | ✅ Clean: `hasHelpFlag` routes output to stdout with exitOK while real parse errors still get stderr+exit64 — and it scans all tokens (stopping only at `--`) because every flag takes a space-separated value, so a value can't terminate the flag region. |
+| M | Exit-code categories collapsing into one nonzero value. | ✅ Clean: sysexits-mapped 0/1/64/78 documented in godoc AND usage text; doctor's narrower 0/1/2 documented in both places — consistent two places each. |
+| S | Did-you-mean suggesting on unrelated typos. | ✅ Clean: edit distance ≤2, dash-trimmed, rune-based Levenshtein (multibyte-safe); unrelated input yields `""`. |
+| S | `printUsage` listing commands the dispatcher lacks. | ✅ Clean: usage text covers run/version/config/service/doctor/wallet/completion — all dispatched. |
+| M | `knownSubcommands` desynced from the dispatch switch — "wallet" missing, so `otedama wal` gets no suggestion. | ⚠️ Tracked: real gap; fix is open as PR #1062 (unmerged); do not re-deliver. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
