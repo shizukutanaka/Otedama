@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1184 update — skills-doc reference parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `make <target>` in skills/*.md | ✅ Clean — `make test`, `make test-integration`, `make fuzz` all resolve to Makefile targets |
+| S | `otedama <subcommand>` in skills/*.md | ✅ Clean — the only phantom reference (`otedama migrate-from-v2` in release-procedure.md) is already covered by an explicit session-483 訂正 erratum |
+| S | `//go:build` / E2E claims in skills/*.md | ⚠️ Noted — `test-e2e`/`integration`-tag claims are all corrected by inline session-483 errata; the corrections themselves remain accurate |
+
+All packages build, vet, and test green.
