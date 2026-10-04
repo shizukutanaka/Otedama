@@ -4275,6 +4275,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 840 update — bits-absence + strconv-discard + embed-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `math/bits` low-level bit ops where a clear expression would do — readability vs speed trade. | ✅ Clean: absent — the one "bits" hit is a BIP-39 entropy comment; all bit ops are plain operators on protocol fields. |
+| M | `strconv.Atoi/ParseUint` with `_` error discard — non-numeric input silently becomes 0. | ✅ Benign: two discards — `parse.go:268` feeds `d.Port` from an already-structured host:port split (non-numeric yields 0 → rejected by downstream port validation); `stratumv1.go:484` parses a protocol counter where 0 is the safe fallback. All other 10+ parses check errors with explicit bit sizes. |
+| S | `//go:embed` of large/secret material — accidental binary bloat or secret embedding. | ✅ Clean: absent — no embed directives. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
