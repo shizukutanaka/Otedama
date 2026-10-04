@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 812 update — global-logger + strings-map + once-value audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `slog.SetDefault`/`log.Set*` mutating the global logger outside main — output hijack between components. | ✅ Clean: zero global mutation sites — the `logger` package holds an `atomic.Pointer`-guarded instance; components receive it, never re-set the process logger. |
+| S | `strings.Map`/`bytes.Map` returning -1 dropping runes — accidental data loss vs intended sanitization. | ✅ Clean: both sites are the pool-text sanitizers — `-1` drops every `unicode.IsControl` rune (C0+C1+DEL) deliberately before log/terminal output. |
+| S | `sync.OnceValue`/`OnceFunc` available (go1.21+) for lazy singletons — vs manual `sync.Once` ceremony. | ✅ Benign: absent — the repo's lazy paths use `atomic.Pointer`/`atomic.Bool` compare-and-set or eager init; nothing needs once-value memoization today. |
+
+All packages build, vet, and test green.
