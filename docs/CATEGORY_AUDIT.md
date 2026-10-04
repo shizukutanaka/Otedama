@@ -4593,6 +4593,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 866 update — select-case + send-only + recv-mix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `select` mixing send and recv cases without a `ctx.Done()` — random choice can pick a send while a recv was required for progress. | ✅ Clean: absent — no select mixes send+recv cases; each select is either recv-with-ctx-done or a bounded send under the non-blocking pattern (s588/732). |
+| M | `select` containing only send cases — blocks forever on a full channel. | ✅ Clean: absent — every send uses either `select { case ch <- v: case <-ctx.Done(): ... }` or `default:` non-blocking form. |
+| S | `select` recv cases evaluated in misleading order — first-ready random pick assumed as priority. | ✅ Clean: code never relies on case order — loops always include `ctx.Done()` and treat channel order as fair (fanin merges verified s636/773). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
