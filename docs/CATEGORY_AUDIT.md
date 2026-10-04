@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1183 update — repo-config path census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | CODEOWNERS path targets | ✅ Clean — all 12 patterns (`/internal/lightning`, `/internal/btccrypto`, `/internal/poolproto`, `/internal/stratum/noise*`, `/.goreleaser.yaml`, `/Makefile`, `/install.sh`, docs, …) resolve to real files/dirs |
+| S | dependabot.yml ecosystems | ✅ Clean — gomod/github-actions/docker all target existing manifests (`go.mod`, `.github/workflows/`, `Dockerfile`); the no-`automerge` caveat is honestly documented |
+| S | `.github/` housekeeping | ✅ Clean — CODEOWNERS, ISSUE_TEMPLATE/, pull_request_template.md, workflows all present and consistent with CLAUDE.md |
+
+All packages build, vet, and test green.
