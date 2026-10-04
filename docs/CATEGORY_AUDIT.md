@@ -2178,6 +2178,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 916 update — config-layer + env-empty + numeric-parse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Layer precedence inverted — file overriding flags, or env overriding flags. | ✅ Clean: comment + code agree flag > env > file > default; `Origin*` attribution set on every applied field. |
+| M | Empty-string env var treated as a real value — clobbering the file layer with `""`. | ✅ Clean: every `getEnv` consumer guards `v != ""`; empty/unset is "not set" (config_test.go:85 covers it). |
+| S | Malformed numeric env var silently zeroing a field. | ✅ Clean: `strconv.ParseFloat` failure → value not applied; the malformed input is surfaced by `EnvWarnings` rather than silently swallowed. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
