@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 785 update — receiver-mutation + receiver-consistency + nil-method audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Value receiver silently discarding a mutation — method writes a field the caller never sees. | ✅ Clean: all value-receiver methods are read-only on small value types (`Hash`, `ID`, `Lang`, `Yield`, `Policy`, `Info`) — verified no field writes in session 671. |
+| S | Mixed value/pointer receivers on one type — confusing copy semantics at the API. | ✅ Clean: no type mixes receiver kinds; stateful types are uniformly pointer-received, value types uniformly value-received. |
+| S | Method call on a possibly-nil pointer — `.String()`/`.Error()` panic through a nil concrete value. | ✅ Clean: the 31 stringer/error call sites invoke on non-pointer value types or guarded pointers — none can deliver a nil dereference (verified sessions 640/724). |
+
+All packages build, vet, and test green.
