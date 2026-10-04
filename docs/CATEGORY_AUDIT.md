@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 931 update — frame-header + channel-bit + payload-ownership audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hand-masking `extension_type`/`channel_msg` at call sites — bit-field drift between readers. | ✅ Clean: `Header.ChannelMsg()` and `Header.ExtensionID()` are the only accessors; the `0x8000` mask lives in one constant with a spec citation; `ExtensionID` clears the bit so dispatch is uniform. |
+| M | `MsgLength` exceeding the U24 bound or a channel-msg frame shorter than the 4-byte channel_id. | ✅ Clean: `Validate()` enforces `MsgLength <= MaxMessageLength` and `ChannelMsg ⇒ MsgLength >= MinimumChannelPayload` — malformed frames rejected before dispatch. |
+| M | `Frame.Payload` aliasing the decoder's scratch buffer — data race with the next `ReadFrame`. | ✅ Clean: payload is freshly allocated per call and caller-owned (documented); scratch covers only the fixed 6-byte header which `DecodeHeader` copies out. |
+
+All packages build, vet, and test green.
