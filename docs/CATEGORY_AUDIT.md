@@ -4083,6 +4083,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 823 update — three-index + self-copy + unsafe-slice audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Three-index slice `s[i:j:k]` capacity-limiting tricks — obscure aliasing bugs on append. | ✅ Clean: zero 3-index sites — slices stay two-index; capacity tricks aren't needed since buffers are exact-size. |
+| M | `copy(dst, src)` where dst and src overlap on one backing array — memmove semantics relied on implicitly (works, but hides aliasing intent). | ✅ Clean: all `copy` sites move between distinct buffers (`be`/`b`, `hs.h[:]`/`h.Sum`) — no self-array overlaps. |
+| M | `unsafe.Slice`/`StringData`/`Pointer` — bounds and lifetime unchecked. | ✅ Clean: absent — no `unsafe` usage anywhere in the tree (verified sessions 605/620/627/677). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
