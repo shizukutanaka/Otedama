@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 947 update — nonce-partition + ntime-roll + work-version audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Threads grinding duplicate nonce ranges — wasted hash rate and pool-side duplicate-share rejects. | ✅ Clean: each thread starts at `NonceOffset + threadID` and advances by `NonceStep` — a residue-class partition; `w.cfg.NonceStep` defaults to `Threads`, keeping ranges disjoint. |
+| M | u32 nonce-space wrap re-hashing identical headers — duplicate shares for the rest of the job. | ✅ Clean: `nonce < prev` detects the wrap and `ntimeRoll++` rolls `h.Time` forward — every post-wrap sweep hashes distinct headers (standard ntime-roll). Roll resets on job change. |
+| M | Stale work pointer masking a job update, or share-send blocking the miner loop. | ✅ Clean: reload key is `work != localWork \|\| workVer != localWorkVer` (version counter guards same-pointer reuse); share send is non-blocking with `dropCount` making drops observable. |
+
+All packages build, vet, and test green.
