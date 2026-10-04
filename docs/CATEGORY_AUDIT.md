@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 995 update — config-cascade + zero-value + validate-aggregate + pool-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Config precedence silently wrong — a file value losing to defaults, or origin tracking misattributing where a value came from. | ✅ Clean: `ResolveWithOrigins` walks the 4-layer cascade field-by-field and stamps the matching `Origin*` only when the source actually set the field. |
+| M | A numeric file value of `0`/`0.0` silently dropping the operator's explicit override (zero == unset in Go). | ✅ Clean: every numeric field carries the documented caveat — a non-default file value counts as explicit, and a genuine zero must come via the env var; the note is repeated per field so it can't be missed on the next addition. |
+| M | `DefaultDataDir` ignoring platform conventions — a fixed `~/.otedama` on every OS. | ✅ Clean: APPDATA (Windows), `~/Library/Application Support` (Darwin), and `XDG_DATA_HOME` with `~/.local/share` fallback on Unix. |
+| M | Validation failing one error at a time — five bad fields costs five edit cycles. | ✅ Clean: `Validate` aggregates every issue into a single error; every failover address is checked at load, not only when failover reaches it. |
+| S | A pool URL smuggling userinfo/path/fragment or a non-numeric port into the dialer. | ✅ Clean: `validatePoolTarget` rejects `@/?#`+whitespace before `SplitHostPort`, requires a non-empty host and port 1–65535; no default port is synthesized. |
+
+All packages build, vet, and test green.
