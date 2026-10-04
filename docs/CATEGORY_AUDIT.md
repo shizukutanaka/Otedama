@@ -2154,6 +2154,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 914 update — work-version + share-buffer + job-swap audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Job swap mid-grind leaving threads on stale work — wasted hashes on dead jobs. | ✅ Clean: `SetWork` bumps `workVer` under `mu`; every grind iteration re-reads `(w.work, w.workVer)` and reloads on change — no thread lingers on a stale job. |
+| M | Share channel blocking the hot loop — goroutine stalls on a full buffer. | ✅ Clean: `shares` is buffered `Threads*4` and the send is `select … default` — a rare drop increments `dropCount` (observable via `Stats.SharesDropped`) instead of blocking. |
+| S | `SetWork` from a non-owner goroutine — data race on `w.work`. | ✅ Clean: `SetWork` takes `mu` and the grind loop reads under the same lock — documented safe from any goroutine. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
