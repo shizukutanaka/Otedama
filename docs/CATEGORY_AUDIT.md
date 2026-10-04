@@ -3350,6 +3350,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 731 update — registry + test-env + httptest audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Metrics registry double-registration — a name silently overwritten leaves callers writing to a metric dropped from the exposition. | ✅ Clean: same name+labels re-registration returns the existing object (idempotent, metrics.go:164/202); cross-type collision panics (fail-fast); all 50 registration sites have unique names (uniq -d = ∅). |
+| S | Test env mutation — `os.Setenv`/`Unsetenv` without restore leaks state into parallel tests. | ✅ Clean: all 6 sites pair mutation with `defer os.Setenv(key, old)` restore (nolint'd where unchecked); no leaked env between tests. `t.Setenv` would be equivalent — the manual pattern is correct as written. |
+| M | `httptest.NewServer` lifecycle — a leaked server per test leaks a port and goroutine. | ✅ Clean: all 11 `httptest.NewServer` sites close via `defer ts.Close()` — no leaked servers. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
