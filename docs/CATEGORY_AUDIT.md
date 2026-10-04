@@ -2784,6 +2784,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1154 update — bool-map census
+
+`map[K]bool` as a set vs the `map[K]struct{}` idiom — absent-vs-false
+ambiguity surface.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 7 `map[K]bool` sites (setFlags, 3× seen dedup, 2× valid-count/break sets); every write is `= true` only — no `= false` is ever stored, so all `m[k]` truth tests are safe; the 2 `struct{}` sites coexist | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
