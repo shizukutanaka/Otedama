@@ -4665,6 +4665,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 873 update — rate-limiter + token-bucket + clock-doc audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Token-bucket limiter bugs — starts empty, blocks on take, unbounded refill, or ignores ctx. | ✅ Clean: `submitLimiter` starts full, `take()` is non-blocking (drop + counter), refill is ticker-driven and capped at `submitBurst`, and the refill goroutine exits on `ctx.Done()` (engine/run.go:1847-1880). |
+| M | `clock.NewRateLimiter` referenced in the clock doc comment — phantom API? | ✅ Benign: exists only inside a doc-comment example illustrating how a caller injects `clock.Clock` — not a symbol in the package. |
+| S | Rate limit on a non-Clock wall clock — untestable drift. | ✅ Benign: `submitLimiter` uses `time.NewTicker` directly; shares are real-time events, `take()` is non-blocking so injection adds no value. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
