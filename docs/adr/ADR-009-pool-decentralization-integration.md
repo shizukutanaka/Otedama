@@ -1072,3 +1072,20 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1172 ecosystem update (2026-10-02)
+
+**sv2-spec** — quiet window continues: the normative open set is
+unchanged (#203 non-custodial-payouts extension still open with the
+SEQ0_255-vs-B0_64K payout-set scalability debate active — small pools
+already sit at ~60 coinbase outputs; #202 remains the alternative
+draft and #195 the original draft). Nothing new affects Otedama's
+implemented surface.
+
+**SRI** — still v1.12.0 (2026-09-17): ChaCha20-Poly1305 remains the
+sole Noise cipher, matching Otedama's `internal/stratum/noise*`.
+
+**sv2-apps** — still v0.7.0; the repo remains alpha with the JDP/JDS
+stack under active development (178 open issues). No release-impacting
+change for Otedama's tracking items (#881 JDP hardening, #839/#845
+TDP work, #856 codecs, #883 fee-transparent example configs).
