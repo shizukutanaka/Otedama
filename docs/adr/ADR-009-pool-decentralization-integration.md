@@ -1072,3 +1072,44 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1075 ecosystem update (2026-10-02)
+
+**sv2-spec:**
+- The normative open set is unchanged: **#236** (`SetTarget.target` ≤
+  channel `max_target`), **#234** (authority-key management/rotation —
+  Otedama conformance notes recorded in the s1060 entry), **#203**
+  (coinbase transaction payouts extension), **#198**
+  (`coinbase_witness` on `NewTemplate`), plus editorial #232/#186/#103.
+- Recently merged: **#231** (Server/Client role relationship
+  clarified across roles — the doc previously recorded this as
+  converging), **#228** (field renames `max_target`/`target`/`ntime`
+  — Otedama's wire struct already renamed to match, PR #704),
+  **#227** (normative clarifications), **#226** (`min_ntime` and share
+  validation rules — Otedama's stale-ntime roll-forward and
+  SubmitShares* seq validation predate and remain consistent),
+  **#225** (`SetupConnection` validation + flag semantics),
+  **#233** (`AGENTS.md` shared agent conventions),
+  **#230** (Noise certificate `version` semantics — already noted).
+  The Oct-1 clarification batch has now landed; no new normative
+  obligations surface for the wired V1/V2 paths.
+
+**SRI:** remains at **v1.12.0** (2026-09-17) — no release since the
+s1060 check.
+
+**sv2-apps:**
+- Open set is 15 (was 27 at s1035, 17 at s746): tracked items
+  **#881** (JDS `handle_push_solution` — still WIP), **#845** (target
+  field renames per spec cleanup), **#839** (JDS mining-job-token →
+  `user_identity` binding), **#856** (`bitcoin_core_sv2` hardening),
+  **#878** (empty coinbase reward scripts — now open again per latest
+  state), **#883** (community-multisig coinbase example),
+  **#821**/**#820**/**#803**/**#802** (share-work monitoring and
+  dropped-share logging), **#903** (buffer sv2 hardening), **#904**
+  (monitoring/config/release edge cases), **#908** (B08 support in
+  `bitcoin_core_sv2`), **#902** (Windows CI), **#874** (Clanker smoke
+  tests doc).
+- Recently merged: **#907** (agent-doc warning), **#900**
+  (stratum-core bump), **#875** (single cargo workspace — already
+  recorded), **#871**/**#868** (versioning CI), **#869** (JDP
+  coverage in bitcoin-core-sv2 docs).
