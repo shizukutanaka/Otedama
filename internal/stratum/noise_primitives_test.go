@@ -5,6 +5,7 @@ package stratum
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 )
@@ -269,7 +270,7 @@ func TestEncryptedConn_ReadFromEmptyStream(t *testing.T) {
 	if err == nil {
 		t.Error("Read from empty stream should fail")
 	}
-	if err != io.EOF && err != io.ErrUnexpectedEOF {
+	if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		// Either EOF variant is acceptable.
 		t.Logf("got error type: %T / %v", err, err)
 	}
