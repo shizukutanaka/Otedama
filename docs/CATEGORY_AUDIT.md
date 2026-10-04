@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 998 update — seed-oracle + secret-residue + format-bound audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A decryption oracle — distinguishing "wrong passphrase" from "tampered file" tells an attacker which guess was closer. | ✅ Clean: every GCM `Open` failure collapses to the single `ErrWrongPassphrase` sentinel, documented as deliberately indistinguishable; structural errors (version, empty ciphertext) stay separately distinguishable. |
+| S | Key/plaintext/passphrase material surviving on the heap for the GC. | ✅ Clean: `zeroBytes` defers cover `pass`, `key`, and `plaintext` on every path; the helper's best-effort caveat (GC copies) is honestly documented. |
+| S | An empty passphrase silently producing a deterministic-but-useless encryption — the seed file effectively in the clear. | ✅ Clean: `EncryptSeed` rejects `passphrase == ""` explicitly, before any crypto runs. |
+| S | A corrupt or adversarial `wallet.dat` forcing an unbounded allocation at decode. | ✅ Clean: `UnmarshalEncryptedSeed` enforces both `minLen` (header floor) and a 4 KiB `maxLen` ceiling; version is checked before any field use. |
+| M | KDF parameters too weak for offline brute force, or undocumented so a future editor weakens them unnoticed. | ✅ Clean: scrypt N=2^17/r=8/p=1 (~1s on consumer CPU) is a named constant with the BIP-38 rationale inline; salt and nonce are fresh `io.ReadFull` reads per encryption. |
+
+All packages build, vet, and test green.
