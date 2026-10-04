@@ -1935,6 +1935,21 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1026 update — version-injection + info-snapshot + clock-abstraction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ldflags variables declared `const` (uninjectable). | ✅ Clean: `var` block, so the linker can write them; defaults cover ldflags-less `go build`. |
+| S | `GoVersion`/`Platform` trusting injected strings that could lie. | ✅ Clean: both come from `runtime` at call time — they describe the binary that is actually running, not what the build script claimed. |
+| M | `version.Get()` returning a view that changes under mutation. | ✅ Clean: it returns a snapshot Info; the non-reflection of later var mutation is documented. |
+| M | `clock.Fake` reads racing `Set`/`Advance`. | ✅ Clean: `RWMutex` throughout; the interface documents the concurrent-use contract; compile-time satisfaction checks catch a missing method at `go build`. |
+| M | Tests silently depending on monotonic time the Fake doesn't guarantee. | ✅ Clean: `Set` explicitly allows time moving backward and the doc tells production code not to rely on monotonicity — the contract is honest rather than implied. |
+| S | `otedama version` output format drifting under parsers. | ✅ Clean: `String()`'s format is frozen and documented as stable for tools. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
