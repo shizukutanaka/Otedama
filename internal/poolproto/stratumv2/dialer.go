@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -234,7 +235,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SV2 job/tip state, mirroring the engine's inline loop: a job is
 	// emittable only once both NewMiningJob (merkle root + version) and
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
-	// (no min_ntime) wait for the SetNewPrevHash that names them.
+	// (no ntime_start) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
 	var pendingOrder []uint32 // insertion order for pendingCap FIFO eviction
 	var prevHash [32]byte
@@ -243,7 +244,7 @@ func (s *session) readLoop(ctx context.Context) {
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
-			JobID:      fmt.Sprintf("%d", j.JobID),
+			JobID:      strconv.FormatUint(uint64(j.JobID), 10),
 			Version:    j.Version,
 			PrevHash:   prevHash,
 			MerkleRoot: j.MerkleRoot,
@@ -282,8 +283,8 @@ func (s *session) readLoop(ctx context.Context) {
 				delete(pending, pendingOrder[0])
 				pendingOrder = pendingOrder[1:]
 			}
-			if j.HasMinNtime && havePrev {
-				if !emit(j, j.MinNtime, false) {
+			if j.HasNtimeStart && havePrev {
+				if !emit(j, j.NtimeStart, false) {
 					return
 				}
 			}
@@ -300,9 +301,9 @@ func (s *session) readLoop(ctx context.Context) {
 			if named != nil {
 				pending[p.JobID] = named
 				pendingOrder = append(pendingOrder, p.JobID)
-				ntime := p.MinNtime
-				if named.HasMinNtime && named.MinNtime > ntime {
-					ntime = named.MinNtime
+				ntime := p.NtimeStart
+				if named.HasNtimeStart && named.NtimeStart > ntime {
+					ntime = named.NtimeStart
 				}
 				if !emit(named, ntime, true) {
 					return
