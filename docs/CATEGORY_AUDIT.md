@@ -3398,6 +3398,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 735 update — metric-naming + slog-level + label-build audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Prometheus naming-convention drift — counters without `_total`, unit-bearing metrics without a unit suffix, mixed-case or dotted names breaking scrape parsers. | ✅ Clean: all 45 series share the `otedama_` namespace in snake_case; every counter ends `_total`; unit-bearing gauges carry `_seconds`/`_sats_per_second`/`_hashes_per_second`/`_milliseconds`/`_watts`; `_info` meta-gauges and `_rate` ratios are consistent. |
+| M | slog level discipline — error content emitted at Debug/Info (invisible at default level) or noise at Error. | ✅ Clean: zero Debug/Info sites with error content; all `Warn`/`Error` calls sit on genuine failure paths (rate-fetch failures, engine errors, argv-secret warn); the log-callback adapter maps "warn"/"error" to the right levels. |
+| P | Metric-label value construction via `fmt.Sprintf` — an allocation per emission on the share hot path. | ✅ Clean: all label values are enumerated strings (`reason`, `device`, `address`) with zero Sprintf in label construction; `fmt.Sprintf` appears only in panic messages and value rendering (`%d`/`%g` — correct verbs). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
