@@ -146,7 +146,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 // knownSubcommands mirrors the dispatch switch in run(). Keep in sync —
 // it is only used to offer a "did you mean" hint on typos.
 var knownSubcommands = []string{
-	"run", "version", "config", "service", "doctor", "completion", "help",
+	"run", "version", "config", "service", "doctor", "wallet", "completion", "help",
 }
 
 // suggestSubcommand returns the closest known subcommand to what the user
