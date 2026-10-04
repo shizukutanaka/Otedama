@@ -1731,3 +1731,20 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1084 update — log-level ↔ severity drift
+
+Census of level strings (`"debug"`/`"info"`/`"warn"`/`"warning"`/`"error"`)
+at every structured-log call site, checking severity matches the event.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `"error"` emitted exactly once — cmd/otedama/run.go:241 at the fatal startup boundary; engine internals never use it because session failures are retry/failover events, not process errors | S |
+| S | `"warning"` (11 sites) vs `"warn"` (57 sites) — both are documented `ParseLevel` aliases resolving to `LevelWarn` (logger.go:79, :148) | S |
+| S | `"warn"` semantics — session ended→failover, all-pools-failed backoff, plaintext-transport advisory, tls_ca_file unreadable: all recoverable degradations | S |
+| S | `"info"` — lifecycle milestones only (devices detected, connecting/connected, transport protocol) | S |
+| S | No error-path logged at `info`/`debug`; no benign event at `error` | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
