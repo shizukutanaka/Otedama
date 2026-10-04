@@ -3114,6 +3114,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1189 update — workflow secret-name census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | Kubeconfig secret naming | ⚠️ Noted — three schemes coexist: `KUBE_CONFIG` (ci-cd.yml), `KUBE_CONFIG_{STAGING,PRODUCTION}` (ci.yml), `{STAGING,PRODUCTION}_KUBECONFIG` (deploy.yml). Per-env credentials must be duplicated under both spellings or one pipeline's deploy step always no-ops (deploy.yml's `!= ''` guards make the miss graceful) |
+| S | Other secret names | ✅ Clean — `DOCKER_USERNAME`/`DOCKER_PASSWORD`, `SLACK_WEBHOOK`, `GITHUB_TOKEN` consistent across workflows; all job-level `permissions:` blocks present |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
