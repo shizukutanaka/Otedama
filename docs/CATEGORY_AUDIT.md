@@ -1755,5 +1755,12 @@ All packages build, vet, and test green.
 | M | Custom `MarshalJSON`/`UnmarshalJSON`/`MarshalText`/`UnmarshalText`/`MarshalBinary` implementations — hand-rolled codecs that can panic on hostile input or round-trip lossily. | ✅ Absent: zero custom marshal/unmarshal methods — all wire/serialization goes through `json`/`yaml` tags on stock codecs; no hand-rolled codec exists to misbehave. |
 | S | `pem.Decode`/`AppendCertsFromPEM` misuse on CA-file loading — unchecked return accepting a garbage/empty cert pool, or block-type confusion accepting non-CERTIFICATE blocks. | ✅ Clean: all 3 sites (`stratum/tls.go`, `stratumv1/tls.go`, `doctor/checks.go`) use `AppendCertsFromPEM` (not raw `pem.Decode`) and branch on its bool — failure surfaces as an explicit "no valid CA certificates" error. The API itself handles block filtering and multi-block PEMs; partial garbage is tolerated only when ≥1 valid CERTIFICATE parses. |
 | M | Benchmark-loop misuse — missing `b.N` iteration, setup inside the timed region, or unreported allocations skewing results. | ✅ Clean: all 11 benchmarks use the canonical `for i := 0; i < b.N; i++` loop, hoist setup before `b.ResetTimer()` where needed, and call `b.ReportAllocs()` — no timing-region pollution. |
+## Session 722 update — time-add + error-discard + blank-import audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `time.Add`/`AddDate` on unbounded or user-controlled durations — a far-future/wrapped deadline silently disabling a guard (or negative duration pre-expiring it). | ✅ Clean: every `time.Add` uses a compile-time or config-validated constant (`handshakeTimeout`, `10s`, `5m`, `-staleTempMaxAge`) — no unbounded duration reaches a deadline computation. |
+| S | `_ =` swallowing *error* values — a failed operation whose error was the only signal. | ✅ Clean: all discards are documented unactionables — HTTP health-endpoint writes (client disconnect can't be fixed), `fmt.Sscanf` where a malformed value fails validation downstream, bounded `io.Copy` drains before Close, and one explicitly commented `// intentionally ignored: non-fatal`. |
+| M | Blank imports (`import _ "..."`) with undocumented side effects — hidden init() work the reader can't see. | ✅ Clean: 2 sites, both `_ "internal/poolproto/stratumv1"` — the documented self-registration import (V1's init() registers its dialer into the poolproto registry); no hidden side effect beyond the deliberate one. |
 
 All packages build, vet, and test green.
