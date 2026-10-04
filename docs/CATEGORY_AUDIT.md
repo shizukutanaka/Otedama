@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 780 update — timer-lifecycle + context-value + unmarshal-freshness audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `time.NewTimer`/`AfterFunc` leak — a created timer never stopped on the non-firing path. | ✅ Clean: all NewTicker sites `defer .Stop()` (verified session 758); both NewTimer sites explicitly Stop — `run.go:605` even documents the `time.After`-in-select GC pitfall it avoids; `stratumv1.go:529` pairs `defer timer.Stop()`. |
+| P | `context.WithValue` with a string/int key — collisions across package boundaries. | ✅ Clean: the single site uses the unexported `loggerKey` type — collision-proof by design; no string keys anywhere. |
+| P | `json.Unmarshal` reusing a shared destination struct — stale fields surviving between messages. | ✅ Clean: every unmarshal targets a fresh local (`&p`, per-field `&x`) — no shared decode structs exist. |
+
+All packages build, vet, and test green.
