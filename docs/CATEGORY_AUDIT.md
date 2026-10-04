@@ -1731,3 +1731,25 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 960 update — milestone checkpoint (~420 audit classes verified clean)
+
+Sessions 941–960 closed the protocol-depth sweep: the stratumv1 session
+(readLoop line cap, pending-RPC lifecycle, extranonce boundary, dial/TLS
+precedence), stratumv2 dialer (pending-map FIFO, tip activation,
+handshake deadlines, write bounds), miner (nonce residue classes, ntime
+roll, header wire format, nBits decode), btccrypto (address dispatch,
+checksums, witness rules), lightning (atomic wallet save, seed-store
+encryption, BIP-39 round-trip), engine (work-target selection, stream
+merge, fan-in cancellation, worker partitioning, provider lifecycle),
+and rates (plausibility rails, single-flight).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Real defects fixed in the sweep so far | C1 control-char gap (#809), XDG systemd-manager env (#807), AEAD per-frame re-derivation (#957) |
+| M | Tracked (not defects) | noise.go x-only fallback → v3.1.0 secp256k1 NX (KNOWN_LIMITATIONS §2); noise_pool secret residue (key material only) |
+| M | Cumulative verdicts | ~420 mechanical defect classes verified clean across ~120 entries |
+
+All packages build, vet, and test green.
