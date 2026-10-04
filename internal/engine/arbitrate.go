@@ -9,6 +9,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -175,10 +176,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			opts.metrics.activeStreams.Set(float64(len(streams)))
 
-			margin := opts.hysteresisPct
-			if margin == 0 {
-				margin = defaultHysteresisPct
-			}
+			margin := cmp.Or(opts.hysteresisPct, defaultHysteresisPct)
 			minYield := opts.minYield
 			if pf := opts.powerFloor(); pf > minYield {
 				minYield = pf
@@ -360,10 +358,7 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			// Device is idle: no stream accepts its family, or all compatible
 			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d.
 			pauseDevice(a.DeviceID)
-			reason := a.Reason
-			if reason == "" {
-				reason = "no compatible stream"
-			}
+			reason := cmp.Or(a.Reason, "no compatible stream")
 			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
 
 		case a.SwitchedFromID != "":
