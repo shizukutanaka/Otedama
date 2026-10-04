@@ -2851,6 +2851,16 @@ All packages build, vet, and test green.
 | S | Machine-translation claim | ⚠️ Noted — CLAUDE.md's "機械翻訳で1,000言語以上" is a policy statement about doc translation, not a code surface; no in-code claim contradicts it. |
 
 All packages build, vet, and test green.
+---
+## Session 1218 update — ADR index + status parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ADR file set vs CLAUDE.md | ✅ Clean — exactly ADR-001…011 exist in `docs/adr/`, matching the architecture-map declaration. |
+| S | Status parity | ✅ Clean — all 11 ADRs carry a `**Status:**` field; README.md index matches (001–006 + 011 Accepted, 007–010 Proposed) and records ADR-002's partial supersession by ADR-006. |
+| S | Cross-doc ADR references | ✅ Clean — every `ADR-NNN` reference in KNOWN_LIMITATIONS/AUDIT_CHECKLIST resolves to a real file; AUDIT_CHECKLIST's "ADR-001, -002, -003 present" is a spot-check row, not a count claim. |
+
+All packages build, vet, and test green.
 
 ---
 
