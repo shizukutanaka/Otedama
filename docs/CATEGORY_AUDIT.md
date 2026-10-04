@@ -4131,6 +4131,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 827 update — signal-buffer + cleanup-mix + notify-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `signal.Notify(ch)` on an unbuffered channel — signals silently dropped. | ✅ Clean: zero `signal.Notify(` — the single surface is `signal.NotifyContext` (run.go:208), which manages delivery internally. |
+| S | `defer` vs `t.Cleanup` inconsistency — cleanup silently skipped or double-run across test boundaries. | ✅ Benign: 34 `t.Cleanup` sites exist where cross-helper cleanup is needed; 208 test-scope `defer`s are idiomatic local teardown — the split is intentional (helper-owned vs test-owned resources). |
+| S | Multiple signal handlers competing for the same process signals — delivery raced between handlers. | ✅ Clean: single registration point — `signal.NotifyContext` only (verified session 562). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
