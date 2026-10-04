@@ -1803,3 +1803,15 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1256 update — second-wave stdlib surface + DeepEqual + Sleep audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Second-wave stdlib adoption — `slices.Chunk/Concat/Backward/Repeat/Grow/Clip`, `strings.Lines/SplitSeq/FieldsSeq/FieldsFuncSeq`, `unique`, `weak`, `math/rand/v2`, `runtime.AddCleanup` (Go 1.23+ iterator/misc additions) against hand-rolled equivalents. | ✅ Clean after checking each candidate: the only `strings.Split` inside a `for` in production (`hal/gpu_linux.go:156`) cannot take `strings.Lines` — Lines yields newline-TERMINATED lines (different semantics from Split, which strips); `EnglishWords`/`Mnemonic` sites need materialized slices; no `unique`/`weak`/`rand/v2`/`AddCleanup` call sites or equivalents exist. Nothing to modernize — wave complete. |
+| M | `reflect.DeepEqual` — the pattern that replaced comparisons, pointer-equal structs, or `==` misuse. | ✅ Clean: zero production uses; one deliberate, godoc-commented test use (`arbitration/fuzz_test.go:239`) asserting `Decide` determinism across allocations — the documented correct choice there (compares map fields `==` cannot). |
+| L | `time.Sleep` — production busy-wait/polling where a channel or condition variable is the idiomatic primitive. | ⚠️ Noted: one site (`miner/worker.go:269`) — 10 ms yield only while `localWork == nil` (no job yet), a bounded cold-path poll that exits the moment work arrives; the hot path never sleeps. A `sync.Cond` would add a second sync primitive to the mining hot loop to save ≤10 ms of first-job latency — recorded, not changed. |
+
+All packages build, vet, and test green.
