@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1032 update — env-fallback matrix + loopback-table + resource-hygiene audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `OTEDAMA_WALLET_PASSPHRASE` documented but never read (silent config hole). | ✅ Clean (fixed + pinned): `applyRunEnvFallbacks` tests cover env-when-flag-empty, flag-beats-env, and unset≡empty; the comment records the defect history and the parallel `OTEDAMA_HTTP_ADDR` fix-by-promotion — regression-proof documentation in the test itself. |
+| M | Tests mutating process env without isolation. | ✅ Clean: `t.Setenv` throughout — auto-restore + parallel-conflict guard; the empty-string case deliberately exercises the same branch as unset. |
+| M | `isLoopbackAddr` branches under-covered. | ✅ Clean: 11-case table — `127.x` range, `localhost`/`LOCALHOST`, `[::1]`, bare host, `0.0.0.0`, `[::]`, RFC-1918, hostname, empty — every boundary pinned. |
+| M | `startHTTPServer` warnings firing/missing for the wrong bind classes. | ✅ Clean: non-loopback warns, pprof mention only when enabled, loopback silent — three-way assertion matrix; `ctx.WithCancel`+`srv.Stop()` deferred on every path. |
+| S | Zero-config startup regressing. | ✅ Clean: end-to-end `--dry-run` with only `--bitcoin-address` asserts `exitOK` + "dry-run" output. |
+
+All packages build, vet, and test green.
