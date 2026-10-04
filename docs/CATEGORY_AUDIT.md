@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1066 update — KNOWN_LIMITATIONS re-verification (docs↔code drift)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Open limitations that silently became resolved (stale warnings). | ✅ Clean: all 8 open entries re-verified against code — §1 AI yield is a fixed midpoint quote labeled "(simulated)" (`ai_inference.go:36,79`); §2 Noise NX unwired (no engine call sites; `v2tls://` is the real path); §4 GPU detection is `gpu_linux.go`-only and detected GPUs have no mining driver; §5 ML-DSA is scaffold-only; §6 wallet is BIP-39 receive-side; §13 the 8-job CI failure signature still fires on every PR; §14 `datum://` is recognised in `knownSchemes` but `DialURL` errors and `run.go:739-747` warns explicitly. |
+| S | Resolved entries re-opened by later work. | ✅ Clean: 6 `✅ RESOLVED` sections spot-checked remain resolved (e.g. §16 `wallet` subcommand exists at cmd/otedama/wallet.go). |
+
+All packages build, vet, and test green.
