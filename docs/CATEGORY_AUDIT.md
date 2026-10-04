@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1149 update — assignment-idiom census
+
+`x = x op y` expanded form vs compound `x op= y`; also loop-increment
+idiom coverage.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero expanded-form reassignments — compound `op=` used throughout; the `4 + 4 + 1 + 4 + 32`-style const sums document wire-field widths and are intentional | S |
+
+All packages build, vet, and test green.
