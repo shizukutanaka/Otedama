@@ -5943,3 +5943,14 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+---
+
+## Session 1317 update — gocyclo batch C: engine session/run/arbitration decomposition
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `runSession` — cyclomatic 88 (dial→handshake→tick→frame-dispatch→submit in one 500-line select loop). | ✅ Decomposed (behavior unchanged): `runSession` keeps protocol dispatch (~5); `runSessionV2` drives the session select (~8); shared tick block → `sessionTick.observe` + `observeMetrics`; frame handlers → `onFrame`/`onNewJob`/`onPrevHash`/`onSetTarget`/`onShareAccept`/`onShareReject`/`onShare`; transport → `dialV2`/`readV2Frames`. Signatures of `Run`, `runSession`, `runSessionV1`, `Options`, `sessionOpts` unchanged — tests unaffected. |
+| M | `runSessionV1` — cyclomatic 53; `runReconnectLoop` — 26; `Run` — 24; `runArbitrationLoop` — 21 (engine's residual ≥16 set, none covered by PR #1396/#1397). | ✅ Decomposed: `v1Session`/`onJob`/`onShare`/`submitResult`/`v1Credentials` (53→7); `reconnectState` + `sessionOptsFor`/`markConnecting`/`advanceEndpoint`/`sleep`/`finishAttempt` (26→11); `applyDefaults`/`startRunMetrics`/`startFeeds`/`monitorCurtailment`/`launchArbitration`/`runUptimeTicker` (24→7); `decideTick`/`decideParams`/`recordAllocation`/`syncActivity`/`logIdleTransition` (21→7). Verified: build+vet+gofmt clean, `go test ./internal/engine/` green, repo gocyclo residual = the 10 functions open PRs #1396 (5) and #1397 (5) already cover — zero uncovered findings. |
+| L | Extraction fidelity — the V2/V1 tick blocks had divergent starvation-warning ordering (V2: accept-rate→difficulty→silence; V1: accept-rate→silence→difficulty). | ⚠️ Noted + normalized: unified to V1's order (jobs-silence warn before difficulty warn) — ordering of two independent warn-once tripwires is semantically irrelevant. `sharesSubmitInFlight` gauge remains V2-only inside `v2Session.onTick`/`onShare` (V1 never populated it before; unchanged). |
+
+All packages build, vet, and test green; `gofmt` clean; golangci-lint v2 shows zero uncovered gocyclo findings.

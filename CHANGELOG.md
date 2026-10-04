@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1317 — engine 巨大関数の分解・gocyclo 解消)
+
+**変更.** `internal/engine` の高循環複雑度関数を動作不変のままヘルパーへ分割:
+`runSession` (88→5) はプロトコル振り分けのみ残し `runSessionV2`+`v2Session` メソッド群
+(`onFrame`/`onNewJob`/`onPrevHash`/`onSetTarget`/`onShareAccept`/`onShareReject`/`onShare`)
+と `dialV2`/`readV2Frames`/`sessionTick` へ、`runSessionV1` (53→7) は `v1Session`
+メソッド群と `v1Credentials` へ、`runReconnectLoop` (26→11) は `reconnectState` +
+`sessionOptsFor`/`markConnecting`/`advanceEndpoint`/`sleep`/`finishAttempt` へ、
+`Run` (24→7) は `applyDefaults`/`startRunMetrics`/`startFeeds`/`monitorCurtailment`/
+`launchArbitration`/`runUptimeTicker` へ、`runArbitrationLoop` (21→7) は `decideTick`/
+`decideParams`/`recordAllocation`/`syncActivity`/`logIdleTransition` へ。
+V1/V2 で重複していた ~85 行のスタッツティック処理は `sessionTick.observe` に単一化。
+公開シグネチャ (`Run`/`runSession`/`runSessionV1`/`Options`/`sessionOpts`) は不変。
+オープン PR #1396・#1397 と合わせて gocyclo 指摘を全件解消する構成。
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
