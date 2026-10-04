@@ -1791,3 +1791,15 @@ All packages build, vet, and test green.
 | P | `slices.Delete*`/`Insert`/`Replace` tail-pointer retention — a removed element's slot still referencing a live object (GC pin). | ✅ Absent: zero prod `slices.Delete`/`DeleteFunc`/`Insert`/`Replace` sites — removal goes through the bounded-FIFO `s[1:]` pattern (no tail retention beyond the cap) or map `delete`. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 724 update — func-compare + raw-fd + header-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `f == g` comparing two func values — always false (or panics on some reflect paths), hiding a broken equality check. | ✅ Clean: zero func==func comparisons; the only `func` hits are method signatures and predicate arguments (`strings.IndexFunc`). |
+| M | `os.NewFile`/`f.Fd()` escapes — wrapping a raw fd whose ownership then competes with the GC'd `*os.File` (double-close). | ✅ Clean: zero `os.NewFile`; the 2 `Fd()` sites are the platform-split TTY-width ioctls (`unix.IoctlGetWinsize`, `windows.GetConsoleScreenBufferInfo`) — the fd is borrowed read-only for the call, no ownership transfer. |
+| L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
+
+All packages build, vet, and test green.
