@@ -160,3 +160,37 @@ bitcoin-core's `examples/ellswift.c` vectors. Also note the "2-level
 PKI server authentication" clause is the concrete missing piece behind
 KNOWN_LIMITATIONS §2's "no code authenticates a responder static key" —
 the message flow, not just the DH primitive, must change.
+
+## Erratum 2 (added session 437, does not alter the accepted decision)
+
+The prior erratum's claim "no audited Go implementation of ellswift
+exists" is no longer true: **`github.com/btcsuite/btcd/btcec/v2` ships an
+`ellswift` package as of v2.5.0 (2026-05-15)**, merged upstream
+(btcsuite/btcd commit d79d37d) with the official BIP-324 test vectors.
+Its exported API covers the entire NX handshake primitive surface:
+`EllswiftCreate` (key + 64-byte encodable pubkey), `XSwiftEC` /
+`XElligatorSwift` / `XSwiftECInv` (the encode/decode math),
+`EllswiftECDHXOnly`, and `V2Ecdh` — the BIP-324 x-only ECDH with the
+`bip324_ellswift_xonly_ecdh` tagged hash that the SV2 spec calls for.
+
+Consequences for Follow-up items 1–2:
+
+- **Option A consolidates to a single dependency.** `btcec/v2` provides
+  the curve arithmetic *and* the previously-missing ElligatorSwift —
+  the two gaps the prior erratum said would need a second package plus a
+  hand-port. `btcec` is the btcd fork of the same Decred lineage as
+  `dcrec/secp256k1` (same ISC licence, same constant-time field code),
+  so the Option A vetting rationale applies unchanged; the ADR's chosen
+  approach stands, only the module coordinates move from
+  `decred/dcrd/dcrec/secp256k1/v4` to `btcsuite/btcd/btcec/v2` (which
+  itself depends on `decred/dcrd/dcrec/secp256k1/v4` transitively, so no
+  extra blast radius).
+- **The residual DIY-crypto risk disappears.** Follow-up item 2 becomes
+  "wire `ellswift.V2Ecdh` into `internal/stratum/noise.go`" rather than
+  "port ElligatorSwift by hand", which is the risk class this ADR
+  rejected in Option B. `internal/stratum/noise*` remains a
+  CODEOWNERS maintainer-review area per CLAUDE.md.
+- Still open after the dependency lands: the "2-level PKI server
+  authentication" message-flow work noted in the prior erratum is
+  unchanged — `ellswift` covers DH encoding, not the responder
+  static-key authentication the spec also requires.
