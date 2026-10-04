@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1193 update — workflow build-reference census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | Dead ldflags symbols | **Fixed** — ci.yml ×2, ci-cd.yml, release.yml injected `main.Version`/`main.GitCommit`/`main.BuildTime`; real vars are `internal/version.{Version,Commit,BuildDate}` (linker silently no-ops nonexistent symbols). Now matches Makefile/.goreleaser convention |
+| M | Docker verify job defects (deferred) | ⚠️ Noted — `scripts/verify-docker.{sh,ps1}` referenced but absent; build-args `GIT_COMMIT`/`CGO_ENABLED`/`GOTAGS` unused by the Dockerfile (only VERSION/COMMIT/BUILD_DATE exist); version greps expect `Git Commit:` text the `Info.String()` format never emits; health checks assume an HTTP endpoint + Postgres the product doesn't have |
+| S | `make` targets in workflows | ✅ Clean — `fmt`/`build`/`build-all`/`test-integration` all exist |
+
+All packages build, vet, and test green.

@@ -275,7 +275,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             output_name=${output_name}.exe
           fi
-          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S) -X main.GitCommit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+          go build -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -331,7 +331,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             output_name=${output_name}.exe
           fi
-          go build -tags=experimental_unified -ldflags="-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S) -X main.GitCommit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+          go build -tags=experimental_unified -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
