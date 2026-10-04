@@ -3171,6 +3171,16 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1195 update — .gitignore vs tracked-files census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Tracked files matching .gitignore patterns | ✅ Clean — zero of 219 tracked files are ignored (no stale commits of excluded artifacts like wallet.dat/config.yaml/bin/) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
