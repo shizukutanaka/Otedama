@@ -2631,6 +2631,23 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1140 update — mechanical-audit checkpoint
+
+Checkpoint after 20 sessions in the mechanical defect-class family
+(s1121–s1139).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | s1121–s1129: manual-contains, short-circuit, stub-function, magic-number, time.After, condition-assignment, new-vs-make, log-style, duplicate-error — all clean | S |
+| S | s1130: ADR-009 ecosystem recheck — SRI v1.12.0 hardening wave recorded | S |
+| S | s1131–s1139: bare-return, empty-branch, recover-placement, nesting-depth, duplicate-string, zero-comparison, atomic-usage, nil-nil return, param-count — all clean/benign | S |
+| M | Ledger at 93 merged entries (~640 cumulative classes); in-flight entries pending merge | S |
+| M | Zero new real defects in the window; open items remain the previously-fixed C1/XDG/AEAD/subcommand/base58 set | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
