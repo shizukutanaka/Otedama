@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 838 update — afterfunc + timer-reset + newtimer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.AfterFunc` callback on a timer that is never stopped — fires after teardown. | ✅ Clean: absent — all one-shot delays use `NewTimer`+`Stop` or `time.After`. |
+| S | `time.Timer.Reset` after expiry without draining `.C` — stale tick consumed as fresh. | ✅ Clean: the only `.Reset(` is `hash.Hash.Reset` on the pooled hasher (noise_pool.go:39) — correct reuse; zero `time.Timer` reuse-after-expiry sites. |
+| S | `time.NewTimer` without `Stop` — timer object retained to expiry. | ✅ Clean: both NewTimer sites (`run.go:605` backoff, `stratumv1.go:529` call timeout) pair an explicit `Stop` — the comment at run.go:600 documents why `time.After` was avoided here. |
+
+All packages build, vet, and test green.
