@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1072 update — CLI-flag orphan audit (parsed-but-unread flags)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Flags parsed in `parseRunFlags` but never consumed — a flag the user sets that does nothing. | ✅ Clean: all 15 flags have a read site — six config-layer flags ride the embedded `f.FlagValues` into `config.Resolve` (run.go:170 flag layer), `configFile` → `loadConfigFile`, `dryRun` → validation gate, `noTUI` → auto-disable + `Options.NoTUI`, both wallet passphrases → env-fallback + argv-warning + `Options`, `logFile` → `buildLogger`, `pprofEnabled` → non-loopback warn, `showOrigin`/`jsonOut` → `config show` output modes. |
+| S | Flag-layer fields not merged by `config.Resolve`. | ✅ Clean: `FlagValues` is consumed field-by-field inside `Resolve` (s969 precedence-matrix + s1070 field-consumption verdicts); `setFlags` map drives only the argv-secret warning. |
+
+All packages build, vet, and test green.
