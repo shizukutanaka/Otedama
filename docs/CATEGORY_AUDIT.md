@@ -3709,6 +3709,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 783 update — signal-context + exit-surface + main-cleanup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Manual `signal.Notify` channel — a second signal registration racing the first, or a missed `signal.Stop`. | ✅ Clean: single registration via `signal.NotifyContext` at `cmd/otedama/run.go:208` — cancellation propagates through ctx and cleanup rides the deferred `cancel` (verified sessions 562/640/690). |
+| S | `os.Exit`/`log.Fatal` inside a library — bypassing deferred cleanup and defying test isolation. | ✅ Clean: one `os.Exit` exists, wrapping `run()`'s int in `main.go:110`; no `log.Fatal` anywhere; library packages all return errors (verified session 562). |
+| S | Main-path early return skipping shutdown — an error exit that skips pool disconnect/worker stop. | ✅ Clean: `run()` plumbing returns an exit code to `main` — every error path runs through the deferred cancel/shutdown inside `run` before the code reaches `os.Exit`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
