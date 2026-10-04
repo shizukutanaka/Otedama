@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 813 update — raw-message + peek-buffered + url-escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `json.RawMessage` retained and re-decoded multiple times, or stored raw in structs with lazy decode — silent double-parse cost/staleness. | ✅ Clean: RawMessage appears only as the `[]json.RawMessage` params array — each element is decoded exactly once into a concrete type inside the parse functions. |
+| S | `bufio.Reader.Peek`/`Buffered` semantics — Peek'd bytes treated as consumed or Buffered read past. | ✅ Clean: absent — the wire decoder reads fixed-size frames via `io.ReadFull` on a plain `io.Reader`. |
+| M | `url.QueryEscape` where `PathEscape` is needed (or vice versa) — wrong escaping in constructed URLs. | ✅ Clean: zero escape sites — the binary never constructs URLs; pool URLs are validated (not built) per session 486. |
+
+All packages build, vet, and test green.
