@@ -4371,6 +4371,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 848 update — loop-err + dial-context + resolve audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `err` reused across loop iterations — last-iteration failure overwrites an earlier error or a stale error leaks past the loop. | ✅ Clean: zero cross-iteration `err` reuse — every loop-scoped error is `:=`-fresh or checked in-body. |
+| M | `net.Dial`/`DialTimeout` instead of ctx-aware `DialContext` — un-cancellable connects. | ✅ Clean: all outbound connections go through ctx-aware dialers (`poolproto` dial interface — session 570); zero bare `net.Dial*`. |
+| S | `net.Resolve*`/`Lookup*` in the connect path — DNS without a deadline, blocking before the ctx applies. | ✅ Clean: absent — dialers pass host:port to `DialContext` directly; DNS happens inside the ctx-bounded dial. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
