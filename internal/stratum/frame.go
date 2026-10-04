@@ -139,9 +139,10 @@ func (h Header) Validate() error {
 // raw payload. Higher layers deserialize the payload based on
 // (ExtensionID, MsgType).
 //
-// The Payload slice is owned by Frame and must not be retained by the
-// caller beyond the lifetime of the Frame, because the Decoder may
-// reuse its internal buffer for the next frame.
+// The Payload slice is freshly allocated by Decoder.ReadFrame on every
+// call and is owned by the caller — it may be retained beyond the next
+// ReadFrame call. The decoder's reusable scratch buffer covers only the
+// fixed-size header, which DecodeHeader copies into the value Header.
 type Frame struct {
 	Header  Header
 	Payload []byte
@@ -196,7 +197,7 @@ func EncodeFrame(f Frame) ([]byte, error) {
 		return nil, fmt.Errorf("stratum: payload length %d exceeds U24 maximum %d", len(f.Payload), MaxMessageLength)
 	}
 	h := f.Header
-	h.MsgLength = uint32(len(f.Payload))
+	h.MsgLength = uint32(len(f.Payload)) //nolint:gosec // payload is bounded by MaxFrameSize at construction
 	if err := h.Validate(); err != nil {
 		return nil, err
 	}

@@ -16,7 +16,7 @@ import (
 
 func TestCipherState_EncryptDecryptRoundtrip(t *testing.T) {
 	var key [32]byte
-	copy(key[:], []byte("test-key-12345678901234567890123"))
+	copy(key[:], "test-key-12345678901234567890123")
 
 	cs := &CipherState{key: key}
 	plaintext := []byte("hello otedama")
@@ -373,13 +373,13 @@ func TestEncryptedConn_Read_SmallBuffer_DrainsProperly(t *testing.T) {
 
 	rest := make([]byte, len(original))
 	n2, err := reader.Read(rest)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		t.Fatalf("second Read: %v", err)
 	}
 
-	reassembled := append(first[:n1], rest[:n2]...)
-	if !bytes.Equal(reassembled, original) {
-		t.Errorf("reassembled = %q, want %q", reassembled, original)
+	first = append(first[:n1:n1], rest[:n2]...)
+	if !bytes.Equal(first, original) {
+		t.Errorf("reassembled = %q, want %q", first, original)
 	}
 }
 
@@ -393,10 +393,12 @@ func TestHmacSHA256_KnownVector(t *testing.T) {
 	got := hmacSHA256(key, data)
 
 	// Expected from RFC/test-vector tools:
-	want := []byte{0xf7, 0xbc, 0x83, 0xf4, 0x30, 0x53, 0x84, 0x24,
+	want := []byte{
+		0xf7, 0xbc, 0x83, 0xf4, 0x30, 0x53, 0x84, 0x24,
 		0xb1, 0x32, 0x98, 0xe6, 0xaa, 0x6f, 0xb1, 0x43,
 		0xef, 0x4d, 0x59, 0xa1, 0x49, 0x46, 0x17, 0x59,
-		0x97, 0x47, 0x9d, 0xbc, 0x2d, 0x1a, 0x3c, 0xd8}
+		0x97, 0x47, 0x9d, 0xbc, 0x2d, 0x1a, 0x3c, 0xd8,
+	}
 	if !bytes.Equal(got, want) {
 		t.Errorf("hmacSHA256 = %x\nwant %x", got, want)
 	}
