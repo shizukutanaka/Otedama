@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 774 update — nil-slice-json + map-iter-order + secret-quoting audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Nil slice marshaling to `null` instead of `[]` — JSON consumers tripping on a null array. | ✅ Benign: the only unguarded slice fields (`config.Pools`, `doctor.Checks`) marshal nil→null; both consumers are tolerant JSON readers — cosmetic only. |
+| S | Map iteration order reaching output — non-deterministic serialization or first-match ambiguity. | ✅ Clean: the `for range` sites iterate slices or iterate maps only for unordered exposition (Prometheus output) — no ordering-sensitive first-match path. |
+| S | `%q`-quoting secret material into error text — seed/key bytes echoed into logs. | ✅ Benign: `lightning` quotes only words that failed wordlist membership (non-seed typos, never valid seed words); `config` quotes only numeric-parse failures (non-secret numeric env vars). |
+
+All packages build, vet, and test green.
