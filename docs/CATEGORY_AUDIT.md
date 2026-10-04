@@ -3268,6 +3268,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1205 update — README.md flag parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `--flag` names in README | ✅ Clean — 4 flags (`--config`/`--data-dir`/`--bitcoin-address`/`--payout-address`); `--help` is a real flag (`helpFlag`) |
+| S | Command table completeness | ✅ Clean — README command table covers all dispatched subcommands incl. `completion` (line 93) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
