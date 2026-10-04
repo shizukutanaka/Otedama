@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1045 update — stratum-test wire-boundary + frame-limits + noise-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Wire decoders truncating mid-field accepted as valid input. | ✅ Clean: every SV2 message gets a roundtrip PLUS per-field-boundary truncation tests (`DecodeOpenMiningChannelSuccess_TruncatedAt{ReqID,ChannelID,Target,ExtraNonce2Size}` etc.) — the decode-reject surface is field-exhaustive, not spot-checked. |
+| M | Frame-layer bounds under-pinned (oversize, fragmentation, channel-bit). | ✅ Clean: oversized payload/frame reject, short dst/input reject, clean-close EOF vs `UnexpectedEOF` mid-header/mid-payload distinguished, **1-byte-reader fragmentation**, channel-bit + extension-ID mask + ChannelID extract/reject matrix. |
+| M | Noise transport contract untested (nonce reuse, tamper, wrong-AD). | ✅ Clean: nonce-increments, tampered-CT fails, wrong-AD fails, transport unusable pre-complete, write/read error paths, small-buffer drain, multi-message roundtrip, **HMAC-SHA256 known vector**; handshake `ReadMessage2` covers too-short/33B-compressed/65B-uncompressed (P-256 stub documented). |
+| M | HKDF chains producing non-distinct or non-deterministic keys. | ✅ Clean: hkdf2/hkdf3 output-size + determinism + input-sensitivity + output-distinctness; MixKey updates CK; DeriveTransportKeys populates both, keys differ, **nonces start at 0**. |
+| S | Dispatch coverage gaps (unknown type silently dropped, malformed-known mishandled). | ✅ Clean: per-type dispatch tests + unknown→error + malformed-known→error + lenient-extranonce boundary (B0_32) covered. |
+
+All packages build, vet, and test green.
