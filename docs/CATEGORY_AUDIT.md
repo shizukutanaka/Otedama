@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 858 update — chan-capacity + unbuffered + chan-struct audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbuffered `make(chan T)` between producer/consumer — coupling goroutine scheduling to correctness (deadlock on late receiver). | ✅ Clean: zero unbuffered channels — every `make(chan` specifies capacity ≥1, matching the three-pattern convention verified at s742. |
+| M | Buffered channel with capacity 0-vs-1 confusion in tests of the drain path. | ✅ Clean: all capacities are deliberate (1 for signals/notifications, larger for job queues). |
+| S | `chan` stored in structs without lifecycle ownership — ambiguous who closes. | ✅ Clean: every channel field has a documented owner that closes it (verified across s559/642/682/779). |
+
+All packages build, vet, and test green.
