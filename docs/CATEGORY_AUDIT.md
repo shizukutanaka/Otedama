@@ -2811,6 +2811,16 @@ All packages build, vet, and test green.
 | S | Cumulative class coverage | ✅ Clean — ~690 defect/drift classes audited across the mechanical + docs-parity passes; open tracked residuals unchanged (docker-verify script/arg gaps from s1193). |
 
 All packages build, vet, and test green.
+---
+## Session 1212 update — import-direction + forbidden-path census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Forbidden architecture paths in Go sources | ✅ Clean — zero references to `internal/providers/`, `pkg/`, `web/`, `internal/auth|render|scientific|observability|security/` in .go files. |
+| S | Import direction | ✅ Clean — all 5 `internal/engine` mentions outside internal/engine are comments, not imports; only cmd/otedama imports the engine. Fan-out sane (config 17, poolproto 15, hal 13). |
+| S | Forbidden paths in docs | ✅ Clean — `docs/architecture.md` target-architecture body carries the top-of-file disclaimer already (prior fix); remaining doc references are notes that the paths don't exist. |
+
+All packages build, vet, and test green.
 
 ---
 
