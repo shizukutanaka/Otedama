@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 871 update — debug-surface + pprof + leak-helper audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `expvar`/`plugin`/`cgo-ffi` — implicit global mutation or unsafe plugin surface. | ✅ Clean: absent. |
+| M | `net/http/pprof` blank-import — handlers silently land on `http.DefaultServeMux` exposed to the network. | ✅ Clean: explicit import; handler funcs called directly on the custom mux only; mounted only when `--pprof` (default off) — plus non-loopback warn (s453). |
+| S | Goroutine-leak detection absent — leaked goroutines slip tests. | ✅ Benign: `goleak` deliberately not vendored (zero-dep policy); in-test `runtime.NumGoroutine` delta checks used in `rates/fetcher_test.go` instead. |
+
+All packages build, vet, and test green.
