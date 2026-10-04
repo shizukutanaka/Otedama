@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1092 update — platform-file ↔ build-tag parity
+
+Files with GOOS suffixes must carry matching `//go:build` constraints, and
+the partition must cover all platforms exactly once.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `hal/gpu_linux.go`+`gpu_stub.go`: `linux`/`!linux` exhaustive; test file `gpu_linux_test.go` also tagged | S |
+| S | `tui/width_{unix,windows,other}.go`: `unix`/`windows`/`!unix && !windows` — mutually exclusive, total coverage | S |
+| S | No legacy `// +build` lines — modern `//go:build` form only | S |
+| S | No suffix/tag mismatches; no untagged platform files | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
