@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 915 update — nbits-bitmath + difficulty-target + meets-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `TargetFromNBits` accepting a malformed compact target — grinding into a void job. | ✅ Clean: rejects negative-mantissa bit, `exp < 3`, zero mantissa (dead-end target), and >256-bit overflow — four distinct errors surfaced via `applyJob`/`updateWork`. |
+| M | `TargetFromDifficulty` on non-positive/NaN pool difficulty — panic or poisoned target. | ✅ Clean: `!(d > 0) || IsInf` reject; post-division non-positive and >32-byte targets rejected. |
+| S | `MeetsTarget` using `<` instead of `<=` — a hash exactly equal to the target falsely rejected. | ✅ Clean: `hash.LessOrEqual(target)` — the PoW spec's "≤ target" comparison. |
+
+All packages build, vet, and test green.
