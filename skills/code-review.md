@@ -30,7 +30,7 @@
 
 **パフォーマンスのチェック:** ホットパスに不要なアロケーションは発生していないか。goroutineの数は制御可能か（無制限に生成されていないか）。チャネルのバッファサイズは適切か。データベースクエリはN+1問題を回避しているか。キャッシュは適切に使用されているか。
 
-**ドキュメントのチェック:** 公開API（`pkg/`配下）の変更はgodocに反映されているか。破壊的変更は`CHANGELOG.md`に記録されているか。設定ファイル形式の変更はサンプル（`config.yaml.example`）に反映されているか。新機能はREADMEまたは関連ドキュメントに説明されているか。
+**ドキュメントのチェック:** 公開API（export された型・関数 — `pkg/`はアーキテクチャマップで作成禁止のため存在しない）の変更はgodocに反映されているか。破壊的変更は`CHANGELOG.md`に記録されているか。設定ファイル形式の変更はサンプル（`config.yaml.example`）に反映されているか。新機能はREADMEまたは関連ドキュメントに説明されているか。
 
 ## レビューコメントの書き方
 
@@ -50,7 +50,7 @@
 
 セキュリティ関連のレビューは、本書のチェックリストに加えて、OWASP Top 10、CWE Top 25、Go specific vulnerabilities（gosecの検出項目）を参照します。暗号化関連の変更は、Cryptography Engineering（Ferguson, Schneier, Kohno）の原則に照らして評価します。
 
-Lightning Network関連のレビューは、BOLT仕様（Basis of Lightning Technology）への準拠を確認します。LDKのバージョンアップによる影響も同時に評価します。Stratum V2関連のレビューは、stratumprotocol.orgの仕様書への準拠と、Stratum Reference Implementationとの相互運用性を確認します。
+Lightning関連のレビューは、現状の出荷範囲（BIP-39 シード・scrypt KDF・AES-256-GCM のウォレット、`internal/lightning/`）ではウォレット暗号の正しさと鍵素材の取り扱いを確認します（訂正 session 507: 本文はかつて「BOLT 仕様準拠・LDK バージョンアップ影響」を挙げていたが、LDK は非採用 — BOLT/LDK の観点は ADR-007 が着工するまで適用外）。Stratum V2関連のレビューは、stratumprotocol.orgの仕様書への準拠と、Stratum Reference Implementationとの相互運用性を確認します。
 
 裁定エンジンのレビューは、アルゴリズムの正確性に加えて、数値計算の安定性（浮動小数点誤差、オーバーフロー、アンダーフロー）、予測モデルの妥当性、ポリシープリセットごとの期待動作を確認します。
 
