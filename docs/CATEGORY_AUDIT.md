@@ -4445,6 +4445,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 854 update — func-value + callback-field + callback-lock audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Stored `func` values escaping their scope — closures over loop vars or resources that outlive validity. | ✅ Clean: all 10 stored funcs are statement-scoped helpers used within the enclosing function — no escape into fields or channels. |
+| M | `func` fields called without a nil check — panic on optional callbacks. | ✅ Clean: every callback field (`log`, `Logger`, `OnReady`, `onConnected`) is either defaulted at construction or nil-guarded at each call site (verified s642/782). |
+| M | Callback invoked while holding a mutex — reentrancy deadlock if the callback takes the lock. | ✅ Clean: arbitration log callbacks are deliberately invoked after `streamsMu` is released (refactored in #714, verified s789). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
