@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1293 update — lint-config linter-name currency
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Deprecated linter names | ✓ Zero in the enabled set: all 33 enabled linters (errcheck/govet/ineffassign/staticcheck/unused/typecheck/gosec/bodyclose/rowserrcheck/goconst/gocritic/revive/unconvert/unparam/dogsled/dupl/gocyclo/misspell/nakedret/prealloc/gosimple/gofmt/gofumpt/goimports/errorlint/nilerr/usestdlibvars/wastedassign) are valid golangci-lint v2 names — no deadcode/varcheck/structcheck/scopelint/maligned/interfacer/golint/ifshort/exportloopref remnants |
+| R | Scoping | ✓ `disable-all: true` + explicit allowlist — no surprise linter activation on tool upgrades |
+
