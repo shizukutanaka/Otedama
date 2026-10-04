@@ -2365,6 +2365,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 932 update — decoder-guard + length-before-alloc + scratch-read audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Decoder` silently usable with `MaxFrameSize=0` — every frame misrejected or, worse, unbounded. | ✅ Clean: `ReadFrame` rejects `MaxFrameSize <= 0` up front; `NewDecoder` always seeds `DefaultMaxFrameSize` (16 MiB, matching SRI). |
+| M | `make([]byte, MsgLength)` executed before the size bound — memory-exhaustion attack on a crafted header. | ✅ Clean: `total := HeaderSize + int(h.MsgLength)` is checked against `MaxFrameSize` *before* any allocation; the check precedes `make`. |
+| S | Discarded `DecodeHeader` error on the scratch buffer masking a real decode bug. | ✅ Clean: `d.scratch` is `[HeaderSize]byte` by construction, so `DecodeHeader`'s `len(src) < HeaderSize` guard is unreachable — the `_` discard is documented at the site. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
