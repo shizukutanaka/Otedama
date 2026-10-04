@@ -2338,6 +2338,21 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 930 update — milestone checkpoint
+
+Coverage checkpoint (mirrors the s920 entry):
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| E | Audit ledger coverage since session 920. | ✅ ~375 mechanical defect classes verified clean/benign across ~100 ledger entries (~270 finding rows). Sessions 921–929 covered: i18n bundle/render fallback; arbitration input guards, determinism, hysteresis-space, held/switch accuracy, effective-yield, policy-score; hal Family/Identity/Capabilities/Device/Driver contract; registry zero-value + detector ctx + identity gate; poolproto Register/Lookup/DialURL. |
+| E | Real defects fixed to date (unchanged since s920). | ✅ 3 total: C1 control-char gap in `daemon/quoteToken` (#809), XDG systemd-manager env resolution (#807), AEAD per-frame re-derivation (#957). Zero new real defects in sessions 921–929. |
+| E | Deferred rows. | Unchanged: the three `⏸ Deferred` rows remain open items (TUI width — resolved by open PR #721; `clock.Clock` test-only gap; CODEOWNERS-gated funds-critical item). |
+| E | Next priorities. | Continue the per-package sweep (engine main loop, stratum V2 session state, lightning wallet lifecycle, metrics exposition), the ~14–17-session ecosystem recheck cadence (last: s922, ADR-009), and landing-code scrutiny as audit PRs merge. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
