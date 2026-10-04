@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 959 update — rate-parse + plausibility + single-flight audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | NaN/Inf or a unit-mangled price (BTC-denominated, thousands, sats) pulling the median. | ✅ Clean: `parseRate` rejects non-finite values; a separate plausibility band `[100, 1e8]` USD drops mangled readings before the median — covering the two-source case where a relative test cannot tell which is wrong. |
+| M | Concurrent `Fetch` callers fanning out — doubled request rate, HTTP 429 risk (CoinGecko's free tier bans bursts). | ✅ Clean: `inflight` single-flight coalesces every caller onto the leader's `done`; waiters can still bail on their own `ctx` — one in-flight fetch per source at all times. |
+| M | A fetch's HTTP round-trips blocking `BTCUSDRate` readers. | ✅ Clean: `inflightMu` (in-flight pointer) is a separate short-held lock from `mu` (cached rate) — a fetch holds neither across the network. |
+| M | Silent staleness — cached rate looks valid long after all sources die; or a redirect retargeting a hardcoded HTTPS endpoint. | ✅ Clean: `RateAge` exposes monotonically rising age (`everFetched` flag before first success); the shared client refuses redirects explicitly. |
+
+All packages build, vet, and test green.
