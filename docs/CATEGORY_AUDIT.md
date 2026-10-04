@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1049 update — tui-test ansi-width + indicator-priority + lifecycle-race audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | ANSI-escape accounting breaks column alignment (visible width vs byte length). | ✅ Clean: `VisibleLen` covers plain/multi-escape/non-color-CSI/**incomplete-escape-at-end**; `TruncateVisible` preserves leading ANSI + closes trailing style + zero/negative→empty; `PadRight` ignores escapes for width; pool status column alignment pinned (session-462 fix's test). |
+| M | Status indicators conflicting (stalled vs curtailed ambiguity). | ✅ Clean: stalled shown/hidden, **curtailed renders "paused" not "stalled"**, and **curtailed takes priority over stalled** — the priority order is an explicit test, not emergent. |
+| M | Dashboard lifecycle races (stop mid-render, double start/stop). | ✅ Clean: `StopDoesNotRaceRenderLoop`, double-start noop, stop-without-start safe, double-stop safe, `Update_NonBlocking` — the goroutine contract is covered. |
+| M | Width detection unsafe off-TTY (ioctl on pipe). | ✅ Clean: `DetectWidth_NonFileWriter` + `NonTerminalFile` (no ioctl on non-TTY) + `SetWidth_LocksDetection`; minimum-width enforced; footer gap clamped. |
+| S | Format boundary coverage thin. | ✅ Clean: hashrate exact thresholds + negative→Hz; duration sub-second/zero/>1day; sats display range boundaries; URL shorten exact/one-over/too-small. |
+
+All packages build, vet, and test green.
