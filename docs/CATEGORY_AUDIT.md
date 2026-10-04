@@ -4677,6 +4677,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 874 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `sync.Pool` hashers returned unreset or with secret residue — cross-user key bleed. | ✅ Clean: `getHasher()` always `Reset()`s on borrow; put occurs after `Sum()` — the pool carries no post-state. However the hasher is returned without zeroing the key material used, which matches the existing threat model (Noise key derivation output is the secret, not the hasher internals — `crypto/hmac`-equivalent internals are not attacker-visible). |
+| M | Pooled HMAC built by hand instead of `crypto/hmac` — subtle deviation from RFC 2104. | ✅ Verified correct: blockSize=64 for SHA-256, key>64 hashed first, ipad 0x36 / opad 0x5C over a 64-byte zero-padded key — exact HMAC construction (and the unpooled reference still exists for cross-check in tests). |
+| S | hkdf2/hkdf3 chained on pooled HMAC — intermediate slices could alias. | ✅ Clean: every `hmacSHA256Pooled` returns a fresh `Sum(nil)`; `append(out1, 0x02)` allocates new (cap=len) — no aliasing between chain steps. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
