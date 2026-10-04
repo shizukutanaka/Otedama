@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1026 update — version-injection + info-snapshot + clock-abstraction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ldflags variables declared `const` (uninjectable). | ✅ Clean: `var` block, so the linker can write them; defaults cover ldflags-less `go build`. |
+| S | `GoVersion`/`Platform` trusting injected strings that could lie. | ✅ Clean: both come from `runtime` at call time — they describe the binary that is actually running, not what the build script claimed. |
+| M | `version.Get()` returning a view that changes under mutation. | ✅ Clean: it returns a snapshot Info; the non-reflection of later var mutation is documented. |
+| M | `clock.Fake` reads racing `Set`/`Advance`. | ✅ Clean: `RWMutex` throughout; the interface documents the concurrent-use contract; compile-time satisfaction checks catch a missing method at `go build`. |
+| M | Tests silently depending on monotonic time the Fake doesn't guarantee. | ✅ Clean: `Set` explicitly allows time moving backward and the doc tells production code not to rely on monotonicity — the contract is honest rather than implied. |
+| S | `otedama version` output format drifting under parsers. | ✅ Clean: `String()`'s format is frozen and documented as stable for tools. |
+
+All packages build, vet, and test green.
