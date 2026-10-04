@@ -3987,6 +3987,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 814 update — unsigned-countdown + len-subtraction + mask-slice audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `for i := len(x)-1; i >= 0; i--` on an unsigned index — never terminates. | ✅ Clean: every `i >= 0` countdown runs on `int` constants/indices (`i:=31`, `i:=7`) — no unsigned loop vars reach the pattern. |
+| M | `len(s)-N` slice arithmetic without a length guard — panic on short input. | ✅ Clean: every site is length-guarded — `EncryptedSeed` enforces `minLen=29` before `len(b)-29`; bech32 validates total length before `data[1:len-6]`; trim loops guard `len(b) > 0`. |
+| S | Mask helpers slicing `s[:6]…s[len-4:]` on short strings — negative-bound panic. | ✅ Clean: `maskAddress`/`maskAddr` both early-return when `len <= 10/12`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
