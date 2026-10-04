@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1249 — float64-precision / uint-sub-underflow / duration-cast
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| float64-precision | No `float64(uint64)`/`uint64(float64)` conversions in production code — only `Float64bits` bit-reinterpret at stratumv1/parse.go:339. `float64(hashes)` at miner/worker.go:222 loses precision only above 2^53 hashes (~9×10^15, unreachable on CPU) | Clean |
+| uint-sub-underflow | `cols - len(prefix) - len(statusPlain) - 2` at tui/dashboard.go:324 is `int` arithmetic floored at 8 — guarded | Clean |
+| duration-cast | 3 `time.Duration(x)` casts: `d.Wait` capped by `maxReconnectWaitSeconds` before conversion; `p50` bounded by latency-ring contents; `UnixNano - startTime` negative only under wall-clock rewind (benign, one-shot stat) | Clean |
