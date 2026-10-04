@@ -2515,6 +2515,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1131 update — bare-return census
+
+`return err` propagating an error with no added context — context loss if
+the upstream error doesn't identify the operation.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 48 sites concentrated in leaf I/O helpers where the stdlib error already carries the operation (os.OpenFile path, io.ReadFull, bufio slice); operation boundaries wrap with `component:`-prefixed context | S |
+| S | No double-wrap (no `fmt.Errorf("engine: %w", err)` on already-prefixed errs) | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
