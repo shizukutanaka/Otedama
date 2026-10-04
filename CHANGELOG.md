@@ -16,6 +16,534 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   suite ×2 all green — no test needs multi-CPU scheduling;
   suite robust across every scheduler dimension.
 
+### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
+
+**変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
+sv2-spec リポジトリを SV2 の正典ソースとしてピン（messages.go + ADR-009）、
+KNOWN_LIMITATIONS の Akash 形状を修正（chain-sdk + on-chain Bidengine +
+AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安価な
+背信」を正直に記載）+ LN HTLC タイミング連関を追加、ADR-010 に SCaLE
+学習スイッチコスト（A2）・3 種ドリフトの非定常性 grounding + Sliding-
+Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
+報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
+
+### Changed (session 309 — server→client 入力面の監査判定を記録)
+
+**内容.** Stratum V1/V2 でサーバー→クライアント方向の入力面
+（reconnect/version_mask/未知フレーム/backoff/notify 各フィールド）を
+全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
+判定記録。closed #383 の未マージ変更を master へ再デリバー。
+
+### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
+
+`mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
+分割の disjoint 性、`TargetFromNBits`/`TargetFromDifficulty` の異常値
+拒否、`set_version_mask` の前方互換無視、notice キュー境界、
+TUI へのプール制御文字列不到達を全て確認・記録。ESP-Miner
+v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
+プール側機能）。stale な `otedama_build_info` backlog 行も訂正
+（session 54 で実装済み）。
+
+### Docs (session 326 — 衛生スイープ結果の記録)
+
+`govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
+（module-level advisory 22件は全て非到達）。`deadcode` の指摘は
+全てテスト専用/将来向けのエクスポート API 面であり実質デッド
+コードなし——削除対象とせず判定を記録。
+
+### Docs (session 328 — 残存監査面の判定記録)
+
+`mining.set_version_mask`（BIP320 未実装・無害に drop）、Worker
+Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
+（10s timeout + 64KiB 上限 + 中央値3ソース）、daemon ユニット権限
+（0644/0755 = 正規）、i18n フォールバック（base-tag → English）、
+config 数値パース（warn+skip）、provider quote チャネル（bounded）
+——全て master 上で健全と確認し記録。
+
+### Docs (session 329 — SRI 1.12.0 暗号整合確認)
+
+SRI 1.12.0 が noise_sv2 から AES-256-GCM を削除し
+ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
+当初から `Noise_NX_secp256k1_ChaChaPoly_SHA256` のみ実装のため
+整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
+（ライブラリ crate は stratum-mining/stratum に残留）。
+
+### Docs (session 330 — エコシステム+日本語ソース走査判定)
+
+internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
+SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
+知見なし、`0xf0xx0/stratumv2`（Go SV2 codec）は先行実装として
+記録（Otedama internal/stratum が scope を包含するため依存追加
+根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
+当方クライアント側バウンドで既にミラー済み。
+
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
+### 監査判定 (session 356 — hal/V1 ディスパッチ)
+
+GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
+dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監査済みと
+記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
+文書化済み事項として再確認。
+
+### 監査判定 (session 362 — btccrypto/依存態勢)
+
+btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
+secp256k1 は正直な stub）を監査済みと記録。govulncheck で
+到達可能脆弱性ゼロを確認。
+
+### 監査判定 (session 363 — provider ライフサイクル)
+
+pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
+WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
+quoteCh 置換 caveat は未到達パスとして文書化。
+
+### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
+
+V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
+ヘッダ LE ハッシュの整合性、SIGTERM/Interrupt → ctx → conn.Close
+の完全シャットダウン経路を監査済みと記録。
+
+### 監査判定 (session 397 — トランスポート/ファンイン/エンコード側)
+
+V1 アウトバウンドリクエスト面（authorize/submit はオペレータ由来フィールドのみ、
+pending-RPC マップは全出口で解放）。V1 `readLine` は ReadSlice+64KiB 上限。
+両 TLS ダイアラは TLS1.2+・検証常時・ServerName 自動・平文フォールバックなし。
+`fanIn` は ctx 双方向対応でリークなし。hal sysfs は kernel 生成値のみ。
+BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 `ExtraNonce2Size` は
+decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
+エコシステム不変（SRI v1.12.0）。
+
+### 監査判定 (session 400)
+
+プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
+発見・記録（電力無駄なし: ジョブなしワーカーはアイドル待機。AI 再配分は設計判断
+項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
+の収益計算・信頼度・フォールバックは監査 clean。
+
+### 監査判定 (session 401)
+
+最後の未個別監査ファイル `internal/lightning/seedstore.go` を監査 clean —
+空パスフレーズ拒否・`ErrWrongPassphrase` の不可分性（復号オラクル防止）・
+秘密バッファ全経路ゼロ化・バージョン付きバイナリ形式。`Decoder.ReadFrame`
+は確保前に `MaxFrameSize` 境界検査（メモリ枯渇 DoS 防御）。`WalletManager`
+の単一スレッドライフサイクルを文書化。これで `internal/` + `cmd/` 配下の
+全ファイル監査網羅が完了。
+
+### 修正 (session 402)
+
+`skills/` 内の実在しないテスト基盤の記述を訂正 — `//go:build
+integration`/`e2e` タグ、`make test-e2e` ターゲット、`otedama
+migrate-from-v2` サブコマンドはいずれも存在しません。統合テストは
+`testing.Short()` でゲート（`make test-integration` が全件実行）し、
+E2E スイートは意図的に未実装。LDK/regtest・ZKP の記述は v4.0
+スコープの将来指針として明記。
+
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist は master 側（session 485）で注記済みのため変更なし。
+
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
+### 修正 (session 411)
+
+GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
+しなかった問題を修正 — FIPS 140-3 の非対応理由（Noise NX の
+ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
+を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
+go.mod と完全整合を確認済み。
+
+### 修正 (session 412)
+
+SECURITY.md の非実在コマンド `otedama migrate-from-v2` への言及を
+`docs/MIGRATING-FROM-V2.md` への誘導に訂正。ADR-006/010/011・
+SECURITY.md のスコープ節は実装と整合を確認済み。
+
+### 修正 (session 414)
+
+competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
+ウォレット生成・プール自動選択を「実装済み」風の記述から v4.0 構想/
+ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
+`config.DefaultPoolURL` 単一フォールバック）を明記。
+
+### Docs (session 437 — ADR-011 依存先の上流進展を Erratum 2 として記録)
+
+- `docs/adr/ADR-011`: Erratum 2 追記 — `btcsuite/btcd/btcec/v2@v2.5.0`
+  が `ellswift`（BIP-324 公式ベクタ・`V2Ecdh` 含む）を上流同梱。
+  前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
+  が単一依存で完結する形に収束することを記録。
+
+### 修正 (session 463)
+
+1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
+   していた問題を修正 — 既に実装済みの3項目（reject 分類+メトリクス、
+   submit レイテンシ、poolproto 配線 — V1 のみ）を残件と区別して状態注記。
+
+### 修正 (session 465)
+
+1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0`
+   （GOTOOLCHAIN=auto で 1.24 へ自動切替）と `godebug tlsmlkem`
+   （1.24 未満ではパース不能）により実質 Go 1.24+ が必要なため、実際の
+   最小ツールチェーン要件を明記。
+
+### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
+
+* `skills/tdd.md`: 「CI上で継続的にファズ実行」→ CI にファズジョブ非存在（`make fuzz` ローカルのみ）、`//go:build integration` タグ → 宣言ファイルゼロ（実際は `testing.Short()` ゲート）、`make test-e2e`/`//go:build e2e` → 両方非実在（E2E スイート未実装、ターゲット削除済み）の3件を訂正。
+* `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
+* `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
+### Fixed (session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正)
+
+* 「>5% 回帰で自動失敗」→ CI はベンチマークを実行して artifact をアップロードするのみで回帰ゲートなし。
+* 「CI が PR に比較を投稿」→ 比較・投稿処理は非実在。
+* 「デコーダーは CI で継続的にファズされる」→ CI にファズジョブなし（`make fuzz` ローカルのみ — session 483 の skills/ 訂正と同クラス）。
+* `BenchmarkDecoder_ReadFrame` の再現コマンド → 関数非実在のため、その throughput 表は未検証の推定値と明示。
+* 「Go 1.22 で計測」の表記に、現 master は Go ≥1.24 必須（`godebug tlsmlkem`）の注意書きを追加。
+* （マージ時注記）回帰ゲート・デコーダー推定値/ファズの訂正は master 側で先行済みのため BENCHMARKS.md への重複追記は行わず、本 PR は PR 比較投稿の訂正と Go ≥1.24 注記のみを反映。
+
+### Fixed (session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正)
+
+* Windows のログ参照手順 `Get-EventLog -Source Otedama` → イベントソース非登録の phantom（SCM で stdout 破棄・`--log-file` 非通過も併記）。
+* `contrib/grafana/otedama-dashboard.json`「lives at」→ `contrib/` 非実在のため v3.1.0 計画として訂正。
+* ハードニングチェック「Binary cosign signature verified」→ 署名リリース非実在（#562 で記録済みの release.yml 欠陥）と訂正。
+* 「Dependabot for the Otedama container image tag」→ dependabot docker エコシステムは Dockerfile のベースイメージ pin を更新するのみでデプロイ済みタグは更新しない、と訂正。
+
+### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
+
+* §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
+* §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
+
+### Fixed (session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記）
+
+* `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
+* 「SRI の Go バインディングを統合利用」/「自前実装ではなく SRI を選択」の理由付けが実態と逆であることを追記 — SRI は Rust のみで Go バインディング非存在、`internal/stratum` は自前実装。LDK のメンテ済み Go バインディングも非存在。
+
+### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
+
+* Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
+* リスク1 の「govulncheck は週次で自動実行済み」→ CI に非存在で Makefile ローカルのみ。
+
+### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
+
+* 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
+* 行11「SHA pinning」・行13「cosign 署名済み」は master 側の Gap 注記が先に着地済みのため重複追記せず。
+* CI gate 節を実態に書換 — ci.yml に独立した `go vet`/`staticcheck`/`govulncheck` ジョブは非存在（govet+staticcheck は golangci-lint 内で実行、5-OS ビルド行列は Build ジョブに実在）、nightly ファズ・ベンチマーク比較ジョブも非存在。
+
+### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
+
+* §2・§5 の実装状況は master 側で同内容の訂正が先に着地済みのため重複追記せず。
+* §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
+
+### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
+
+* 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
+* 「`otedama --log-level=debug doctor`」→ サブコマンド前のフラグは `unknown subcommand` で失敗し、`doctor` は `--log-level` を持たない。
+
+### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
+
+- **`internal/engine` audit surface complete.** All six non-test files
+  (run.go, arbitrate.go, metrics.go, stats.go, setup.go, fanin.go) have
+  now been read end-to-end across sessions 509–511: every goroutine
+  spawn site audited for shared-state access; the only findings were the
+  `rejectByReason` map race (fixed session 509, PR #591) and the
+  arbitration-pause flap (fixed session 510, PR #592). `miner.Worker`'s
+  SetWork↔grind path verified race-free (mutex + workVer generation
+  counter); `LatencyTracker`, `HashrateMonitor`, the V1/V2 session-loop
+  state maps, `fanIn`, and `arbitration.Decide`'s full-device assignment
+  coverage all verified correct.
+- **ADR-009 ecosystem update:** recorded the first known production
+  Stratum V2 Job-Declaration block — mainnet block 955,318, mined by
+  DMND for GoMining on June 25–26, 2026 (verified against DMND's
+  announcement and Bitcoin Magazine). Miner-declared templates are now
+  proven in production, strengthening the ADR's "Why now" premise.
+
+### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
+
+- **Core-path audit surface complete.** `internal/arbitration`,
+  `internal/logger`, and `internal/version` read end-to-end, finishing
+  the non-test sweep of the core packages (engine, miner, hal,
+  arbitration, logger, version) started in session 509. Verdicts:
+  arbitration `Decide` is deterministic (sorted device order, duplicate-
+  ID rejection, policy-space hysteresis, full-device assignment
+  coverage); logger's default singleton is race-free via
+  `atomic.Pointer` with nil-safe `IntoContext`/`SetDefault`; version's
+  ldflags layout matches the documented defaults. The only residual
+  class — non-finite arbitration inputs — is already owned by open PRs
+  #437 and #443.
+
+### Documentation & audit (session 514 — provider/daemon read; toolchain current)
+
+- **`internal/provider` + `internal/daemon` read end-to-end.** Verdicts:
+  pollingProvider's double-start guard, Stop ordering (cancel → wait →
+  recreate channel), and drop-oldest sendQuote all correct;
+  AkashProvider honors the publish-zero-don't-go-silent contract;
+  daemon's quoting helpers, `sc.exe query` state parse, and
+  ProtectHome/ReadWritePaths carve-out all verified. The
+  install-but-don't-start semantics of `installWindowsService` is a
+  closed-PR-owned decision (#552) — recorded, not re-delivered.
+  Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
+  2026; 1.26.5–1.26.8 carried security fixes).
+
+### Documentation & audit (session 515 — metrics/clock/tui read)
+
+- **`internal/metrics`, `internal/clock`, `internal/tui` read
+  end-to-end.** Verdicts: metric cross-type collisions panic at
+  registration (one bad name would silently kill the whole scrape);
+  exposition escaping, NaN/±Inf rendering, and deterministic ordering
+  correct; Fake clock's non-monotonic contract documented; Dashboard
+  Start/Stop atomics + WaitGroup ordering close the writer race they
+  describe; `truncateVisible` correctly preserves ANSI state. Two
+  residuals recorded without code change: `metricKey`'s unescaped
+  label-value serialization (needs a `,`/`=` in a device ID — today's
+  producers can't emit one) and a `truncateToBudget`/`shortenURL`
+  duplication candidate for the Issue ledger.
+
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
+### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
+
+- **`go test -race ./...` green on all 23 packages** (go1.26.8);
+  33 K lines of test code mechanically audited — skips environmental,
+  error-swallows fixture-scoped, no tautological assertions. Ecosystem
+  recheck: SRI still at v1.12.0, go1.26.8 confirmed current; toolchain
+  bump remains closed-PR-owned (#369).
+
+### Documentation & audit (session 518 — sv2-spec tracking)
+
+- **ADR-009 ecosystem update:** sv2-spec #194 merged — error codes may
+  now drive automated actions (upstream blessing for our reject-code
+  classification); #202/#203 compete on a non-custodial JDP payout
+  extension (miner-declared payout outputs — on Otedama's sovereignty
+  axis, tracked for future JDC work).
+
+### Documentation & audit (session 519 — rule-3 duplication ledger)
+
+- Recorded two candidates in `docs/CATEGORY_AUDIT.md` (not fixed —
+  consolidation is a contract decision): `tui` truncator family
+  (`truncateToBudget` hard-cuts vs `shortenURL` returns over-limit
+  intact at budget <4, Issue #3 class) and `metrics.metricKey`
+  label-value `,`/`=` collision (latent; unreachable from today's
+  producers but live on the API surface).
+
+### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
+
+- Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
+  block parses under 1.27's removed-setting acceptance rule; no >1.22
+  stdlib symbols so `stdversion` vet is clean). Recorded upstream's
+  `stratum-mining/sv2-ui` orchestrated JDP stack in ADR-009; ESP-Miner
+  2.15.3 / DATUM v0.4.1beta unchanged.
+
+### Documentation & audit (session 521 — ecosystem recheck)
+
+- ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
+  40–60% by end-2026), `stratum` vs `sv2-apps` repo landscape
+  clarified, single-port SV1/SV2 auto-detection pattern noted.
+  Japanese-source recheck: no drift.
+
+### Documentation & audit (session 522 — EROSION threat modeled)
+
+- `docs/THREAT_MODEL.md`: added the missing network-adversary DoS
+  class — the EROSION single-packet Noise-nonce-desync attack (S&P'24),
+  with Otedama's verified posture (frame/decrypt error → reconnect →
+  fresh handshake; no silent degradation) and its residual (bounded
+  reconnect loop, inherent).
+
+### Documentation & audit (session 524 — golangci-lint pin divergence)
+
+- `docs/KNOWN_LIMITATIONS.md` §13: recorded that golangci-lint is
+  pinned at three different versions (ci.yml `v1.55.2` curl-install,
+  `golangci-lint-action@v3`, local `v1.64.8`) while upstream is at
+  `v2.13.x`; v2.13.0 adds the go1.27 support the local toolchain
+  already needs. Upgrade implies a `.golangci.yml` v2-config migration
+  — maintainer-owned.
+
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
+### Documentation & audit (session 527 — end-to-end binary smoke)
+
+- First real-binary smoke: `version`, `completion`, `doctor` (17
+  checks, documented 0/1/2 exit contract), `config show`, and `config
+  validate` (exit 78 per §2.1) all verified against their documented
+  contracts on the go1.27.1-built artifact.
+
+### Documentation & audit (session 528 — non-custodial E2E)
+
+- Verified the core non-custodial path on the real binary: first run
+  creates the wallet and shows the 24-word phrase exactly once
+  (`wallet.dat` at 0600); second run loads the same fingerprint and
+  never re-shows the phrase; connect loop backs off gracefully and
+  shuts down clean on SIGTERM.
+
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
+### Documentation & audit (session 530 — sv2-spec cert version)
+
+- `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
+  `version` field is now normative (MUST be 0; reject unsupported).
+  Forward requirement for Otedama's future cert validation.
+
+### Documentation & audit (session 531 — coverage measured)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
+  results — all 24 packages green, median ~97%; only `cmd/otedama`
+  (88%) below the 90% intent, its uncovered residue being the
+  integration-only `cmdRun` live path already exercised by the
+  binary E2E smokes.
+
+### Documentation & audit (session 534 — escape analysis)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-gcflags=-m` sweep — every heap
+  escape is on a cold path (package init, invalid-input errors,
+  construction); the grind loop is allocation-free, matching the
+  benchmark's 0 allocs/op.
+
+### Documentation & audit (session 535 — flake sweep)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
+  `-race -count=2` on engine/stratum/poolproto, all green on
+  go1.27.1/arm64; no nondeterminism evidence anywhere in the suite.
+
+### Documentation & audit (session 536 — extended vet)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `nilness` zero findings tree-wide;
+  `shadow`'s 13 hits are all the checked-immediately `if err :=`
+  idiom (verified benign, no dropped errors).
+
+### Tests (session 537 — stdlib modernization)
+
+- `internal/i18n/messages/messages_test.go`: `sort.Strings` →
+  `slices.Sort` — the tree no longer imports `sort` or calls
+  `reflect.DeepEqual` anywhere (all other sorts were already on
+  `slices`/`cmp`/`maps`).
+
+### Documentation & audit (session 538 — checkptr)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-d=checkptr` instrumented full
+  suite — all 24 packages green, zero unsafe.Pointer violations;
+  the tree imports neither `unsafe` nor `syscall` directly.
+
+### Documentation & audit (session 539 — dependency boundaries)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `go mod verify` clean; external
+  deps = x/crypto + yaml.v3 only; import graph verified as a DAG
+  matching the architecture map (13 leaf packages, engine sole
+  aggregator, no upward imports).
+
+### Documentation & audit (session 540 — order dependence)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-shuffle=on` ×2 full-suite runs
+  all green — no order-dependent tests; suite is deterministic.
+
+### Documentation & audit (session 542 — ecosystem recheck)
+
+- `docs/adr/ADR-009`: sv2-spec #220 (Noise Act 2 = 234 bytes —
+  forward requirement for the §2 noise completion), #221/#224
+  (docs-only), #209 (job_id/SetNewPrevHash prohibitions — engine
+  conformance verified). SRI still v1.11.1.
+
+### Documentation & audit (session 541 — serialized scheduling)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-cpu=1` (GOMAXPROCS=1) full
+  suite ×2 all green — no test needs multi-CPU scheduling;
+  suite robust across every scheduler dimension.
+
+### Documentation & audit (session 544 — runtime integrity)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `checkptr=2` + `invalidptr=1`
+  clean on the raw-byte packages; `go version -m` confirms the
+  release path pins CGO_ENABLED=0 (fully static) per ADR-003.
+
+### Documentation & audit (session 545 — pprof)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: hot loop confirmed 0-alloc via
+  benchmem+pprof, 98.5% CPU inside FIPS SHA-256; midstate reuse
+  (~30% headroom) analyzed and rejected — stdlib has no midstate
+  API and custom compression violates the no-custom-crypto rule.
+
+### Documentation & audit (session 565 — atomic API)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all `sync/atomic` uses are the
+  typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
+  386-misalignment panic class is absent.
+
+### Documentation & audit (session 566 — JSON/YAML decode)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
+  pointer and checks its error; yaml config decode uses
+  `KnownFields(true)`; the only ignored results are documented
+  best-effort tolerations.
+
+### Documentation & audit (session 567 — init surface)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
+  canonical — BIP-39 wordlist integrity panic + plugin-registry
+  registration; no I/O or goroutines at init time.
+
 ### Documentation & audit (session 568 — recover/spawn)
 
 - `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
