@@ -1731,3 +1731,12 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1243 — yield-overflow + negative-duration + select-fairness
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| yield-overflow | Yield math is float64 throughout on non-finite-guarded inputs (arbitration/engine.go:99,304,307; rates/fetcher.go:109) — no uint64 multiply in the money path | Clean |
+| negative-duration | No negative `time.Duration` literals; all derived durations bounded | Clean |
+| select-fairness | Every `select` pairs `ctx.Done()` with work channels; Go's pseudo-random ready-case pick means no starvation ordering dependency | Clean |
