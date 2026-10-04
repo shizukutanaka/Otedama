@@ -109,7 +109,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - 機密 type に `LogValuer` 実装 (private key、address、credentials を source で redact)。
 - 全 metric `otedama_*` prefix、minor release 間で名前/label set を維持、削除は6ヶ月 deprecation。
 - label cardinality を `WithCardinalityLimit(2000)` で明示cap。
-- `--metrics-addr`, `--otlp-endpoint`, `--pprof-addr` は全て opt-in、デフォルト無効。
+- メトリクス・プロファイリングの公開面は全て opt-in、デフォルト無効（実装済み: `--http-addr`、`--pprof`、計画中: `--otlp-endpoint`）。
 - **絶対に phone home しない**。
 
 **実装状況:** Prometheus `internal/metrics` + httpserver `--http-addr` は実装済み。OTel build tag は v3.3.0 スコープ。
