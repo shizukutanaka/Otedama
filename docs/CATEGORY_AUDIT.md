@@ -2058,6 +2058,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 905 update — strings-census + repeat-bound + builder-usage audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `strings.*` census — unbounded `Repeat`/`Join` on attacker input. | ✅ Clean: 20 functions across ~117 sites; the top three (HasPrefix/Join/Contains) are all on trusted config/log text. |
+| M | `strings.Repeat` on a pool-controlled size — memory amplification. | ✅ Clean: 7 sites all bounded — TUI column padding (≤ terminal width), doctor fingerprint elision (fixed 3), and V1 `extranonce2` padding clamped to `maxExtranonce2Size` (s411/428). |
+| S | `strings.Builder` misuse — `WriteString` error checked or buffer reused. | ✅ Clean: 10 sites all discard the always-nil WriteString error (contract); no Builder is shared or reused across calls. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
