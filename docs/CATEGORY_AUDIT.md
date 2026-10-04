@@ -1926,6 +1926,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 894 update — process-handle + pid-kill + process-lifecycle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.StartProcess`/`ForkExec`/raw `*os.Process` handles — un-reaped processes or pid reuse races. | ✅ Clean: absent — no `Process` handles, `Pid` fields, or `ForkExec` in the codebase. |
+| M | `Process.Kill`/`Signal`/`Wait`/`Release` — signals to a possibly-reused pid. | ✅ Clean: absent — process control reaches children only through `exec.Cmd`'s own lifecycle (verified s748/s864). |
+| S | `os.FindProcess` on an arbitrary pid — returns a handle to a possibly-different process. | ✅ Clean: absent. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
