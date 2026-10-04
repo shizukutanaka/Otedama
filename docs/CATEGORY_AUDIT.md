@@ -2152,6 +2152,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1041 update — config-test layer-matrix + env-warning + ssot-equivalence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | 4-layer precedence under-pinned per field (silent shadowing in one layer). | ✅ Clean: dedicated per-field layer matrix — HTTPAddr/DataDir/Language each get file/env/flag + flag-over-env tests; `EmptyStringInHigherLayerDoesNotOverrideLower` and `FileLogFormatNotClobberedByFlagDefault` pin the two classic shadowing bugs. |
+| M | `ResolveWithOrigins` diverging from `Resolve` (two paths, one truth). | ✅ Clean: `TestResolveWithOrigins_ConsistentWithResolve` asserts identical inputs → identical config — the SSOT invariant is an explicit equivalence test, and per-field origin tracking (env/file/flag/default) is pinned. |
+| M | `EnvWarnings` mis-firing or under-firing on numeric env. | ✅ Clean: malformed cases flagged (unit-suffix typo `"300w"`, comma-decimal `"50,000"`), valid/unset → none, **non-numeric vars provably never flagged**, nil-env → process env — all four quadrants covered. |
+| M | `Validate` address/network checks weakened to accept-list-only. | ✅ Clean: valid-accept + invalid-reject + **checksum-typo reject on both primary and failover list** + empty-string-in-list + non-finite rejects + unknown-log-level + aggregates-multiple-issues — reject paths tested as hard as accept paths. |
+| S | Zero-config startup pathological case untested. | ✅ Clean: `TestZeroConfigurationStartup` + `IncludesLogFormat` assert bare defaults are valid end-to-end. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
