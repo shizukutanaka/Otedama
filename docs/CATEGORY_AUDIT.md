@@ -1804,6 +1804,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1019 update — service-dispatch + help-exit + injectable-seam audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `otedama service --help` exiting like an error. | ✅ Clean: explicit `help`/`--help`/`-h` case prints usage to **stdout** with exitOK — the same bug class leaf subcommands fix via `parseSubcommandFlags`; unknown subcommands still quote (`%q`) + exitUsage. |
+| M | Tests performing real OS service operations. | ✅ Clean: `newDaemonManager` + `managerInstall`/`Uninstall`/`Status` are injectable variables — the seam exists precisely so tests never touch systemd/launchd/SCM. |
+| M | Install flags drifting from the daemon layer's contract. | ✅ Clean: flags map verbatim into `daemon.ServiceFlags` (address/level/format/language) with no cmd-side transformation to desync. |
+| S | `service status` printing a misleading state. | ✅ Clean: not-installed, installed-stopped, and installed-running are three distinct outputs plus the install hint. |
+| S | Uninstall/status silently consulting a config file they should not need. | ✅ Clean: both construct the manager with empty config args — the service definition path is manager-derived, not config-dependent. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
