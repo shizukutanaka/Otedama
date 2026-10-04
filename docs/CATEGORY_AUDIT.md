@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1048 update — provider-test lifecycle + quote-freshness + publish-overflow audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Provider lifecycle edges untested (double-start, stop-without-start, restart residue). | ✅ Clean: both providers pin stop-without-start safe, double-start reject, stop-clears-state-for-restart, goroutine cleanup — the four-state lifecycle matrix is symmetric across Mining and Akash. |
+| M | Quote freshness degrading silently (stale rate = fresh confidence). | ✅ Clean: `FreshRate_HighConfidence` vs `StaleRate_LowerConfidence` pins the confidence-decay matrix; `NoGPUDevices_EmitsZeroYieldQuote` + `QuotePriceWithinConfiguredBounds` cover degenerate and bound cases. |
+| M | Publish channel back-pressure hazards (block-forever vs unbounded). | ✅ Clean: zero-rate→fallback and drops-oldest-when-full for BOTH providers — the bounded-queue contract is tested twice, not assumed. |
+| M | Polling loop leak on ctx cancel. | ✅ Clean: `ParentContextCancelTerminatesLoop` + `SendQuoteReturnsFalseOnCancelledContext` + republish-on-ticker — the goroutine exit path is pinned, not just the happy tick. |
+| S | Simulated provider misrepresenting itself. | ✅ Clean: `NameDisclosesSimulation` pins honest sim disclosure in the provider name; `YieldHigherThanCPUMining` + GPU-only acceptance covered; hashrate-func set/zero/unknown matrix tested. |
+
+All packages build, vet, and test green.
