@@ -2953,3 +2953,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1281 update — Go 1.25/1.26 API surface adoption census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| WaitGroup.Go | 30 `wg.Add(1)` + `go func` sites would simplify — but requires go 1.25; blocked by the go 1.24 module floor | ⏸ Deferred (floor) |
+| errors.AsType / t.Attr | require go 1.26 / 1.25 — blocked by floor | ⏸ Deferred (floor) |
+| runtime.AddCleanup | available under go 1.24 — but zero `SetFinalizer`/finalizer sites exist to migrate | ✓ Clean |
+| json/v2, synctest, omitzero | absent by design (experimental or covered by existing fakes) | ✓ Clean |
+
+Census over synced master; adoption gate is `go 1.24.0` in go.mod.
