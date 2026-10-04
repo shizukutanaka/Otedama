@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1008 update — simulated-quote + family-gate + rate-fallback audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A simulated Akash yield mistaken for real income — the alpha provider quotes a fixed midpoint, not a live market. | ✅ Clean: `Name()` carries the deliberate "(simulated)" suffix — load-bearing in TUI/logs/`config show` — and the type doc states the fixed-midpoint behavior plus the v3.1.0 REST-integration gate. Confidence is also lower than mining's (0.85/0.6 vs 0.95/0.7) so the honest-simulation discount reaches the arbitration sort. |
+| M | A CPU or non-compute GPU receiving an inference quote. | ✅ Clean: `Start` filters to `FamilyGPU && GeneralCompute`; with zero eligible devices `publish` emits a `Confidence: 0` quote — `Effective()` = 0, invisible to Decide (graceful exclusion, not an error). |
+| M | A zero or negative BTC rate zeroing/negating every quote. | ✅ Clean: `rate <= 0` falls back to a documented 95 000 constant — quotes degrade gracefully while the freshness flag independently marks them unreliable. |
+| M | Hidden fee drag — gross yield quoted as net. | ✅ Clean: `netUSDPerHour = usdPerHour * 0.80` models the ~20% Akash platform take; gross and net are separate fields on the quote. |
+
+All packages build, vet, and test green.
