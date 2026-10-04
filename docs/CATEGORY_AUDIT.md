@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 799 update — partial-return + signed-compare + map-set audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Non-zero value returned alongside a non-nil error — caller may consume the partial result. | ✅ Clean: all `return v, err` sites return zero values on error (`""`, `false`, `Hash{}`); the sole exception (`i18n/message.go:329`) returns the bundle fallback string with the parse error — callers always check `err` first, and `raw` is a safe degraded display value. |
+| M | Signed/unsigned comparison mixing — wraparound miscompare. | ✅ Clean: zero signed-vs-unsigned comparison sites; uint casts carry `nolint:gosec` bounds justifications (verified session 695). |
+| M | `map[T]bool`/`struct{}` value read for meaning — zero value mistaken for presence. | ✅ Clean: every set-map's value is written-only (membership checks use comma-ok or `map[k]` on bool-sets where `false` == absent is the intent) — `seen`, `validEntropyBits`, `validCounts`, `setFlags`. |
+
+All packages build, vet, and test green.
