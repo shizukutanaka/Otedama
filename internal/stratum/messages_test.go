@@ -197,13 +197,13 @@ func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 
 // ----- NewMiningJob -----
 
-func TestNewMiningJob_Roundtrip_PresentMinNtime(t *testing.T) {
+func TestNewMiningJob_Roundtrip_PresentNtimeStart(t *testing.T) {
 	orig := NewMiningJob{
-		ChannelID:   1,
-		JobID:       7,
-		HasMinNtime: true,
-		MinNtime:    0x60000000,
-		Version:     0x20000004,
+		ChannelID:     1,
+		JobID:         7,
+		HasNtimeStart: true,
+		NtimeStart:    0x60000000,
+		Version:       0x20000004,
 	}
 	for i := range orig.MerkleRoot {
 		orig.MerkleRoot[i] = byte(255 - i)
@@ -212,10 +212,10 @@ func TestNewMiningJob_Roundtrip_PresentMinNtime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	// channel_id(4) + job_id(4) + option flag(1) + min_ntime(4) +
+	// channel_id(4) + job_id(4) + option flag(1) + ntime_start(4) +
 	// version(4) + merkle_root(32)
 	if len(payload) != 49 {
-		t.Errorf("payload length = %d, want 49 (present min_ntime)", len(payload))
+		t.Errorf("payload length = %d, want 49 (present ntime_start)", len(payload))
 	}
 	got, err := DecodeNewMiningJob(payload)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestNewMiningJob_Roundtrip_PresentMinNtime(t *testing.T) {
 }
 
 func TestNewMiningJob_Roundtrip_FutureJob(t *testing.T) {
-	// Absent min_ntime marks a future job (mined only after the
+	// Absent ntime_start marks a future job (mined only after the
 	// SetNewPrevHash that names it).
 	orig := NewMiningJob{
 		ChannelID: 2,
@@ -242,7 +242,7 @@ func TestNewMiningJob_Roundtrip_FutureJob(t *testing.T) {
 		t.Fatalf("Encode: %v", err)
 	}
 	if len(payload) != 45 {
-		t.Errorf("payload length = %d, want 45 (absent min_ntime)", len(payload))
+		t.Errorf("payload length = %d, want 45 (absent ntime_start)", len(payload))
 	}
 	got, err := DecodeNewMiningJob(payload)
 	if err != nil {
@@ -251,8 +251,8 @@ func TestNewMiningJob_Roundtrip_FutureJob(t *testing.T) {
 	if got != orig {
 		t.Errorf("roundtrip mismatch:\n got %+v\nwant %+v", got, orig)
 	}
-	if got.HasMinNtime {
-		t.Error("HasMinNtime = true for a future job")
+	if got.HasNtimeStart {
+		t.Error("HasNtimeStart = true for a future job")
 	}
 }
 
@@ -264,7 +264,7 @@ func TestDecodeNewMiningJob_Short(t *testing.T) {
 	buf := make([]byte, 45)
 	buf[8] = 1
 	if _, err := DecodeNewMiningJob(buf); err == nil {
-		t.Error("short present-min_ntime payload accepted")
+		t.Error("short present-ntime_start payload accepted")
 	}
 }
 
@@ -280,10 +280,10 @@ func TestDecodeNewMiningJob_BadOptionFlag(t *testing.T) {
 
 func TestSetNewPrevHash_Roundtrip(t *testing.T) {
 	orig := SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     7,
-		MinNtime:  0x686F0000,
-		NBits:     0x17038EC1,
+		ChannelID:  1,
+		JobID:      7,
+		NtimeStart: 0x686F0000,
+		NBits:      0x17038EC1,
 	}
 	for i := range orig.PrevHash {
 		orig.PrevHash[i] = byte(i + 1)
@@ -314,8 +314,8 @@ func TestDecodeSetNewPrevHash_Short(t *testing.T) {
 
 func TestSetTarget_Roundtrip(t *testing.T) {
 	orig := SetTarget{ChannelID: 3}
-	for i := range orig.MaxTarget {
-		orig.MaxTarget[i] = byte(0xF0 - i)
+	for i := range orig.Target {
+		orig.Target[i] = byte(0xF0 - i)
 	}
 	payload, err := orig.Encode()
 	if err != nil {
@@ -340,7 +340,7 @@ func TestDecodeSetTarget_Short(t *testing.T) {
 }
 
 func TestDispatchFrame_SetNewPrevHashAndSetTarget(t *testing.T) {
-	p := SetNewPrevHash{ChannelID: 1, JobID: 2, MinNtime: 3, NBits: 4}
+	p := SetNewPrevHash{ChannelID: 1, JobID: 2, NtimeStart: 3, NBits: 4}
 	payload, _ := p.Encode()
 	f, _ := WrapMessage(MsgSetNewPrevHash, true, payload)
 	m, err := DispatchFrame(f)
@@ -799,7 +799,7 @@ func TestDispatchFrame_OpenMiningChannelSuccess(t *testing.T) {
 }
 
 func TestDispatchFrame_NewMiningJob(t *testing.T) {
-	orig := NewMiningJob{ChannelID: 1, JobID: 5, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
+	orig := NewMiningJob{ChannelID: 1, JobID: 5, HasNtimeStart: true, NtimeStart: 0x60000000, Version: 0x20000000}
 	payload, err := orig.Encode()
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
