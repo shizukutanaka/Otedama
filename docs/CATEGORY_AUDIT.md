@@ -3079,6 +3079,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1184 update — skills-doc reference parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `make <target>` in skills/*.md | ✅ Clean — `make test`, `make test-integration`, `make fuzz` all resolve to Makefile targets |
+| S | `otedama <subcommand>` in skills/*.md | ✅ Clean — the only phantom reference (`otedama migrate-from-v2` in release-procedure.md) is already covered by an explicit session-483 訂正 erratum |
+| S | `//go:build` / E2E claims in skills/*.md | ⚠️ Noted — `test-e2e`/`integration`-tag claims are all corrected by inline session-483 errata; the corrections themselves remain accurate |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
