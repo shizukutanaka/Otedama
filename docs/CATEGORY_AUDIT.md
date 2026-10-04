@@ -1734,7 +1734,7 @@ All packages build, vet, and test green.
 
 ---
 
-## Session 881 update — sleep-lock + sleep-busywait + print-under-lock audit
+## Session 882 update — sleep-lock + sleep-busywait + print-under-lock audit
 
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
