@@ -3541,6 +3541,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 768 update — atomic-api + raw-bypass + strconv-tolerance audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Mixing legacy `atomic.LoadInt32`-style functions with typed `.Load()` — inconsistent access discipline. | ✅ Clean: zero free-function atomic calls; all 36 accesses use the typed `atomic.Bool`/`Int`/`Uint`/`Pointer` method API (verified session 739). |
+| M | Raw field access bypassing the atomic wrapper — a non-atomic read racing a CAS write. | ✅ Clean: flag fields (`started`, `ready`, etc.) are accessed exclusively through the atomic methods — no raw reads found. |
+| M | `strconv` errors ignored leaving zero-value fields — a malformed pool/config value read as 0 and used. | ✅ Benign: the two unchecked sites are fail-closed — `client.reconnect` string-port failure leaves `Port=0`, rejected downstream by the host:port requirement (session 486); `uintID` parse failure yields an id that can't match `pending`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
