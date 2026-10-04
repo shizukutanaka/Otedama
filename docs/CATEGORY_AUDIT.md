@@ -4641,6 +4641,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 870 update — task-chan + chan-chan + mailbox audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `chan func()` task channels — closure panics die in the worker, ordering lost. | ✅ Clean: absent — work is dispatched by direct calls or bounded data channels, never closure queues. |
+| M | `chan chan` rendezvous patterns — deadlock-prone request-reply. | ✅ Clean: absent — RPC waits use `map[id]chan` keyed correlation, not nested channels (s533). |
+| S | Mailbox actor pattern — messages from multiple writers interleaving on one state. | ✅ Clean: V1 `dispatch()` is a synchronous call from the single read-loop owner; V2 uses the same per-connection owner model. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
