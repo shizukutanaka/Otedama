@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 965 update — tui-stop-race + update-drop + visible-width audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Stop` racing an in-flight `render` write on a non-concurrency-safe `io.Writer` — torn frame on shutdown; double `Stop` panicking on `close(doneCh)`. | ✅ Clean: `wg.Wait()` before the final newline; `started` CAS makes `Stop` idempotent and safe when `Start` was never called. |
+| M | Full update channel blocking `Update` callers — stat producer stalls behind a slow terminal. | ✅ Clean: drop-oldest-then-enqueue pattern, same freshest-wins policy as the provider quote channel. |
+| M | `truncateToBudget` with a non-positive or <4 budget — negative-length panic or `s[:budget-3]` slice out of range. | ✅ Clean: `budget <= 0` → `""`; `budget < 4` → hard cut without ellipsis. |
+| M | `fmt`'s `%-Ns` padding counting ANSI escape bytes as width — misaligned columns on colored fields. | ✅ Clean: `padToVisibleWidth` pads by `visibleLen` (ANSI-aware); truncation paths apply to plain text only. |
+
+All packages build, vet, and test green.
