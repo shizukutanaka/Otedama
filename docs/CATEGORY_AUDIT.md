@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 941 update — sv1-line-cap + en2-bound + jobq-drain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | V1 `readLine` letting a newline-free pool stream grow memory unbounded. | ✅ Clean: `bufio.ErrBufferFull` at `maxLineBytes` (64 KiB) terminates the session; the returned line is copied out of the bufio buffer (aliasing documented) — a misbehaving pool can't accumulate or corrupt prior lines. |
+| M | Pool-controlled `extranonce2_size` driving a per-job `make([]byte)` — allocation DoS. | ✅ Clean: `completeV1Job` refuses `sz <= 0 || sz > 64` before allocating; `en2Counter` (atomic u64) fills big-endian tail bytes — sizes <8 still roll, sizes >8 stay zero-padded head. |
+| M | `sendJob`'s `clean_jobs` drain or `noticeCh` drop-oldest select blocking the read loop. | ✅ Clean: all sends/receives are non-blocking `select`/`default`; the drain exits via `goto send` when empty; a full channel drops the oldest rather than wedging dispatch. |
+
+All packages build, vet, and test green.
