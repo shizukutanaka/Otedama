@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1224 update — Makefile reference parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Doc/workflow `make <target>` references | ✅ Clean — every real target referenced from docs and workflows (`CI`, `all`, `audit`, `build`, `build-all`, `fmt`, `fuzz`, `lint`, `security`, `setup`, `test`, `test-e2e`, `test-integration`) exists; remaining grep hits are English prose ("make progress", "make that", "make clear", "make by", "make today"). |
+| S | External-tool invocations | ✅ Clean — `golangci-lint`, `gofumpt`, `gosec`, `govulncheck` all degrade gracefully (`command -v` guard + install hint) or are installed by the `setup` target; no `scripts/` directory is referenced or required. |
+| M | `install.sh` shell refs | ✅ Clean — the only in-repo shell script; no Makefile target or doc step calls a missing `.sh`. |
+
+All packages build, vet, and test green.
