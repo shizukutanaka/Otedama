@@ -2896,6 +2896,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1167 update — doc path-reference existence + test-fixture integrity
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Backtick-quoted repo paths in docs/ (297 refs, 55 misses on `os.path.exists`) | ✅ Clean — every miss is one of: forbidden/future paths explicitly labeled nonexistent (CONTRIBUTING `internal/auth`/`internal/security`), KNOWN_LIMITATIONS entries describing the very nonexistent scripts they flag, architecture.md's header-disclaimed target architecture, or historical ledger prose |
+| M | testdata/ fixtures referenced by tests | ✅ Clean — zero `testdata/` references; all fixtures are TempDir-generated or package-relative source reads (`metrics_doc_test.go` reads `metrics.go` + `../../docs/SPECIFICATION.md`, both exist) |
+| L | numeric-claim residuals (session 1166 census) | ✅ Clean — all non-ADR numeric claims (17 checks / 15 flags / 10 catalogs / 4 layers) verified; the single drift hit (workflow inventory) fixed in #1248 |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
