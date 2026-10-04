@@ -4433,6 +4433,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 853 update — unkeyed-literal + enum-valid + any-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unkeyed struct literal — silently breaks when a field is added/reordered. | ✅ Clean: absent — all composite literals are field-keyed. |
+| M | Exported enum without a `Valid()`/`Validate()` guard — out-of-range values from the wire or config reach the domain unchecked. | ✅ Clean: every exported enum defines `Valid()` (i18n ID/Lang, arbitration Policy, hal Family) and every wire-bearing struct defines `Validate()` (stratum Header, hal Identity, Config, lightning Entropy). |
+| S | `interface{}`/`any` fields in structs — untyped escape hatch hiding type bugs. | ✅ Clean: counts are small and bounded per file; every `any` site was verified in the s651/682/764 sweeps (error values, test seams, message templates). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
