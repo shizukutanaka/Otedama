@@ -2214,6 +2214,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 919 update — exit-code + status-dominance + skip-semantics audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ExitCode` returning warn when a fail is also present — CI treats blocking failures as warnings. | ✅ Clean: `has.fail → 2`, `has.warn → 1`, else `0` — fail strictly dominates warn dominates pass. |
+| M | `StatusSkip` counted as a failure — skipped platform-inapplicable checks flip the exit code. | ✅ Clean: `StatusSkip` sets neither flag; skips are pass-equivalent. |
+| S | Exit code wired to a per-check status instead of the aggregate. | ✅ Clean: `os.Exit(report.ExitCode())` — the aggregate over all `Results`, single wiring point at `main.go:110`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
