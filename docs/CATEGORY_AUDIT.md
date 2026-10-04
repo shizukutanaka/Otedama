@@ -2194,6 +2194,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1044 update — miner-test canonical-vectors + nbits-rejects + worker-partition audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | SHA256d anchored only to self-consistency (a systematic bug would pass everywhere). | ✅ Clean: **genesis block hash** pinned in internal byte order (with the byte-order nuance documented) + canonical empty-input vector — the hot-path primitive is anchored to Bitcoin's most well-known constant. |
+| M | `TargetFromNBits`/`TargetFromDifficulty` reject matrix thin. | ✅ Clean: negative mantissa, small exponent, zero mantissa, overflow, plus difficulty 0/negative/NaN/Inf — every reject path has a dedicated test; `NBitsFromTarget` covers the **sign-bit-pad** edge and pins the documented small-target precision-loss NOTE. |
+| M | Worker lifecycle hazards untested (double-start, mid-job swap, share loss). | ✅ Clean: start-twice-panics, start/stop, easy-target share find, multi-thread shares, SetWork job change, stats-before/after — lifecycle contract covered. |
+| M | Prior fixes unguarded by regression tests. | ✅ Clean: `NoncePartitionAcrossWorkers` (pins session-399 partition) and `NonceWrapRollsNTime` (pins session-370 ntime roll) — each shipped fix has a dedicated regression test. |
+| S | Difficulty conversion round-trips untested. | ✅ Clean: `DifficultyFromTarget_RoundTrip`, zero→infinite, diff-1≡genesis; header nonce at byte offset 76 pinned. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
