@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1003 update — device-detect + nonce-partition + wallet-once audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | An interrupted device detection reported as "no devices detected" — misleading the operator. | ✅ Clean: `detectDevices` returns "device detection interrupted" whenever `Detect` errors alongside an empty list — only a truly empty enumeration (impossible, the CPU driver always enumerates) yields the "no devices" wording. |
+| S | Two workers grinding identical (header, nonce) space — duplicate-work rejections. | ✅ Clean: `startMinerWorkers` partitions per worker: `NonceOffset = i*Threads`, `NonceStep = next-pow2(Threads×workers)`, guarded `total ≤ 2^31` so every offset < total — disjoint residue classes forever (the session-399/#510 fix). |
+| M | A pool seeded with vardiff for a zero-rate miner on a fresh session. | ✅ Clean: `nominalMiningHashrate` sums `DefaultHashrates[family]` per spawned worker — only devices that actually hash count; unknown families contribute 0 (the session-383/#495 fix). |
+| S | The BIP-39 recovery phrase promised by four docs but never actually printed — "back it up" with nothing shown. | ✅ Fixed historically (session 253, shipped via #498): `printRecoveryPhrase` writes the one-time mnemonic to `Options.Output`, deliberately outside the logger; `IsNew` triggers TTY-gated `verifyBackupPhrase`. Comment cites the zero-call-site verification that caught it. |
+| M | A wallet failure aborting the mining run. | ✅ Clean: `setupWallet` returns "" on every failure path — log-only, mining proceeds non-custodial-optional; provider `Start` errors likewise degrade rather than fatal. |
+
+All packages build, vet, and test green.
