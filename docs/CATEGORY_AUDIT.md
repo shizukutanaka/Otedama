@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 806 update — defer-cost + reader-hot + writer-iface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `defer` inside per-call hot functions (hash, wire primitives) — extra deferred-call bookkeeping per invocation. | ✅ Clean: zero `defer` in `sha256d.go`/`wire.go`/`noise.go` — the hash and codec paths are defer-free. |
+| P | `io.Reader`/`io.Writer` interface dispatch on the encode hot path — virtual call + boxing per write. | ✅ Benign: write side uses concrete `[]byte`-returning append primitives (the io.Writer predecessor was deliberately replaced, `wire.go:26`); `io.Reader` remains only on the per-frame decode side, never per-nonce. |
+| P | Interface-typed parameters on the submit path boxing concrete types per call. | ✅ Clean: message `Encode()` returns `([]byte, error)` concrete — Submit threads concrete frames, no boxing per call. |
+
+All packages build, vet, and test green.
