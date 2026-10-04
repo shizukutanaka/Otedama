@@ -1964,6 +1964,21 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1028 update — exposition-atomicity + label-key + float-format audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | One malformed label/name corrupting the whole `/metrics` scrape (Prometheus drops the entire response). | ✅ Clean: `isValidMetricName`/`isValidLabelName` panic at registration — startup-fatal developer error, with the whole-scrape severity documented; cross-type name reuse (counter AND gauge) also panics for the same reason. |
+| S | `metricKey` colliding two distinct label sets (value containing `,k=` merges series). | ✅ Benign by domain: keys concatenate raw `name,k=v` — a value like `x,b=y` could collide, but every producer emits bounded alphabets (`cpu-0`, `accepted`, provider names) that cannot contain `,` or `=`; no runtime input reaches label values. |
+| M | A caller mutating its label map after registration corrupting stored metrics. | ✅ Clean: `cloneLabels` (`maps.Clone`) at registration — the stored series is independent of the caller's map. |
+| M | HELP vs label escaping confused (over/under-escaping). | ✅ Clean: two distinct escapers — labels escape `\`, `"`, `\n`; HELP escapes only `\` and `\n` (quote is not special there) — matches the exposition spec exactly. |
+| M | Special floats rendered wrong (`>1e308`-style thresholds catch large finite values). | ✅ Clean: `IsNaN`/`IsInf` before `%g`, emitting the canonical `NaN`/`+Inf`/`-Inf` — the threshold-misclassification case is named in the comment. |
+| S | Collectors deadlocking on registry access inside `WriteText`. | ✅ Clean by contract: the collector list is snapshotted under `RLock`, released before any `fn(w)` runs — documented "must not call any Registry method". |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
