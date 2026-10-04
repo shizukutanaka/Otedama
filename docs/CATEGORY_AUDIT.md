@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 836 update — response-bound + drain-limits + body-reuse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbounded `io.ReadAll(resp.Body)` — hostile endpoint exhausts memory. | ✅ Clean: all three response reads are `io.LimitReader`-bounded (`maxHashrateBody`, 64KiB fetcher, 8KiB doctor discard). |
+| S | Response body left undrained — connection never reused, goroutine leak on keep-alive. | ✅ Clean: every site either reads the body fully or drains a bounded discard (`checks.go:904`, `hashrate.go:191`) before close — the documented keep-alive pattern. |
+| S | `json.Decoder` reading directly off the network without limit — unbounded alloc via field values. | ✅ Clean: decode happens on the LimitReader-bounded body bytes, not a raw `resp.Body` stream. |
+
+All packages build, vet, and test green.
