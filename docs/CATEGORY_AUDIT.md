@@ -3043,6 +3043,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1181 update — doc package-path parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `internal/<pkg>` references in live docs | ✅ Clean — every reference in CONTRIBUTING, DEPLOYMENT, API, solo-operations maps to a real package |
+| S | Phantom paths (internal/auth, internal/providers, internal/btcnode, internal/plugin, …) | ⚠️ Noted — appear only inside explicitly disclaimed planning docs (architecture.md session-243/487 banner, ADR-009 "proposal" code blocks, CONTRIBUTING §82 self-correcting note); no live false claim |
+| S | Forbidden-path leakage | ✅ Clean — no doc instructs creating `pkg/`, `web/`, `internal/providers/` etc. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
