@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1004 update — lazy-series + payout-label + unaccounted audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Concurrent lazy metric registration racing on the shared registry or map (the `rejectByReason` defect class). | ✅ Clean: every lazy series (`rejectReason`, `touchLastReject`, `incSharesFoundForDevice`, `setActivePayout`) creates under its own mutex and mutates the value after release — registry lookups never happen on the hot path. |
+| S | The payout address exposed raw as a Prometheus label. | ✅ Clean: `setActivePayout` only ever receives `maskAddr` output; the gauge series carries the masked form and the previous active series is zeroed — exactly one series reads 1 at a time. |
+| M | `otedama_shares_unaccounted` going negative when a stats tick races a burst of accepts — a meaningless "owed to the pool" reading. | ✅ Clean: the reconciliation clamps at 0 with a comment explaining the tick-race direction. |
+| M | Acceptance/reject/stale rates dividing by zero on startup. | ✅ Clean: `judged == 0` short-circuits to `acceptanceRate` (rate=1.0) and zeroes the fraction gauges. |
+| M | Metric docstrings too thin for operators to act on. | ✅ Clean: gauges carry alert guidance inline (clockSkew >120 s, rate age >2× refresh, last-job >2× notify interval, difficulty-starvation reading) — the metric catalogue doubles as runbook. |
+
+All packages build, vet, and test green.
