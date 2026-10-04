@@ -2118,6 +2118,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 911 update — doctor-dispatch + check-name + result-slot audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Runner.Run` writing results concurrently to a shared map — race on collection. | ✅ Clean: results go to a preallocated `[]Result` by index (`results[idx]`), no shared map; the `wg` join makes every write visible before `Report` is built. |
+| M | Check overriding its own `Name` — inconsistent report identity. | ✅ Clean: `res.Name = chk.Name` is assigned post-run by the runner — the check can't spoof the registry entry. |
+| S | Check results arriving out-of-order — unstable report ordering. | ✅ Clean: index-positioned write → report order == `Checks` order; 17 named checks are all unique. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
