@@ -3769,6 +3769,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 788 update — reslice-reuse + wg-locality + select-defer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `x[:0]` reslice keeping stale elements reachable — reused backing leaking old contents into new appends' tails. | ✅ Clean: both reslice sites (`jobOrder`, `pendingOrder`) reuse their own wholly-owned backing purely for capacity retention across reconnect cycles — the resliced length-0 view cannot surface stale elements. |
+| M | `sync.WaitGroup` copied by value — Add/Done landing on different counters. | ✅ Clean: all `wg` are function-local `var`s or struct fields used by pointer — never passed by value (verified session 671 mutex-copy sweep). |
+| M | `defer` inside a `select` case — registration deferred until function exit, masking per-iteration leaks. | ✅ Clean: zero defer-in-select sites — defers live at function/loop scope only. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
