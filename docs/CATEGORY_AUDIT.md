@@ -3362,6 +3362,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 732 update — select-starvation + env-parallel + nested-exit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `select` done-channel starvation — a `ctx.Done()` case competing with a flooding data channel is chosen uniformly at random, delaying shutdown. | ✅ Clean: every loop selects `ctx.Done()` alongside its data/ticker cases — once closed, exit is expected within ~2 iterations; no `select` loop can starve done. `worker.go:251` even polls done with `default` first. |
+| S | Test env mutation under `t.Parallel` — a `t.Setenv`/`os.Setenv` test racing parallel siblings leaks env. | ✅ Clean: zero `t.Parallel` calls in either file that mutates env (`subcommands_test.go`, `config_loading_test.go`) — env-mutating tests are inherently serialized. |
+| M | `goto`/labeled-break inside select — smuggled non-local exits obscuring control flow. | ✅ Clean: 2 sites, both canonical — `stratumv1.go:385` `goto send` (drain-until-empty), `hal/registry.go:178` `break loop` (close-detection exit). No non-local jumps elsewhere. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
