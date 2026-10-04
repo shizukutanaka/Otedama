@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 783 update — signal-context + exit-surface + main-cleanup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Manual `signal.Notify` channel — a second signal registration racing the first, or a missed `signal.Stop`. | ✅ Clean: single registration via `signal.NotifyContext` at `cmd/otedama/run.go:208` — cancellation propagates through ctx and cleanup rides the deferred `cancel` (verified sessions 562/640/690). |
+| S | `os.Exit`/`log.Fatal` inside a library — bypassing deferred cleanup and defying test isolation. | ✅ Clean: one `os.Exit` exists, wrapping `run()`'s int in `main.go:110`; no `log.Fatal` anywhere; library packages all return errors (verified session 562). |
+| S | Main-path early return skipping shutdown — an error exit that skips pool disconnect/worker stop. | ✅ Clean: `run()` plumbing returns an exit code to `main` — every error path runs through the deferred cancel/shutdown inside `run` before the code reaches `os.Exit`. |
+
+All packages build, vet, and test green.
