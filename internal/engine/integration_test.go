@@ -152,10 +152,10 @@ func (p *mockPool) handleConn(conn net.Conn) {
 		return
 	}
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     100,
-		MinNtime:  uint32(time.Now().Unix()),
-		NBits:     0x1d00ffff,
+		ChannelID:  1,
+		JobID:      100,
+		NtimeStart: uint32(time.Now().Unix()),
+		NBits:      0x1d00ffff,
 	}
 	for i := range prev.PrevHash {
 		prev.PrevHash[i] = byte(0x10 + i)
@@ -191,7 +191,8 @@ func (p *mockPool) handleConn(conn net.Conn) {
 // sendServerMsg encodes and writes a server-to-client Stratum V2 message.
 func sendServerMsg(w io.Writer, msgType uint8, isChannel bool, enc interface {
 	Encode() ([]byte, error)
-}) error {
+},
+) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err
