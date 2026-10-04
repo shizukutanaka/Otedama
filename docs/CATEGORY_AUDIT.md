@@ -1731,3 +1731,31 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1065 update — test-meta family checkpoint + mutation-resistance spot check
+
+The test-meta family (sessions 1061–1064, ~12 classes) is clean: zero
+goroutine-`t.Fatal`, env mutation confined and restored, globals immutable
+or seam-saved, skips all conditional, benchmarks hygienic, no cwd/init
+coupling, discards contract-correct.
+
+**Mutation-resistance spot check** (`effectiveYield`, stats.go) — the three
+canonical boundary mutations were traced against the suite:
+
+- `uptimeSeconds <= 0` → `< 0`: killed by `ZeroUptimeReturnsZeroNotNaN`
+  (division by zero would surface NaN into the exposition).
+- `fraction > 1` clamp removed: killed by `ClampsAboveOne` (racing counters
+  would yield >100% effective yield).
+- `fraction < 0` clamp removed: killed by `NegativeFractionReturnsZero`.
+
+Each boundary in the function has a dedicated killer test — the coverage is
+adequate, not incidental.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Mutation-resistance of boundary conditions in accounting math. | ✅ Clean: all three boundary mutations on `effectiveYield` have dedicated killers. |
+| S | Test-meta family total (4 sessions). | ✅ Clean: ~12 classes, zero defects. |
+
+All packages build, vet, and test green.
