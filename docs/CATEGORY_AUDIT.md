@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1147 update — range-int census
+
+Classic `for i := 0; i < n; i++` vs the Go 1.22+ `for i := range n`
+idiom — modernization surface only.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ~11 classic-form sites (sha256d rounds, seed bitwalks, worker batch, submit burst); all index-only counters that `for i := range n` expresses identically — classic form retained in hot crypto paths where the familiar shape aids review against the spec | ⚠️ Noted |
+
+All packages build, vet, and test green.
