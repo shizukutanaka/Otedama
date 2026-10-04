@@ -2748,3 +2748,14 @@ share difficulty to a sane ceiling) but the starvation/flood
 mitigations already cover the reachable damage.
 
 All packages build, vet, and test green.
+
+## Session 1270 update — devin-direct-merge.yml + code-review.yml audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| conflict-comment | `/fix-conflict` comment told Devin to merge with `mainブランチ` — repo default branch is `master`, `main` does not exist | 🔧 Fixed (this PR) — comment now says `master` |
+| workflow-permissions | `devin-direct-merge.yml` had no `permissions:` block — token ran with broad defaults | 🔧 Fixed (this PR) — minimal `contents: read` + `pull-requests: write` |
+| mergeable-race | `gh pr view --json mergeable` can return `UNKNOWN` right after opened/synchronize → treated as non-conflicting, comment missed | ⚠️ Noted — cosmetic; next synchronize event rechecks |
+| node-deadweight | `code-review.yml` is Node-centric on a Go-only repo (no package.json): every PR gets a "No Node.js project detected" comment; common-issues greps only `*.js`/`*.json`; performance-check fully skipped. Only `dependency-review-action` does meaningful work (Go-module aware) | ⚠️ Noted — noise + wasted runner minutes; trimming is a workflow-design call for the maintainer |
+
+All packages build, vet, and test green.
