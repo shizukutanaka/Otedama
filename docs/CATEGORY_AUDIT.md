@@ -4553,6 +4553,34 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 864 update — flag-dup + exec-argv + exec-lookup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate `flag.X("name", ...)` registration — panic at init. | ✅ Clean: absent — no `flag` package use; argv parsing is a bespoke switch in `cmd/otedama` (verified s737/803). |
+| M | `exec.Command(name, args...)` with user-controlled `name` or interpolated `args` — argv injection. | ✅ Clean: all 4 call sites use fixed literal commands (`systemctl`, `launchctl`, `sc.exe`, plus the `runCmd` seam) with literal argument lists — no user input reaches argv (s690/764). |
+| M | `exec.LookPath`/relative command names — PATH-hijacked binaries. | ✅ Clean: commands resolve via PATH deliberately for service managers; unit names passed are compile-time constants, never user strings. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 864 correction — flag package actually in use
+
+The first entry of this session claimed "no `flag` package use; argv parsing
+is a bespoke switch". That was wrong: the grep only matched `flag.String(`
+/ `flag.Bool(` package-level forms and missed the `*Var` registrations.
+Actual usage: `flag.NewFlagSet(name, flag.ContinueOnError)` per subcommand
+in `cmd/otedama` (run/doctor/service/version/config/completion) with
+`StringVar`/`BoolVar`/`String`/`Bool` registrations — the bespoke part is
+only the top-level subcommand dispatch switch. Re-verified for the original
+defect class: every flag name within each FlagSet registers exactly once,
+so no duplicate-registration panic; `ContinueOnError` keeps `flag` from
+calling `os.Exit` inside library code. Verdict stays **clean**, but for the
+correct reason.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
