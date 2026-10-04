@@ -1072,3 +1072,32 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1060 ecosystem update (2026-10-02)
+
+**sv2-spec** — the normative open set is unchanged: #236 (`SetTarget.target`
+MUST NOT exceed `max_target`, still in wording refinement), #234
+(authority-key management/rotation), #203 (coinbase transaction payouts
+extension), #198 (`coinbase_witness` on `NewTemplate`). A clarification
+batch landed since the last merged record: #223 (SetupConnection protocol-
+version semantics), #225 (validation rules + flag semantics), #226
+(`min_ntime` and share validation rules), #227 (spec-gap normative
+clarifications), #231 (Server/Client relationship across roles). All are
+clarifying text — no wire-format or message-set change, so Otedama's
+conformance surface is untouched; #226's share-validation text remains
+aligned with the repo's existing share-time checks.
+
+**SRI** — v1.12.0 (2026-09-17) remains the latest tag; no new release.
+
+**sv2-apps** — open set holds at 27. Landed since the last merged record:
+#875 (single cargo workspace — reference-implementation crate paths moved
+under `sv2-apps/`), #857 (pool payout policy isolation for solo mining),
+#900 (stratum-core bump), plus versioning/CI hygiene (#865/#868/#871/#907).
+Open tracked items: #881 (WIP `handle_push_solution` — still the JDC phase-2
+dependency), #839 (JDS binds mining-job tokens to `user_identity`),
+#845 (target-message field renames tracking spec cleanup), #856
+(`bitcoin_core_sv2` hardening), #903 (buffer hardening), #878 (reject empty
+coinbase reward scripts — fail-closed direction consistent with session-595),
+#904 (monitoring/config/release edge cases), #908 (B08 type support),
+#883 (community-multisig example payouts). Trajectory unchanged: hardening
+and reference-implementation consolidation, no new protocol surface.
