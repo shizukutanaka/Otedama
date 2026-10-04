@@ -1464,3 +1464,8 @@ as written; the next recheck is due around session 1200.
 ## Session-1201 ecosystem update (2026-10-02)
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1287 ecosystem update (2026-10-02)
+
+sv2-spec: the normative open set is unchanged (#203/#202/#198, plus #236 SetTarget bound and #234 key management tracked alongside). #202 has a new substantive review thread: reviewer concern that a `RequestPayoutOutputs.Success` can be stale at declaration time — validating side would need epoch-awareness plus a "stale → re-request" signal so a JDC that caches payout sets doesn't silently build superseded coinbases against sliding-window/reset pools. Otedama's DATUM/non-custodial tracking should note this freshness requirement as an open design issue for the eventual client role. SRI low-level crates: latest release confirmed v1.12.0 (2026-09-17) — the earlier ledger re-anchor to v1.11.1 (session 1268) was a verification miss; v1.12.0 is real and current. sv2-apps latest remains v0.7.0 (alpha). No action required.
+

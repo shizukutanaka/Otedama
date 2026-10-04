@@ -2953,3 +2953,14 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1287 update — ecosystem recheck (ADR-009)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | sv2-spec normative open set | ✓ Unchanged (#203/#202/#198 + #236/#234 tracking); #202 gained a new freshness/epoch-awareness review thread — recorded in ADR-009 |
+| R | SRI latest release | ⚠️ Corrected: v1.12.0 (2026-09-17) IS the latest — the session-1268 ledger re-anchor to v1.11.1 was a verification miss |
+| R | sv2-apps latest | ✓ v0.7.0 (alpha) remains latest |
+
+Ecosystem recheck recorded in ADR-009; next recheck ~session 1297.
+
