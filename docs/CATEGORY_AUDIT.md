@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1148 update — duplicate-symbol census
+
+Same top-level name reused across packages — name-collision risk.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 74 duplicate names; every one is (a) in a different package so always qualified (`hal.Registry` vs `metrics.Registry`), (b) an intentional build-tag twin (`RegisterGPULinux`, `terminalWidth`), or (c) a documented seam mirror between engine's inline V2 path and poolproto's dialer (`sendMsg`, `readLoop`, `prevHash`, `prevNBits`, `handshakeTimeout`) | S |
+
+All packages build, vet, and test green.
