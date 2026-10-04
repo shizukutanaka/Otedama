@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1169 update — config example key drift + version-mention census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `config.yaml.example` keys vs `config.Config` yaml tags | ✅ Clean — all 8 example keys (`bitcoin_address`, `data_dir`, `language`, `log_format`, `log_level`, `name`, `pools`, `workers`) map to real tags; the 12 tag-only fields are a deliberately minimal example (engine fills defaults) |
+| S | `Benchmark*` names cited in `BENCHMARKS.md` | ✅ Clean — `HashHeader` and `WorkerGrind_SingleThread` exist; the `BenchmarkDecoder_*` mention is the doc's own disclosure that they were removed |
+| M | `Fuzz*` inventory vs `.github/oss-fuzz-integration.md` readiness list | ✅ Fixed in #1250 — checklist claimed "one more needed"; 21 targets exist across 9 packages (criterion met) |
+| M | Go-version mentions (`1.21`/`1.23.x` CI pins vs `go 1.22`/`toolchain go1.24.0`) | ⚠️ Noted — already recorded verbatim in KNOWN_LIMITATIONS §Go pins (CI 8-job failure signature traceable to `tlsmlkem` godebug + `GOTOOLCHAIN=local`); no new drift |
+
+All packages build, vet, and test green.
