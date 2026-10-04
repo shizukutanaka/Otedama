@@ -1388,3 +1388,22 @@ No Otedama action required — wire-layer and cipher posture already aligned wit
   env-over-file precedence.
 
 No Otedama action required.
+
+## Session-1158 ecosystem update (2026-10-02)
+
+**sv2-spec:** Normative open set unchanged — #203 (non-custodial payouts
+extension, push-based) and #202 (request-response alternative) remain
+open with #195 as draft; the payout-set scalability debate (SEQ0_255 vs
+SEQ0_64K given pools already at ~60 coinbase outputs) is still active.
+No new normative text for Otedama.
+
+**SRI:** v1.12.0 remains current (no v1.13). ChaCha20-Poly1305 remains
+the sole Noise cipher — matching Otedama's noise suite.
+
+**sv2-apps:** v0.7.0 released (runtime-architecture modernization):
+`stratum-apps` gained a `SharedSet` synchronization wrapper,
+`bitcoin_core_sv2` now supports Bitcoin Core IPC v30.x and v31.x behind
+versioned backends, `REQUIRES_STANDARD_JOBS` semantics updated, and the
+`stratum-apps::rpc` module was deprecated. Otedama does not consume the
+apps stack; the reference still validates the pool-side protocol shape
+tracked in this ADR.
