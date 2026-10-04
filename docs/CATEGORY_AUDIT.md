@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 815 update — is-nil + as-target + verb-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `errors.Is(err, nil)` used as an `err == nil` test — masks wrapped-nil edge cases and signals intent confusion. | ✅ Clean: zero sites — nil tests are plain `err == nil` / `err != nil`. |
+| M | `errors.As` with a non-pointer or non-interface target — runtime panic. | ✅ Clean: the single site (`run.go:1830`) passes `&fe` where `fe` is a concrete `error`-typed value — pointer-to-interface, the required form. |
+| S | `%v`/`%s` on `err` inside `Errorf` silently drops the unwrap chain where callers need `Is`/`As`. | ✅ Benign: all error-propagation verbs are `%w`; the single `%v` site (`config.go:769`) wraps a pool-URL parse error whose chain carries no caller-semantic — it's validation detail, not a classified error. |
+
+All packages build, vet, and test green.
