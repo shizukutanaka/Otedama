@@ -4517,6 +4517,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 861 update — equal-method + time-eq + comparator-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `Equal`/`Compare`/`Less` method inconsistent with `==` or sort order — two notions of equality. | ✅ Clean: absent — no custom equality methods; all comparisons are scalar `==` or `time.Before/After` (correct, location-insensitive). |
+| M | `==`/`!=` on `time.Time` — wall+monotonic+location triple compare, false inequality on same instant. | ✅ Clean: zero `==` on times — all time comparisons use `Before`/`After`/`Equal` methods (sessions 611, 692). |
+| S | `strings.Compare`/`bytes.Compare` result compared to literal `-1`/`0`/`1` instead of `<0`/`==0`/`>0` — sign convention bug. | ✅ Clean: clean — comparators use the generic `cmp.Compare` (4 sites: arbitration engine.go:325/416/418, metrics.go:272-275), which returns -1/0/+1; no legacy literal-sign comparisons. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
