@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1052 update — daemon-test unit-injection + argv-hygiene + btccrypto-test vector-anchor audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Service-definition injection via unquoted/newline values (the C1 class). | ✅ Clean: `NewlineInValueCannotInjectDirective` + `QuoteToken_ControlCharacters` (pins the session-727/809 fix); path-with-spaces quoted for systemd AND single-string for launchd; argv preserves spaces; empty flags omitted. |
+| M | Unit/plist content drift (missing hardening, wrong dirs). | ✅ Clean: hardening present, ReadWritePaths=data-dir, restart policy, network-wait, user target; launchd RunAtLoad, **logs under Library/Logs not /tmp**, label, valid-XML; path errors when HOME unset; symlink resolution. |
+| M | Address validators passing typos or misclassifying formats. | ✅ Clean: base58 valid-vectors + typo-checksum-fail + invalid-char + wrong-length + unsupported-version; **checksum-failure ≠ unrecognised-format** (error-class distinction); bech32 valid-vectors + typo + mixed-case + invalid-char + too-long + wrong-HRP + invalid-witness-version + **non-canonical padding** + program-too-short; ConvertBits rejects out-of-range/padding. |
+| M | Crypto primitives anchored only to self-consistency. | ✅ Clean: `Hash256` genesis-header vector, `TaggedHash` **BIP-340 official vector** + structure; scheme registry dup-panic/deterministic/concurrent-lookup; legacy→ECDSA, taproot→Schnorr; secp256k1 stub returns not-implemented (honest-stub pinned). |
+
+All packages build, vet, and test green.
