@@ -4167,6 +4167,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 830 update — iota-bitmask + nil-sentinel + spec-bit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `iota` constants used as bit flags — sequential 0,1,2,3 OR'd into a broken bitmask. | ✅ Clean: all five iota blocks are closed enums (Policy, AddressType, Status, Format, ValueOrigin) — never combined with `\|`; the single bit op (`channelMsgBit`) is an explicit `0x8000` protocol-spec constant. |
+| S | `errors.Is(err, nil)` / `errors.As(err, nil)` — meaningless call returning err!=nil / panicking. | ✅ Clean: absent — every Is/As has a concrete target (verified session 618). |
+| S | Bitwise ops on sequential iota enums — treat flag OR as membership test, wrong result. | ✅ Clean: no bitwise ops on any iota enum — the mask site is wire-protocol. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
