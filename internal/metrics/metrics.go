@@ -36,6 +36,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -251,7 +252,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 		entries = append(entries, entry{
 			name: c.name, help: c.help, kind: "counter",
 			labels: c.labels,
-			text:   fmt.Sprintf("%d", c.Value()),
+			text:   strconv.FormatUint(c.Value(), 10),
 			key:    metricKey(c.name, c.labels),
 		})
 	}
