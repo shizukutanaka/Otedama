@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 852 update — field-collision + builtin-shadow + stringer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Struct field colliding with a method name (`Name` field + `Name()` method) — silent method-shadowing bug. | ✅ Clean: absent — all `Name()`/`String()`/`Error()` methods read plain fields or return literals; no field/method name collisions. |
+| M | Field or variable shadowing a builtin (`len`, `cap`, `copy`, `error`, `string`, `any`) — confusing and hides the builtin in scope. | ✅ Clean: zero declarations shadow builtins (the single match is doc text). |
+| S | `String()` on a type that leaks internals (pointer receiver reading mutable fields unsynchronized) — racy or leaky display. | ✅ Clean: all 10 `String()` methods are pure formatters on value receivers or read-only fields. |
+
+All packages build, vet, and test green.
