@@ -4605,6 +4605,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 867 update — random-access + io-copy + discard-drain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ReadAt`/`WriteAt`/`Seek` on a shared offset — caller-visible position races. | ✅ Clean: absent — all I/O is sequential stream reads. |
+| M | `io.Copy` with a pooled or reused buffer — copy-buffer aliasing. | ✅ Clean: only two `io.Copy` calls, both to `io.Discard` for drain-before-close — no buffer, no aliasing. |
+| M | `io.Copy` error discarded on a partial body — silent truncation. | ✅ Benign: both sites discard-by-design (response bounded by `LimitReader` at 8KiB / `maxHashrateBody`); the drain is only for connection reuse, data unused (s836). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
