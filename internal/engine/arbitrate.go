@@ -164,14 +164,15 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now()) {
+			pruned := pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now())
+			streams := streamsSlice(opts.streamMap)
+			opts.streamsMu.Unlock()
+			for _, key := range pruned {
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
 					key, streamStaleTimeout,
 				))
 			}
-			streams := streamsSlice(opts.streamMap)
-			opts.streamsMu.Unlock()
 			opts.metrics.activeStreams.Set(float64(len(streams)))
 
 			margin := opts.hysteresisPct
