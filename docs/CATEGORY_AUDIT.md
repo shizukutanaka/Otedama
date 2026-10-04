@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 956 update — worker-partition + hashrate-declare + provider-start audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Multiple SHA256d workers grinding the same (header, nonce) pairs — duplicate-share rejects. | ✅ Clean: `startMinerWorkers` gives worker `i` `NonceOffset = i*Threads` and a shared `NonceStep = next-pow2(threads×workers)`, applied only when `total ≤ 2³¹` — residue classes stay disjoint across workers; single-worker setups keep the per-thread partition. |
+| M | Zero SHA256d-capable devices silently producing an engine with no miners. | ✅ Clean: empty `sha256d` list returns an explicit error before any worker is constructed. |
+| M | Declared `nominal_hashrate` miscounting — vardiff seeded wrong (handshake happens before live stats exist). | ✅ Clean: `nominalMiningHashrate` sums `provider.DefaultHashrates` per worker (exactly the devices that will hash); unknown families contribute 0. |
+| M | A provider that fails to start aborting the whole engine. | ✅ Clean: provider start errors are logged and the engine runs with the degraded provider set; worker `HashrateFunc` still samples live stats. |
+
+All packages build, vet, and test green.
