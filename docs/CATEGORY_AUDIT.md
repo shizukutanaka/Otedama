@@ -2860,6 +2860,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1162 update — nil-surface + uintptr census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `uintptr` — zero usages anywhere; no unsafe-size plumbing | Clean |
+| M | V1 JSON-RPC `params` — all 4 call sites pass a non-nil `[]any` literal (`extranonce.subscribe` explicitly `[]any{}` → emits `[]`, never `null`) | Clean |
+| M | doctor JSON doc — `checks` slice starts nil and is append-built; `null` only reachable if zero checks registered (the 17-check registry makes it unreachable); consumed fields are summary+exit_code | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
