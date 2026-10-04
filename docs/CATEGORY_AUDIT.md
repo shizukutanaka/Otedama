@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 867 update — random-access + io-copy + discard-drain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ReadAt`/`WriteAt`/`Seek` on a shared offset — caller-visible position races. | ✅ Clean: absent — all I/O is sequential stream reads. |
+| M | `io.Copy` with a pooled or reused buffer — copy-buffer aliasing. | ✅ Clean: only two `io.Copy` calls, both to `io.Discard` for drain-before-close — no buffer, no aliasing. |
+| M | `io.Copy` error discarded on a partial body — silent truncation. | ✅ Benign: both sites discard-by-design (response bounded by `LimitReader` at 8KiB / `maxHashrateBody`); the drain is only for connection reuse, data unused (s836). |
+
+All packages build, vet, and test green.
