@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 814 update — unsigned-countdown + len-subtraction + mask-slice audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `for i := len(x)-1; i >= 0; i--` on an unsigned index — never terminates. | ✅ Clean: every `i >= 0` countdown runs on `int` constants/indices (`i:=31`, `i:=7`) — no unsigned loop vars reach the pattern. |
+| M | `len(s)-N` slice arithmetic without a length guard — panic on short input. | ✅ Clean: every site is length-guarded — `EncryptedSeed` enforces `minLen=29` before `len(b)-29`; bech32 validates total length before `data[1:len-6]`; trim loops guard `len(b) > 0`. |
+| S | Mask helpers slicing `s[:6]…s[len-4:]` on short strings — negative-bound panic. | ✅ Clean: `maskAddress`/`maskAddr` both early-return when `len <= 10/12`. |
+
+All packages build, vet, and test green.
