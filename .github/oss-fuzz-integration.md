@@ -15,9 +15,13 @@ OSS-Fuzz inclusion. The actual integration requires a PR to
 
 1. Otedama has a public release tag (v3.0.0 or later non-alpha).
 2. The maintainer has 30 minutes to file the upstream PR.
-3. At least three `Fuzz*` functions exist in the codebase (we have
-   `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`; one more is needed
-   — candidates: `FuzzBech32Decode`, `FuzzMnemonicParse`).
+3. At least three `Fuzz*` functions exist in the codebase — met: 21
+   targets across `internal/stratum`, `internal/poolproto/stratumv1`,
+   `internal/miner`, `internal/lightning`, `internal/btccrypto`,
+   `internal/config`, `internal/arbitration`, `internal/rates`, and
+   `cmd/otedama`. The `build.sh` below wires the two Stratum decoders;
+   add `compile_native_go_fuzzer` lines for more targets at submission
+   time if broader coverage is wanted.
 
 ## Files prepared
 
