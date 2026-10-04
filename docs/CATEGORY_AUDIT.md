@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 949 update — addr-dispatch + checksum + witness-rules audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ValidateAddress` trying one format and failing on the other — valid bech32 rejected because base58 errored first (or vice versa). | ✅ Clean: dispatch is `ErrNotBech32 → base58, ErrNotBase58 → ErrUnrecognisedAddress` — a *format* mismatch falls through, while a checksum failure inside a format is returned immediately. Single entry point for payout validation. |
+| M | `ValidateBase58Address` skipping the checksum — a typo'd address accepted, payouts misdirected. | ✅ Clean: decoded length must be exactly 25; `Hash256(payload)[:4]` must equal the checksum bytes; version restricted to 0x00 (P2PKH) / 0x05 (P2SH) — typo and wrong-version inputs reject. |
+| M | `ValidateBech32Address` accepting mixed case, a non-bc HRP, wrong checksum constant, or an out-of-range program. | ✅ Clean: BIP-173 mixed-case reject, ≤90 chars, `hrp == "bc"`, `version > 16` reject, BIP-350 selects `bech32` vs `bech32m` constant by version, and `convertBits` range-checks each symbol with strict no-pad rejection — the full rule set. |
+
+All packages build, vet, and test green.
