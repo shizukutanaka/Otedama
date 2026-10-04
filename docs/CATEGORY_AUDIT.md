@@ -3193,6 +3193,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1197 update — SECURITY.md supported-versions parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Supported-versions table vs VERSION | ✅ Consistent — VERSION is `v3.0.0-alpha.1`; the table correctly marks `v3.0.x-alpha` as "No" support (self-use) while v3.0.x stable/beta get full/major-only fixes |
+| M | No currently-supported release line | ⚠️ Noted — per the table, the shipped line (alpha) receives no security fixes by policy; honest policy statement, not a doc defect |
+| S | v2.1.9 partial-support window | ✅ Consistent — "重大な脆弱性のみ、2026年10月まで" is still within its declared window; `docs/MIGRATING-FROM-V2.md` exists |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
