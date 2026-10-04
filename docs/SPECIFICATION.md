@@ -61,12 +61,12 @@ its default, and its validation rule:
 |---|---|---|---|
 | `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | valid mainnet address, checksum verified (see §3.3) |
 | `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a valid mainnet address, checksum verified |
-| `pools[].url` | — (file only) | built-in recommendations | supported scheme + non-empty host (§3.3) |
+| `pools[].url` | — (file only) | single built-in default (`config.DefaultPoolURL`) | supported scheme + non-empty host (§3.3) |
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
 | `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured for `stratum+tls://` and `stratum+v2tls://` |
-| `workers.name` | — (file only) | `""` | appended as `.name` to the `user_identity` |
+| `workers.name` | — (file only) | `""` → hostname fallback | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
 | `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
 | `log_format` | `OTEDAMA_LOG_FORMAT` | `text` | ∈ {text, json} |
