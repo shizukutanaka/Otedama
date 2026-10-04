@@ -2166,6 +2166,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1042 update — rates-test median/fallback + single-flight + skew-guard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Median/plausibility path under-pinned (out-of-band source corrupting the rate). | ✅ Clean: implausible-excluded (1-of-3 out-of-band), 2-source-1-implausible-keeps-good, 2-source averaging, all-fail→fallback with `errors.Join` per-source causes — the rejection path is as tested as the happy path. |
+| M | Single-flight coalescing starves a caller's own ctx deadline. | ✅ Clean: `Fetch_CoalescesConcurrentCalls` proves deduplication AND `CoalescedCallerHonorsOwnContext` proves a coalesced caller still exits on its own ctx — both halves of the contract pinned. |
+| M | Clock-skew detection silently broken (warn never fires). | ✅ Clean: zero-pre-fetch, accurate Date, large-skew-detected, missing-Date→0, warn-logged-over-threshold — the five-state matrix is covered. |
+| M | Outbound HTTP hygiene unenforced (redirects, giant bodies, missing UA). | ✅ Clean: `RedirectRefused` (pins the security fix), `LimitsResponseSize`, `IncludesUserAgent`, `RespectsContext`, 500→error, bad-URL, body-read-error — every documented hardening has a test. |
+| S | Extractor accept/reject coverage thin per source. | ✅ Clean: per-source valid + malformed-JSON + missing-field + empty + **trailing-garbage rejection** (Coinbase amount AND Kraken price) against real response shapes. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
