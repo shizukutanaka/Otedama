@@ -3290,6 +3290,16 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1207 update — skills/*.md reference parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `otedama <cmd>` / `--flag` / `make <target>` refs | ✅ Clean — all real; the only matched gaps (`migrate-from-v2`, `make test-e2e`) are documented session-483 errata in-place, and `migrate-from-v2` is a real Make target (Makefile:331), not a phantom subcommand |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
