@@ -2583,6 +2583,45 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 972 update — stats-window + accountant + latency-ring audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Share counter resetting on reconnect producing a negative hashrate, or zero/negative dt dividing by zero. | ✅ Clean: `hashrateWindow.observe` emits 0 when `total < lastTotal` (reset) or `dt <= 0`; first call primes and returns 0. |
+| M | Stats ticking non-uniformly (Goroutine scheduling) losing sub-second productive time, or idle/stalled time accruing as productive. | ✅ Clean: `uptimeAccountant` carries the sub-second remainder forward and flushes only whole productive seconds; `satsAccountant` gates on the same `productive` flag and retains fractional precision — the estimate never runs backwards. |
+| M | The "+1 sat per share" conflation of shares with earnings. | ✅ Clean by design: sats estimate integrates the arbitration yield rate over productive time; documented as an estimate vs pool-side accounting (KNOWN_LIMITATIONS §9). |
+| M | Latency ring buffer racing, negative samples corrupting quantiles, or the sort running under the lock. | ✅ Clean: `Record` drops `ms < 0`; mutex-guarded ring; `Quantile` copies the window under lock then sorts outside it — nearest-rank with clamped endpoints. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 973 update — engine-metrics + lazy-series + payout-info audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Lazily-created per-category/per-device series racing on their backing map — the s509 rejectByReason race class. | ✅ Clean: every lazy series has a dedicated mutex (`rejectByReasonMu`, `lastRejectByReasonMu`, `sharesFoundPerDeviceMu`, `payoutInfoMu`); the counter/gauge mutation happens after the map guard is released. |
+| M | `otedama_payout_info` exposing the raw payout address as a label value — /metrics leaking the wallet destination. | ✅ Clean: the label is the masked form only (`setActivePayout(masked)`); empty masked is a no-op. |
+| M | Two payout series reading 1 simultaneously during failover — ambiguous active destination. | ✅ Clean: previous series is set to 0 before the new one is set to 1, under `payoutInfoMu`; unchanged address short-circuits. |
+| M | `shares_unaccounted` going negative when a stats tick races a burst of pool accepts — a meaningless negative gauge. | ✅ Clean: `unaccounted` is clamped at 0 (`found > judged` else 0), documenting that a tick can observe more judged-than-found. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 974 update — arb-pause + stream-staleness + merge audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A pool job update clobbering an arbitration pause — device resumes hashing after being routed away. | ✅ Clean: `reconcileArbPauses` rewrites the pause set to mirror every Decide's allocation (idle/`ai.*` → Pause, else Resume); the s382 persistence fix holds. |
+| M | A dead provider's last quote still routing devices — revenue to a stream that no longer exists, or pruning too eagerly on jitter. | ✅ Clean: `pruneStaleStreams` drops streams unseen for 3 min (3–6× the 30/60s quote cadence) from both `m` and `seen`. |
+| M | `streamsSlice` first-seen de-dup losing `YieldPerDevice` for all but one device, or aliasing the map under mutation. | ✅ Clean: same-`StreamID` entries merge into a representative; the rep's `YieldPerDevice` is a deep copy so later `updateStream` writes can't mutate the slice handed to Decide. |
+| M | `updateStream` writing into a nil `YieldPerDevice` (panic) or a missing power-rate producing a garbage floor. | ✅ Clean: map allocated when nil; `powerFloor` returns 0 on unconfigured power, no rate, or zero devices, and the even-split approximation is documented. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
