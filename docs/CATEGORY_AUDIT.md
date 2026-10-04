@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 866 update — select-case + send-only + recv-mix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `select` mixing send and recv cases without a `ctx.Done()` — random choice can pick a send while a recv was required for progress. | ✅ Clean: absent — no select mixes send+recv cases; each select is either recv-with-ctx-done or a bounded send under the non-blocking pattern (s588/732). |
+| M | `select` containing only send cases — blocks forever on a full channel. | ✅ Clean: absent — every send uses either `select { case ch <- v: case <-ctx.Done(): ... }` or `default:` non-blocking form. |
+| S | `select` recv cases evaluated in misleading order — first-ready random pick assumed as priority. | ✅ Clean: code never relies on case order — loops always include `ctx.Done()` and treat channel order as fair (fanin merges verified s636/773). |
+
+All packages build, vet, and test green.
