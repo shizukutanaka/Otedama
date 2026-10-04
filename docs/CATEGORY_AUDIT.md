@@ -1866,6 +1866,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 889 update — setenv-prod + exec-env + env-warning audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Setenv`/`Unsetenv`/`Clearenv` in prod — global env mutation that races reads. | ✅ Clean: absent — the only env writes are the six test sites in `cmd/otedama` (defer-restored, s731). |
+| M | `exec.Cmd.Env` overriding the child env — secret/environment leakage to spawned tools. | ✅ Clean: no `.Env` assignment in prod — `exec.Command` inherits the process env; systemctl invocations pass only argv (s864). |
+| S | Env warnings lost between the config layer and the operator. | ✅ Clean: `config.EnvWarnings(nil)` is surfaced in three places (run.go, config.go, doctor) — same warnings at every entry point. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
