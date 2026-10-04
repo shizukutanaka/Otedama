@@ -2353,6 +2353,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 931 update — frame-header + channel-bit + payload-ownership audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hand-masking `extension_type`/`channel_msg` at call sites — bit-field drift between readers. | ✅ Clean: `Header.ChannelMsg()` and `Header.ExtensionID()` are the only accessors; the `0x8000` mask lives in one constant with a spec citation; `ExtensionID` clears the bit so dispatch is uniform. |
+| M | `MsgLength` exceeding the U24 bound or a channel-msg frame shorter than the 4-byte channel_id. | ✅ Clean: `Validate()` enforces `MsgLength <= MaxMessageLength` and `ChannelMsg ⇒ MsgLength >= MinimumChannelPayload` — malformed frames rejected before dispatch. |
+| M | `Frame.Payload` aliasing the decoder's scratch buffer — data race with the next `ReadFrame`. | ✅ Clean: payload is freshly allocated per call and caller-owned (documented); scratch covers only the fixed 6-byte header which `DecodeHeader` copies out. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
