@@ -2983,6 +2983,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1176 update — doc-referenced make-target parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `make <target>` invocations in docs/README/CONTRIBUTING/skills vs Makefile targets | ✅ Clean — every live reference (`setup`/`build`/`test`/`lint`/`fuzz`/`security`/`audit`/`test-integration`) resolves to a real target |
+| S | `make test-e2e` mentions | ✅ Clean — all mentions are honest historical errata (RESEARCH_IMPROVEMENTS documents the removal; `skills/tdd.md` carries the session-483 correction stating the suite and target do not exist) |
+| M | Target-name drift in CONTRIBUTING | ✅ Clean — `make setup` resolves; target list consistent |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
