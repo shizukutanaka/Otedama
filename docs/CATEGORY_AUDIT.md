@@ -2731,3 +2731,16 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1271 update — deploy.yml + ci-cd.yml workflow audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| secrets-in-if | `deploy.yml` rollback job used `${{ secrets.X != '' }}` in step `if:` — the `secrets` context is not allowed there | 🔧 Fixed (this PR) — switched to the `env.X != ''` pattern the sibling steps already use |
+| dead-ldflags | `ci-cd.yml` build injected `main.Version`/`main.GitCommit` — symbols don't exist (same defect class fixed for release.yml in #1275); version silently defaulted | 🔧 Fixed (this PR) — inject `internal/version.Version`/`.Commit`; also `cmd/otedama/*.go` → `./cmd/otedama` package path |
+| node-deadweight | `deploy.yml` `test` job runs `npm ci`/`npm test`/`npm run lint` — no package.json → fails at step 1; `build`/`security-scan`/deploys all `needs:` it → whole workflow permanently red | ⚠️ Noted — separate permanent-failure signature independent of the Go-pin issue |
+| needs-skip-cascade | `deploy-production` needs `deploy-staging`, which only runs on `develop` (nonexistent) or dispatch=staging — skipped on tag pushes → production deploy can never run | ⚠️ Noted — needs `always()` + its own `if`, or drop the dependency |
+| phantom-paths | `ci-cd.yml` deploy applies `k8s/deployment.yaml`; `deploy.yml` deploys `./kubernetes/helm/otedama` — neither path exists (CLAUDE.md: k8s handled via DEPLOYMENT.md YAML). Both gated on nonexistent branches (`main`, `develop`) so they never execute | ⚠️ Noted — dead aspirational code |
+| unpinned-actions | `aquasecurity/trivy-action@master`, `securego/gosec@master`, `actions/create-release@v1` (deprecated) | ⚠️ Noted — floating/deprecated action refs |
+| go-pins | `ci-cd.yml` `GO_VERSION: '1.21'` + matrix 1.20/1.21 | Tracked by open PR #1344 |
+
+All packages build, vet, and test green.
