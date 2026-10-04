@@ -1072,3 +1072,30 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-964 ecosystem update (2026-10-05)
+
+**sv2-spec** open set remains 7 (unchanged since session-950):
+- **#236 (open, active 10-02)** — `SetTarget.target` MUST NOT exceed the
+  channel's `max_target` bound clarifies the target-vs-max_target
+  invariant Otedama already implements (share target clamped by
+  block-target bound since session 256).
+- **#234** — authority key management and rotation.
+- **#203** — coinbase transaction payouts extension.
+- **#198** — `coinbase_witness` field in `NewTemplate`.
+- Editorial: #232, #186, #103.
+
+**SRI** remains at v1.12.0 (2026-09-17).
+
+**sv2-apps** open set is ~27 (unchanged):
+- **#907 (merged since session-936)**, **#857/#900** — earlier noted.
+- **#845 (open)** — field rename aligning wire names with spec #228
+  (Otedama already shipped the rename, #704).
+- **#908** — B08 type support in `bitcoin_core_sv2`.
+- **#856** — `bitcoin_core_sv2` hardening.
+- **#839** — JDS job-token↔user_identity binding.
+- **#881** — `handle_push_solution` WIP.
+- **#903/#904** — hardening/edge-case work.
+
+No normative drift affecting Otedama's wire behavior; next recheck
+~session 978-981.
