@@ -2541,6 +2541,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1133 update — recover-placement census
+
+`recover()` outside a deferred function always returns nil — the classic
+misuse that silently masks panics.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 19 `recover()` sites, all inside `defer func()` bodies in test files; production code has zero recover (panics = programming errors per s787 census) | S |
+| S | Two deliberate `_ = recover()` sites assert panic-or-clean-close contracts — correctly deferred | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
