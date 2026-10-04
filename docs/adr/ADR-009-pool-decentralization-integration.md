@@ -1288,3 +1288,27 @@ untracked openings include #874 AGENTS.md docs, #902 Windows CI support,
 #903 "Buffer sv2" hardening, #904 monitoring/config/release edge cases,
 #908 B08 type support in `bitcoin_core_sv2`. The ecosystem continues
 hardening and infra work; nothing requires an Otedama change.
+
+## Session-1015 ecosystem update (2026-10-02)
+
+**sv2-spec** — the normative open set is unchanged since
+session-606: #236 (`SetTarget.target` must not exceed the channel's
+`max_target` — refreshed 2026-10-02, still open; Otedama's bounded
+share-target handling already clamps pool-supplied targets, so the
+proposed rule matches shipped behavior), #234 (key management and
+rotation), #203 (coinbase payouts extension), #198
+(`coinbase_witness` in `NewTemplate`), plus dormant #103/#186/#232.
+No merged spec changes this window; the quiet window continues.
+
+**SRI** — v1.12.0 (2026-09-17) remains the latest release; no new
+tag since the session-606 check.
+
+**sv2-apps** — open set stands at 27 PRs. The five PRs tracked
+across prior sessions are all still open: #881 (WIP
+`handle_push_solution` for the JDS — the piece phase-2 JDC submits
+through), #839 (binds mining job tokens to `user_identity`), #845
+(target-message field renames tracking spec cleanup), #856
+(`bitcoin_core_sv2` hardening), #883 (fee-transparent example
+configs). New entries since session-606 are operational hardening:
+#903 (sv2 buffer hardening), #904 (monitoring/config/release edge
+cases), #908 (B08 type support), #902 (Windows CI).
