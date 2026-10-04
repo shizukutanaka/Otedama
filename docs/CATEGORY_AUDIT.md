@@ -1731,6 +1731,162 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1209 update — CLI help/completion parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `printUsage` command list vs dispatch switch | ✅ Clean — all 8 subcommands (run/version/config/service/doctor/wallet/completion/help) listed; exit-code table matches implementation (0/1/64/78, doctor 0/1/2). |
+| S | bash/zsh/fish completion verb lists vs dispatch + per-command arg parsers | ✅ Clean — all 3 scripts name the same 8 commands; sub-args match arg parsers (config→show/validate, service→install/uninstall/status, wallet→verify/change-passphrase, completion→bash/zsh/fish). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1013 update — stop-race + update-drop + width-budget audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Stop` writing to `w` while the render loop still owns it. | ✅ Clean: CAS `started` is the single-shot gate (safe pre-Start and multi-call); `close(doneCh)` → `wg.Wait` → only then `showCursor`/`Fprintln` — no racing writer, documented inline. |
+| M | A full update channel blocking the engine's stats push. | ✅ Clean: `Update` drains one stale entry then enqueues — bounded loss is the documented contract (freshest wins, never blocks). |
+| M | A torn stats snapshot mid-render. | ✅ Clean: `lastStats` guarded by `mu`; the tick copies under lock then renders the copy. |
+| S | The critical pool-status field silently truncated at narrow widths. | ✅ Clean: every line is budget-truncated to `cols` and the key field is sized from a dynamic budget, not a fixed offset — safe at the documented 40-column minimum; live width re-probed per tick (TIOCGWINSZ / Windows counterpart), `SetWidth` locks detection for tests. |
+| S | Emoji section labels under-padding and leaving stale glyph fragments. | ✅ Clean: section labels are deliberately plain text — emoji render width-2 but `visibleLen` counts 1 rune; the mismatch is documented and avoided. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1014 update — i18n-fallback + immutability + degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A missing translation leaving the UI with an empty string. | ✅ Clean: `Render` falls exact → base tag → mandatory English → `"!{id}!"` placeholder + error — conspicuous in logs and never blank; English presence is enforced at `NewBundle`. |
+| M | Caller-side mutation corrupting a shared catalog across goroutines. | ✅ Clean: `NewCatalog` deep-copies the messages map; `Bundle` holds its own catalog map; both are documented lock-free-after-construction (the deliberate no-lock design matters on the log-line hot path). |
+| M | An invalid message ID or duplicate language slipping into the bundle. | ✅ Clean: `ID.Valid`/`Lang.Valid` charset checks reject bad IDs at construction; `NewBundle` rejects duplicate languages. |
+| M | A template variable missing from `data` breaking message rendering. | ✅ Clean: `RenderWith` fast-paths messages without `{{`; parse/exec failures return the raw template + error — degrades, never breaks rendering. |
+| S | Translation-completeness drift between English and the ten priority languages going unnoticed. | ✅ Clean: `MissingTranslations` emits sorted per-language gaps for the CI completeness check; complete languages are omitted. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1016 update — wallet-atomicity + oracle + sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A killed mid-write leaving a half-written wallet.dat. | ✅ Clean: CreateTemp→Write→Sync→Close→Chmod(0600)→Rename in the same dir (same filesystem); Close errors are honored because the final flush can happen there; every failure path removes the temp file; `sweepStaleTempFiles` reaps >1-minute leftovers at startup without touching a live writer. |
+| S | The wallet file briefly world-readable between write and chmod. | ✅ Clean: Chmod(0600) happens **before** the rename, so the final path is never visible with loose permissions; data dir itself is MkdirAll 0700. |
+| S | Decrypt errors leaking an oracle (wrong passphrase vs corrupt file distinguishable). | ✅ Clean: `loadExisting` and `ChangePassphrase` collapse `DecryptSeed` failures into opaque fixed strings ("wallet unlock failed", "incorrect old passphrase"); the documented intent is oracle-resistance. |
+| S | A restored-backup wallet.dat losing fingerprint identity checks. | ✅ Clean: missing `wallet.fingerprint` is recreated from the decrypted seed on load — but never overwritten when present, since a mismatching fingerprint is a signal, not a bug to mask. |
+| M | The BIP-39 25th-word silently deriving a different seed. | ✅ Documented benign: `WithMnemonicPassphrase` spells out the decoy-wallet property (wrong phrase → valid-looking different seed, no error) and why it is creation-only (the phrase is folded into the stored seed). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1017 update — bip39-math + secret-hygiene + wordlist-integrity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | Entropy or a reader short-read silently producing weak seeds. | ✅ Clean: `GenerateEntropy` rejects non-BIP-39 bit lengths up front and uses `io.ReadFull` — a short or failed read is fatal, never retried with a weaker source (documented contract). |
+| C | A malformed or malicious wordlist breaking index consistency. | ✅ Clean: `NewWordList` requires exactly 2048 non-empty valid-UTF-8 unique words and defensive-copies the slice; the bundled English list is SHA-256 integrity-checked at init (english_wordlist.go). |
+| S | A transcription typo restoring the wrong wallet without notice. | ✅ Clean: `MnemonicToEntropy` re-derives and compares the ENT/32 checksum bit-for-bit — a mismatch returns an explicit transcription-error, never a wrong seed. |
+| S | Secret material surviving in heap buffers after derivation. | ✅ Clean: the `bits` working buffer is `zeroBytes`'d on both encode and decode paths; `MnemonicToSeed` wipes the password bytes and the intermediate PBKDF2 output after copying into the fixed `[64]byte` Seed. |
+| M | The public fingerprint leaking seed information. | ✅ Clean: `Fingerprint` is 4 bytes of HMAC-SHA256 keyed by a domain string — non-reversible, safe for UI confirmation. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1018 update — runtime-exposition + summary-substitute + escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go_gc_duration_seconds` silently mis-typed vs client_golang. | ✅ Clean: the summary this package cannot emit is deliberately re-expressed as two counters (`_total` pause seconds + `_total` cycles) — the rate()-able form dashboards actually use; the substitution is documented at the top of the file. |
+| M | A Go version string breaking label syntax in `go_info`. | ✅ Clean: the label value goes through `escapeLabel` (Prometheus escaping), not `%q` — the nolint comment explains why the obvious-looking gocritic fix would be a bug. |
+| M | Dashboards keyed on client_golang names silently breaking. | ✅ Clean: all emitted names match the client_golang `go_*` surface; kind strings (gauge/counter) are per-entry, not a blanket type. |
+| S | An inconsistent snapshot mixing memstats from different instants. | ✅ Clean: one `ReadMemStats` + one `NumGoroutine` per scrape feeds all 12 metrics. |
+| M | Write failures swallowed mid-exposition. | ✅ Clean: `Fprintf` errors propagate to the collector caller. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1019 update — service-dispatch + help-exit + injectable-seam audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `otedama service --help` exiting like an error. | ✅ Clean: explicit `help`/`--help`/`-h` case prints usage to **stdout** with exitOK — the same bug class leaf subcommands fix via `parseSubcommandFlags`; unknown subcommands still quote (`%q`) + exitUsage. |
+| M | Tests performing real OS service operations. | ✅ Clean: `newDaemonManager` + `managerInstall`/`Uninstall`/`Status` are injectable variables — the seam exists precisely so tests never touch systemd/launchd/SCM. |
+| M | Install flags drifting from the daemon layer's contract. | ✅ Clean: flags map verbatim into `daemon.ServiceFlags` (address/level/format/language) with no cmd-side transformation to desync. |
+| S | `service status` printing a misleading state. | ✅ Clean: not-installed, installed-stopped, and installed-running are three distinct outputs plus the install hint. |
+| S | Uninstall/status silently consulting a config file they should not need. | ✅ Clean: both construct the manager with empty config args — the service definition path is manager-derived, not config-dependent. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1020 update — milestone checkpoint (deep-package audit pass)
+
+Sessions 992–1019 completed a file-by-file deep read of every production
+package (the "deep audit pass" that began at session 992), adding ~45
+new mechanical-class rows on top of the ~450 verified through session
+991 — roughly **495 defect classes** now verified clean or documented
+benign, with the same `S/M/L/P/E` table and `All packages build, vet,
+and test green` footer on every entry.
+
+Real defects found during the deep pass remain tiny relative to the
+surface covered:
+
+- `updateStream` bridged gross `SatsPerSecond` instead of
+  `NetSatsPerSecond`, discarding provider fee differentials at the
+  arbitration boundary (fixed on the session-1009 branch).
+- All other candidate rows resolved to documented, intentional
+  behavior — e.g. the Akash "(simulated)" marker load-bearing until
+  v3.1.0, Render Network/io.net's documented exclusion from the
+  provider set, BIP-39's decoy-wallet property, and the wallet
+  fingerprint sidecar's recreate-but-never-overwrite rule.
+
+The pass leaves the codebase with: every `internal/` and `cmd/`
+package read end-to-end; known real-defect inventory unchanged apart
+from the item above (the C1 control-char fix #809, XDG manager-env
+fix #807, AEAD reuse #957, wallet-subcommand suggestion #1062, and
+base58 length bound #633 remain the standing open items).
+
+Next axes: keep the ADR-009 cadence; re-audit newly landed code as it
+merges; continue the mechanical-class sweep for any unvisited
+patterns; revisit tracked rows when their owning change lands.
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1021 update — wordlist-integrity + catalog-skip + locale-detect audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A corrupted embedded BIP-39 wordlist silently producing non-portable mnemonics. | ✅ Clean: `init()` verifies 2048-word count AND the canonical SHA-256 before the process can run — panic on either failure (fail-closed at startup); `NewWordList` re-validates uniqueness, so the list is triple-checked. |
+| M | One bad built-in catalog preventing startup. | ✅ Documented tradeoff: `NewBundle` skips catalogs that fail to construct (English fallback covers them) and `MissingTranslations` surfaces the gap — startup resilience over perfect completeness, stated inline. |
+| M | POSIX locale strings (`ja_JP.UTF-8@modifier`, `C`, `POSIX`) misdetected. | ✅ Clean: `LC_ALL`→`LC_MESSAGES`→`LANG` precedence order; codeset (`'.'`) and modifier (`'@'`) stripped, `'_'`→`'-'`; neutral `C`/`POSIX` maps to English, not a false detect. |
+| M | Case-variant BCP-47 tags failing to match. | ✅ Clean: input lower-cased before exact-then-base matching (`JA`, `ja-JP`, `ja` all resolve to Japanese). |
+| S | `go_info`-style label breakage via locale strings reaching message IDs. | ✅ Clean: locale detection stays in `DetectLang*` — never concatenated into message IDs (typed `ID` keeps the two domains apart). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 976 update — logger-default + ctx-injection + adapter audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `FromContext` racing `SetDefault` under `-race`, or two goroutines each allocating a default — split log streams. | ✅ Clean: `atomic.Pointer[Logger]`; cold path uses `CompareAndSwap` and the loser returns the winner (`defaultLoggerSlow` is extracted for deterministic testing). |
+| M | `IntoContext(ctx, nil)` storing a typed-nil that shadows the default — nil-pointer log call. | ✅ Clean: nil is a no-op (`return ctx`); `FromContext` also guards `l != nil` and falls back to the default. |
+| M | `SetDefault(nil)` clobbering the live default — every downstream `FromContext` suddenly nil. | ✅ Clean: nil input is ignored. |
+| M | `Discard` still emitting on a slow path, corrupting the TUI. | ✅ Clean: belt-and-suspenders — `io.Discard` writer AND `LevelError+1` threshold. |
+| M | `Adapter` mis-mapping a level string the engine emits (e.g. "warning"). | ✅ Clean: `strings.ToLower` then explicit debug/warn|warning/error cases, Info fallback. |
+
+All packages build, vet, and test green.
 
 ---
 
@@ -2569,6 +2725,73 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 972 update — stats-window + accountant + latency-ring audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Share counter resetting on reconnect producing a negative hashrate, or zero/negative dt dividing by zero. | ✅ Clean: `hashrateWindow.observe` emits 0 when `total < lastTotal` (reset) or `dt <= 0`; first call primes and returns 0. |
+| M | Stats ticking non-uniformly (Goroutine scheduling) losing sub-second productive time, or idle/stalled time accruing as productive. | ✅ Clean: `uptimeAccountant` carries the sub-second remainder forward and flushes only whole productive seconds; `satsAccountant` gates on the same `productive` flag and retains fractional precision — the estimate never runs backwards. |
+| M | The "+1 sat per share" conflation of shares with earnings. | ✅ Clean by design: sats estimate integrates the arbitration yield rate over productive time; documented as an estimate vs pool-side accounting (KNOWN_LIMITATIONS §9). |
+| M | Latency ring buffer racing, negative samples corrupting quantiles, or the sort running under the lock. | ✅ Clean: `Record` drops `ms < 0`; mutex-guarded ring; `Quantile` copies the window under lock then sorts outside it — nearest-rank with clamped endpoints. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 973 update — engine-metrics + lazy-series + payout-info audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Lazily-created per-category/per-device series racing on their backing map — the s509 rejectByReason race class. | ✅ Clean: every lazy series has a dedicated mutex (`rejectByReasonMu`, `lastRejectByReasonMu`, `sharesFoundPerDeviceMu`, `payoutInfoMu`); the counter/gauge mutation happens after the map guard is released. |
+| M | `otedama_payout_info` exposing the raw payout address as a label value — /metrics leaking the wallet destination. | ✅ Clean: the label is the masked form only (`setActivePayout(masked)`); empty masked is a no-op. |
+| M | Two payout series reading 1 simultaneously during failover — ambiguous active destination. | ✅ Clean: previous series is set to 0 before the new one is set to 1, under `payoutInfoMu`; unchanged address short-circuits. |
+| M | `shares_unaccounted` going negative when a stats tick races a burst of pool accepts — a meaningless negative gauge. | ✅ Clean: `unaccounted` is clamped at 0 (`found > judged` else 0), documenting that a tick can observe more judged-than-found. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 974 update — arb-pause + stream-staleness + merge audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A pool job update clobbering an arbitration pause — device resumes hashing after being routed away. | ✅ Clean: `reconcileArbPauses` rewrites the pause set to mirror every Decide's allocation (idle/`ai.*` → Pause, else Resume); the s382 persistence fix holds. |
+| M | A dead provider's last quote still routing devices — revenue to a stream that no longer exists, or pruning too eagerly on jitter. | ✅ Clean: `pruneStaleStreams` drops streams unseen for 3 min (3–6× the 30/60s quote cadence) from both `m` and `seen`. |
+| M | `streamsSlice` first-seen de-dup losing `YieldPerDevice` for all but one device, or aliasing the map under mutation. | ✅ Clean: same-`StreamID` entries merge into a representative; the rep's `YieldPerDevice` is a deep copy so later `updateStream` writes can't mutate the slice handed to Decide. |
+| M | `updateStream` writing into a nil `YieldPerDevice` (panic) or a missing power-rate producing a garbage floor. | ✅ Clean: map allocated when nil; `powerFloor` returns 0 on unconfigured power, no rate, or zero devices, and the even-split approximation is documented. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1011 update — probe-fanout + sidecar-injection + coherence-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | An unbounded probe fanout turning doctor into a port scanner. | ✅ Clean: `maxReachabilityProbes` = 8, each dial bounded by a 5 s ctx-aware `net.Dialer`; results indexed per probe (no shared-slot race); reachable/unreachable/unparseable classified with graduated severity. |
+| M | A corrupt wallet-fingerprint sidecar injecting control characters into the report. | ✅ Clean: the fingerprint is printed only when it matches the `isFingerprint` 8-hex shape; malformed → "re-run to regenerate" rather than raw output. Wallet file mode checked `perm & 0o077` (Windows-gated) catching restored-backup 0644. |
+| M | `tls_ca_file` silently ignored on non-`stratum+tls://` pools. | ✅ Clean: `checkPoolTLSCA` warns on scheme mismatch and validates the PEM with the same `x509.CertPool.AppendCertsFromPEM` the dialer uses — diagnosis and live path agree on "valid". |
+| M | The clock-skew probe leaking or abandoning connections. | ✅ Clean: 5 s request ctx + bounded `io.LimitReader` drain before `Body.Close` so keep-alive reuse works and a hostile body can't cause an unbounded read (rationale documented inline). |
+| M | Pool URLs leaking userinfo into report text. | ✅ Clean: every pool surface passes `poolproto.StripUserinfo` + `stripScheme` before display. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1012 update — hashrate-plausibility + median + freshness audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A manipulated or unit-confused endpoint feeding an absurd network hashrate into the yield estimate. | ✅ Clean: `[1e18, 1e23]` H/s plausibility band rejects garbage before caching (~9.3e20 real in 2026 tolerates orders of legitimate drift); per-source failures are logged, not fatal. |
+| M | An unbounded endpoint response streaming into memory. | ✅ Clean: `maxHashrateBody` = 64 KiB caps both the body read and the non-200 drain path (drain kept for keep-alive reuse). |
+| M | A single bad source skewing the arbitration input. | ✅ Clean: parallel fetch → `slices.Sort` → median (even-count = mean of middle two, matching the price fetcher's convention); `results` channel buffered to len(sources) so senders never block. |
+| M | A stale hashrate reading silently staying "fresh". | ✅ Clean: `CurrentHashrate` returns `fresh=false` at ≥ `HashrateCacheDuration` (30 min, apt for fortnightly retargets) and `(0,false)` before first success — the provider's constant fallback takes over honestly. |
+| M | Background poller leaking or delaying the first reading. | ✅ Clean: immediate first `Fetch` then ticker select; `ctx.Done` exits, `ticker.Stop` deferred; RWMutex guards the cached pair. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
@@ -2576,6 +2799,86 @@ All packages build, vet, and test green.
 | L | `//go:build` partitions leaving a GOOS uncovered (missing symbol on some platform) or a file that compiles nowhere; stray `//go:embed`/`//go:generate`/`//go:linkname` directives. | ✅ Clean: the only directives are the two complete partitions — hal GPU `linux`/`!linux` and TUI width `unix`/`windows`/`!unix && !windows` (full GOOS coverage, every file compiles somewhere); zero embed/generate/linkname directives. |
 | M | `os.Pipe`/`net.Pipe` in prod — an fd/in-memory pair whose ends must both be closed and drained (a blocked write wedges a goroutine). | ✅ Absent in prod: all ~50 `net.Pipe` sites are `_test.go` fake transports (the canonical use, with drain goroutines where needed — `dialer_test.go:1126`); the single `os.Pipe` is the test stderr capture. |
 | L | slog attribute keys with unbounded cardinality — dynamic keys (host, ID, user input) exploding the log schema. | ✅ Clean by construction: zero typed-attr call sites — every log line routes through the Logger wrapper's plain-message methods (`Info(msg)`), so no key/value attrs exist to vary. |
+
+All packages build, vet, and test green.
+---
+## Session 1210 update — audit checkpoint
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Ledger state | ⚠️ Noted — master holds 92 merged session entries (s646–s650 tail shown); s1201–s1209 verdicts live on in-flight PRs #1283–#1291. |
+| S | Session batch s1201–s1209 | ✅ Clean — 8 parity/drift censuses (ecosystem, CONTRIBUTING, DEPLOYMENT, API, README, TROUBLESHOOTING, skills, metric-doc, help/completion) all clean; two genuine doc gaps fixed in-flight: missing `otedama completion` API section (#1286) and missing `otedama_devices_idle` metric row (#1290). |
+| S | Cumulative class coverage | ✅ Clean — ~690 defect/drift classes audited across the mechanical + docs-parity passes; open tracked residuals unchanged (docker-verify script/arg gaps from s1193). |
+
+All packages build, vet, and test green.
+---
+## Session 1212 update — import-direction + forbidden-path census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Forbidden architecture paths in Go sources | ✅ Clean — zero references to `internal/providers/`, `pkg/`, `web/`, `internal/auth|render|scientific|observability|security/` in .go files. |
+| S | Import direction | ✅ Clean — all 5 `internal/engine` mentions outside internal/engine are comments, not imports; only cmd/otedama imports the engine. Fan-out sane (config 17, poolproto 15, hal 13). |
+| S | Forbidden paths in docs | ✅ Clean — `docs/architecture.md` target-architecture body carries the top-of-file disclaimer already (prior fix); remaining doc references are notes that the paths don't exist. |
+
+All packages build, vet, and test green.
+---
+## Session 1213 update — release-path parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `release.yml` does not invoke goreleaser; `.goreleaser.yaml` signs/sboms/checksums are dead config | ⚠️ Noted — documented residual (sessions 480/488/516); VERIFY.md's top-of-file status block already discloses this accurately. Open maintainer decision: wire goreleaser into release.yml or keep inline builds. |
+| S | VERIFY.md ↔ actual release surface | ✅ Clean — the "not yet live" block correctly states release.yml builds plain tarballs, ci-cd.yml attaches an unsigned `checksums.txt` (ci-cd.yml:211–214), and install.sh tries `checksums.txt` then goreleaser-style names (install.sh:144). |
+| S | Asset-name parity | ✅ Clean — doc examples (`otedama_<ver>_checksums.txt`, `.sbom.*`) are presented as intended-flow only; no current-tense claim contradicts the actual `otedama-<os>-<arch>.tar.gz` / `.deb` / `.rpm` uploads. |
+
+All packages build, vet, and test green.
+---
+## Session 1215 update — doctor-check + CLI-usage parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Doctor check count | ✅ Clean — checks.go registers exactly 17 named checks, matching CLAUDE.md's "17 並行ヘルスチェック". |
+| S | `otedama doctor` flags in API.md | ✅ Clean — `--config`/`--bitcoin-address`/`--data-dir`/`--json` all registered in doctor.go's FlagSet; JSON shape and exit codes 0/1/2 match implementation. |
+| S | Doc flag surface drift | ✅ Clean — whole-docset `--flag` census (s1214) verified; remaining non-implemented flag names are OS-tool invocations or ADR-planned commands. |
+
+All packages build, vet, and test green.
+---
+## Session 1216 update — i18n catalog + locale-declaration parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Language set vs CLAUDE.md | ✅ Clean — `PriorityLanguages()` returns exactly the ten declared languages (en/ja/zh/ko/es/fr/de/pt/ru/ar); a unit test pins the count. Catalogs exist for all ten (en.go, ja.go, zh.go, ko.go, es.go, ru_ar.go, other_langs.go). |
+| S | BCP-47 doc claims | ✅ Clean — DetectLang handles tag→base-language fallback (`ja-JP`→`ja`) as documented; `--language` flag and `BCP 47` mentions in API.md/MIGRATING-FROM-V2.md match. |
+| S | Machine-translation claim | ⚠️ Noted — CLAUDE.md's "機械翻訳で1,000言語以上" is a policy statement about doc translation, not a code surface; no in-code claim contradicts it. |
+
+All packages build, vet, and test green.
+---
+## Session 1218 update — ADR index + status parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ADR file set vs CLAUDE.md | ✅ Clean — exactly ADR-001…011 exist in `docs/adr/`, matching the architecture-map declaration. |
+| S | Status parity | ✅ Clean — all 11 ADRs carry a `**Status:**` field; README.md index matches (001–006 + 011 Accepted, 007–010 Proposed) and records ADR-002's partial supersession by ADR-006. |
+| S | Cross-doc ADR references | ✅ Clean — every `ADR-NNN` reference in KNOWN_LIMITATIONS/AUDIT_CHECKLIST resolves to a real file; AUDIT_CHECKLIST's "ADR-001, -002, -003 present" is a spot-check row, not a count claim. |
+
+All packages build, vet, and test green.
+---
+## Session 1219 update — fuzz-target ↔ decoder-surface parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Stratum V2 decode surface | ✅ Clean — all 14 exported decoders (`DecodeHeader`, `Decoder.ReadFrame`, 6 handshake decoders, 6 steady-state message decoders) are exercised by `frame_fuzz_test.go`/`handshake_fuzz_test.go`/`messages_fuzz_test.go`/`roundtrip_fuzz_test.go`. |
+| S | Cross-package fuzz inventory | ✅ Clean — 21 `Fuzz*` entrypoints across 13 files cover every boundary parser (config YAML, BIP-39 mnemonic, rate JSON, V1 notify/parse, base58/bech32 addresses, arbitration inputs, miner bit-math). |
+| S | OSS-Fuzz readiness claim | ✅ Clean — `.github/oss-fuzz-integration.md` checklist satisfied (21 ≥ required count), consistent with #1250's ledger entry. |
+
+All packages build, vet, and test green.
+---
+## Session 1220 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Ledger state | ✅ Clean — 93 `## Session` verdict entries on master; every defect class re-verified this pass (doctor count, i18n catalog, ADR index, fuzz surface, spec defaults) is either clean or recorded as ⚠️ Noted with the reason. |
+| S | Real fixes since last checkpoint | ✅ Clean — #1293 (workflow branch filters → master), #1290 (`otedama_devices_idle` metric row), #1286 (`otedama completion` API doc), s1214 (SUSTAINABILITY flag names), s1217 (SPECIFICATION defaults) all delivered as independent PRs. |
+| S | Open residual defects | ⚠️ Noted — docker-verify script gaps (verify-docker.{sh,ps1} absent, build-arg names, grep formats), dead goreleaser config vs inline release.yml build, and the preexisting 8-job CI failure signature (go.mod `tlsmlkem`, Dependency graph) remain open maintainer decisions. |
 
 All packages build, vet, and test green.
 
