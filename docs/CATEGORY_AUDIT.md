@@ -1731,3 +1731,20 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1079 update — stale-marker census
+
+Census of TODO/FIXME/XXX/HACK markers and "deferred/future" notes to
+find stale tracking comments whose referenced work has since landed.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `TODO\|FIXME\|XXX` in non-test .go files: **zero** — enforced by Makefile release gate step [6/8] and AUDIT_CHECKLIST row 6 | S |
+| S | `stratum/messages.go` "Job Declaration and Template Distribution are deferred to a later milestone" — still true; JDC tracked in ADR-009 phase 2 / sv2-apps #881 | S |
+| S | `btccrypto.go` `AddressP2MR` "implementation arrives in a later release" — intentional scaffold, documented in KNOWN_LIMITATIONS §scaffolding | S |
+| S | "later" prose in comments (dashboard resize, hashrate update, wallet fingerprint) — all describe runtime sequencing, not pending work | ⚠️ Noted |
+| S | Doc-side markers (KNOWN_LIMITATIONS open list, AUDIT_CHECKLIST backlog rows) re-verified in sessions 1066–1067 | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
