@@ -1072,3 +1072,16 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-793 ecosystem update (2026-10-04)
+
+### sv2-spec
+- Normative open set unchanged: #236 (`SetTarget.target` ≤ `max_target` bound), #234 (authority-key management), #203 (coinbase payouts extension), #198 (`coinbase_witness` field) — all still open, no new conformance-relevant text.
+- Newly merged since last check: #231 (Server/Client relationship clarified across roles — documentation alignment only, no wire change for a downstream mining client), #233 (AGENTS.md conventions). New editorial PR #186 open (markdown table fix) — non-normative.
+- Otedama impact: none — the Oct-1 normative batch (session-678/#703) already covered the landed semantic changes; Otedama's SetTarget handling predates #236's bound and remains conformant.
+
+### stratum (SRI)
+- Latest release remains v1.12.0 (2026-09-17) — no new tag since last check.
+
+### sv2-apps
+- Open PR count steady at 27. Recently merged: #875 (crates consolidated into a single cargo workspace), #865 (`bitcoin_core_sv2` bumped to 0.6.0), #907 (docs: agent-comment guidance). No protocol-surface change affecting Otedama's client role.
