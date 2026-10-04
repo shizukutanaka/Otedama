@@ -2959,6 +2959,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1174 update — dependency-rationale + directive-comment census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `go.mod` direct-dependency rationale comments (CLAUDE.md: "依存追加時はコメントに理由を記録") | ✅ Clean — all 3 direct deps (go.yaml.in/yaml/v3, x/crypto, x/sys) carry rationale naming the consumer package, license, and maintenance posture |
+| S | `godebug` directive documentation | ✅ Clean — all 3 pins (panicnil, randautoseed, tlsmlkem) documented in a header comment + GODEBUG_NOTES.md cross-reference |
+| M | Module/toolchain declaration drift | ✅ Clean — single `module`, `go 1.22` + `toolchain go1.24.0`; the CI pin tension (1.21/1.23.x runners vs `tlsmlkem`) is already recorded in KNOWN_LIMITATIONS |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
