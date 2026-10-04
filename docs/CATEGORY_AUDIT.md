@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1215 update — doctor-check + CLI-usage parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Doctor check count | ✅ Clean — checks.go registers exactly 17 named checks, matching CLAUDE.md's "17 並行ヘルスチェック". |
+| S | `otedama doctor` flags in API.md | ✅ Clean — `--config`/`--bitcoin-address`/`--data-dir`/`--json` all registered in doctor.go's FlagSet; JSON shape and exit codes 0/1/2 match implementation. |
+| S | Doc flag surface drift | ✅ Clean — whole-docset `--flag` census (s1214) verified; remaining non-implemented flag names are OS-tool invocations or ADR-planned commands. |
+
+All packages build, vet, and test green.
