@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 802 update — embed-collision + nested-map + double-send audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Embedded struct JSON field-name collision — outer/inner field silently shadowed on marshal. | ✅ Clean: all 25 json-tagged structs are flat (no embedded fields among the tagged types — the embedded message base structs carry no json tags, so no collision class exists) — verified by struct-embed grep. |
+| M | Nested-map write `m[a][b] = v` on a nil inner map — panic. | ✅ Clean: zero nested-map-write sites — all multi-key indices are `map[key]struct` reads or single-level sets. |
+| M | Two send cases in one `select` — nondeterministic choice hiding a required ordering. | ✅ Clean: zero multi-send select sites — every select pairs at most one send with `ctx.Done()`. |
+
+All packages build, vet, and test green.
