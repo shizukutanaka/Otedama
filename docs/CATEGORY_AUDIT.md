@@ -4469,6 +4469,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 857 update — counter-inc + interface-surface + wrap-reach audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `seqNum`/`counter`/`nonce` `++` arithmetic — wraparound to a previously-sent value on uint32 fields. | ✅ Clean: sole counter increment is `seqNum++` (engine/run.go:1191) — a u32 at ≤10 submits/s needs ~13 years to wrap, and the future-sequence guard tolerates any residual case (sessions 738, 772). |
+| S | Interfaces too large (ISP violation) or too small to be useful — bad API boundaries. | ✅ Clean: 12 interface declarations, all 1–4 methods — `Clock`, `Connection`, `Session`, `Dialer`, `Provider`, `RateSource`, `NetworkHashrateSource`, plus file-local `encodable`/`rateStats`; proper ISP. |
+| M | Counter incremented then read unsynchronized — torn state between `++` and `Load`. | ✅ Clean: `seqNum` is guarded by the session mutex on both paths; share counters are `atomic.Int64` (s739). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
