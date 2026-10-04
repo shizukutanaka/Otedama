@@ -2530,3 +2530,16 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1263/1264 update — toolchain-pin parity + test-infrastructure surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| H | Workflow `go-version` pins below `go.mod`'s `toolchain go1.24.0` + `godebug tlsmlkem=1` requirement — `GOTOOLCHAIN: local` jobs fail at go.mod parse (the long-standing all-red CI signature). | ⚠️ Fixed: ci.yml/test.yml/ci-cd.yml/security.yml/release.yml all bumped to `1.24.x`; matrices now `['1.24.x','1.25.x']`; codecov conditionals retargeted. `.golangci.yml` (`go: "1.24"`), `Dockerfile` (`golang:1.24-alpine`), `GODEBUG_NOTES.md` already consistent. |
+| S | `func Example*` — godoc examples for exported API. | ✅ Benign: zero present; every package is `internal/`/`cmd/` with no external consumers; godoc coverage already audited separately. |
+| M | On-disk fuzz seed corpora (`testdata/fuzz/`) — OSS-Fuzz/coverage-readiness signal. | ⚠️ Noted: 9 packages ship Fuzz targets but only `poolproto/stratumv1` has an on-disk corpus (FuzzParseSubscribeResult). 77 `f.Add` inline seeds exist across the suite, so coverage is reasonable — a deliberate corpus backfill is optional, not a defect. |
+| M | `go mod tidy` drift (unused requires or missing sums). | ✅ Clean: `go mod tidy -diff` produces no changes. |
+
+All packages build, vet, and test green.
