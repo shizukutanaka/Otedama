@@ -2475,6 +2475,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1127 update — new-vs-make census
+
+`new(T)` where T is map/chan/slice/func (produces nil-able pointer to an
+uninitialized type — panic on use).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 9 `new(...)` sites, all on value-struct types (big.Int ×5, big.Float ×3, atomic.Bool ×1) — `new` is the correct zero-value idiom | S |
+| S | Zero `new(map|chan|slice|func)` | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
