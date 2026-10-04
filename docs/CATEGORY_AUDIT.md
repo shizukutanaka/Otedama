@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 844 update — duration-mult + backoff-cap + float-cast audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Duration` multiplied unchecked — exponential overflow wraps to a negative/huge duration. | ✅ Clean: the single exponential site (`run.go:613` `backoff *= 2`) is immediately capped at `reconnectBackoffMax` (64s) — can't overflow (verified session 636). |
+| S | `time.Duration(float)` conversion — fractional-nanosecond rounding and int64 overflow on huge floats. | ✅ Clean: `stats.go:58` casts `p50 * ms` where p50 is a bounded latency percentile — no overflow path; all literal durations use `N * unit` int form. |
+| S | Sleep-poll constants inline (`time.Sleep(10*ms)`) — magic numbers scattered. | ✅ Benign: the one inline sleep (`worker.go:269` bounded shutdown drain) is a documented poll interval, not a tunable. |
+
+All packages build, vet, and test green.
