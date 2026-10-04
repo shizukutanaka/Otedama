@@ -1734,6 +1734,48 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1013 update — stop-race + update-drop + width-budget audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Stop` writing to `w` while the render loop still owns it. | ✅ Clean: CAS `started` is the single-shot gate (safe pre-Start and multi-call); `close(doneCh)` → `wg.Wait` → only then `showCursor`/`Fprintln` — no racing writer, documented inline. |
+| M | A full update channel blocking the engine's stats push. | ✅ Clean: `Update` drains one stale entry then enqueues — bounded loss is the documented contract (freshest wins, never blocks). |
+| M | A torn stats snapshot mid-render. | ✅ Clean: `lastStats` guarded by `mu`; the tick copies under lock then renders the copy. |
+| S | The critical pool-status field silently truncated at narrow widths. | ✅ Clean: every line is budget-truncated to `cols` and the key field is sized from a dynamic budget, not a fixed offset — safe at the documented 40-column minimum; live width re-probed per tick (TIOCGWINSZ / Windows counterpart), `SetWidth` locks detection for tests. |
+| S | Emoji section labels under-padding and leaving stale glyph fragments. | ✅ Clean: section labels are deliberately plain text — emoji render width-2 but `visibleLen` counts 1 rune; the mismatch is documented and avoided. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1014 update — i18n-fallback + immutability + degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A missing translation leaving the UI with an empty string. | ✅ Clean: `Render` falls exact → base tag → mandatory English → `"!{id}!"` placeholder + error — conspicuous in logs and never blank; English presence is enforced at `NewBundle`. |
+| M | Caller-side mutation corrupting a shared catalog across goroutines. | ✅ Clean: `NewCatalog` deep-copies the messages map; `Bundle` holds its own catalog map; both are documented lock-free-after-construction (the deliberate no-lock design matters on the log-line hot path). |
+| M | An invalid message ID or duplicate language slipping into the bundle. | ✅ Clean: `ID.Valid`/`Lang.Valid` charset checks reject bad IDs at construction; `NewBundle` rejects duplicate languages. |
+| M | A template variable missing from `data` breaking message rendering. | ✅ Clean: `RenderWith` fast-paths messages without `{{`; parse/exec failures return the raw template + error — degrades, never breaks rendering. |
+| S | Translation-completeness drift between English and the ten priority languages going unnoticed. | ✅ Clean: `MissingTranslations` emits sorted per-language gaps for the CI completeness check; complete languages are omitted. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1016 update — wallet-atomicity + oracle + sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A killed mid-write leaving a half-written wallet.dat. | ✅ Clean: CreateTemp→Write→Sync→Close→Chmod(0600)→Rename in the same dir (same filesystem); Close errors are honored because the final flush can happen there; every failure path removes the temp file; `sweepStaleTempFiles` reaps >1-minute leftovers at startup without touching a live writer. |
+| S | The wallet file briefly world-readable between write and chmod. | ✅ Clean: Chmod(0600) happens **before** the rename, so the final path is never visible with loose permissions; data dir itself is MkdirAll 0700. |
+| S | Decrypt errors leaking an oracle (wrong passphrase vs corrupt file distinguishable). | ✅ Clean: `loadExisting` and `ChangePassphrase` collapse `DecryptSeed` failures into opaque fixed strings ("wallet unlock failed", "incorrect old passphrase"); the documented intent is oracle-resistance. |
+| S | A restored-backup wallet.dat losing fingerprint identity checks. | ✅ Clean: missing `wallet.fingerprint` is recreated from the decrypted seed on load — but never overwritten when present, since a mismatching fingerprint is a signal, not a bug to mask. |
+| M | The BIP-39 25th-word silently deriving a different seed. | ✅ Documented benign: `WithMnemonicPassphrase` spells out the decoy-wallet property (wrong phrase → valid-looking different seed, no error) and why it is creation-only (the phrase is folded into the stored seed). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 1017 update — bip39-math + secret-hygiene + wordlist-integrity audit
 
 | Cat | Finding | Disposition |
@@ -2631,6 +2673,34 @@ All packages build, vet, and test green.
 | M | A dead provider's last quote still routing devices — revenue to a stream that no longer exists, or pruning too eagerly on jitter. | ✅ Clean: `pruneStaleStreams` drops streams unseen for 3 min (3–6× the 30/60s quote cadence) from both `m` and `seen`. |
 | M | `streamsSlice` first-seen de-dup losing `YieldPerDevice` for all but one device, or aliasing the map under mutation. | ✅ Clean: same-`StreamID` entries merge into a representative; the rep's `YieldPerDevice` is a deep copy so later `updateStream` writes can't mutate the slice handed to Decide. |
 | M | `updateStream` writing into a nil `YieldPerDevice` (panic) or a missing power-rate producing a garbage floor. | ✅ Clean: map allocated when nil; `powerFloor` returns 0 on unconfigured power, no rate, or zero devices, and the even-split approximation is documented. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1011 update — probe-fanout + sidecar-injection + coherence-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | An unbounded probe fanout turning doctor into a port scanner. | ✅ Clean: `maxReachabilityProbes` = 8, each dial bounded by a 5 s ctx-aware `net.Dialer`; results indexed per probe (no shared-slot race); reachable/unreachable/unparseable classified with graduated severity. |
+| M | A corrupt wallet-fingerprint sidecar injecting control characters into the report. | ✅ Clean: the fingerprint is printed only when it matches the `isFingerprint` 8-hex shape; malformed → "re-run to regenerate" rather than raw output. Wallet file mode checked `perm & 0o077` (Windows-gated) catching restored-backup 0644. |
+| M | `tls_ca_file` silently ignored on non-`stratum+tls://` pools. | ✅ Clean: `checkPoolTLSCA` warns on scheme mismatch and validates the PEM with the same `x509.CertPool.AppendCertsFromPEM` the dialer uses — diagnosis and live path agree on "valid". |
+| M | The clock-skew probe leaking or abandoning connections. | ✅ Clean: 5 s request ctx + bounded `io.LimitReader` drain before `Body.Close` so keep-alive reuse works and a hostile body can't cause an unbounded read (rationale documented inline). |
+| M | Pool URLs leaking userinfo into report text. | ✅ Clean: every pool surface passes `poolproto.StripUserinfo` + `stripScheme` before display. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1012 update — hashrate-plausibility + median + freshness audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A manipulated or unit-confused endpoint feeding an absurd network hashrate into the yield estimate. | ✅ Clean: `[1e18, 1e23]` H/s plausibility band rejects garbage before caching (~9.3e20 real in 2026 tolerates orders of legitimate drift); per-source failures are logged, not fatal. |
+| M | An unbounded endpoint response streaming into memory. | ✅ Clean: `maxHashrateBody` = 64 KiB caps both the body read and the non-200 drain path (drain kept for keep-alive reuse). |
+| M | A single bad source skewing the arbitration input. | ✅ Clean: parallel fetch → `slices.Sort` → median (even-count = mean of middle two, matching the price fetcher's convention); `results` channel buffered to len(sources) so senders never block. |
+| M | A stale hashrate reading silently staying "fresh". | ✅ Clean: `CurrentHashrate` returns `fresh=false` at ≥ `HashrateCacheDuration` (30 min, apt for fortnightly retargets) and `(0,false)` before first success — the provider's constant fallback takes over honestly. |
+| M | Background poller leaking or delaying the first reading. | ✅ Clean: immediate first `Fetch` then ticker select; `ctx.Done` exits, `ticker.Stop` deferred; RWMutex guards the cached pair. |
 
 All packages build, vet, and test green.
 
