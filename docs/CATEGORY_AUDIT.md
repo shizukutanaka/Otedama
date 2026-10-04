@@ -2823,6 +2823,24 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1160 update — mechanical-audit checkpoint
+
+Tenth checkpoint. Sessions 1151–1159 covered: struct-tag typo census,
+RWMutex read/write balance, legacy `sort.` API (**real fix** — `sort.Ints`
+→ `slices.Sort`), bool-map vs struct{} set idiom, imported-package shadow,
+panic-style, legacy error-inspection (**real fix** — `os.IsNotExist` →
+`errors.Is(os.ErrNotExist)` at 4 sites), single-verb `Sprintf` (**real
+fix** — 12 sites → `strconv`), plus the s1158 ADR-009 ecosystem recheck
+(spec quiet, SRI v1.12.0, sv2-apps v0.7.0).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| — | 3 real fixes merged this span (2 stdlib modernization, 1 errors.Is convention); every other class clean or ⚠️ Noted | Checkpoint |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
