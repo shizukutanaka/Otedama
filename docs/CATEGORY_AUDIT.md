@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1190 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Ledger state | ✅ 93 `## Session` entries on master (in-flight audit PRs carry their own entries, same as previous checkpoints) |
+| S | ADR-009 ecosystem log | ✅ 14 session updates recorded; latest (session-1186) confirms the quiet window — sv2-spec payout extensions open, SRI v1.12.0, sv2-apps v0.7.0 |
+| S | Tree health | ✅ `go vet ./...` and `go build ./...` clean on current master |
+| S | Coverage since s1180 | Repo-config path parity (CODEOWNERS/dependabot), skills-doc references, .dockerignore↔Dockerfile, ecosystem recheck, CHANGELOG currency (⚠️ stale Unreleased noted), docs internal links, workflow secret names (⚠️ kubeconfig naming triple-scheme) — one drift class found and honestly recorded |
+
+All packages build, vet, and test green.
