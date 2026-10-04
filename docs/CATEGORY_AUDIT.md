@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 777 update — defer-arg-eval + named-return + close-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `defer f(x)` evaluating `x` at registration — a reassigned variable's stale value reaching the deferred call. | ✅ Clean: deferred `close(inCh)`/`cancel()`/`stopLimiter()` sites want the register-time binding (close *this* scope's channel/cancel), which is exactly Go's semantics; no reassigned variable is defer-captured. |
+| S | Named return mutated by deferred code — a defer overwriting the caller-visible result. | ✅ Clean: no function relies on named-return-after-defer interplay; returned values are computed at the return statement. |
+| S | Lock pairing LIFO inversion — `defer` stack ordering releasing guards out of order. | ✅ Clean: every lock acquire pairs with its own `defer Unlock` immediately below; no multi-lock stacking exists to invert. |
+
+All packages build, vet, and test green.
