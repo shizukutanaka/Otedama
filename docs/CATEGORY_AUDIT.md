@@ -1950,6 +1950,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1027 update — logger-default + ctx-injection + fanin audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A typed-nil logger in ctx shadowing the default. | ✅ Clean: `IntoContext(nil)` is a documented no-op; `FromContext` also guards `l != nil` — two layers against the typed-nil footgun. |
+| M | Default-logger initialization racing concurrent `FromContext` calls. | ✅ Clean: `atomic.Pointer` with a CAS slow path that returns the winner's logger — the loser branch is split out so it's unit-testable; `SetDefault(nil)` can never clobber the default. |
+| S | `ParseLevel`/`Adapter` misclassifying unknown levels. | ✅ Clean: both lowercase+trim and fall back to Info (visible, not silent-drop); `warn`/`warning` both mapped. |
+| M | fanIn goroutines pinned open by a stuck input after cancel. | ✅ Clean: the receive itself selects `ctx.Done()` (comment explains why — a never-written input can't pin `out` open); send path also selects Done; output closes via `wg.Wait()`. |
+| M | fanIn buffer sizing unbounded or zero. | ✅ Clean: `factor*len(channels)` capped at 64, floored at 1 — quotes get 64×, shares 4×, both bounded. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
