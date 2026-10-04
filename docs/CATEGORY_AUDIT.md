@@ -4251,6 +4251,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 838 update — afterfunc + timer-reset + newtimer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.AfterFunc` callback on a timer that is never stopped — fires after teardown. | ✅ Clean: absent — all one-shot delays use `NewTimer`+`Stop` or `time.After`. |
+| S | `time.Timer.Reset` after expiry without draining `.C` — stale tick consumed as fresh. | ✅ Clean: the only `.Reset(` is `hash.Hash.Reset` on the pooled hasher (noise_pool.go:39) — correct reuse; zero `time.Timer` reuse-after-expiry sites. |
+| S | `time.NewTimer` without `Stop` — timer object retained to expiry. | ✅ Clean: both NewTimer sites (`run.go:605` backoff, `stratumv1.go:529` call timeout) pair an explicit `Stop` — the comment at run.go:600 documents why `time.After` was avoided here. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
