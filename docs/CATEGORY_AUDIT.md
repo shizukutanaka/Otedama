@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1058 update — stratum-wire/fuzz + config-example-gate + fuzz-property-tail audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Wire primitive decode error paths untested (length-byte vs data-byte failure conflated). | ✅ Clean: each primitive tests truncation AND injected IO error on the length byte AND the data bytes separately; LE byte-order pinned; too-long rejected; the `FuzzMessageDecoderBounds` table caps every decoder's accepted length. |
+| M | Pooled HMAC diverging from the non-pooled path (the s625 perf swap). | ✅ Clean: `MatchesNonPooled` equivalence + RFC 4231 vector + concurrent-safe + **allocation reduction itself asserted** — the perf claim is a test, not a comment. |
+| M | config.yaml.example drifting from the real field set. | ✅ Clean: `ExampleFileIsValid` parses the shipped example + `ExampleDocumentsEveryField` fails when a field is added without documenting it — doc drift is a test failure, not a review hope. |
+| M | Fuzz property assertions too weak (only no-crash). | ✅ Clean: `FuzzTargetFromDifficultyMonotonic` asserts the ordering invariant; round-trip fuzz on messages; per-decoder + per-handshake + frame + numeric-env + source-extract fuzz; non-finite rejection (s478) pinned at the fetcher boundary. |
+| S | TLS-client coverage gaps. | ✅ Clean: verified handshake, default-rejects-untrusted, extra-CA self-signed end-to-end, garbage-PEM reject. |
+
+All packages build, vet, and test green.
