@@ -3125,6 +3125,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1190 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Ledger state | ✅ 93 `## Session` entries on master (in-flight audit PRs carry their own entries, same as previous checkpoints) |
+| S | ADR-009 ecosystem log | ✅ 14 session updates recorded; latest (session-1186) confirms the quiet window — sv2-spec payout extensions open, SRI v1.12.0, sv2-apps v0.7.0 |
+| S | Tree health | ✅ `go vet ./...` and `go build ./...` clean on current master |
+| S | Coverage since s1180 | Repo-config path parity (CODEOWNERS/dependabot), skills-doc references, .dockerignore↔Dockerfile, ecosystem recheck, CHANGELOG currency (⚠️ stale Unreleased noted), docs internal links, workflow secret names (⚠️ kubeconfig naming triple-scheme) — one drift class found and honestly recorded |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
