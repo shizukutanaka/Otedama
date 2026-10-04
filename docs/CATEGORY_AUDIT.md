@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1054 update — poolproto-test handshake-matrix + ordering-gates + tls-path audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | V1 negotiate failure paths untested (a rejected subscribe/authorize silently proceeds). | ✅ Clean: subscribe call-error/err-result/unparseable, authorize call-error/rejected — each returns handshake-failed; **extranonce-subscribe method-not-found→succeeds** (tolerant to pools without it); non-V1 conn error; dial + handshake timeouts. |
+| M | V2 handshake ordering and failure coverage. | ✅ Clean: `EmitsJobOnlyAfterSetNewPrevHash` (ordering gate); both phases' send/read/garbage/unexpected-msg matrix; setup-reject + channel-reject; **PendingJobsBounded** (pins s429 bound) + write deadline (s436) + v2tls trusted-connect (s480). |
+| M | V1 dispatch leniency turning malformed input into state corruption. | ✅ Clean: empty/malformed/parse-error lines ignored, unknown notification ignored, oversized line terminates; notify field-boundary matrix (P0/P1/P5/P6/P7 non-string); per-field fuzz on all notification parsers + dispatch-line + subscribe-result. |
+| M | Job-queue overflow and stale-job delivery. | ✅ Clean: full-channel drops-oldest (cleanJobs=false), `PurgesAllPendingJobsWhenCleanJobs`, cleanJobs-on-empty sends, merkle+EN2 roll (pins s417); set_extranonce atomicity + concurrent readers + size bounds (s411/#428). |
+| S | Dialer/registry contract drift. | ✅ Clean: FromURL↔StripScheme consistency pinned, case-sensitive, dup/nil/unknown panics, `NegotiateFailureClosesConnection`, `CallTimeout_ReleasesPending`, TLS default-rejects-untrusted + per-pool CA verifies self-signed + garbage-PEM reject. |
+
+All packages build, vet, and test green.
