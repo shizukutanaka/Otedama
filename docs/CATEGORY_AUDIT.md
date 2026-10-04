@@ -2953,3 +2953,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1286 update — KNOWN_LIMITATIONS open-entry re-verification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | §13 "CI workflows non-functional/misdescribed" | ✓ Still true on master: `deploy.yml` runs `npm ci` (no package.json) + `helm upgrade ... ./kubernetes/helm/` (nonexistent path); `ci.yml` docker-verify calls `scripts/verify-docker.sh` + polls `localhost:8082/health` (server exposes /healthz only) + a postgres:15 job for a nonexistent DB layer; `ci-cd.yml` still pins GO_VERSION '1.21' + matrix go 1.20/1.21 below go.mod's 1.24.0 floor and applies `k8s/deployment.yaml` (pending #1344 covers the active workflows); `security.yml` references `tests/security`/`tests/load` (no `tests/` dir); `code-review.yml` is Node-gated with `has_node=false` always; `test.yml` has no fuzz/benchmark job (CLAUDE.md map description remains inaccurate, #1347 pending) |
+| R | Other open entries (§1,§2,§4,§5,§6,§8,§14) | ✓ Still true: simulated AI yield, unwired Noise NX, Linux-only GPU + no GPU mining, PQ scaffold, receive-only Lightning, no ASIC detection, DATUM reserved-scheme |
+
+All 8 open KNOWN_LIMITATIONS entries re-verified against synced master; no entry is stale.
+
