@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 827 update — signal-buffer + cleanup-mix + notify-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `signal.Notify(ch)` on an unbuffered channel — signals silently dropped. | ✅ Clean: zero `signal.Notify(` — the single surface is `signal.NotifyContext` (run.go:208), which manages delivery internally. |
+| S | `defer` vs `t.Cleanup` inconsistency — cleanup silently skipped or double-run across test boundaries. | ✅ Benign: 34 `t.Cleanup` sites exist where cross-helper cleanup is needed; 208 test-scope `defer`s are idiomatic local teardown — the split is intentional (helper-owned vs test-owned resources). |
+| S | Multiple signal handlers competing for the same process signals — delivery raced between handlers. | ✅ Clean: single registration point — `signal.NotifyContext` only (verified session 562). |
+
+All packages build, vet, and test green.
