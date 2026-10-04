@@ -2249,6 +2249,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1048 update — provider-test lifecycle + quote-freshness + publish-overflow audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Provider lifecycle edges untested (double-start, stop-without-start, restart residue). | ✅ Clean: both providers pin stop-without-start safe, double-start reject, stop-clears-state-for-restart, goroutine cleanup — the four-state lifecycle matrix is symmetric across Mining and Akash. |
+| M | Quote freshness degrading silently (stale rate = fresh confidence). | ✅ Clean: `FreshRate_HighConfidence` vs `StaleRate_LowerConfidence` pins the confidence-decay matrix; `NoGPUDevices_EmitsZeroYieldQuote` + `QuotePriceWithinConfiguredBounds` cover degenerate and bound cases. |
+| M | Publish channel back-pressure hazards (block-forever vs unbounded). | ✅ Clean: zero-rate→fallback and drops-oldest-when-full for BOTH providers — the bounded-queue contract is tested twice, not assumed. |
+| M | Polling loop leak on ctx cancel. | ✅ Clean: `ParentContextCancelTerminatesLoop` + `SendQuoteReturnsFalseOnCancelledContext` + republish-on-ticker — the goroutine exit path is pinned, not just the happy tick. |
+| S | Simulated provider misrepresenting itself. | ✅ Clean: `NameDisclosesSimulation` pins honest sim disclosure in the provider name; `YieldHigherThanCPUMining` + GPU-only acceptance covered; hashrate-func set/zero/unknown matrix tested. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
