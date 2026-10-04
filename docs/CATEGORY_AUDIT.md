@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1181 update — doc package-path parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `internal/<pkg>` references in live docs | ✅ Clean — every reference in CONTRIBUTING, DEPLOYMENT, API, solo-operations maps to a real package |
+| S | Phantom paths (internal/auth, internal/providers, internal/btcnode, internal/plugin, …) | ⚠️ Noted — appear only inside explicitly disclaimed planning docs (architecture.md session-243/487 banner, ADR-009 "proposal" code blocks, CONTRIBUTING §82 self-correcting note); no live false claim |
+| S | Forbidden-path leakage | ✅ Clean — no doc instructs creating `pkg/`, `web/`, `internal/providers/` etc. |
+
+All packages build, vet, and test green.
