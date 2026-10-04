@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1047 update — i18n-test completeness-gate + fallback-chain + detect-matrix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Per-language catalogs silently missing keys (runtime placeholder leak). | ✅ Clean: `AllCatalogs_CoverAllEnglishIDs` + `Japanese_CoversAllEnglishIDs` + `AllLanguages_CoverAllEnglishIDs` — completeness is asserted per catalog AND per language, plus placeholder-consistency-with-English and no-empty-messages gates. |
+| M | Fallback chain order wrong (exact → base → English). | ✅ Clean: each hop pinned — exact-match, base-lang (pt-BR→pt), English-fallback, partial-translation fallback, unknown-ID→placeholder; `NewBundle` rejects nil-English/non-English-fallback. |
+| M | Template injection corrupts render (bad template panics). | ✅ Clean: `RenderWith` covers nil-data/no-template/missing-ID→RenderError/bad-template→ParseError/exec-error — the degrade surface is per-error-class. |
+| M | Locale detection mishandling POSIX/subtags/case. | ✅ Clean: exact, subtag (pt-BR→pt), unknown→default, case-insensitive, **POSIX env precedence + normalization** — detection matrix covered; `StartupReadyIsDistinct` pins dedupe. |
+| S | Catalog immutability/concurrency unguarded. | ✅ Clean: `Catalog_IsImmutable` (mutation of returned map doesn't leak) + `ConcurrentRenderIsSafe`. |
+
+All packages build, vet, and test green.
