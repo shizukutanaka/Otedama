@@ -4203,6 +4203,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 834 update — lock-send + print-discard + builder-write audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Channel send while holding a mutex — blocks the critical section on receiver readiness (deadlock risk). | ✅ Clean: `stratumv1.go:234-239` deletes under `pendingMu`, unlocks, then sends; `dashboard.go:195-198` stores under `d.mu`, unlocks, then proceeds — the send/write is always outside the critical section. |
+| S | `fmt.Fprint*(w)` return value discarded — write failure silently lost. | ✅ Benign: all discarded Fprint calls target the user-facing display boundary (injected `w`/`out` writers, `strings.Builder`); errors are non-actionable at display time and `strings.Builder` never returns an error (session-745). |
+| S | Read from a `strings.Builder`/`bytes.Buffer` after concurrent write — torn read. | ✅ Clean: builders are function-local construction buffers, never shared across goroutines (session-745 census). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
