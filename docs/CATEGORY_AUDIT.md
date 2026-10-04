@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1053 update — doctor-test per-check-matrix + echo-safety + runner-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Per-check outcome matrix thin (a degraded check silently passes). | ✅ Clean: every check has pass/warn/fail coverage — pool reachability covers unreachable/malformed/reachable/**partial-outage→warn**/all-malformed→fail/mixed→warn; clock-skew covers accurate/large-warn/very-large-fail/net-error/missing-Date/malformed-Date/request-error; encryption skips/passes/warns-per-pool. |
+| M | Secret/PII echo at the check boundary (fingerprint printed raw). | ✅ Clean: `MalformedFingerprintNotEchoed` — only validated fingerprints are displayed; `IsLikelyBitcoinAddress` charset+prefix+length per format; `MaskAddress` structure + length boundaries (10/11); wallet perms warn vs owner-only pass. |
+| M | Concurrent runner reordering or dropping results. | ✅ Clean: `PreservesCheckOrderDespiteConcurrency` — output order is pinned independent of goroutine completion order; elapsed-time measured; empty-checks safe; exit-code tri-state (pass/warn/fail) + JSON mirror. |
+| M | stat-error vs not-exist conflation (permission error treated as missing). | ✅ Clean: `StatErrorNotNotExist_Fails` for both data-dir and wallet checks; no-home→skip; is-file→fail; lax-perms→warn; creates-on-first-run. |
+| S | Helper drift (appendUnique, kind, fingerprint). | ✅ Clean: duplicate-not-appended, AddressKind unknown/P2WPKH/P2WSH, IsFingerprint matrix; `DefaultChecks` all-have-run-function + membership of every check. |
+
+All packages build, vet, and test green.
