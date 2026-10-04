@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 918 update — addr-validator + pool-target + prefix-enum audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Address validated by length/prefix only — a checksum-valid typo still misdirects earnings. | ✅ Clean: length + mainnet prefix *plus* full checksum via `btccrypto.ValidateAddress` (bech32/bech32m for `bc1…`, Base58Check for `1…`/`3…`); testnet prefixes rejected at this layer. |
+| M | Pool URL accepted with userinfo/path or a missing port — silently undialable until first connect. | ✅ Clean: `CutPrefix` scheme → `validatePoolTarget` rejects `@/?#`/whitespace, requires `net.SplitHostPort` with a numeric port in 1–65535. |
+| S | Scheme list matching by `strings.Contains` — `stratum+tcp://x` inside another string falsely accepted. | ✅ Clean: `CutPrefix` only accepts the scheme at position 0, iterated over the four canonical schemes. |
+
+All packages build, vet, and test green.
