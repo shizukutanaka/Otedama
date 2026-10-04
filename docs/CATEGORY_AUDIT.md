@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1051 update — hal-test detector-resilience + sysfs-parse + registry-guards audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hardware detection hanging or losing all results on partial failure/cancel. | ✅ Clean: `PartialFailureIsTolerated` (one driver's error doesn't drop others' devices), `CanceledContextReturnsPartialResults`, `ContextCancellationInterruptsDrainLoop`, nil-logger + nil-registry safe — the degrade matrix is covered. |
+| M | sysfs parsing mishandling malformed kernel data. | ✅ Clean: InferVendorName known/unknown-fallback/whitespace/empty; ReadSysFile nonexistent→empty, trims trailing, **preserves internal newlines**; ParseGPUDevice valid/missing-vendor/SHA256d-false/**logfn called on validation failure**/correct render-node ID; InferModel with/without PCI-ID. |
+| M | Duplicate device enumeration (same GPU via symlink aliases). | ✅ Clean: `Enumerate_DeduplicatesCanonicalPaths` + `SkipsNonRenderDEntries` — the canonical-path dedupe that prevents double-counting is explicitly pinned against fake sysfs. |
+| M | Registry invariants (duplicates, snapshot aliasing, sorted output). | ✅ Clean: nil/empty-name/duplicate rejects, unknown→not-ok, `DriversReturnsSortedByName`, `DriversReturnsSnapshot` (mutating the slice doesn't leak into the registry), concurrent registration safe. |
+| S | version package untested. | ✅ Clean: build-info Get, String contains all fields, JSON roundtrip + snake_case tags — the `-X` ldflags injection surface is covered. |
+
+All packages build, vet, and test green.
