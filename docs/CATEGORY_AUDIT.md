@@ -4287,6 +4287,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 841 update — gosched + subtle-compare + manual-secret-compare audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.Gosched`/`Goexit` — scheduler hand-holding that hides a real blocking bug. | ✅ Clean: absent — scheduling is left to the runtime; blocking is always explicit (chan/timer/ctx). |
+| M | Secret material compared with `==`/manual byte loop — timing side channel. | ✅ Clean: the single secret compare (`wallet.go:149` fingerprint check in the backup-verify flow) uses `subtle.ConstantTimeCompare` — correct and necessary. |
+| S | Hand-rolled constant-time loop instead of `crypto/subtle` — subtle timing leak via early-exit. | ✅ Clean: no hand-rolled compares — subtle is the only path. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
