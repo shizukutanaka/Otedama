@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 816 update — fatal-in-lib + goroutine-capture + named-snapshot audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `log.Fatal`/`os.Exit` inside library code — kills the host process, skipping cleanup. | ✅ Clean: zero calls in `internal/` (one doc comment mentions `os.Exit(report.ExitCode())` as caller guidance) — exit surface remains `main`-only (verified sessions 562/783). |
+| M | `go func()` closure capturing a mutable loop/outer variable — race or stale-value read. | ✅ Clean: worker spawn passes `threadID` as an explicit parameter; the V1 submit goroutine captures `capturedSess`/`capturedShare` — variables deliberately snapshotted before the `go` statement. |
+| S | Unsnapshotted captures elsewhere in `go func` bodies — implicit dependency on outer mutation. | ✅ Clean: the remaining `go func() {}` bodies read only stable fields (ctx, channels, immutable opts) — the `captured*` naming convention marks the few mutable reads. |
+
+All packages build, vet, and test green.
