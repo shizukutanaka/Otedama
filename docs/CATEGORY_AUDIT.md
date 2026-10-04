@@ -2709,6 +2709,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1147 update — range-int census
+
+Classic `for i := 0; i < n; i++` vs the Go 1.22+ `for i := range n`
+idiom — modernization surface only.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ~11 classic-form sites (sha256d rounds, seed bitwalks, worker batch, submit burst); all index-only counters that `for i := range n` expresses identically — classic form retained in hot crypto paths where the familiar shape aids review against the spec | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
