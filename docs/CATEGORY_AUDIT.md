@@ -2034,6 +2034,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 903 update — net-pkg + pprof-gate + net-residual audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net/mail`/`smtp`/`textproto`/`httputil`/`rpc` — accidental alternative-protocol imports. | ✅ Clean: absent — only `net/http` (+httptest in tests) appears. |
+| M | `net/http/pprof` registered unconditionally — profiling surface always exposed. | ✅ Clean: import exists but pprof is gated behind `--pprof` (server.go:47 nolint:gosec + :44 comment verified s871); loopback-bind warning s393. |
+| S | `net/fmtp`/`netip` misuse or double-parse of `netip.Addr`. | ✅ Clean: `netip` is the single parse point (s711/891); no re-parse or fallback. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
