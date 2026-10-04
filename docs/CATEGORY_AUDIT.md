@@ -2831,6 +2831,16 @@ All packages build, vet, and test green.
 | S | Asset-name parity | ✅ Clean — doc examples (`otedama_<ver>_checksums.txt`, `.sbom.*`) are presented as intended-flow only; no current-tense claim contradicts the actual `otedama-<os>-<arch>.tar.gz` / `.deb` / `.rpm` uploads. |
 
 All packages build, vet, and test green.
+---
+## Session 1215 update — doctor-check + CLI-usage parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Doctor check count | ✅ Clean — checks.go registers exactly 17 named checks, matching CLAUDE.md's "17 並行ヘルスチェック". |
+| S | `otedama doctor` flags in API.md | ✅ Clean — `--config`/`--bitcoin-address`/`--data-dir`/`--json` all registered in doctor.go's FlagSet; JSON shape and exit codes 0/1/2 match implementation. |
+| S | Doc flag surface drift | ✅ Clean — whole-docset `--flag` census (s1214) verified; remaining non-implemented flag names are OS-tool invocations or ADR-planned commands. |
+
+All packages build, vet, and test green.
 
 ---
 
