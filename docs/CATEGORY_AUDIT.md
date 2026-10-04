@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1176 update — doc-referenced make-target parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `make <target>` invocations in docs/README/CONTRIBUTING/skills vs Makefile targets | ✅ Clean — every live reference (`setup`/`build`/`test`/`lint`/`fuzz`/`security`/`audit`/`test-integration`) resolves to a real target |
+| S | `make test-e2e` mentions | ✅ Clean — all mentions are honest historical errata (RESEARCH_IMPROVEMENTS documents the removal; `skills/tdd.md` carries the session-483 correction stating the suite and target do not exist) |
+| M | Target-name drift in CONTRIBUTING | ✅ Clean — `make setup` resolves; target list consistent |
+
+All packages build, vet, and test green.
