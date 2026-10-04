@@ -2010,6 +2010,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 901 update — exec-census + exec-seam + exec-pipe audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `exec.Command` argv surface — user-controlled input reaching argv. | ✅ Clean: 4 sites (systemctl/launchctl/sc.exe probes + `runCmd`); every argv element is a fixed literal or the service name — no user-controlled argv. |
+| M | `runCmd` test seam not restored — leaked stub across tests. | ✅ Clean: `service_test.go` wraps every replacement in `t.Cleanup(func() { runCmd = orig })` — verified s778. |
+| S | `StdinPipe`/`StdoutPipe`/`StderrPipe`/`ProcessState`/`ExitError`/`cmd.Env` — interactive or piped subprocesses. | ✅ Clean: absent — all subprocesses are `Output()`/`CombinedOutput()` one-shots; no pipes, no env mutation. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
