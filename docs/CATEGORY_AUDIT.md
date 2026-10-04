@@ -1853,6 +1853,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1021 update — wordlist-integrity + catalog-skip + locale-detect audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A corrupted embedded BIP-39 wordlist silently producing non-portable mnemonics. | ✅ Clean: `init()` verifies 2048-word count AND the canonical SHA-256 before the process can run — panic on either failure (fail-closed at startup); `NewWordList` re-validates uniqueness, so the list is triple-checked. |
+| M | One bad built-in catalog preventing startup. | ✅ Documented tradeoff: `NewBundle` skips catalogs that fail to construct (English fallback covers them) and `MissingTranslations` surfaces the gap — startup resilience over perfect completeness, stated inline. |
+| M | POSIX locale strings (`ja_JP.UTF-8@modifier`, `C`, `POSIX`) misdetected. | ✅ Clean: `LC_ALL`→`LC_MESSAGES`→`LANG` precedence order; codeset (`'.'`) and modifier (`'@'`) stripped, `'_'`→`'-'`; neutral `C`/`POSIX` maps to English, not a false detect. |
+| M | Case-variant BCP-47 tags failing to match. | ✅ Clean: input lower-cased before exact-then-base matching (`JA`, `ja-JP`, `ja` all resolve to Japanese). |
+| S | `go_info`-style label breakage via locale strings reaching message IDs. | ✅ Clean: locale detection stays in `DetectLang*` — never concatenated into message IDs (typed `ID` keeps the two domains apart). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
