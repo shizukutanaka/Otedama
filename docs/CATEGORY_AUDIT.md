@@ -2045,6 +2045,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1033 update — json-contract + origin-annotation + seam-injection audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `origins` key leaking into JSON output without `--origin`, or flag-layer values missing from it. | ✅ Clean both directions: `--json` alone asserts `origins` is nil-omitted; `--json --origin` asserts `origins.http_addr == "flag"` alongside the flag-supplied value — the annotation can't silently drift. |
+| M | `config show --json` flattening pools out of order or dropping them (file-only path never exercised). | ✅ Clean: `TestConfigShow_JSON_EmitsConfiguredPools` writes a real YAML via `t.TempDir` and asserts both URLs survive in order — covers the file→flatten path the flag-only tests never reach. |
+| M | Malformed numeric env warning vs. failing the run. | ✅ Clean: `TestRun_MalformedNumericEnvVar_WarnsAndSucceeds` pins warn-but-continue; `TestConfigValidate_MalformedNumericEnvVar_PrintsWarning` pins the same on validate — matching the EnvWarnings design. |
+| M | Service status tri-state (installed-stopped / running / not-installed) conflated. | ✅ Clean: three dedicated tests, one per state, each asserting its distinct output line; install/uninstall/status manager-error paths → `exitRuntime`, parse errors → `exitUsage` (injectable seams exercised). |
+| S | Origin annotations (default/file/env/flag) only partially pinned. | ✅ Clean: Default-values, Flag-, File-annotated, and NoOrigin each have a dedicated test — all four classes covered. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
