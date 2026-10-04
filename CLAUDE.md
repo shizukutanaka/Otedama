@@ -50,7 +50,7 @@ Otedama/
 │   └── version/            # ビルドメタデータ（ldflags 注入）
 ├── docs/adr/               # ADR-001〜011
 ├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md
-└── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml
+└── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml / devin-direct-merge.yml
 
 # 存在しないパス（作成禁止）:
 # cmd/otedamad/           → デーモンモードは service サブコマンドで代替
