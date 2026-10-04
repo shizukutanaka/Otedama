@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 889 update — setenv-prod + exec-env + env-warning audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Setenv`/`Unsetenv`/`Clearenv` in prod — global env mutation that races reads. | ✅ Clean: absent — the only env writes are the six test sites in `cmd/otedama` (defer-restored, s731). |
+| M | `exec.Cmd.Env` overriding the child env — secret/environment leakage to spawned tools. | ✅ Clean: no `.Env` assignment in prod — `exec.Command` inherits the process env; systemctl invocations pass only argv (s864). |
+| S | Env warnings lost between the config layer and the operator. | ✅ Clean: `config.EnvWarnings(nil)` is surfaced in three places (run.go, config.go, doctor) — same warnings at every entry point. |
+
+All packages build, vet, and test green.
