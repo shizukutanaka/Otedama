@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1063 update — test-meta family 3 (benchmark hygiene + example tests + name uniqueness)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Benchmark measuring setup or wall-clock instead of the unit under test. | ✅ Clean: all 11 benchmarks set up outside `b.N`, call `ReportAllocs` + `ResetTimer` after setup; `BenchmarkWorkerGrind` mutates only the nonce in-loop (the hash is the measurement, not noise); `BenchmarkWriteText` exercises the realistic 200-series shape the decorate-sort optimization targets. |
+| M | Duplicate subtest names silently shadowing (only the last one runs visibly). | ✅ Clean: `go test -list` shows zero duplicate test names in the largest package (engine); table tests use named entries. |
+| S | `Example*` tests absent. | ✅ Benign: zero example tests — the repo demonstrates usage via `docs/` + `--help` output + integration tests; godoc examples would be additive, not a defect. |
+| S | Benchmark correctness defects (b.Fatal in loop, timer misuse). | ✅ Clean: `b.Fatal` only on unexpected harness errors; timer calls are before `b.N` loops. |
+
+All packages build, vet, and test green.
