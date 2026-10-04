@@ -30,7 +30,7 @@ otedama <command> [flags]
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
-| `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
+| `service install\|uninstall\|status` | Manage the background service (systemd user unit / launchd agent / Windows Service Control Manager via `sc.exe`). **Correction (session 486):** this table previously said "Task Scheduler" — nothing invokes `schtasks.exe`; the Windows service is an SCM registration. |
 | `doctor` | Run self-diagnostic checks. |
 | `wallet verify` | Verify a written-down recovery phrase against the stored wallet by public fingerprint — reads the phrase from stdin, never decrypts `wallet.dat`. |
 | `wallet change-passphrase` | Re-encrypt `wallet.dat` under a new passphrase; both passphrases come from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE`, never argv. |
@@ -61,12 +61,12 @@ its default, and its validation rule:
 |---|---|---|---|
 | `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | valid mainnet address, checksum verified (see §3.3) |
 | `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a valid mainnet address, checksum verified |
-| `pools[].url` | — (file only) | built-in recommendations | supported scheme + non-empty host (§3.3) |
+| `pools[].url` | — (file only) | single built-in default (`config.DefaultPoolURL`) | supported scheme + non-empty host (§3.3) |
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
 | `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured for `stratum+tls://` and `stratum+v2tls://` |
-| `workers.name` | — (file only) | `""` | appended as `.name` to the `user_identity` |
+| `workers.name` | — (file only) | `""` → hostname fallback | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
 | `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
 | `log_format` | `OTEDAMA_LOG_FORMAT` | `text` | ∈ {text, json} |
@@ -223,8 +223,9 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 ## 7. Known limitations
 
 Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) engine does not yet
-route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
+simulated; (2) Noise NX uses P-256, not secp256k1; (3) **V2** sessions do not yet
+route through the `poolproto` abstraction — V1 sessions do
+(KNOWN_LIMITATIONS §3, resolved session 91); (4) GPU detection is Linux-only;
 (5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
 
 ---

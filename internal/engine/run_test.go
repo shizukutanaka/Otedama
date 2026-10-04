@@ -116,7 +116,7 @@ func (fp *fakePool) serve() {
 	encoded, _ = stratum.EncodeFrame(outF)
 	conn.Write(encoded) //nolint:errcheck
 
-	// 5. Send NewMiningJob (future job: no min_ntime) followed by the
+	// 5. Send NewMiningJob (future job: no ntime_start) followed by the
 	// SetNewPrevHash that activates it — the full SV2 activation
 	// sequence. The all-0xFF channel target from step 4 means every
 	// header hash qualifies as a share, so the CPU finds one instantly.
@@ -136,10 +136,10 @@ func (fp *fakePool) serve() {
 	conn.Write(encoded) //nolint:errcheck
 
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     1,
-		MinNtime:  0x60000000,
-		NBits:     0x207fffff, // network compact target (easiest, for realism)
+		ChannelID:  1,
+		JobID:      1,
+		NtimeStart: 0x60000000,
+		NBits:      0x207fffff, // network compact target (easiest, for realism)
 	}
 	for i := range prev.PrevHash {
 		prev.PrevHash[i] = byte(0xA0 + i%16)
@@ -288,7 +288,7 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 				t.Errorf("submitted NVersion = 0x%08X, want 0x20000004 (the job's version)", s.NVersion)
 			}
 			if s.NTime < 0x60000000 {
-				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash min_ntime floor; stale values roll forward — see rollNTime)", s.NTime)
+				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash ntime_start floor; stale values roll forward — see rollNTime)", s.NTime)
 			}
 			if s.JobID != 1 {
 				t.Errorf("submitted JobID = %d, want 1", s.JobID)
@@ -388,7 +388,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
 		}
 		if s.NTime < 0x60000000 {
-			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (min_ntime floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
+			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (ntime_start floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
 		}
 	case <-ctx.Done():
 		t.Fatal("no share within 3s at the easiest share target — share target not honored")
@@ -470,7 +470,7 @@ func TestRollNTime(t *testing.T) {
 		wantAt   string // "now" | "declared"
 	}{
 		{"stale ntime rolls forward to now", now - 3600, "now"},
-		{"future ntime kept verbatim (min_ntime floor)", now + 3600, "declared"},
+		{"future ntime kept verbatim (ntime_start floor)", now + 3600, "declared"},
 		{"exactly now unchanged", now, "declared"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2529,7 +2529,7 @@ func (fp *responsivePool) serve() {
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
 
 	// SV2 activation order: the job is sent first as a future job (no
-	// min_ntime), then SetNewPrevHash names it to activate — matching how
+	// ntime_start), then SetNewPrevHash names it to activate — matching how
 	// a real pool stages jobs ahead of the chain tip that will use them.
 	// Sending SetNewPrevHash before its job exists hits the engine's
 	// "names unknown job" guard (a real defensive path, but not what this
@@ -2545,10 +2545,10 @@ func (fp *responsivePool) serve() {
 
 	// Network nBits 0x207fffff is the easiest possible target.
 	prev := stratum.SetNewPrevHash{
-		ChannelID: 1,
-		JobID:     1,
-		MinNtime:  0x60000000,
-		NBits:     0x207fffff,
+		ChannelID:  1,
+		JobID:      1,
+		NtimeStart: 0x60000000,
+		NBits:      0x207fffff,
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
@@ -2600,8 +2600,8 @@ func (fp *responsivePool) serve() {
 				// new epoch stays nearly-max so workers keep producing
 				// shares under it.
 				st := stratum.SetTarget{ChannelID: share.ChannelID}
-				for i := range st.MaxTarget {
-					st.MaxTarget[i] = 0xFE
+				for i := range st.Target {
+					st.Target[i] = 0xFE
 				}
 				payload, _ = st.Encode()
 				fp.emit(conn, stratum.MsgSetTarget, true, payload)
@@ -3168,7 +3168,7 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
 		payload, _ = job.Encode()
 		emit(stratum.MsgNewMiningJob, true, payload)
-		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, NtimeStart: 0x60000000, NBits: 0x207fffff}
 		payload, _ = prev.Encode()
 		emit(stratum.MsgSetNewPrevHash, true, payload)
 
