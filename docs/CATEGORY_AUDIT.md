@@ -2760,6 +2760,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1151 update — struct-tag census
+
+Struct tag key spelling/sanity (`jason:`, `omlitempty`, exotic keys).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero typos — only two tag keys in use: `json` (43 sites) and `yaml` (20); all well-formed `key:"value"` pairs | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
