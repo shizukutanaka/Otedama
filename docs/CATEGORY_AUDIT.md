@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 821 update — runtime-surface + tuning-override + finalizer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `runtime.*` used beyond platform/metadata needs — layout dependence or scheduler poking. | ✅ Clean: `runtime.` sites are `NumCPU` (worker-count default, device model string), `GOOS`/`GOARCH` platform dispatch, `Version` metadata — no layout or scheduler dependency. |
+| M | `GOMAXPROCS`/`SetGCPercent`/`FreeOSMemory` called from inside the binary — overriding operator tuning. | ✅ Clean: absent — process tuning stays with the operator (GOMAXPROCS is the documented knob, per the --worker-threads doc fix in session 464). |
+| S | `runtime.SetFinalizer`/`KeepAlive` — resurrection hazards and GC-pinning bugs. | ✅ Clean: absent — the only `KeepAlive` hits are literal launchd-plist XML keys, unrelated to `runtime`. |
+
+All packages build, vet, and test green.
