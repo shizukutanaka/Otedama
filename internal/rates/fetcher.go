@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -53,8 +54,9 @@ var defaultSources = []Source{
 			// "95000foo" would parse as 95000), whereas ParseFloat rejects any
 			// non-numeric suffix. The sanity band still catches out-of-range
 			// values, but strict parsing rejects them earlier and with a clearer
-			// error.
-			return strconv.ParseFloat(v.Data.Amount, 64)
+			// error. ParseFloat also accepts "NaN"/"Inf" literals, so non-finite
+			// results are rejected explicitly here.
+			return parseRate(v.Data.Amount)
 		},
 	},
 	{
@@ -73,7 +75,7 @@ var defaultSources = []Source{
 				if len(ticker.C) == 0 {
 					continue
 				}
-				return strconv.ParseFloat(ticker.C[0], 64)
+				return parseRate(ticker.C[0])
 			}
 			return 0, fmt.Errorf("rates: kraken: no ticker data")
 		},
@@ -94,6 +96,20 @@ var defaultSources = []Source{
 			return 0, fmt.Errorf("rates: coingecko: missing bitcoin.usd field")
 		},
 	},
+}
+
+// parseRate parses a source-supplied numeric string, rejecting non-finite
+// results (NaN, ±Inf) that strconv.ParseFloat would otherwise accept
+// silently for inputs like "NaN" or "Infinity".
+func parseRate(s string) (float64, error) {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, fmt.Errorf("rates: non-finite price %q", s)
+	}
+	return v, nil
 }
 
 // CacheDuration is how long a fetched rate is considered fresh.
@@ -237,13 +253,13 @@ func (f *Fetcher) RateAge() (age time.Duration, everFetched bool) {
 // diagnostic fetch would double the request rate and risk an HTTP 429 ban
 // (CoinGecko's free tier rejects bursts aggressively). A coalesced caller
 // receiving the shared result observes the leader's context outcome, which is
-// the intended behaviour: every caller wants the same current rate.
+// the intended behavior: every caller wants the same current rate.
 func (f *Fetcher) Fetch(ctx context.Context) error {
 	f.inflightMu.Lock()
 	if call := f.inflight; call != nil {
 		f.inflightMu.Unlock()
 		// A fetch is already running; wait for it (or for our own context to be
-		// cancelled, so a coalesced caller is never pinned to the leader's
+		// canceled, so a coalesced caller is never pinned to the leader's
 		// lifetime) and adopt its result.
 		select {
 		case <-call.done:
@@ -284,7 +300,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 		}(src)
 	}
 
-	var rates []float64
+	rates := make([]float64, 0, len(f.sources))
 	var maxSkew float64
 	var skewSeen bool
 	// Collect per-source errors so that, if every source fails, the caller
@@ -304,7 +320,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
-		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+		if !(r.rate >= minPlausibleRateUSD && r.rate <= maxPlausibleRateUSD) {
 			// A reading outside the sanity band is a unit/parse error or
 			// manipulation, never a real quote. Drop it so it cannot pull the
 			// median. Stay quiet on a plain zero (a source that simply has no
@@ -330,7 +346,8 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 				"rates: WARNING: local clock is %.0f s off server time "+
 					"(threshold %.0f s); TLS certificate validation, mining "+
 					"nTime fields, and rate-freshness judgements may be incorrect",
-				maxSkew, clockSkewWarnThreshold))
+				maxSkew, clockSkewWarnThreshold,
+			))
 		}
 	}
 
@@ -378,8 +395,8 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 // fetchOne performs a single HTTP GET against src and returns the parsed
 // BTC/USD rate, the absolute clock skew observed from the HTTP Date response
 // header (0 if absent or unparseable), and any error.
-func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewSecs float64, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
+func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate, skewSecs float64, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, http.NoBody)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -418,7 +435,7 @@ func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewS
 
 // StartBackground launches a goroutine that refreshes the rate every
 // interval. It performs an initial fetch immediately.
-// The goroutine exits when ctx is cancelled.
+// The goroutine exits when ctx is canceled.
 func (f *Fetcher) StartBackground(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = CacheDuration

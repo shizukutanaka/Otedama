@@ -65,8 +65,20 @@ privileges. No user-space software resists that threat.
 
 **Mitigation:** Stratum V2 Noise NX handshake authenticates the pool
 to the miner via a static public key. `internal/stratum/noise.go`
-implements the handshake. Falling back to V1 is not supported, so
-downgrade attacks are structurally impossible.
+implements the handshake. V1 is also supported (ADR-006): the protocol
+is selected by the URL scheme the operator configures —
+`stratum+v2://` / `stratum+v2tls://` get Noise/PKI authentication,
+while `stratum://` (V1) is plaintext with no MITM protection at all
+and `stratum+tls://` (V1) is protected only by the PKI. An attacker
+cannot downgrade a configured `stratum+v2*` pool — there is no
+auto-negotiation — but nothing stops an operator from configuring a
+plaintext V1 pool; that is a configuration choice, and the residual
+risk below applies.
+
+**Residual risk (V1):** on a `stratum://` pool, an on-path attacker
+can hijack shares and inject jobs with no authentication barrier —
+the classic threat V2 was designed to close. Operators should prefer
+`stratum+v2tls://` or at minimum `stratum+tls://` pools.
 
 **Residual risk:** In v3.0.0-alpha, the Noise DH uses P-256 instead of
 the spec-mandated secp256k1. This does not weaken authentication but
@@ -108,18 +120,49 @@ weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 **Threat:** A malicious pool sends a crafted frame that causes buffer
 overflow, panic, or memory exhaustion.
 
-**Mitigation:** `MaxFrameSize` caps any single frame. The fuzz tests
-`FuzzDecodeHeader` and `FuzzDecoder_ReadFrame` run nightly with
-automatic crasher reporting.
+**Mitigation:** `MaxFrameSize` caps any single frame. Fuzz tests
+cover every untrusted-input parser — V1 wire messages and
+notifications, SV2 frame/header/message/handshake decoders and
+primitives, address validators, target bitmath, env-var parsing,
+config-file decode, arbitration inputs, and BIP-39 restore — via
+`make fuzz` (a scheduled CI fuzz job is not yet wired).
 
 **Residual risk:** Go panic safety provides strong guarantees, but
 a panic in the decode path still terminates the miner (DoS, below).
 
 ---
 
+**Threat:** The chosen pool itself mines selfishly against the user's
+submitted work — withholding found blocks to gain an advantage. Unlike
+share stealing, this is *undetectable*: Bahrani & Weinberg prove a
+selfish-mining strategy whose orphan pattern is statistically
+indistinguishable from honest mining and profitable from 38.2% of
+network hashrate (arXiv:2309.06847). No client-side observation can
+prove or disprove it.
+
+**Mitigation:** None direct — the attack is definitionally invisible to
+the miner. What Otedama provides is *cheap defection*: multi-pool
+failover and endpoint diversity (`otedama doctor`'s pool-diversity
+checks) keep the cost of leaving a pool low, and the pool-vs-local
+share reconciliation (session 260) surfaces sustained payout-vs-work
+divergence that, while it cannot distinguish selfish mining from bad
+luck, is the closest observable signal.
+
+**Residual risk:** A miner on a selfish-mining pool loses revenue and
+cannot know it. The honest advice is to prefer pools whose own revenue
+model disincentivises withholding (PPLNS-family schemes penalise
+withheld blocks; FPPS pools absorb the risk instead) and to rotate
+periodically — both are operator choices, not code.
+
+---
+
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
+**Mitigation:** Only two third-party runtime dependencies:
+`golang.org/x/crypto` and `gopkg.in/yaml.v3` (plus the Go standard
+library). All GitHub Actions pinned by SHA. Dependabot auto-updates
+with review. govulncheck runs in CI. See ADR-003.
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
 `gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
 with review. govulncheck runs in CI. See ADR-003.
@@ -221,6 +264,12 @@ need to defeat this should tunnel the pool connection over Tor or a VPN
 (Tor-by-default is planned — ADR-007 B7). Adding traffic shaping or a
 mining-cookie-style construct is tracked as a future hardening item.
 
+The same class of timing channel exists on the payout side: Rohrer &
+Tschorsch, "Counting Down Thunder" (arXiv:2006.12143), show that
+HTLC-resolution timing leaks payment endpoints in payment-channel
+networks — the Lightning analogue of the Stratum leak above.
+Tor-by-default (ADR-007 B7) mitigates both channels at once.
+
 ---
 
 ### Denial of service (D)
@@ -246,6 +295,48 @@ channel-bounded.
 **Residual risk:** Legitimate high-throughput pools may trigger drops.
 The design tradeoff favors freshness (no stale share penalty) over
 completeness (drop old jobs rather than queue indefinitely).
+
+---
+
+**Threat (network adversary):** An on-path attacker corrupts a single
+SV2 ciphertext so the Noise nonce counters desynchronize — every
+subsequent frame fails to decrypt and the session silently dies while
+the miner keeps hashing stale jobs (the EROSION attack, Tran/von
+Arx/Vanbever, IEEE S&P 2024 — same endpoint behavior as dropping all
+V1 packets).
+
+**Mitigation:** Otedama treats any frame/decrypt error as session
+fatal: the read loop exits, the engine's reconnect loop re-dials, and
+a fresh Noise handshake re-synchronizes the nonce counters. There is
+no silent-degradation mode in which the miner continues on a broken
+session — the desync degrades into a bounded reconnect rather than
+persistent unrecoverable desynchronization.
+
+**Residual risk:** Sustained tampering produces a reconnect loop —
+bounded by the exponential reconnect backoff, but shares are lost
+during each gap. No client-side fix exists: the countermeasure is
+routing hygiene (pool-side RPKI/monitoring), which is the pool's and
+the network's responsibility, not the client's.
+
+---
+
+**Threat:** A hostile or buggy SV2 pool floods *distinct* job IDs
+(`NewMiningJob`) without ever rotating the chain tip, so the
+outstanding-job maps grow without bound — memory exhaustion. The
+per-message bound (`MaxFrameSize`) does not help: each frame is small;
+the *count* is unbounded. Noise encryption is irrelevant because the
+actor here is the pool itself, not a MitM.
+
+**Mitigation:** Both outstanding-job maps are capped at 64 with FIFO
+eviction: the engine loop's `jobs` map (`storeBoundedJob`, `jobsCap`)
+and the stratumv2 adapter read loop's `pending` map (`pendingCap`).
+A `SetNewPrevHash` still drains the map to the named job, so the bound
+only bites pools that flood *without* rotating the tip. The newest jobs
+— most likely to be activated — survive eviction.
+
+**Residual risk:** None identified. A legitimate pool exceeding 64
+in-flight jobs would lose the oldest ones; the tip's named job is
+always retained when present, so activation still proceeds.
 
 ---
 
@@ -323,6 +414,22 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
+**Mitigation (planned, not yet live):** the signed-release pipeline
+described in `VERIFY.md` (checksums + cosign keyless signatures +
+SBOMs, via `.goreleaser.yaml`) exists as configuration but is not
+wired into `release.yml` — current releases ship plain tarballs. The
+only available verification today is rebuilding from source per
+VERIFY.md. `install.sh` fetches the release asset matching the
+platform name.
+
+**Residual risk:** until signed releases ship, downloaded artifacts
+cannot be cryptographically verified — users with strict supply-chain
+requirements should build from source.
+
+**Residual risk (once live):** the signing key can be stolen.
+GitHub's OIDC-based keyless signing via Sigstore reduces this to
+"compromise of the GitHub Actions runtime," which is actively
+monitored.
 **Mitigation:** Release artifacts ship a `checksums.txt` file that
 `install.sh` verifies with SHA-256 before installing. `install.sh`
 also supports optional cosign `verify-blob` against
@@ -338,6 +445,18 @@ identity bound to the release workflow) remains a release-hardening
 item; when enabled, `install.sh` picks it up automatically and
 `--certificate-identity-regexp` pins the signer identity to this
 repository's workflows.
+
+## Posture notes
+
+- **FIPS 140-3:** Otedama is not FIPS-compliant by design. The
+  Stratum V2 Noise NX transport (`internal/stratum/noise.go`, not yet
+  wired into live connections — KNOWN_LIMITATIONS §2) uses
+  ChaCha20-Poly1305 from `golang.org/x/crypto`, which is not in the
+  FIPS-approved algorithm list and is outside the Go FIPS module, so
+  enabling `fips140=on` does not make that transport FIPS-validated. (Wallet-at-rest encryption —
+  AES-256-GCM — *is* a FIPS-validated construction; the gap is the
+  transport.) Environments with a hard FIPS requirement should not
+  deploy Otedama. See `GODEBUG_NOTES.md`.
 
 ## Assumptions
 
@@ -365,7 +484,8 @@ The minimum review interval is once per major version.
 ## References
 
 - ADR-001 — Non-custodial wallet model
-- ADR-002 — Stratum V2 as the exclusive pool protocol
+- ADR-002 — Stratum V2 as the exclusive pool protocol (partially
+  superseded by ADR-006: V1 support shipped)
 - ADR-003 — Zero runtime dependencies
 - `SECURITY.md` — Vulnerability reporting
 - [Stratum V2 specification](https://stratumprotocol.org/)
@@ -373,3 +493,8 @@ The minimum review interval is once per major version.
 - Recabarren & Carbunar, "Hardening Stratum, the Bitcoin Pool Mining
   Protocol" (arXiv:1703.06545) — basis for the traffic-analysis
   side-channel threat in the Information-disclosure section.
+- Bahrani & Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847)
+  — basis for the pool-selfishness threat in the Tampering section.
+- Rohrer & Tschorsch, "Counting Down Thunder: Timing Attacks on
+  Privacy in Payment Channel Networks" (arXiv:2006.12143) — the
+  Lightning analogue of the Stratum timing side channel.

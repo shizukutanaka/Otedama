@@ -31,6 +31,7 @@ otedama run [flags]
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
 | `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
+| `--pprof` | bool | `false` | Mount Go pprof profiling at `/debug/pprof/` on the `--http-addr` server (intended for loopback/private addresses only). |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
 **Exit codes:**
@@ -97,9 +98,12 @@ Inspect or validate the effective configuration.
 
 Install, remove, or query the auto-start service.
 
-- `otedama service install [--config path] [--data-dir path]`
+- `otedama service install [--config path] [--data-dir path]
+  [--bitcoin-address addr] [--log-level lvl] [--log-format fmt]
+  [--language tag]`
   Install the user-level service (systemd user unit on Linux,
-  LaunchAgent on macOS, Windows service on Windows).
+  LaunchAgent on macOS, Windows service via `sc.exe` on Windows).
+  `--bitcoin-address` is required when no config file supplies one.
 - `otedama service uninstall` — Remove and stop the service.
 - `otedama service status` — Print installation and running state.
 
@@ -122,6 +126,40 @@ gating or monitoring agents. Shape: `{"summary":{"passed","failed","warnings",
 - `2` — At least one check failed.
 
 The same exit code is mirrored in the JSON `exit_code` field.
+
+### `otedama wallet`
+
+Manage the Lightning wallet without starting the engine.
+
+- `otedama wallet verify [--data-dir path] [--config path]` — Check that a
+  written-down recovery phrase derives to the same seed as the stored wallet.
+  Reads the phrase from **stdin** (never argv — process lists leak it), validates
+  the BIP-39 checksum, and compares public fingerprints, so `wallet.dat` is
+  never decrypted. Set `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` if the wallet was
+  created with a BIP-39 "25th word". Exits 0 on match, 1 on mismatch or
+  invalid phrase. If `wallet.fingerprint` is absent, falls back to decrypting
+  `wallet.dat` — requires `OTEDAMA_WALLET_PASSPHRASE`.
+- `otedama wallet change-passphrase [--data-dir path] [--config path]` —
+  Re-encrypt `wallet.dat` under a new passphrase. Requires
+  `OTEDAMA_WALLET_PASSPHRASE` (current) and `OTEDAMA_WALLET_NEW_PASSPHRASE`
+  (new) — passphrases are never accepted on argv because `ps aux` exposes
+  them to every local process. Exits 0 on success; never creates a wallet —
+  missing `wallet.dat` is an error.
+
+The wallet directory resolves through the usual four layers
+(`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
+
+### `otedama completion`
+
+Print a shell-completion script for bash, zsh, or fish to stdout.
+
+```
+otedama completion bash > /etc/bash_completion.d/otedama
+otedama completion zsh  > "${fpath[1]}/_otedama"
+otedama completion fish > ~/.config/fish/completions/otedama.fish
+```
+
+Passing an unsupported shell exits with a usage error (2).
 
 Suitable as a container healthcheck command:
 ```yaml
@@ -198,8 +236,14 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
-| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Consulted on first run (new wallet creation) and by `otedama wallet verify`. |
+| `OTEDAMA_WALLET_NEW_PASSPHRASE` | — | New passphrase for `otedama wallet change-passphrase`. Environment variable only — never accepted as a flag, so it cannot leak through process lists. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
+| `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `arbitration_hysteresis_pct` (config only) | Fraction (0–1) yield advantage required to switch a device's workload. |
+| `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `curtail_below_btc_usd` (config only) | Pause all hashing when BTC/USD drops below this price (0 = disabled). |
+| `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `min_yield_sats_per_sec` (config only) | Per-device profitability floor (0 = disabled). |
+| `OTEDAMA_POWER_WATTS` | `power_watts` (config only) | Rig's total power draw; enables `otedama_power_watts`/cost metrics (0 = unset). |
+| `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `electricity_price_per_kwh` (config only) | USD per kWh; enables the `otedama_power_cost_usd_per_hour` gauge. |
 
 ---
 
@@ -269,6 +313,7 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+| `otedama_devices_idle` | gauge | — | Devices left unassigned this cycle (no compatible accepting stream, or none cleared `min_yield_sats_per_sec`). A persistent non-zero value means the floor is parking hardware. |
 
 **Economics & power**
 

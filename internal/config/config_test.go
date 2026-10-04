@@ -4,6 +4,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func TestResolve_FlagOverridesEnvOverridesFileOverridesDefaults(t *testing.T) {
 		BitcoinAddress: "bc1qfromflag00000000000000000000000000000000",
 	}
 
-	got := Resolve(fromFile, env, flags)
+	got := Resolve(&fromFile, env, &flags)
 
 	// Flag wins for BitcoinAddress.
 	if got.BitcoinAddress != flags.BitcoinAddress {
@@ -60,7 +61,7 @@ func TestResolve_FileOverridesDefaultsWhenNoEnvOrFlag(t *testing.T) {
 	fromFile := Config{
 		LogLevel: "error",
 	}
-	got := Resolve(fromFile, nil, FlagValues{})
+	got := Resolve(&fromFile, nil, &FlagValues{})
 
 	if got.LogLevel != "error" {
 		t.Errorf("LogLevel = %q, want file value %q", got.LogLevel, "error")
@@ -69,7 +70,7 @@ func TestResolve_FileOverridesDefaultsWhenNoEnvOrFlag(t *testing.T) {
 
 func TestResolve_EmptyLayersPreserveDefaults(t *testing.T) {
 	// With no file, no env, no flags, the result must equal Defaults.
-	got := Resolve(Config{}, nil, FlagValues{})
+	got := Resolve(&Config{}, nil, &FlagValues{})
 	want := Defaults()
 
 	if got.LogLevel != want.LogLevel {
@@ -90,7 +91,7 @@ func TestResolve_EmptyStringInHigherLayerDoesNotOverrideLower(t *testing.T) {
 	env := map[string]string{
 		"OTEDAMA_LOG_LEVEL": "",
 	}
-	got := Resolve(fromFile, env, FlagValues{LogLevel: ""})
+	got := Resolve(&fromFile, env, &FlagValues{LogLevel: ""})
 
 	if got.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want file value %q (empty env/flag must not override)", got.LogLevel, "debug")
@@ -105,7 +106,7 @@ func TestResolve_PoolsFromFileUsedWhenFlagsEmpty(t *testing.T) {
 			{URL: "stratum+v2://braiins.com:3336"},
 		},
 	}
-	got := Resolve(fromFile, nil, FlagValues{})
+	got := Resolve(&fromFile, nil, &FlagValues{})
 
 	if len(got.Pools) != 1 {
 		t.Fatalf("got %d pools, want 1", len(got.Pools))
@@ -249,6 +250,15 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"ssh rejected", "ssh://pool.example.com", true},
 		{"no scheme rejected", "pool.example.com:3333", true},
 		{"empty host rejected", "stratum+v2://", true},
+		{"missing port rejected", "stratum+tcp://pool.example.com", true},
+		{"empty port rejected", "stratum+tcp://pool.example.com:", true},
+		{"non-numeric port rejected", "stratum+tcp://pool.example.com:abc", true},
+		{"port out of range rejected", "stratum+tcp://pool.example.com:99999", true},
+		{"zero port rejected", "stratum+tcp://pool.example.com:0", true},
+		{"userinfo rejected", "stratum+tcp://user:pass@pool.example.com:3333", true},
+		{"path rejected", "stratum+tcp://pool.example.com:3333/extra", true},
+		{"whitespace rejected", "stratum+tcp://pool.example.com :3333", true},
+		{"ipv6 literal accepted", "stratum+v2://[2001:db8::1]:3336", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -331,7 +341,7 @@ func TestZeroConfigurationStartup(t *testing.T) {
 	flags := FlagValues{
 		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}
-	cfg := Resolve(Config{}, nil, flags)
+	cfg := Resolve(&Config{}, nil, &flags)
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("zero-configuration invocation (BitcoinAddress only) failed validation: %v", err)
@@ -356,7 +366,7 @@ func TestLogFormat_DefaultIsText(t *testing.T) {
 
 func TestLogFormat_FromConfigFile(t *testing.T) {
 	file := Config{LogFormat: "json"}
-	cfg := Resolve(file, nil, FlagValues{})
+	cfg := Resolve(&file, nil, &FlagValues{})
 	if cfg.LogFormat != "json" {
 		t.Errorf("LogFormat = %q, want json (from config file)", cfg.LogFormat)
 	}
@@ -365,7 +375,7 @@ func TestLogFormat_FromConfigFile(t *testing.T) {
 func TestLogFormat_EnvOverridesFile(t *testing.T) {
 	file := Config{LogFormat: "json"}
 	env := map[string]string{"OTEDAMA_LOG_FORMAT": "text"}
-	cfg := Resolve(file, env, FlagValues{})
+	cfg := Resolve(&file, env, &FlagValues{})
 	if cfg.LogFormat != "text" {
 		t.Errorf("LogFormat = %q, want text (env overrides file)", cfg.LogFormat)
 	}
@@ -374,7 +384,7 @@ func TestLogFormat_EnvOverridesFile(t *testing.T) {
 func TestLogFormat_FlagOverridesEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_LOG_FORMAT": "json"}
 	flags := FlagValues{LogFormat: "text"}
-	cfg := Resolve(Config{}, env, flags)
+	cfg := Resolve(&Config{}, env, &flags)
 	if cfg.LogFormat != "text" {
 		t.Errorf("LogFormat = %q, want text (flag overrides env)", cfg.LogFormat)
 	}
@@ -382,7 +392,7 @@ func TestLogFormat_FlagOverridesEnv(t *testing.T) {
 
 func TestLogFormat_EmptyFileDoesNotClobberDefault(t *testing.T) {
 	file := Config{} // LogFormat is empty
-	cfg := Resolve(file, nil, FlagValues{})
+	cfg := Resolve(&file, nil, &FlagValues{})
 	if cfg.LogFormat != "text" {
 		t.Errorf("LogFormat = %q, want text (empty file preserves default)", cfg.LogFormat)
 	}
@@ -392,7 +402,7 @@ func TestZeroConfigurationStartup_IncludesLogFormat(t *testing.T) {
 	flags := FlagValues{
 		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}
-	cfg := Resolve(Config{}, nil, flags)
+	cfg := Resolve(&Config{}, nil, &flags)
 	if cfg.LogFormat != "text" {
 		t.Errorf("zero-config LogFormat = %q, want text", cfg.LogFormat)
 	}
@@ -490,7 +500,7 @@ func TestValidate_CurtailBelowBTCUSD(t *testing.T) {
 
 func TestResolve_CurtailBelowBTCUSD_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_CURTAIL_BELOW_BTC_USD": "50000"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.CurtailBelowBTCUSD != 50000 {
 		t.Errorf("CurtailBelowBTCUSD = %g, want 50000", cfg.CurtailBelowBTCUSD)
 	}
@@ -498,7 +508,7 @@ func TestResolve_CurtailBelowBTCUSD_EnvOverride(t *testing.T) {
 
 func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
 	env := map[string]string{"OTEDAMA_CURTAIL_BELOW_BTC_USD": "not-a-number"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.CurtailBelowBTCUSD != 0 {
 		t.Errorf("invalid env should leave default 0; got %g", cfg.CurtailBelowBTCUSD)
 	}
@@ -623,7 +633,7 @@ func TestValidate_PowerWatts(t *testing.T) {
 
 func TestResolve_PowerWatts_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_POWER_WATTS": "1200"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.PowerWatts != 1200 {
 		t.Errorf("PowerWatts = %g, want 1200", cfg.PowerWatts)
 	}
@@ -631,7 +641,7 @@ func TestResolve_PowerWatts_EnvOverride(t *testing.T) {
 
 func TestResolve_PowerWatts_InvalidEnvIgnored(t *testing.T) {
 	env := map[string]string{"OTEDAMA_POWER_WATTS": "not-a-number"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.PowerWatts != 0 {
 		t.Errorf("invalid env should leave default 0; got %g", cfg.PowerWatts)
 	}
@@ -678,12 +688,12 @@ func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 	// flag bound to FlagValues (empty default), the file value must win
 	// when no flag is passed.
 	fromFile := Config{LogFormat: "json"}
-	cfg := Resolve(fromFile, nil, FlagValues{})
+	cfg := Resolve(&fromFile, nil, &FlagValues{})
 	if cfg.LogFormat != "json" {
 		t.Errorf("Resolve: file log_format=json overridden, got %q", cfg.LogFormat)
 	}
 	// An explicit flag still wins.
-	cfg = Resolve(fromFile, nil, FlagValues{LogFormat: "text"})
+	cfg = Resolve(&fromFile, nil, &FlagValues{LogFormat: "text"})
 	if cfg.LogFormat != "text" {
 		t.Errorf("Resolve: flag log_format=text should win, got %q", cfg.LogFormat)
 	}
@@ -695,7 +705,7 @@ func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 
 func TestResolve_WorkerNameFromFile(t *testing.T) {
 	fromFile := Config{Workers: WorkerConfig{Name: "rig-01"}}
-	cfg := Resolve(fromFile, nil, FlagValues{})
+	cfg := Resolve(&fromFile, nil, &FlagValues{})
 	if cfg.Workers.Name != "rig-01" {
 		t.Errorf("Workers.Name = %q, want rig-01 (from config file)", cfg.Workers.Name)
 	}
@@ -703,7 +713,7 @@ func TestResolve_WorkerNameFromFile(t *testing.T) {
 
 func TestResolve_LanguageFromFile(t *testing.T) {
 	fromFile := Config{Language: "ja"}
-	cfg := Resolve(fromFile, nil, FlagValues{})
+	cfg := Resolve(&fromFile, nil, &FlagValues{})
 	if cfg.Language != "ja" {
 		t.Errorf("Language = %q, want ja (from config file)", cfg.Language)
 	}
@@ -711,7 +721,7 @@ func TestResolve_LanguageFromFile(t *testing.T) {
 
 func TestResolve_DataDirFromFile(t *testing.T) {
 	fromFile := Config{DataDir: "/data/otedama"}
-	cfg := Resolve(fromFile, nil, FlagValues{})
+	cfg := Resolve(&fromFile, nil, &FlagValues{})
 	if cfg.DataDir != "/data/otedama" {
 		t.Errorf("DataDir = %q, want /data/otedama (from config file)", cfg.DataDir)
 	}
@@ -719,7 +729,7 @@ func TestResolve_DataDirFromFile(t *testing.T) {
 
 func TestResolve_LanguageFromEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_LANGUAGE": "zh"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.Language != "zh" {
 		t.Errorf("Language = %q, want zh (from env)", cfg.Language)
 	}
@@ -727,21 +737,21 @@ func TestResolve_LanguageFromEnv(t *testing.T) {
 
 func TestResolve_DataDirFromEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_DATA_DIR": "/var/lib/otedama"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.DataDir != "/var/lib/otedama" {
 		t.Errorf("DataDir = %q, want /var/lib/otedama (from env)", cfg.DataDir)
 	}
 }
 
 func TestResolve_LanguageFromFlag(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{Language: "ko"})
+	cfg := Resolve(&Config{}, nil, &FlagValues{Language: "ko"})
 	if cfg.Language != "ko" {
 		t.Errorf("Language = %q, want ko (from flag)", cfg.Language)
 	}
 }
 
 func TestResolve_DataDirFromFlag(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{DataDir: "/tmp/mydata"})
+	cfg := Resolve(&Config{}, nil, &FlagValues{DataDir: "/tmp/mydata"})
 	if cfg.DataDir != "/tmp/mydata" {
 		t.Errorf("DataDir = %q, want /tmp/mydata (from flag)", cfg.DataDir)
 	}
@@ -755,7 +765,7 @@ func TestResolve_DataDirFromFlag(t *testing.T) {
 // path so the documented "auto-detect" behavior (Config.DataDir's doc
 // comment) is real, not aspirational.
 func TestResolve_DataDirDefaultsToOSPath(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{})
+	cfg := Resolve(&Config{}, nil, &FlagValues{})
 	want := DefaultDataDir()
 	if want == "" {
 		t.Skip("DefaultDataDir() returned empty in this environment (no home dir); nothing to assert")
@@ -786,7 +796,7 @@ func TestDefaultDataDir_NonEmptyWithHomeDir(t *testing.T) {
 
 func TestResolve_FlagLanguageOverridesEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_LANGUAGE": "fr"}
-	cfg := Resolve(Config{}, env, FlagValues{Language: "de"})
+	cfg := Resolve(&Config{}, env, &FlagValues{Language: "de"})
 	if cfg.Language != "de" {
 		t.Errorf("Language = %q, want de (flag overrides env)", cfg.Language)
 	}
@@ -794,7 +804,7 @@ func TestResolve_FlagLanguageOverridesEnv(t *testing.T) {
 
 func TestResolve_FlagDataDirOverridesEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_DATA_DIR": "/env/data"}
-	cfg := Resolve(Config{}, env, FlagValues{DataDir: "/flag/data"})
+	cfg := Resolve(&Config{}, env, &FlagValues{DataDir: "/flag/data"})
 	if cfg.DataDir != "/flag/data" {
 		t.Errorf("DataDir = %q, want /flag/data (flag overrides env)", cfg.DataDir)
 	}
@@ -812,7 +822,7 @@ func TestResolve_FlagDataDirOverridesEnv(t *testing.T) {
 
 func TestResolve_HTTPAddrFromFile(t *testing.T) {
 	fromFile := Config{HTTPAddr: "127.0.0.1:9090"}
-	cfg := Resolve(fromFile, nil, FlagValues{})
+	cfg := Resolve(&fromFile, nil, &FlagValues{})
 	if cfg.HTTPAddr != "127.0.0.1:9090" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9090 (from config file)", cfg.HTTPAddr)
 	}
@@ -820,14 +830,14 @@ func TestResolve_HTTPAddrFromFile(t *testing.T) {
 
 func TestResolve_HTTPAddrFromEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}
-	cfg := Resolve(Config{}, env, FlagValues{})
+	cfg := Resolve(&Config{}, env, &FlagValues{})
 	if cfg.HTTPAddr != "0.0.0.0:8080" {
 		t.Errorf("HTTPAddr = %q, want 0.0.0.0:8080 (from env)", cfg.HTTPAddr)
 	}
 }
 
 func TestResolve_HTTPAddrFromFlag(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	cfg := Resolve(&Config{}, nil, &FlagValues{HTTPAddr: "127.0.0.1:9999"})
 	if cfg.HTTPAddr != "127.0.0.1:9999" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999 (from flag)", cfg.HTTPAddr)
 	}
@@ -835,14 +845,14 @@ func TestResolve_HTTPAddrFromFlag(t *testing.T) {
 
 func TestResolve_FlagHTTPAddrOverridesEnv(t *testing.T) {
 	env := map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}
-	cfg := Resolve(Config{}, env, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	cfg := Resolve(&Config{}, env, &FlagValues{HTTPAddr: "127.0.0.1:9999"})
 	if cfg.HTTPAddr != "127.0.0.1:9999" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999 (flag overrides env)", cfg.HTTPAddr)
 	}
 }
 
 func TestResolve_HTTPAddrDefaultsToEmpty(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{})
+	cfg := Resolve(&Config{}, nil, &FlagValues{})
 	if cfg.HTTPAddr != "" {
 		t.Errorf("HTTPAddr = %q, want empty (HTTP server disabled by default)", cfg.HTTPAddr)
 	}
@@ -1002,7 +1012,7 @@ func TestResolveWithOrigins_ConsistentWithResolve(t *testing.T) {
 	env := map[string]string{"OTEDAMA_LANGUAGE": "ja"}
 	flags := FlagValues{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
 
-	want := Resolve(fromFile, env, flags)
+	want := Resolve(&fromFile, env, &flags)
 	got, _ := ResolveWithOrigins(fromFile, env, flags)
 
 	if want.BitcoinAddress != got.BitcoinAddress {
@@ -1031,7 +1041,7 @@ func TestArbitrationHysteresisPct_DefaultIs5Pct(t *testing.T) {
 }
 
 func TestArbitrationHysteresisPct_ResolvePreservesDefault(t *testing.T) {
-	cfg := Resolve(Config{}, nil, FlagValues{})
+	cfg := Resolve(&Config{}, nil, &FlagValues{})
 	if cfg.ArbitrationHysteresisPct != 0.05 {
 		t.Errorf("resolved ArbitrationHysteresisPct = %v, want 0.05", cfg.ArbitrationHysteresisPct)
 	}
@@ -1186,5 +1196,44 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 	}
 	if o.ElectricityPricePerKWh != OriginFile {
 		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
+	}
+}
+
+// TestValidate_RejectsNonFinite covers NaN/±Inf on every float field:
+// comparisons like `x < 0` are false for NaN, so without explicit
+// guards a .nan in config.yaml or "NaN" in an env var would validate.
+func TestValidate_RejectsNonFinite(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	fields := []struct {
+		name string
+		set  func(*Config, float64)
+	}{
+		{"arbitration_hysteresis_pct", func(c *Config, v float64) { c.ArbitrationHysteresisPct = v }},
+		{"curtail_below_btc_usd", func(c *Config, v float64) { c.CurtailBelowBTCUSD = v }},
+		{"min_yield_sats_per_sec", func(c *Config, v float64) { c.MinYieldSatsPerSec = v }},
+		{"power_watts", func(c *Config, v float64) { c.PowerWatts = v }},
+		{"electricity_price_per_kwh", func(c *Config, v float64) { c.ElectricityPricePerKWh = v }},
+	}
+	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		for _, f := range fields {
+			c := base()
+			f.set(&c, v)
+			err := c.Validate()
+			if err == nil {
+				t.Errorf("%s=%v should fail Validate()", f.name, v)
+				continue
+			}
+			if !strings.Contains(err.Error(), f.name) {
+				t.Errorf("%s=%v: error should mention field name: %v", f.name, v, err)
+			}
+		}
+	}
+	// Sanity: a valid base config still passes.
+	if err := base().Validate(); err != nil {
+		t.Errorf("valid config rejected: %v", err)
 	}
 }
