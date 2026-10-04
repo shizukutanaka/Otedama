@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 991 update — httpserver-lifecycle + pprof-gate + exposition-sort audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | An HTTP bind failure surfacing late, a background Serve error lost, or a crashed server invisible to the supervisor. | ✅ Clean: `net.Listen` runs before Start returns (fail-fast); `boundAddr` records the real address (ephemeral port handled); a non-clean Serve error is stored for `ServeError()` polling. |
+| M | Shutdown losing in-flight requests or hanging forever. | ✅ Clean: `Stop` gives a 5-second graceful budget; ctx cancel triggers the same path. |
+| S | pprof endpoints mounted unconditionally — `/debug/pprof/*` leaking runtime internals to a public listener. | ✅ Clean: explicit `enablePprof` gate; `registerPprofHandlers` documents the caller must verify the listener isn't internet-facing (matches the `--pprof` non-loopback warning chain). |
+| M | `/metrics` scrape cost O(n log n) metricKey allocations per interval, or a collector invoked while the registry lock is held (deadlock on re-entrant collector). | ✅ Clean: decorate-sort-undecorate computes each sort key once (O(n)); collector slice is snapshotted under RLock and invoked after unlock. |
+| M | `%q` (Go quoting) used for a Prometheus label — wrong escape semantics. | ✅ Clean: `escapeLabel` handles `"`/`\`/newline per the exposition format (the one nolint note documents exactly this trade-off). |
+
+All packages build, vet, and test green.
