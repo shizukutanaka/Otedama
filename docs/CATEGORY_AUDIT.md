@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 954 update — stream-merge + pause-scoping + decide-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Same-`StreamID` map entries losing `YieldPerDevice` for all but one device — arbitration falls back to `DefaultYield`. | ✅ Clean: `streamsSlice` merges same-ID entries into a representative, deep-copying `YieldPerDevice` so every device's yield survives. |
+| M | Pausing one device idling all SHA256d workers — the session-247 class. | ✅ Clean: `pauseDevice` `SetWork(nil)`s only the worker whose `DeviceID` matches; a second SHA256d-capable device no longer gets collateral-paused. |
+| M | Stale provider quotes feeding Decide forever; pre-seeded streams evicted erroneously. | ✅ Clean: `pruneStaleStreams` removes only entries with a recorded quote time older than `streamStaleTimeout`; unquoted seeds are never pruned. |
+| M | Pause set lagging Decide — a pool job re-arms a device in the same tick it was paused; or a Decide error crashing the loop. | ✅ Clean: `reconcileArbPauses` runs before `applyAllocation` so the shared pause set mirrors the newest allocation on the one-shot `SetWork(nil)` tick; a `Decide` error logs `warn` and continues. |
+
+All packages build, vet, and test green.
