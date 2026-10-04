@@ -1748,6 +1748,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1014 update — i18n-fallback + immutability + degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A missing translation leaving the UI with an empty string. | ✅ Clean: `Render` falls exact → base tag → mandatory English → `"!{id}!"` placeholder + error — conspicuous in logs and never blank; English presence is enforced at `NewBundle`. |
+| M | Caller-side mutation corrupting a shared catalog across goroutines. | ✅ Clean: `NewCatalog` deep-copies the messages map; `Bundle` holds its own catalog map; both are documented lock-free-after-construction (the deliberate no-lock design matters on the log-line hot path). |
+| M | An invalid message ID or duplicate language slipping into the bundle. | ✅ Clean: `ID.Valid`/`Lang.Valid` charset checks reject bad IDs at construction; `NewBundle` rejects duplicate languages. |
+| M | A template variable missing from `data` breaking message rendering. | ✅ Clean: `RenderWith` fast-paths messages without `{{`; parse/exec failures return the raw template + error — degrades, never breaks rendering. |
+| S | Translation-completeness drift between English and the ten priority languages going unnoticed. | ✅ Clean: `MissingTranslations` emits sorted per-language gaps for the CI completeness check; complete languages are omitted. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
