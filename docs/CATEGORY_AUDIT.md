@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 860 update — verb-scope + cast-bound + conv-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%v` applied to the `error` itself inside `fmt.Errorf` — loses the wrap chain (`errors.Is/As` fail). | ✅ Clean: `%v` appears only on non-error args (difficulty float, Policy enum, arg list); the error arg always uses `%w` (104 sites; sole deliberate `%v`-on-error at config.go:769, documented opaque-message choice — s839). |
+| M | `float64→int`/`int→uint32` casts on pool-controlled values — truncation or sign flip. | ✅ Clean: all casts bounded upstream — quantile index clamps by construction, `NonceStep` = NumCPU, `MsgLength` payload pre-bounded, big.Int mantissa finite-checked. |
+| P | `string↔[]byte` conversion inside a hot loop — per-iteration allocation churn. | ✅ Clean: zero conversions inside loops — all conversion sites are cold-path (s758). |
+
+All packages build, vet, and test green.
