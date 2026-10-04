@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 848 update — loop-err + dial-context + resolve audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `err` reused across loop iterations — last-iteration failure overwrites an earlier error or a stale error leaks past the loop. | ✅ Clean: zero cross-iteration `err` reuse — every loop-scoped error is `:=`-fresh or checked in-body. |
+| M | `net.Dial`/`DialTimeout` instead of ctx-aware `DialContext` — un-cancellable connects. | ✅ Clean: all outbound connections go through ctx-aware dialers (`poolproto` dial interface — session 570); zero bare `net.Dial*`. |
+| S | `net.Resolve*`/`Lookup*` in the connect path — DNS without a deadline, blocking before the ctx applies. | ✅ Clean: absent — dialers pass host:port to `DialContext` directly; DNS happens inside the ctx-bounded dial. |
+
+All packages build, vet, and test green.
