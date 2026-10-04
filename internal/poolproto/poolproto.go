@@ -66,6 +66,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // ----- Protocol identifiers -----
@@ -120,9 +121,9 @@ var knownSchemes = []struct {
 	{"datum://", ProtocolDATUM},
 }
 
-// StripScheme removes a recognised pool URL scheme prefix and returns
+// StripScheme removes a recognized pool URL scheme prefix and returns
 // the remaining host[:port] portion. It returns ErrUnknownProtocol if
-// the scheme is not recognised. This is the canonical way to get the
+// the scheme is not recognized. This is the canonical way to get the
 // dial target from a pool URL, replacing ad-hoc per-package parsing.
 func StripScheme(url string) (host string, err error) {
 	for _, s := range knownSchemes {
@@ -131,6 +132,26 @@ func StripScheme(url string) (host string, err error) {
 		}
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownProtocol, url)
+}
+
+// StripUserinfo removes any credentials embedded in a pool URL's authority
+// (scheme://user:pass@host → scheme://host) for display and logging.
+// Config pool URLs today may carry userinfo, and echoing them into logs,
+// doctor output, or the TUI would leak the pool password. Malformed URLs
+// are returned unchanged — redaction must never corrupt diagnostics.
+func StripUserinfo(url string) string {
+	i := strings.Index(url, "://")
+	if i < 0 {
+		return url
+	}
+	rest := url[i+3:]
+	// Redact only a '@' inside the authority (before the first '/').
+	if at := strings.LastIndexByte(rest, '@'); at >= 0 {
+		if slash := strings.IndexByte(rest, '/'); slash < 0 || at < slash {
+			return url[:i+3] + rest[at+1:]
+		}
+	}
+	return url
 }
 
 // ----- Core types -----
@@ -163,6 +184,20 @@ type Job struct {
 
 	// CleanJobs, when true, indicates older jobs may be discarded.
 	CleanJobs bool
+
+	// ExtraNonce is the extranonce2 the MerkleRoot was computed with.
+	// V1 only: the session picks a fresh value per job and folds it into
+	// the coinbase; shares must echo it back so the pool can rebuild the
+	// same coinbase. Empty for protocols that don't use it (V2).
+	ExtraNonce []byte
+
+	// Coinb1, Coinb2 and MerkleBranch are the raw Stratum V1 coinbase
+	// parts from mining.notify. The session folds them into MerkleRoot
+	// (with Extranonce) before handing the job to the engine. V2 leaves
+	// them empty — the pool supplies a ready MerkleRoot there.
+	Coinb1       []byte
+	Coinb2       []byte
+	MerkleBranch [][]byte
 
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
@@ -242,6 +277,19 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// ReconnectWaiter is implemented by sessions whose protocol supports a
+// pool-directed reconnect delay (client.reconnect's wait_seconds in
+// Stratum V1). Callers should type-assert a Session to this interface;
+// protocols without the concept are simply absent. The returned duration
+// is already clamped by the implementation — never negative, capped to a
+// sane ceiling — so a hostile pool cannot hang the caller indefinitely.
+type ReconnectWaiter interface {
+	// ReconnectWait reports how long the pool asked us to pause before
+	// reconnecting. Zero means no directive was received (or it carried
+	// no wait field).
+	ReconnectWait() time.Duration
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.
@@ -251,7 +299,7 @@ type Dialer interface {
 
 	// Dial opens a Connection. The url is the full pool URL; the
 	// dialer parses scheme and host:port from it.
-	Dial(ctx context.Context, url string, creds Credentials) (Connection, error)
+	Dial(ctx context.Context, url string, creds *Credentials) (Connection, error)
 
 	// Negotiate performs the protocol handshake on an established
 	// Connection. On success the Connection's Protocol() returns the
@@ -332,7 +380,7 @@ func Available() []ProtocolID {
 // DialURL is the high-level entry point: identify the protocol from
 // the URL, look up its Dialer, dial, and negotiate. Returns the
 // resulting Session ready to receive jobs.
-func DialURL(ctx context.Context, url string, creds Credentials) (Session, error) {
+func DialURL(ctx context.Context, url string, creds *Credentials) (Session, error) {
 	proto := FromURL(url)
 	if proto == ProtocolUnknown {
 		return nil, fmt.Errorf("%w: cannot infer protocol from %q", ErrUnknownProtocol, url)
@@ -367,3 +415,28 @@ var (
 	// soft rejections that come back inside ShareResult).
 	ErrShareRejected = errors.New("poolproto: share rejected")
 )
+
+// maxPoolTextRunes caps sanitized pool-controlled text. Pool strings end
+// up in logs (and potentially the TUI); an unbounded string is a
+// log-flooding vector.
+const maxPoolTextRunes = 256
+
+// SanitizePoolText removes Unicode control characters (C0, DEL, C1 —
+// including ANSI escape introducers) from pool-controlled text and
+// truncates it to 256 runes. Callers use it before logging or rendering
+// any string the pool supplied (share-reject reasons, error objects,
+// job IDs), so escape sequences cannot manipulate the terminal or forge
+// log lines.
+func SanitizePoolText(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxPoolTextRunes {
+		clean = string(runes[:maxPoolTextRunes])
+	}
+	return clean
+}
