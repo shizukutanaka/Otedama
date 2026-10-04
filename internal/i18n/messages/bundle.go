@@ -31,7 +31,7 @@ func NewBundle() (*i18n.Bundle, error) {
 		Russian, Arabic,
 	}
 
-	var built []*i18n.Catalog
+	built := make([]*i18n.Catalog, 0, len(others))
 	for _, fn := range others {
 		c, err := fn()
 		if err != nil {
