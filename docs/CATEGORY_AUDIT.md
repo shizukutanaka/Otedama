@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 988 update — fanin-cancel + scheme-ssot + userinfo-strip audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A stuck input channel (never written, never closed) pinning a `fanIn` goroutine after cancellation — `out` never closes. | ✅ Clean: both the receive and the send `select` include `ctx.Done()`; the merge exits on cancel and `out` closes after `wg.Wait` in a dedicated goroutine. |
+| M | Pool-scheme parsing duplicated per package — `stratum+v2tls://` misread as `v2` on prefix overlap, or a new scheme parsed by one site but not another. | ✅ Clean: `knownSchemes` is the single source of truth for `FromURL` and `StripScheme`, ordered longest-prefix-first (`v2tls` before `v2`); unknown schemes are a hard `ErrUnknownProtocol`. |
+| S | `user:pass` embedded in a pool URL echoed into logs/doctor/TUI. | ✅ Clean: `StripUserinfo` redacts only a `@` inside the authority (before the first `/`) and returns malformed URLs unchanged — redaction can't corrupt diagnostics; every display boundary calls it. |
+| M | A nil/Unknown/dup dialer registration silently degrading the protocol map. | ✅ Clean: `Register` panics at init-time invariants (nil, `ProtocolUnknown`, duplicate) — unreachable post-startup, matching the repo's panic census rule. |
+| S | Pool-controlled text (reject reasons, error objects, job IDs) forging ANSI escapes or flooding logs. | ✅ Clean: `SanitizePoolText` strips every `unicode.IsControl` rune (C0+DEL+C1) and truncates to 256 runes before any log/render site. |
+
+All packages build, vet, and test green.
