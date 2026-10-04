@@ -3553,6 +3553,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 769 update — deadline-pairing + primitive-absence + deadline-discard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Set*Deadline` left armed — a deadline set for one phase timing out later traffic. | ✅ Clean: handshake-phase deadlines are explicitly disarmed via deferred `SetDeadline(time.Time{})`; write deadlines (10s) sit on conns closed when the scope exits; the V1 read deadline is a deliberate 5-minute liveness bound, not a leftover. |
+| M | Missing synchronization primitive — `errgroup` or `sync.Cond` reimplemented as ad-hoc channels with lost wakeups. | ✅ Clean: `errgroup`/`sync.Cond` absent — all coordination uses channel-close fan-in and WaitGroup (verified sessions 553/585/713). |
+| M | `_ = conn.SetDeadline(...)` discarding the error — a failed deadline silently leaving unbounded I/O. | ✅ Benign: `SetDeadline` fails only on an already-broken conn, where the subsequent I/O returns the real error anyway — discarding is correct; every site bounds the immediate next operation. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
