@@ -1731,3 +1731,20 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1088 update — deprecated stdlib census
+
+Deprecated stdlib identifiers (`ioutil.*`, `strings.Title`, `rand.Seed`,
+`math/rand` in production paths, bare `http.Get`, `os.SEEK_*`, weak
+`crypto/md5`/`sha1` imports) would be modernization drift.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero `ioutil.*`, `strings.Title`, `rand.Seed`, `os.SEEK_*`, `Deprecated` markers in production code | S |
+| S | `math/rand` absent from production (hash/timing use `crypto/rand` or time) | S |
+| S | No bare `http.Get/Post/DefaultTransport` — all outbound clients are configured instances | S |
+| S | No `crypto/md5`/`crypto/sha1` imports — mining uses sha256d exclusively | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
