@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1056 update — engine-test helpers merge-accounting + staleness-boundary + metrics-convention audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Stream-merge aliasing or double-counting multi-device yield. | ✅ Clean: `MergesYieldPerDeviceForSameStreamID` + **`MultiDeviceMergeDoesNotMutateInput`** (the aliasing class explicitly falsified) + dedupe-by-ID + Akash-is-not-mining separation + insert/update matrix. |
+| M | Staleness pruning boundary (fresh stream evicted or stale kept). | ✅ Clean: removes-expired keeps-fresh, **never-prunes-untimestamped** (guard against accidental eviction), exact-TTL boundary pinned. |
+| M | Accounting drift (uptime/sats off-by-fraction or backwards-clock). | ✅ Clean: primes on first observe, skips non-productive intervals, **carries fractional remainder** (no truncation loss), ignores non-positive/nil, **backwards-clock skipped**; effectiveYield full/half/zero-uptime→zero-not-NaN/negative→zero/clamps>1/zero-expected. |
+| M | Active-payout failover leaving a stale address exposed. | ✅ Clean: exposes active, **failover zeroes previous**, unchanged is no-op, empty ignored. |
+| S | Metrics series conventions (lazy create, reuse, naming). | ✅ Clean: all registered on init; **names validated against the Prometheus convention regex**; reject-reason + last-reject lazy-create-and-reuse; share rates compute/reconcile/no-shares; joules/TH + power-cost + curtailed gauges appear in exposition. |
+
+All packages build, vet, and test green.
