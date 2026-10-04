@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 779 update — send-on-closed + recv-after-close + chan-owner audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Send on a channel another goroutine may have closed — panic in the producer. | ✅ Clean: every channel's sends and its `close` live in the same owning goroutine (V1 dispatch owns `jobsCh`/`noticeCh`; V2 reader owns `jobsCh`; worker grind owns `shares`) — a channel is never closed by a different goroutine than its senders (verified sessions 559/641). |
+| P | `for range` consumer hanging — producer exits without closing. | ✅ Clean: producers `defer close(...)` on entry (dialer.go:233, stratumv1.go:160-161) so exit paths still release consumers. |
+| P | Comma-ok receive missing where zero-value would be misread — treating a closed-channel zero as a real message. | ✅ Clean: consumers either `for range` (auto-exit on close) or select on ctx.Done alongside the receive; no bare `<-ch` reads a post-close zero into logic. |
+
+All packages build, vet, and test green.
