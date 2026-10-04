@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 920 update — milestone checkpoint (~360 audit classes clean)
+
+The mechanical audit ledger now holds 94 session entries covering ~360 distinct mechanical defect classes. Total table rows: 244 (findings) across severity M/S/L/P/E.
+
+**Real defects fixed to date (3):**
+
+1. **C1 control-character gap** in `daemon.quoteToken` — `unicode.IsControl` widened the allowed set past C0; fixed in PR #809.
+2. **XDG systemd-manager environment** — `systemctl --user` used the shell env, missing units configured via the manager's own environment; fixed in PR #807.
+3. **AEAD per-frame re-derivation** — `stratum` re-derived the transport cipher every frame; pooled at PR #957.
+
+**Deferred rows (recorded, not fixed — all rule-3 layering/consolidation decisions):** unchanged since s900 — the scheme-prefix triplication, the bitcoin-address validator duplication, the `tui` truncator pair, and the metricKey collision theoretical case.
+
+Everything else across concurrency, crypto, network, config, miner, doctor, hal, metrics, engine, provider, arbitration, stratum V1/V2, lightning, cmd, tui, i18n, daemon, and stdlib-surface axes has been re-verified clean. All packages build, vet, and test green.
