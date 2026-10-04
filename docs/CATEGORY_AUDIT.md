@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 986 update — fetch-fanout + plausibility + skew audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Per-source goroutines leaking when a fetch aborts early — unbounded channel or blocked senders. | ✅ Clean: `results` is buffered to `len(sources)` so every sender completes; `wg.Wait` → `close` before collecting; one failure can't stall the fan-in. |
+| M | A single source's poisoned reading (unit error, manipulated feed) pulling the median. | ✅ Clean: every reading is band-checked against `[minPlausible,maxPlausible]` per source, dropped from the median, and logged only for genuinely implausible non-zero values; the median of survivors wins. |
+| M | A huge/never-ending response body pinning memory or the connection. | ✅ Clean: `io.LimitReader` caps the body; non-200 responses are drained through the same bound so keep-alive reuse stays safe. |
+| M | A stale hashrate/rate quietly treated as fresh — arbitration deciding on yesterday's quote. | ✅ Clean: `CurrentHashrate`/`BTCUSDRate` return `(value, fresh)` where fresh requires `hashrate > 0` and age < cache duration. |
+| M | "All sources failed" swallowing the concrete causes, or clock-skew reporting skipped when rates fail. | ✅ Clean: per-source errors collected into `errors.Join` (inspectable via Is/As); skew is aggregated from every response's Date header and persisted before the rate check, so it survives a total outage. |
+
+All packages build, vet, and test green.
