@@ -4529,6 +4529,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 862 update — fprintf-scope + sprintf-rate + write-err audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `fmt.Fprintf` result error discarded where the writer can fail (net conn, file) — partial output unnoticed. | ✅ Clean: all 10 `Fprintf` sites write to `strings.Builder`/`io.Writer` text output (setup wizard, doctor report, plist builder) — per `fmt` contract error is returned on first failure only; all write targets are infallible or errors propagate at the return boundary (s745). |
+| P | `fmt.Sprintf` on every iteration of the hot loop — reflection-driven alloc per share/hash. | ✅ Clean: zero Sprintf inside the share/hash loop — all sites are per-event (session end, failover, job emit) or per-render-tick formatters. |
+| M | `fmt.Fprint*` used where `io.WriteString`/`Write` suffices — needless format parsing per call. | ✅ Benign: the few `Fprintln`/`Fprintf` calls are in wizard/report code where formatting is the point; hot paths use `WriteString`/`Builder` directly (s767). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
