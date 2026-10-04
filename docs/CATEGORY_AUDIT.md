@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 996 update — sv1-readline + call-timeout + subscribe-parse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A pool streaming bytes with no newline growing session memory unboundedly (`ReadBytes` semantics), or a returned line aliasing the bufio buffer. | ✅ Clean: `ReadSlice('\n')` hard-errors at `maxLineBytes` via `ErrBufferFull` (no accumulation ever), and the line is copied out before dispatch — the "owns its line" contract holds. |
+| S | `readLoop` exit leaking the jobs/notice channels or stranding in-flight `call()` waiters. | ✅ Clean: three defers — `close(jobsCh)`, `close(noticeCh)`, `cancelPending` — run on every exit path; `cancelPending` is mutex-guarded against double-close from `Close()`. |
+| S | A pool keeping TCP alive but never answering leaking a submit goroutine and a `pending` entry for the session's life. | ✅ Clean: `call` bounds the wait at `callTimeout` (60s) plus ctx cancellation; pending is removed on every non-response path, and registered before the write so a fast response can't race ahead. |
+| S | `extranonce2_size` smuggling past the bound via float truncation (`int(64.5)` → 64, `int(-0.5)` → 0). | ✅ Clean: `parseSubscribeResult` checks `en2SizeF != math.Trunc(en2SizeF)` and the range on the float before converting — fractional and non-positive values are rejected at the boundary; `extranonce1` is hex-validated too. |
+| M | A wedged pool hanging the read loop forever. | ✅ Clean: 5-minute read deadline applied per iteration — a line that never completes kills the session, while legitimate protocol traffic simply refreshes it. |
+
+All packages build, vet, and test green.
