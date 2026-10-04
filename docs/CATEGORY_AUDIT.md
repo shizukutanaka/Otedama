@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 962 update — hal-sysfs + sysfs-boundary + capability-flag audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Multi-render-node GPUs counted twice — device list inflation and double worker spawning. | ✅ Clean: `renderD*` nodes are deduplicated by `EvalSymlinks`-canonical device path (falls back to the raw path on error). |
+| M | `Capabilities.SHA256d = true` on a GPU with no compute dispatch — re-creating the prior bug where every detected GPU spawned a second NumCPU-thread hashing pool whose shares misattributed to the GPU's device ID. | ✅ Clean: `SHA256d` is deliberately false (no CUDA/ROCm/Vulkan dispatch exists); `GeneralCompute: true` alone spawns no worker threads. The fix is documented inline and in KNOWN_LIMITATIONS. |
+| M | A malformed sysfs identity reaching the device list (empty vendor/model poisoning arbitration). | ✅ Clean: `Identity.Validate()` gates every parsed device; invalid entries are skipped with `logFn` reason. |
+| M | `readSysFile` on sysfs panicking or leaking fds on missing attrs. | ✅ Clean: returns `""` on any read error; only read-only `/sys` attribute paths are touched. |
+
+All packages build, vet, and test green.
