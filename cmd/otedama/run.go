@@ -175,7 +175,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitConfig
 	}
 
-	// Initialise i18n bundle.
+	// Initialize i18n bundle.
 	bundle, _ := messages.NewBundle()
 	lang := messages.DetectLang(cfg.Language)
 	if cfg.Language == "" {

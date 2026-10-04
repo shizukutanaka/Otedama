@@ -335,7 +335,7 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // so no V1 share could ever validate).
 func (s *session) completeV1Job(j *poolproto.Job) {
 	// extranonce2Size is pool-controlled; anything above the observed
-	// maximum (8–12 bytes) falls back to the old behaviour instead of
+	// maximum (8–12 bytes) falls back to the old behavior instead of
 	// allocating a pool-dictated buffer per job.
 	en1s := s.extranonce1.Load()
 	sz := int(s.extranonce2Size.Load())
