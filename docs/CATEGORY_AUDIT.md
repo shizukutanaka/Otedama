@@ -1806,6 +1806,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 883 update — runtime-gc + gc-tuning + memstat audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GC`/`debug.FreeOSMemory`/`SetGCPercent`/`SetMemoryLimit` in prod — manual GC fiddling fights the collector. | ✅ Clean: absent from production — `runtime.GC` and `ReadMemStats` appear in tests only. |
+| M | `runtime.ReadMemStats` on a hot path — stop-the-world-ish stat collection per request. | ✅ Clean: prod `ReadMemStats` is the single `metrics/runtime.go` collector, called only when the metrics endpoint scrapes. |
+| S | `runtime.SetFinalizer`/`AddCleanup` in prod — hidden lifetime coupling. | ✅ Clean: absent (s795 already verified the finalizer class). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
