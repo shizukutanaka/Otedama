@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1022 update — run-flags + tui-autodisable + sink-matrix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | Wallet secrets round-tripping through `config show` or `config.yaml`. | ✅ Clean by construction: both passphrases live only on `runFlags`, never on `config.Config` — documented as deliberate; flag > env via `applyRunEnvFallbacks`; argv-passage warns (process-list exposure). |
+| M | TUI ANSI noise flooding a redirected/service-managed stdout. | ✅ Clean: `isTerminal` (ModeCharDevice, stdlib-only — no x/term dep) auto-disables; narrowing only ever goes toward the safe plain-output default and no flag exists to force the TUI on a non-terminal. |
+| M | Log sink matrix corrupting the dashboard or losing the audit trail. | ✅ Clean: TUI→discard-or-file-only, non-TUI→stdout-or-MultiWriter; `--log-file` is 0600 and size-capped (32 MiB, single .old rotation); an unopenable file warns instead of aborting mining. |
+| M | A failing/non-loopback HTTP server killing startup or silently exposing metrics+pprof. | ✅ Clean: startup failure logs a warning and the run continues; non-loopback binds warn with the exposed surface named (endpoints + pprof when enabled). |
+| M | SIGTERM leaving shutdown noise or a wrong exit code. | ✅ Clean: `NotifyContext` on Interrupt+SIGTERM with deferred cancel; `context.Canceled` is suppressed at the engine boundary so a signal produces the normal shutdown path + exitOK. |
+| S | `--dry-run` starting side effects. | ✅ Clean: it returns before logger/HTTP/engine construction. |
+| S | `isLoopbackAddr` misclassifying `localhost`/`[::1]`. | ✅ Clean: bracket trim + EqualFold for localhost + `net.ParseIP().IsLoopback()`. |
+
+All packages build, vet, and test green.
