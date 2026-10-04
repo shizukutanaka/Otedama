@@ -3879,6 +3879,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 801 update — append-collect + three-index + copy-pair audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `append` inside a loop writing into a shared/preallocated slice — overwritten elements on re-run. | ✅ Clean: all in-loop appends build fresh result slices (`sha256d`, `fallback`, `urls`, `devices`) — each iteration owns its append chain. |
+| M | Three-index slice `s[i:j:k]` misuse — capacity confusion leaking writes into the parent. | ✅ Clean: zero three-index slice sites — no full-slice expressions needing cap control. |
+| M | `copy(dst, src)` operand reversal or truncation surprise. | ✅ Clean: all `copy` sites copy *into* fixed destinations in the right direction (block-header fields `sha256d.go:62-75`, big-endian padding `:167/:241`, wire read-buffer advance `wire.go:148`, noise hash `:110`) — verified sessions 607/701. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
