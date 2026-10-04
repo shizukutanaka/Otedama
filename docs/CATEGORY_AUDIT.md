@@ -3577,6 +3577,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 771 update — byte-order + truncate-cast + encode-bound audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `binary.*Endian` chosen per-field wrongly — a consensus/SV2 field serialized with the wrong byte order. | ✅ Clean: all block-header and SV2 fields use `LittleEndian` per the Bitcoin/SV2 wire specs; the noise counter is LE per the frame layout — no mixed-endian misuse. |
+| S | `byte(uint32)`/`byte(int)` truncation cast — a value above 255 silently wrapping into one byte. | ✅ Clean: zero direct `byte(int/uint)` casts; all narrowing goes through `binary.AppendUint*`/`PutUint*` which encode the full field width. |
+| S | `hex.EncodeToString` on unbounded data — a huge buffer dumped to hex for logging/memory blow-up. | ✅ Clean: all encodes target fixed-size digests (32B hash, 4B MAC tag, wordlist hash, extranonce ≤ 16B) — none touch unbounded input. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
