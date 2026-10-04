@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 955 update — fanin-cancel + send-block + close-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Stuck producer pinning a fan-in goroutine — input never written, never closed, so `out` never closes after cancel. | ✅ Clean: the receive arm selects on `ctx.Done()` in parallel, so a wedged input cannot keep the goroutine or the output channel alive. |
+| M | Producer blocked sending to a full `out` — a second escape path missing, wedging the merge after the consumer stops. | ✅ Clean: after receiving, the send is `select { out <- v; <-ctx.Done(): return }` — a full buffer plus cancellation unwinds instead of blocking. |
+| M | `out` closed while a producer still holds it — send-on-closed panic. | ✅ Clean: `close(out)` runs only after `wg.Wait()` in a dedicated goroutine — every producer exits first. |
+| M | Unbounded or zero-size merge buffer — memory growth on slow consumer or guaranteed stall. | ✅ Clean: `bufSize = bufFactor * len(channels)` clamped to `[1, 64]` — bounded above, never zero. |
+
+All packages build, vet, and test green.
