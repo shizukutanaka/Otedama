@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,12 @@ import (
 	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
+)
+
+const (
+	helpFlag       = "--help"
+	displayDefault = "(default)"
 )
 
 func cmdConfig(args []string, stdout, stderr io.Writer) int {
@@ -24,7 +31,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 		return cmdConfigShow(args[1:], stdout, stderr)
 	case "validate":
 		return cmdConfigValidate(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case "help", helpFlag, "-h":
 		// See cmdService's identical case: an explicit help request must
 		// not look like the "unknown subcommand" error path.
 		fmt.Fprintln(stdout, "otedama config: expected subcommand (show|validate)")
@@ -38,7 +45,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("config show", args, stdout, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
@@ -47,7 +54,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
 
 	if f.jsonOut {
-		return writeConfigJSON(stdout, stderr, cfg, origins, f.showOrigin)
+		return writeConfigJSON(stdout, stderr, &cfg, origins, f.showOrigin)
 	}
 
 	// tag returns " [layer]" when --origin is active, otherwise empty.
@@ -85,7 +92,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintf(stdout, "pools:           %d configured%s\n", len(cfg.Pools), tag(origins.Pools))
 		for i, p := range cfg.Pools {
-			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(p.URL))
+			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(poolproto.StripUserinfo(p.URL)))
 		}
 	}
 	return exitOK
@@ -99,10 +106,10 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 // --origin information. JSON encoding escapes control characters natively, so
 // the safeDisplay terminal-sanitisation used by the text view is unnecessary
 // here (a consumer parses the bytes; it does not echo them to a terminal).
-func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config.Origins, withOrigins bool) int {
+func writeConfigJSON(stdout, stderr io.Writer, cfg *config.Config, origins config.Origins, withOrigins bool) int {
 	pools := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {
-		pools = append(pools, p.URL)
+		pools = append(pools, poolproto.StripUserinfo(p.URL))
 	}
 	doc := struct {
 		BitcoinAddress           string            `json:"bitcoin_address"`
@@ -166,7 +173,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("config validate", args, stdout, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
@@ -177,7 +184,7 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	for _, w := range config.EnvWarnings(nil) {
 		fmt.Fprintf(stderr, "config: warning: %s\n", w)
 	}
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return exitConfig
@@ -186,13 +193,13 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-// safeDisplay sanitises a config value for terminal output. It strips
+// safeDisplay sanitizes a config value for terminal output. It strips
 // control characters (ESC, newlines, DEL, …) so a malicious config value
 // cannot inject ANSI escape sequences or forge log lines when echoed to a
-// terminal, and renders the empty string as "(default)".
+// terminal, and renders the empty string as displayDefault.
 func safeDisplay(v string) string {
 	if v == "" {
-		return "(default)"
+		return displayDefault
 	}
 	if !strings.ContainsFunc(v, unicode.IsControl) {
 		return v
@@ -206,7 +213,7 @@ func safeDisplay(v string) string {
 	}
 	// If all characters were control chars, return the placeholder.
 	if b.Len() == 0 {
-		return "(default)"
+		return displayDefault
 	}
 	return b.String()
 }
