@@ -1072,3 +1072,28 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1246 ecosystem update (2026-10-02)
+
+**sv2-spec** — normative tracked set unchanged: #236 (SetTarget ≤
+channel max_target — active, updated today), #234 (authority-key
+management §4.8), #203 (coinbase payout extension), #198
+(coinbase_witness in NewTemplate). Housekeeping PRs (#232, #186)
+remain cosmetic. No client-visible wire change.
+
+**SRI** — v1.12.0 (2026-09-17) remains the latest release; the
+upstream repo is `stratum-mining/stratum` (merged workspace).
+
+**sv2-apps** — open set 27 PRs. Relevant drift:
+- **#599 (PoC)** — replaces the pool's mempool mirror with Bitcoin
+  Core's `TxCollection`; upstream exploring tighter Core coupling
+  for template construction (server-side only).
+- **#600** — integration tests across multiple Bitcoin Core
+  versions; raises the bar for upstream template-compat testing.
+- **#718** — `fix(pool): back off when accept() fails on descriptor
+  exhaustion` — a server accept-loop hardening item; Otedama is a
+  client and doesn't accept connections, but the same shape applies
+  if a future local proxy lands.
+- **#453** — BIP-54 coinbase-compliance integration test upstream.
+- **#367** — adds `network` to `GlobalInfo` (sv2-ui API surface).
+- **#212** — mimalloc adoption (build-infra).
