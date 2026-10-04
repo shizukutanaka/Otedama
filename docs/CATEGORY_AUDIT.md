@@ -2953,3 +2953,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1275 update — log-format + signal + httptest lifecycle
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| fmt-in-log | Zero `Sprintf` inside logger calls; all formatted values arrive via slog key-value attrs (fmt.Errorf/Sprintf hits are error/issue strings, not log paths) | ✓ Clean |
+| signal lifecycle | Single `signal.NotifyContext` in run.go — cancel-driven auto-stop; no raw `signal.Notify` channel leaks | ✓ Clean |
+| httptest leak | All 49 `httptest.NewServer` sites across rates/doctor tests paired with `Close()` | ✓ Clean |
+
+All packages build, vet, and test green.
