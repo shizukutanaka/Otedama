@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1029 update — resolve-layering + numeric-env + default-datadir audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Numeric env vars parsed in one place, warned about in another (the two sets drifting). | ✅ Clean: `numericEnvVars` is a single source of truth — the same slice drives both `ResolveWithOrigins` (`apply` writes value AND origin together) and `EnvWarnings`, so applied-set ≡ warned-set by construction. |
+| M | Malformed numeric env silently swallowed. | ✅ Clean: the bad value is skipped in resolve but `EnvWarnings` surfaces `"OTEDAMA_X=... is not a valid number"` before run — the comma-decimal/`300w` typo case is named in the doc. |
+| M | Zero-value file fields indistinguishable from unset, clobbering env/flags. | ✅ Clean: nonzero-only override for floats with the caveat documented per field (explicit 0.0 requires the env var); string fields override only when non-empty — origins track the actual winning layer. |
+| M | Empty `DataDir` silently disabling wallet init. | ✅ Clean: layer 4 fills `DefaultDataDir()` when no layer set it (doc names the KNOWN_LIMITATIONS cross-reference — "" would mean "no wallet"); the origin deliberately stays `OriginDefault`. |
+| S | `DefaultDataDir` platform paths wrong or failing noisily. | ✅ Clean: XDG_DATA_HOME → ~/.local/share (linux), Application Support (darwin), %APPDATA% (windows); indeterminate → "" with the contract that callers treat persistence as unavailable. |
+| S | Validate failing on first error only (fix-one-error-per-run UX). | ✅ Clean: `issues` is aggregated and returned as one combined error — all problems fixable in a single edit. |
+
+All packages build, vet, and test green.
