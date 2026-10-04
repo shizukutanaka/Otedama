@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 807 update — fmt-new + key-conv + atomic-mix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `errors.New(fmt.Sprintf(...))` — double formatting where `fmt.Errorf` suffices. | ✅ Clean: zero sites — `fmt.Errorf` used uniformly. |
+| P | `string(b)` map-key conversion inside a loop — one alloc per lookup. | ✅ Clean: zero in-loop byte→string key conversions — map keys are already `string` values at use sites. |
+| M | `atomic.*` field mixed with plain reads/writes — torn values under race. | ✅ Clean: all mutable shared state uses typed atomics exclusively (`Uint64`/`Int64`/`Bool`/`Pointer[T]`); no plain-field bypass — verified sessions 565/677/768. |
+
+All packages build, vet, and test green.
