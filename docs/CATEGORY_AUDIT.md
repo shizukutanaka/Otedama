@@ -1782,6 +1782,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 881 update — ansi-escape + tui-state + cursor-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Raw `\x1b[` escapes in user-facing output — malformed sequences corrupt the terminal. | ✅ Clean: escapes live behind named constants (`esc`/`reset`/`bold`/…) and a `stripANSI` that terminates on any non-`m` CSI end byte — verified by the formatters tests (clear-screen and truncated-sequence cases). |
+| M | TUI cursor/screen state diverging from what was drawn — flicker, leftover cells, or a permanently garbled dashboard. | ✅ Clean: `clearScreen` saves cursor → moves home → clears below → restores; the saved position is re-written every refresh, so a resize can only widen the cleared region, never narrow it. |
+| S | ANSI emitted on non-terminal output — escape noise in log files and pipes. | ✅ Clean: the dashboard only runs when `--no-tui` is unset and output is a terminal; the plain `logln` path emits no escapes. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
