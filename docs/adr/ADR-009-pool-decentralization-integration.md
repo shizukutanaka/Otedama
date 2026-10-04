@@ -1113,3 +1113,28 @@ current with the normative spec text.
 
 ### sv2-apps
 - Open PR count steady at 27. Recently merged: #875 (crates consolidated into a single cargo workspace), #865 (`bitcoin_core_sv2` bumped to 0.6.0), #907 (docs: agent-comment guidance). No protocol-surface change affecting Otedama's client role.
+
+## Session-817 ecosystem update (2026-10-04)
+
+**sv2-spec (upstream spec PRs):**
+- Normative open set unchanged: **#236** (`SetTarget.target` MUST NOT
+  exceed `max_target`; last touched 2026-10-02 — active discussion
+  continues, still open), **#234** (authority key management/rotation),
+  **#198** (`coinbase_witness` on `NewTemplate`), **#203** (coinbase
+  transaction payouts extension).
+- New open: **#232** (editorial — unwrap multi-line table cells);
+  **#186** and **#103** (Proxy Annex WIP) unchanged.
+- Otedama conformance: no new normative deltas — the `max_target`
+  bound (session-443 direction, PR #538) remains ahead of the
+  still-open #236 requirement.
+
+**SRI** remains at **v1.12.0** (2026-09-17) — no release since
+session-793.
+
+**sv2-apps (upstream SRI applications):** open count steady at **27**.
+Recently merged: **#907** (agents docs), **#900** (stratum-core bump),
+**#875** (workspace consolidation — already recorded), **#857** (pool
+payout-policy isolation for solo mining — landed; the tracked isolation
+item), **#871** (version-bump check only on PRs). The session-793 open
+tracking items (#881 JDP push-solution, #883 fee-transparent config)
+stay on the watch list.
