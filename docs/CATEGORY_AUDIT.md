@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1167 update — doc path-reference existence + test-fixture integrity
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Backtick-quoted repo paths in docs/ (297 refs, 55 misses on `os.path.exists`) | ✅ Clean — every miss is one of: forbidden/future paths explicitly labeled nonexistent (CONTRIBUTING `internal/auth`/`internal/security`), KNOWN_LIMITATIONS entries describing the very nonexistent scripts they flag, architecture.md's header-disclaimed target architecture, or historical ledger prose |
+| M | testdata/ fixtures referenced by tests | ✅ Clean — zero `testdata/` references; all fixtures are TempDir-generated or package-relative source reads (`metrics_doc_test.go` reads `metrics.go` + `../../docs/SPECIFICATION.md`, both exist) |
+| L | numeric-claim residuals (session 1166 census) | ✅ Clean — all non-ADR numeric claims (17 checks / 15 flags / 10 catalogs / 4 layers) verified; the single drift hit (workflow inventory) fixed in #1248 |
+
+All packages build, vet, and test green.
