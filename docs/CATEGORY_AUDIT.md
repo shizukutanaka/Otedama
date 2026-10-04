@@ -3853,6 +3853,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 799 update — partial-return + signed-compare + map-set audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Non-zero value returned alongside a non-nil error — caller may consume the partial result. | ✅ Clean: all `return v, err` sites return zero values on error (`""`, `false`, `Hash{}`); the sole exception (`i18n/message.go:329`) returns the bundle fallback string with the parse error — callers always check `err` first, and `raw` is a safe degraded display value. |
+| M | Signed/unsigned comparison mixing — wraparound miscompare. | ✅ Clean: zero signed-vs-unsigned comparison sites; uint casts carry `nolint:gosec` bounds justifications (verified session 695). |
+| M | `map[T]bool`/`struct{}` value read for meaning — zero value mistaken for presence. | ✅ Clean: every set-map's value is written-only (membership checks use comma-ok or `map[k]` on bool-sets where `false` == absent is the intent) — `seen`, `validEntropyBits`, `validCounts`, `setFlags`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
