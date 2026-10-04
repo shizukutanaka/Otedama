@@ -1734,6 +1734,114 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GOMAXPROCS`/`debug.SetGCPercent`/`FreeOSMemory` — hidden global tuning the operator cannot see. | ✅ Clean: absent — no runtime knobs are mutated; scheduling/GC stay under the Go runtime's defaults (README documents GOMAXPROCS as the env lever). |
+| M | `runtime.NumCPU()` used where a bounded worker count was intended — thread explosion on big machines. | ✅ Clean: `miner` uses `NumCPU` only as the `Threads: 0` default (documented); operator flags can cap it. |
+| S | `runtime.GOOS` sprinkled through production logic — untestable platform forks. | ✅ Clean: production GOOS dispatch lives in `daemon/service_paths.go` behind build-tagged platforms; elsewhere it appears only in test skips. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 878 update — codec-census + binary-struct + encoding-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `encoding/gob`, `encoding/xml`, `encoding/csv`, `encoding/asn1`, `base32`/`base64` — alternate codecs deserializing wire data with own quirks. | ✅ Clean: absent — the only encoding imports are `json` (config/doctor/version), `hex` (address/seed display), `pem` (doctor cert probe test), `binary` (wire primitives). |
+| M | `binary.Size`/`binary.Read`/`binary.Write` on variable-layout structs — silent size mismatches vs spec. | ✅ Clean: absent — all wire layout is computed by explicit `append*`/`get*` primitives against spec constants (s741/824). |
+| S | Codec surface drift — different encodings used for the same kind of data in different places. | ✅ Clean: JSON for all structured config/report boundaries, hex for all byte display — no competing codec. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 879 update — ptr-tricks + go-directive + sys-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `unsafe`/`uintptr`/`reflect` in production — layout hacks, GC-pooler breakage, no checkptr coverage. | ✅ Clean: absent from production — `reflect.DeepEqual` appears in one fuzz test only (build/vet confirmed clean at s538/s687). |
+| M | `//go:linkname`/`//go:noinline`/`//go:generate` directives — hidden behavior, unreachable code, or stale generated files. | ✅ Clean: the only directives are `//go:build` platform tags (hal linux/stub, tui width_unix/width_windows/width_other) — correct mutually-exclusive coverage. |
+| S | Direct `syscall`/`x/sys` surface wider than needed — platform-coupled APIs leaking into core logic. | ✅ Clean: `x/sys/unix|windows` only in the build-tagged `tui/width_*.go` terminal-size helpers; `syscall.SIGTERM` only for the run-loop signal set. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 880 update — flag-dup-recheck + flagset-error + setflags audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate flag-name registration within a `flag.FlagSet` — init-time panic. | ✅ Clean: every name registers exactly once per FlagSet (run/doctor/service/version/config/completion). The quoted-string `uniq -d` hits in run.go are `setFlags` map lookups and log literals, not registrations. |
+| M | `flag.ExitOnError`/`flag.Parse` inside library code — `os.Exit` bypasses cleanup. | ✅ Clean: every FlagSet uses `flag.ContinueOnError`; parse errors return through `parseSubcommandFlags` to the dispatcher's exit-code path. |
+| M | `setFlags` map drift — a flag marked "set" that was never registered. | ✅ Clean: `setFlags` records only names passed to `fs.Visit`, i.e. flags actually parsed — cannot list unregistered names. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 881 update — ansi-escape + tui-state + cursor-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Raw `\x1b[` escapes in user-facing output — malformed sequences corrupt the terminal. | ✅ Clean: escapes live behind named constants (`esc`/`reset`/`bold`/…) and a `stripANSI` that terminates on any non-`m` CSI end byte — verified by the formatters tests (clear-screen and truncated-sequence cases). |
+| M | TUI cursor/screen state diverging from what was drawn — flicker, leftover cells, or a permanently garbled dashboard. | ✅ Clean: `clearScreen` saves cursor → moves home → clears below → restores; the saved position is re-written every refresh, so a resize can only widen the cleared region, never narrow it. |
+| S | ANSI emitted on non-terminal output — escape noise in log files and pipes. | ✅ Clean: the dashboard only runs when `--no-tui` is unset and output is a terminal; the plain `logln` path emits no escapes. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 882 update — sleep-lock + sleep-busywait + print-under-lock audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Sleep` in a lock-held or hot path — stalls other goroutines. | ✅ Clean: the only sleep is worker.go:269's `time.Sleep(10ms)` on the `localWork == nil` wait — no lock held, cold idle path. |
+| M | `for` + sleep/`time.After` as a busy-wait — burns CPU polling a flag. | ✅ Clean: same single sleep is the yield-retry pattern on the work assignment — no other sleeps, no `time.After` loops in prod. |
+| M | `fmt.Print`/`Fprintf` while holding a mutex — output stalls hold the lock. | ✅ Clean: no `fmt.*` calls inside any `mu.Lock` scope — verified by both grep and the lock-region read at s863/864. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 883 update — runtime-gc + gc-tuning + memstat audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GC`/`debug.FreeOSMemory`/`SetGCPercent`/`SetMemoryLimit` in prod — manual GC fiddling fights the collector. | ✅ Clean: absent from production — `runtime.GC` and `ReadMemStats` appear in tests only. |
+| M | `runtime.ReadMemStats` on a hot path — stop-the-world-ish stat collection per request. | ✅ Clean: prod `ReadMemStats` is the single `metrics/runtime.go` collector, called only when the metrics endpoint scrapes. |
+| S | `runtime.SetFinalizer`/`AddCleanup` in prod — hidden lifetime coupling. | ✅ Clean: absent (s795 already verified the finalizer class). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 884 update — net-poll + bufio-surface + reset-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net.Poller`/epoll/kqueue/raw `select` syscalls — non-portable poller hacks. | ✅ Clean: absent — the runtime's netpoller is the only poll mechanism. |
+| M | `bufio` `ReadBytes`/`Peek`/`Unread*` in prod — unbounded buffering or invalid peek/consume ordering. | ✅ Clean: `ReadSlice` is the only bufio read primitive in prod (ceiling + copy contract documented in stratumv1); no Peek/Unread. |
+| S | `Reset` called on the wrong pooled target — state leakage across borrows. | ✅ Clean: the only `Reset` is `h.Reset()` on a `hash.Hash` obtained from `hashPool` — the reset-on-borrow contract verified at s874. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 885 update — container + math-bits + bigint-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `container/heap`/`list`/`ring` in prod — hand-rolled data structures with brittle invariants. | ✅ Clean: absent — no `container/` import; the grep hits were comment text. |
+| M | `math/bits` low-level intrinsics — bit tricks that hide overflow/rotate bugs. | ✅ Clean: absent — spec bit ops use raw shifts/masks, verified at s772. |
+| S | `math/big` on a hot path — allocation-heavy arbitrary-precision math per share. | ✅ Clean: `big.Int` appears only on cold paths — target/decode (sha256d, base58, cert test helpers, engine setup) — verified at s792. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 886 update — slog-default + stdlib-log + logger-atomics audit
 
 | Cat | Finding | Disposition |
