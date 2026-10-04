@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1021 update — wordlist-integrity + catalog-skip + locale-detect audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A corrupted embedded BIP-39 wordlist silently producing non-portable mnemonics. | ✅ Clean: `init()` verifies 2048-word count AND the canonical SHA-256 before the process can run — panic on either failure (fail-closed at startup); `NewWordList` re-validates uniqueness, so the list is triple-checked. |
+| M | One bad built-in catalog preventing startup. | ✅ Documented tradeoff: `NewBundle` skips catalogs that fail to construct (English fallback covers them) and `MissingTranslations` surfaces the gap — startup resilience over perfect completeness, stated inline. |
+| M | POSIX locale strings (`ja_JP.UTF-8@modifier`, `C`, `POSIX`) misdetected. | ✅ Clean: `LC_ALL`→`LC_MESSAGES`→`LANG` precedence order; codeset (`'.'`) and modifier (`'@'`) stripped, `'_'`→`'-'`; neutral `C`/`POSIX` maps to English, not a false detect. |
+| M | Case-variant BCP-47 tags failing to match. | ✅ Clean: input lower-cased before exact-then-base matching (`JA`, `ja-JP`, `ja` all resolve to Japanese). |
+| S | `go_info`-style label breakage via locale strings reaching message IDs. | ✅ Clean: locale detection stays in `DetectLang*` — never concatenated into message IDs (typed `ID` keeps the two domains apart). |
+
+All packages build, vet, and test green.
