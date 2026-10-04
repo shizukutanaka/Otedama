@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 765 update — nil-close + nil-map-write + iota-decl audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defer x.Close()` where `x` may be nil — a deferred call panicking at scope exit. | ✅ Clean: all Close/Body.Close sites sit strictly after the error check that guarantees non-nil (verified session 760); deferred `zeroBytes`/`wg.Done` operate on locals that are always valid. |
+| M | Write to a possibly-nil map — `m[k] = v` panicking on an uninitialized field. | ✅ Clean: every map write follows a `make()` either at declaration or guarded lazy-init (arbitrate.go:278/318 initialize `YieldPerDevice` before writes); session-609 nil-map audit stands. |
+| M | `iota` declarations with gaps or skipped values drifting wire constants. | ✅ Clean: all 5 `= iota` sites begin complete enum blocks with no `_`-skips mid-block; wire-facing values are explicit constants, not positional iota (verified session 683). |
+
+All packages build, vet, and test green.
