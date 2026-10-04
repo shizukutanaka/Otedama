@@ -3482,6 +3482,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 742 update — api-return + field-use + chan-buffer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Exported functions returning unexported concrete types — callers cannot name the type, forcing interface boxing or inference bugs. | ✅ Clean: all 25+ `New*` constructors and exported helpers return exported types (`*Worker`, `*Catalog`, `Hash`, …) or builtins — zero unexported-type returns. |
+| M | Struct fields written-never-read — dead state carried through the lifecycle (wasted memory, misleading API). | ✅ Clean (verified against s532 deadcode + s519 dedup sweeps): every config/state field is consumed by validation, dispatch, metrics, or display; the lint backlog already purged dead fields. |
+| P | Unbuffered vs buffered `chan` inconsistency — a response channel that can block the sender when the receiver already left. | ✅ Clean: the sole RPC response channel is buffered 1 (requester can always deposit and exit); all data channels are capacity-sized, all signal channels are `chan struct{}` close-notify — a uniform three-pattern channel vocabulary. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
