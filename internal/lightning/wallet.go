@@ -148,7 +148,7 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 
 	walletPath := filepath.Join(dataDir, walletFile)
 	_, err := os.Stat(walletPath)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		// First run: generate a new seed.
 		if err := wm.createNew(passphrase, wo.mnemonicPassphrase, reader); err != nil {
 			return nil, err
@@ -167,7 +167,7 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 		// creation, and never overwrites an existing file — a fingerprint
 		// that disagrees with wallet.dat is a signal, not a bug to mask.
 		fpPath := filepath.Join(wm.dataDir, fingerprintFile)
-		if _, err := os.Stat(fpPath); os.IsNotExist(err) {
+		if _, err := os.Stat(fpPath); errors.Is(err, os.ErrNotExist) {
 			_ = os.WriteFile(fpPath, []byte(wm.Fingerprint()), 0o600)
 		}
 	}
