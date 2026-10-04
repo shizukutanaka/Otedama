@@ -1731,3 +1731,19 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+
+## Session 1240 checkpoint — full-surface audit complete
+
+The doc↔implementation parity pass (s1193–s1237), ADR body pass (s1236),
+and the sv2-apps v0.8.0 learning pass (s1239) are done. Every user-facing
+doc (README, SPECIFICATION, THREAT_MODEL, DEPLOYMENT, TROUBLESHOOTING,
+API, AUDIT_CHECKLIST, KNOWN_LIMITATIONS, solo-operations, competitive-analysis,
+architecture, MIGRATING-FROM-V2, SUSTAINABILITY, RESEARCH_IMPROVEMENTS) plus
+all 11 ADRs has been verified against shipped code; drift fixed via errata
+or doc corrections. Cumulative audited classes: ~650 across s752–s1239.
+
+New real defects landed on master in this segment: 2 (setup-version range
+enforcement #1239; workflow branch-filter master #1211/#1293).
+
+All packages build, vet, and test green.
