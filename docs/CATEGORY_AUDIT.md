@@ -2953,3 +2953,13 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1284 update — RESEARCH_IMPROVEMENTS open-set re-verification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Remaining 🟡 rows still genuinely open after s1282/s1283 shipped-row fixes | ✓ Verified: Akash REST still simulated (`AkashProvider.Name` discloses "(simulated)"), provider health/heartbeat absent (no liveness calls on Provider interface), OTel traces absent (no otel dep), SLO doc absent, carbon feed absent, pool-share-of-hashrate awareness absent, Markovian/bi-criteria bandit and federated rows still research-tier |
+| R | 🔵 rows unchanged | ✓ Verified: secp256k1 Noise rework (ADR-011), JDC/solo/DATUM (ADR-009), ASIC detection, temperature throttling, BOLT12/PSBT/descriptor rows remain planned/conditional |
+
+Open backlog rows re-verified against synced master; no shipped-but-stale rows remain.
+
