@@ -2821,6 +2821,16 @@ All packages build, vet, and test green.
 | S | Forbidden paths in docs | ✅ Clean — `docs/architecture.md` target-architecture body carries the top-of-file disclaimer already (prior fix); remaining doc references are notes that the paths don't exist. |
 
 All packages build, vet, and test green.
+---
+## Session 1213 update — release-path parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `release.yml` does not invoke goreleaser; `.goreleaser.yaml` signs/sboms/checksums are dead config | ⚠️ Noted — documented residual (sessions 480/488/516); VERIFY.md's top-of-file status block already discloses this accurately. Open maintainer decision: wire goreleaser into release.yml or keep inline builds. |
+| S | VERIFY.md ↔ actual release surface | ✅ Clean — the "not yet live" block correctly states release.yml builds plain tarballs, ci-cd.yml attaches an unsigned `checksums.txt` (ci-cd.yml:211–214), and install.sh tries `checksums.txt` then goreleaser-style names (install.sh:144). |
+| S | Asset-name parity | ✅ Clean — doc examples (`otedama_<ver>_checksums.txt`, `.sbom.*`) are presented as intended-flow only; no current-tense claim contradicts the actual `otedama-<os>-<arch>.tar.gz` / `.deb` / `.rpm` uploads. |
+
+All packages build, vet, and test green.
 
 ---
 
