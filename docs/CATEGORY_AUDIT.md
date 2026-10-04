@@ -2660,6 +2660,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1142 update — len-idiom census
+
+Emptiness-test style: `len(x) != 0` vs `> 0` vs `== 0` vs `>= 1`.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Mixed `!= 0` (16), `> 0` (17), `== 0` (17) — all semantically correct; one `len(p) >= 1` (parse.go:260) equivalent to `> 0`; `len(payload) < 16` is a real bound check not an emptiness test | ⚠️ Noted (style-only inconsistency, no defect) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
