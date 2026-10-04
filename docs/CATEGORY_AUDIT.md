@@ -4335,6 +4335,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 845 update — error-switch + sentinel-eq + try-parse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `switch err.(type)` — fragile alternative to `errors.As` that misses wrapped errors. | ✅ Clean: absent — the `case Msg*Error` hits are SV2 message-type enum dispatch, not error classification; all error inspection uses `errors.Is/As`. |
+| M | `err == ErrX` / `err != ErrX` — sentinel comparison misses wrapped sentinels. | ✅ Clean: all `err ==` comparisons are `err == nil`; zero sentinel equality checks (the `flag.ErrHelp` `==` site uses the canonical stdlib pattern — session 819). |
+| S | `_, err := f(x); if err == nil` try-parse chains — error swallowed for control flow. | ✅ Benign: the try-parse pattern (`hex.DecodeString`, `ecdh.NewPublicKey`, `ParseFloat`, `SplitHostPort`, `os.Stat`) deliberately treats "unparseable" as a normal branch — input is untrusted pool/CLI text where decode failure means "wrong shape", not an error. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
