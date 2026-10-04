@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 929 update — poolproto-register + lookup-wrap + dialurl-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Nil dialer / unknown protocol ID / duplicate registration sliding silently into the registry. | ✅ Clean: `Register` panics on nil + `ProtocolUnknown` + duplicate ID — init-time misregistration is impossible to miss. |
+| M | `Lookup` returning a bare "not found" that `errors.Is` can't classify. | ✅ Clean: returns `fmt.Errorf("%w: %q", ErrUnknownProtocol, id)` — sentinel-preserved. |
+| M | Negotiate failure leaving the conn open — fd leak per failed dial. | ✅ Clean: `DialURL` closes `conn` before wrapping the negotiate error; both stages wrap with `%w` + URL for classification. |
+
+All packages build, vet, and test green.
