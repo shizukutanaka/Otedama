@@ -2953,3 +2953,11 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1294 update — shell-script + container-manifest hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Tracked `*.sh` syntax | ✓ `install.sh` is the only tracked shell script (`scripts/` absent) — parses clean under `sh -n` |
+| R | Dockerfile coherence | ✓ Two-stage `golang:1.24-alpine` builder → distroless static; Go pin satisfies the go.mod toolchain floor; CGO_ENABLED=0 + -trimpath + ldflags `internal/version.*` symbol paths correct (#1275 invariant holds in container build too) |
+
