@@ -2594,6 +2594,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1137 update — atomic-usage census
+
+`atomic` free-function ops on locals (meaningless) vs typed atomics on
+shared state — plus legacy `atomic.Xxx` package functions.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 26 `atomic.*` sites, all typed (`Uint64`/`Bool`/`Int64`/`Pointer[T]`) on struct fields or heap vars shared across goroutines; zero package-func forms, zero ops on locals | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
