@@ -5,6 +5,7 @@ package metrics
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -546,7 +547,7 @@ func TestRegisterCollector_ErrorPropagates(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from collector, got nil")
 	}
-	if err != sentinel {
+	if !errors.Is(err, sentinel) {
 		t.Errorf("error = %v, want %v", err, sentinel)
 	}
 }
@@ -846,7 +847,7 @@ func TestWriteText_SameNameSeriesSortedByLabel(t *testing.T) {
 	}
 }
 
-// BenchmarkWriteText exercises the /metrics exposition path with many labelled
+// BenchmarkWriteText exercises the /metrics exposition path with many labeled
 // series — the realistic shape Prometheus scrapes. It is the benchmark that
 // makes the decorate-sort win (metricKey computed O(n) instead of O(n log n))
 // observable; compare allocs/op before and after.

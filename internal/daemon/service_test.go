@@ -236,11 +236,46 @@ func TestSystemdUnit_QuotesBinaryPathWithSpaces(t *testing.T) {
 
 func TestSystemdUnit_DoesNotQuoteSimpleBinaryPath(t *testing.T) {
 	// A normal path with no spaces must remain unquoted (clean output, and
-	// the previous behaviour for the common case is preserved).
+	// the previous behavior for the common case is preserved).
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	unit := m.systemdUnit()
 	if !strings.Contains(unit, "ExecStart=/usr/local/bin/otedama run") {
 		t.Errorf("systemd ExecStart should leave a space-free path unquoted; got:\n%s", unit)
+	}
+}
+
+func TestSystemdUnit_NewlineInValueCannotInjectDirective(t *testing.T) {
+	// A flag value containing a literal newline must not break out of the
+	// ExecStart= line into a new unit directive: before quoteToken learned
+	// about control characters, a data dir of "x\nProtectHome=false" would
+	// have landed in the unit file raw and silently removed the sandbox.
+	m := &Manager{
+		binaryPath: "/usr/local/bin/otedama",
+		dataDir:    "/home/u/.otedama\nProtectHome=false",
+	}
+	unit := m.systemdUnit()
+	if strings.Contains(unit, "\nProtectHome=false") {
+		t.Errorf("newline in flag value injected a unit directive:\n%s", unit)
+	}
+	if !strings.Contains(unit, `\n`) {
+		t.Errorf("expected the newline to be escaped inside quotes; got:\n%s", unit)
+	}
+	// Only the intended directive lines exist — the escaped form sits
+	// inside quotes as backslash-n, so line-anchored count must be 1.
+	if strings.Count(unit, "\nProtectHome=") != 1 {
+		t.Errorf("expected exactly one ProtectHome= directive; got:\n%s", unit)
+	}
+}
+
+func TestQuoteToken_ControlCharacters(t *testing.T) {
+	if got := quoteToken("plain"); got != "plain" {
+		t.Errorf("quoteToken(plain) = %q", got)
+	}
+	for _, s := range []string{"a\nb", "a\rb", "a\x00b", "a\x7fb"} {
+		got := quoteToken(s)
+		if !strings.HasPrefix(got, `"`) || strings.ContainsAny(got, "\n\r\x00") {
+			t.Errorf("quoteToken(%q) = %q — control char not escaped", s, got)
+		}
 	}
 }
 
@@ -399,7 +434,7 @@ func TestUninstallSystemd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -503,7 +538,7 @@ func TestUninstallLaunchd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -666,7 +701,7 @@ func TestUninstall_Linux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -702,7 +737,7 @@ func blockConfigDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockConfigDir WriteFile: %v", err)
 	}
 }
@@ -713,7 +748,7 @@ func blockLibraryDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockLibraryDir WriteFile: %v", err)
 	}
 }
@@ -790,7 +825,7 @@ func TestInstallSystemd_WriteFileError(t *testing.T) {
 	// Create a DIRECTORY where the unit FILE must go — os.WriteFile returns
 	// "is a directory" even as root, which covers the error branch.
 	unitPath := filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
-	if err := os.MkdirAll(unitPath, 0755); err != nil {
+	if err := os.MkdirAll(unitPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -807,7 +842,7 @@ func TestInstallLaunchd_WriteFileError(t *testing.T) {
 	t.Setenv("HOME", home)
 	// Create a DIRECTORY at the plist path to force WriteFile to fail.
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
-	if err := os.MkdirAll(plistPath, 0755); err != nil {
+	if err := os.MkdirAll(plistPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -858,7 +893,7 @@ func TestUninstall_DarwinDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if err := m.Uninstall(); err != nil {
