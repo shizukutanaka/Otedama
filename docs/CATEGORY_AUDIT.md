@@ -1734,6 +1734,246 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GOMAXPROCS`/`debug.SetGCPercent`/`FreeOSMemory` — hidden global tuning the operator cannot see. | ✅ Clean: absent — no runtime knobs are mutated; scheduling/GC stay under the Go runtime's defaults (README documents GOMAXPROCS as the env lever). |
+| M | `runtime.NumCPU()` used where a bounded worker count was intended — thread explosion on big machines. | ✅ Clean: `miner` uses `NumCPU` only as the `Threads: 0` default (documented); operator flags can cap it. |
+| S | `runtime.GOOS` sprinkled through production logic — untestable platform forks. | ✅ Clean: production GOOS dispatch lives in `daemon/service_paths.go` behind build-tagged platforms; elsewhere it appears only in test skips. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 878 update — codec-census + binary-struct + encoding-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `encoding/gob`, `encoding/xml`, `encoding/csv`, `encoding/asn1`, `base32`/`base64` — alternate codecs deserializing wire data with own quirks. | ✅ Clean: absent — the only encoding imports are `json` (config/doctor/version), `hex` (address/seed display), `pem` (doctor cert probe test), `binary` (wire primitives). |
+| M | `binary.Size`/`binary.Read`/`binary.Write` on variable-layout structs — silent size mismatches vs spec. | ✅ Clean: absent — all wire layout is computed by explicit `append*`/`get*` primitives against spec constants (s741/824). |
+| S | Codec surface drift — different encodings used for the same kind of data in different places. | ✅ Clean: JSON for all structured config/report boundaries, hex for all byte display — no competing codec. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 879 update — ptr-tricks + go-directive + sys-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `unsafe`/`uintptr`/`reflect` in production — layout hacks, GC-pooler breakage, no checkptr coverage. | ✅ Clean: absent from production — `reflect.DeepEqual` appears in one fuzz test only (build/vet confirmed clean at s538/s687). |
+| M | `//go:linkname`/`//go:noinline`/`//go:generate` directives — hidden behavior, unreachable code, or stale generated files. | ✅ Clean: the only directives are `//go:build` platform tags (hal linux/stub, tui width_unix/width_windows/width_other) — correct mutually-exclusive coverage. |
+| S | Direct `syscall`/`x/sys` surface wider than needed — platform-coupled APIs leaking into core logic. | ✅ Clean: `x/sys/unix|windows` only in the build-tagged `tui/width_*.go` terminal-size helpers; `syscall.SIGTERM` only for the run-loop signal set. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 880 update — flag-dup-recheck + flagset-error + setflags audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate flag-name registration within a `flag.FlagSet` — init-time panic. | ✅ Clean: every name registers exactly once per FlagSet (run/doctor/service/version/config/completion). The quoted-string `uniq -d` hits in run.go are `setFlags` map lookups and log literals, not registrations. |
+| M | `flag.ExitOnError`/`flag.Parse` inside library code — `os.Exit` bypasses cleanup. | ✅ Clean: every FlagSet uses `flag.ContinueOnError`; parse errors return through `parseSubcommandFlags` to the dispatcher's exit-code path. |
+| M | `setFlags` map drift — a flag marked "set" that was never registered. | ✅ Clean: `setFlags` records only names passed to `fs.Visit`, i.e. flags actually parsed — cannot list unregistered names. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 881 update — ansi-escape + tui-state + cursor-contract audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Raw `\x1b[` escapes in user-facing output — malformed sequences corrupt the terminal. | ✅ Clean: escapes live behind named constants (`esc`/`reset`/`bold`/…) and a `stripANSI` that terminates on any non-`m` CSI end byte — verified by the formatters tests (clear-screen and truncated-sequence cases). |
+| M | TUI cursor/screen state diverging from what was drawn — flicker, leftover cells, or a permanently garbled dashboard. | ✅ Clean: `clearScreen` saves cursor → moves home → clears below → restores; the saved position is re-written every refresh, so a resize can only widen the cleared region, never narrow it. |
+| S | ANSI emitted on non-terminal output — escape noise in log files and pipes. | ✅ Clean: the dashboard only runs when `--no-tui` is unset and output is a terminal; the plain `logln` path emits no escapes. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 882 update — sleep-lock + sleep-busywait + print-under-lock audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Sleep` in a lock-held or hot path — stalls other goroutines. | ✅ Clean: the only sleep is worker.go:269's `time.Sleep(10ms)` on the `localWork == nil` wait — no lock held, cold idle path. |
+| M | `for` + sleep/`time.After` as a busy-wait — burns CPU polling a flag. | ✅ Clean: same single sleep is the yield-retry pattern on the work assignment — no other sleeps, no `time.After` loops in prod. |
+| M | `fmt.Print`/`Fprintf` while holding a mutex — output stalls hold the lock. | ✅ Clean: no `fmt.*` calls inside any `mu.Lock` scope — verified by both grep and the lock-region read at s863/864. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 883 update — runtime-gc + gc-tuning + memstat audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.GC`/`debug.FreeOSMemory`/`SetGCPercent`/`SetMemoryLimit` in prod — manual GC fiddling fights the collector. | ✅ Clean: absent from production — `runtime.GC` and `ReadMemStats` appear in tests only. |
+| M | `runtime.ReadMemStats` on a hot path — stop-the-world-ish stat collection per request. | ✅ Clean: prod `ReadMemStats` is the single `metrics/runtime.go` collector, called only when the metrics endpoint scrapes. |
+| S | `runtime.SetFinalizer`/`AddCleanup` in prod — hidden lifetime coupling. | ✅ Clean: absent (s795 already verified the finalizer class). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 884 update — net-poll + bufio-surface + reset-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net.Poller`/epoll/kqueue/raw `select` syscalls — non-portable poller hacks. | ✅ Clean: absent — the runtime's netpoller is the only poll mechanism. |
+| M | `bufio` `ReadBytes`/`Peek`/`Unread*` in prod — unbounded buffering or invalid peek/consume ordering. | ✅ Clean: `ReadSlice` is the only bufio read primitive in prod (ceiling + copy contract documented in stratumv1); no Peek/Unread. |
+| S | `Reset` called on the wrong pooled target — state leakage across borrows. | ✅ Clean: the only `Reset` is `h.Reset()` on a `hash.Hash` obtained from `hashPool` — the reset-on-borrow contract verified at s874. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 885 update — container + math-bits + bigint-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `container/heap`/`list`/`ring` in prod — hand-rolled data structures with brittle invariants. | ✅ Clean: absent — no `container/` import; the grep hits were comment text. |
+| M | `math/bits` low-level intrinsics — bit tricks that hide overflow/rotate bugs. | ✅ Clean: absent — spec bit ops use raw shifts/masks, verified at s772. |
+| S | `math/big` on a hot path — allocation-heavy arbitrary-precision math per share. | ✅ Clean: `big.Int` appears only on cold paths — target/decode (sha256d, base58, cert test helpers, engine setup) — verified at s792. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 886 update — slog-default + stdlib-log + logger-atomics audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `slog.SetDefault`/`slog.SetLogLoggerLevel` — global mutation outside the atomic pointer logger. | ✅ Clean: absent — default override goes through `logger.SetDefault` which stores into `atomic.Pointer`, keeping `FromContext` race-free under `-race`. |
+| M | Stdlib `log.New`/`log.Set`/`log.Print` — a second log path bypassing structured output. | ✅ Clean: absent — `log/slog` is the single logging stack (s733/735 verified no bare `log.` calls). |
+| S | `slog.New` handlers built per call — repeated handler construction cost. | ✅ Clean: handlers are built once in `New`/`Discard` at construction; the `Adapter`/`With` paths reuse them. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 888 update — embed-surface + unsafe2 + bit-intrinsic audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go:embed` shipping mutable config/data into the binary — stale defaults hidden in the image. | ✅ Clean: absent — nothing is embedded; `config.yaml.example` is documentation, loaded at runtime from the operator's filesystem. |
+| M | Pointer-trick packages (`unsafe`-backed helpers) — unchecked layout/size assumptions. | ✅ Clean: absent — s879 verified zero `unsafe`/`uintptr`/`reflect` in prod. |
+| S | `math/bits` intrinsics or hand-rolled bit tricks beyond spec ops. | ✅ Clean: absent — s885 verified; spec bit math uses raw shifts/masks only. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 889 update — setenv-prod + exec-env + env-warning audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Setenv`/`Unsetenv`/`Clearenv` in prod — global env mutation that races reads. | ✅ Clean: absent — the only env writes are the six test sites in `cmd/otedama` (defer-restored, s731). |
+| M | `exec.Cmd.Env` overriding the child env — secret/environment leakage to spawned tools. | ✅ Clean: no `.Env` assignment in prod — `exec.Command` inherits the process env; systemctl invocations pass only argv (s864). |
+| S | Env warnings lost between the config layer and the operator. | ✅ Clean: `config.EnvWarnings(nil)` is surfaced in three places (run.go, config.go, doctor) — same warnings at every entry point. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 890 update — milestone checkpoint 2
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Sessions 851–889 audited ~40 more defect classes (≈ 320 cumulative): env surface, flag/argv correctness, flag-set error policy, ANSI/TUI, logging, runtime/GC, container/big-int, embed, bufio/poller, exec env, setenv. | ✅ All clean or benign — zero new reachable defects. |
+| S | One real correction landed mid-run: session-864's "no flag package" claim was wrong — the grep missed `*Var` registrations; corrected on the s864 branch (still clean: FlagSets are per-subcommand with `ContinueOnError`). | ✅ Corrected in place, per the audit-ledger honesty rule. |
+| S | Real code fixes shipped to date: C1 control-char gap (#809), XDG systemd-manager env (#807), AEAD-per-frame re-derivation (#957). | ✅ All three verified by tests; ~320 classes clean against 3 real fixes — the mechanical audit keeps finding the codebase already correct. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 891 update — ip-parse + dial-bound + resolver audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net.ParseIP` misuse in a security check — loopback detection that misses IPv6 brackets or "localhost". | ✅ Clean: `isLoopbackAddr` (run.go:346-360) does `SplitHostPort` → `Trim "[]"` → `localhost` → `ParseIP().IsLoopback()`; the only caller is the `--http-addr`/`--pprof` warn (s504). |
+| M | `net.Dialer` without a timeout or ctx — pool dials that can hang forever. | ✅ Clean: every prod dial sets `d.Timeout`/`DialContext(ctx,…)` and runs inside `poolDialTimeout` (engine run.go:776-793; stratumv2 dialer; tls Dialer). |
+| S | `net.Resolve*`/`Lookup*` DNS in prod — unbounded resolution outside the dial path. | ✅ Clean: absent — resolution happens only inside `DialContext`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 892 update — atomic-typed + atomic-free-func + atomic-float audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Untyped atomic fields (`atomic.Value`, plain ints + `atomic.AddInt*`) — the pre-Go-1.19 API that permits non-atomic access. | ✅ Clean: every atomic field is typed (`atomic.Bool`/`Uint64`/`Int64`/`Pointer[T]`) — the field list is a full census; no untyped free-function sites. |
+| M | `atomic.Float64` misuse — float atomics used for counters where `Uint64` bits would be exact. | ✅ Clean: absent — all counters are `atomic.Uint64`; float64 metrics go through `Uint64` `Bits` helpers (s739). |
+| S | `atomic.Pointer` to a shared mutable target — pointer swap frees the old, but readers of a stale copy mutate freed state. | ✅ Clean: the only `atomic.Pointer` targets are `Logger`, `error`, `reconnectDirective` — all effectively immutable after store (pointer swap publishes a whole new object). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 893 update — http-server-timeout + default-mux + bare-client audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `http.Server` without timeouts — slowloris + goroutine pileup under a hung client. | ✅ Clean: `httpserver` sets `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` 10s, `IdleTimeout` 60s. |
+| M | `http.DefaultServeMux`/`Handle`/`HandleFunc` on the global mux — pprof or handlers registering package-wide. | ✅ Clean: dedicated `http.NewServeMux`; the pprof comment at server.go:44 documents why `net/http/pprof`'s own init is avoided. |
+| S | `http.Get`/`Post`/`DefaultClient` — unbounded default client on outbound calls. | ✅ Clean: absent — every outbound request is `NewRequestWithContext` + a `&http.Client{Timeout: …}` (s835/836/868 verified). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 894 update — process-handle + pid-kill + process-lifecycle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.StartProcess`/`ForkExec`/raw `*os.Process` handles — un-reaped processes or pid reuse races. | ✅ Clean: absent — no `Process` handles, `Pid` fields, or `ForkExec` in the codebase. |
+| M | `Process.Kill`/`Signal`/`Wait`/`Release` — signals to a possibly-reused pid. | ✅ Clean: absent — process control reaches children only through `exec.Cmd`'s own lifecycle (verified s748/s864). |
+| S | `os.FindProcess` on an arbitrary pid — returns a handle to a possibly-different process. | ✅ Clean: absent. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 895 update — text-pkg + utf8-validate + rune-conversion audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `image`/`color`/`draw`/`x/text`/`x/image` — heavyweight rendering deps for a CLI. | ✅ Clean: absent — only `text/template` (i18n catalog rendering) and `text/plain`/`text/html` content-type strings. |
+| M | External text accepted without `utf8.ValidString` — invalid UTF-8 into logs/messages. | ✅ Clean: the only external text boundary (BIP-39 words at seed.go:133) is `ValidString`-gated; wire text is byte-level protocol frames. |
+| S | `[]rune(s)` conversion for byte-per-byte iteration — needless allocation. | ✅ Clean: the three conversions (poolproto sanitize, stratumv1 sanitize, main.go distance) iterate runes deliberately — each is a cold path where byte-vs-rune correctness matters. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 896 update — uid-gid + home-dir + user-pkg audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Getuid`/`Geteuid`/`Getgroups`/`user.*` privilege checks — Windows/other-OS portability breaks. | ✅ Clean: absent — no uid/gid/user lookups; the daemon path is the only privilege boundary and it shells to `systemctl --user` (s807). |
+| M | `os.UserHomeDir` used where an env/dir override should win — ignores XDG_CONFIG_HOME. | ✅ Clean: the 6 sites are all fallbacks for the default path; the XDG_CONFIG_HOME/XDG override is layered above them (s807). |
+| S | `os.UserConfigDir`/`UserCacheDir` instead of the XDG-aware path — divergent location rules. | ✅ Clean: absent — the XDG handling is explicit in `config`, not via `UserConfigDir`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 897 update — mkdir-perm + tmp-perm + os-mutation audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.MkdirAll` with a too-loose mode on a secret-bearing dir — secrets readable by other users. | ✅ Clean: daemon dirs are `0o755` (non-secret config); the wallet data dir is `0o700`. |
+| M | Temp-file write without a permission tighten — wallet backup left world-readable. | ✅ Clean: `lightning/wallet.go` `CreateTemp` + `Chmod 0o600` before rename — the atomic-save contract verified at s501/716. |
+| S | `os.Chtimes`/`Truncate`/`Readlink`/`Expand*`/`Hostname`/`Chown`/`Symlink`/`Link`/`RemoveAll`/`MkdirTemp`/`Getpagesize` in prod — unverified surface. | ✅ Clean: absent in prod — every residual `os.*` mutation is the mkdir/chmod set above. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 898 update — clock-bypass + time-fallback + time-parse audit
 
 | Cat | Finding | Disposition |
