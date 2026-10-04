@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 837 update — regexp-absence + glob-pattern + match-input audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `regexp` on attacker-controlled input — catastrophic backtracking (ReDoS). | ✅ Clean: zero regexp usage in production code — string matching is exact/prefix/suffix. |
+| S | `filepath.Glob`/`path.Match` with a user-controlled pattern — traversal or resource exhaustion via glob metacharacters. | ✅ Clean: single glob (`wallet.go:267`) uses the fixed literal `.wallet-*.tmp` inside the wallet dir — no user pattern input. |
+| S | `MatchString` on untrusted text — same ReDoS surface via compiled patterns. | ✅ Clean: absent — no regexp anywhere. |
+
+All packages build, vet, and test green.
