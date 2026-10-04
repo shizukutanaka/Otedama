@@ -2731,3 +2731,20 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+## Session 1269 update — SetTarget bound audit (proactive, sv2-spec #236)
+
+Audited the engine's handling of server-sent share targets ahead of
+sv2-spec #236 (`SetTarget.target` MUST NOT exceed the channel's
+`max_target`), flagged in the session-1268 ecosystem update.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| set-target-bound | `SetTarget` applied unconditionally at `run.go:1092` — no max_target bound | ⚠️ Noted — by design: `OpenMiningChannel` declares no max_target (handshake.go:156–161, deliberate — "accepts whatever share target the pool assigns"), so #236's bound would be vacuous for Otedama. Hostile ends already mitigated: target=0 → `DifficultyFromTarget` → +Inf → "income effectively zero" starvation warn; target=0xFF..FF → share flood → per-session submit rate cap; superseded-target rejects → retarget classification excludes them from reject rate (ESP-Miner #212). |
+| initial-target | `OpenMiningChannelSuccess.Target` used identically via `handshake()` return | ✅ Clean — same unbounded-by-design path, same mitigations |
+| foreign-channel | `SetTarget.ChannelID` enforced by `channelIDOf` frame guard (run.go:1638, 1028) | ✅ Clean — frames for foreign channels dropped |
+
+If #236 merges, Otedama could optionally adopt a clamp (e.g. bound
+share difficulty to a sane ceiling) but the starvation/flood
+mitigations already cover the reachable damage.
+
+All packages build, vet, and test green.
