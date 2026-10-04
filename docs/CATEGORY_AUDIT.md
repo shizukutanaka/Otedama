@@ -2861,6 +2861,36 @@ All packages build, vet, and test green.
 | S | Cross-doc ADR references | ✅ Clean — every `ADR-NNN` reference in KNOWN_LIMITATIONS/AUDIT_CHECKLIST resolves to a real file; AUDIT_CHECKLIST's "ADR-001, -002, -003 present" is a spot-check row, not a count claim. |
 
 All packages build, vet, and test green.
+---
+## Session 1218 update — ADR index + status parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ADR file set vs CLAUDE.md | ✅ Clean — exactly ADR-001…011 exist in `docs/adr/`, matching the architecture-map declaration. |
+| S | Status parity | ✅ Clean — all 11 ADRs carry a `**Status:**` field; README.md index matches (001–006 + 011 Accepted, 007–010 Proposed) and records ADR-002's partial supersession by ADR-006. |
+| S | Cross-doc ADR references | ✅ Clean — every `ADR-NNN` reference in KNOWN_LIMITATIONS/AUDIT_CHECKLIST resolves to a real file; AUDIT_CHECKLIST's "ADR-001, -002, -003 present" is a spot-check row, not a count claim. |
+
+All packages build, vet, and test green.
+---
+## Session 1219 update — fuzz-target ↔ decoder-surface parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Stratum V2 decode surface | ✅ Clean — all 14 exported decoders (`DecodeHeader`, `Decoder.ReadFrame`, 6 handshake decoders, 6 steady-state message decoders) are exercised by `frame_fuzz_test.go`/`handshake_fuzz_test.go`/`messages_fuzz_test.go`/`roundtrip_fuzz_test.go`. |
+| S | Cross-package fuzz inventory | ✅ Clean — 21 `Fuzz*` entrypoints across 13 files cover every boundary parser (config YAML, BIP-39 mnemonic, rate JSON, V1 notify/parse, base58/bech32 addresses, arbitration inputs, miner bit-math). |
+| S | OSS-Fuzz readiness claim | ✅ Clean — `.github/oss-fuzz-integration.md` checklist satisfied (21 ≥ required count), consistent with #1250's ledger entry. |
+
+All packages build, vet, and test green.
+---
+## Session 1220 update — mechanical-audit checkpoint
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Ledger state | ✅ Clean — 93 `## Session` verdict entries on master; every defect class re-verified this pass (doctor count, i18n catalog, ADR index, fuzz surface, spec defaults) is either clean or recorded as ⚠️ Noted with the reason. |
+| S | Real fixes since last checkpoint | ✅ Clean — #1293 (workflow branch filters → master), #1290 (`otedama_devices_idle` metric row), #1286 (`otedama completion` API doc), s1214 (SUSTAINABILITY flag names), s1217 (SPECIFICATION defaults) all delivered as independent PRs. |
+| S | Open residual defects | ⚠️ Noted — docker-verify script gaps (verify-docker.{sh,ps1} absent, build-arg names, grep formats), dead goreleaser config vs inline release.yml build, and the preexisting 8-job CI failure signature (go.mod `tlsmlkem`, Dependency graph) remain open maintainer decisions. |
+
+All packages build, vet, and test green.
 
 ---
 
