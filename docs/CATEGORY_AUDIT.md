@@ -4653,6 +4653,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 871 update — debug-surface + pprof + leak-helper audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `expvar`/`plugin`/`cgo-ffi` — implicit global mutation or unsafe plugin surface. | ✅ Clean: absent. |
+| M | `net/http/pprof` blank-import — handlers silently land on `http.DefaultServeMux` exposed to the network. | ✅ Clean: explicit import; handler funcs called directly on the custom mux only; mounted only when `--pprof` (default off) — plus non-loopback warn (s453). |
+| S | Goroutine-leak detection absent — leaked goroutines slip tests. | ✅ Benign: `goleak` deliberately not vendored (zero-dep policy); in-test `runtime.NumGoroutine` delta checks used in `rates/fetcher_test.go` instead. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
