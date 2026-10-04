@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1014 update — i18n-fallback + immutability + degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A missing translation leaving the UI with an empty string. | ✅ Clean: `Render` falls exact → base tag → mandatory English → `"!{id}!"` placeholder + error — conspicuous in logs and never blank; English presence is enforced at `NewBundle`. |
+| M | Caller-side mutation corrupting a shared catalog across goroutines. | ✅ Clean: `NewCatalog` deep-copies the messages map; `Bundle` holds its own catalog map; both are documented lock-free-after-construction (the deliberate no-lock design matters on the log-line hot path). |
+| M | An invalid message ID or duplicate language slipping into the bundle. | ✅ Clean: `ID.Valid`/`Lang.Valid` charset checks reject bad IDs at construction; `NewBundle` rejects duplicate languages. |
+| M | A template variable missing from `data` breaking message rendering. | ✅ Clean: `RenderWith` fast-paths messages without `{{`; parse/exec failures return the raw template + error — degrades, never breaks rendering. |
+| S | Translation-completeness drift between English and the ten priority languages going unnoticed. | ✅ Clean: `MissingTranslations` emits sorted per-language gaps for the CI completeness check; complete languages are omitted. |
+
+All packages build, vet, and test green.
