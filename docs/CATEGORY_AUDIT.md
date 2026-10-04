@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 846 update — defer-in-loop + defer-in-select + replacer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defer` inside a `for range ch` loop — defers pile up until function exit, resources held. | ✅ Clean: absent — channel consumers release per-iteration explicitly. |
+| M | `defer` inside a `for { select }` loop — same unbounded defer pileup. | ✅ Clean: absent — verified zero sites. |
+| S | `strings.Replacer`/`Replace` with a non-empty-pattern ordering bug — earlier rules shadow later ones. | ✅ Clean: zero `NewReplacer`/`Replace` in production code — sanitization is `strings.Map`-based (session 807). |
+
+All packages build, vet, and test green.
