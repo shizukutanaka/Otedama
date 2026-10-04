@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 933 update — wire-primitive + length-prefix + postel-decode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `appendStr0_255`/`appendB0_*` writing an over-long length prefix (silent truncation or corrupt frame). | ✅ Clean: every appender bounds the value at the declared cap (255 or 32) before writing the prefix — oversized input errors, never encodes. |
+| M | `getStr0_255`/`getB0_255` allocating attacker-controlled length — the same DoS class as MsgLength. | ✅ Clean: the length prefix is one byte — max allocation is 255 B regardless of input; `io.ReadFull` governs truncation errors. |
+| S | Decode-side B0_32 absent — asymmetric bound risk. | ✅ Deliberate: Postel's-law comment documents strict-encode (32) vs lenient-decode (B0_255 accepts 33–255 with allocation safety) so a non-conformant pool's extranonce isn't a fatal error. |
+
+All packages build, vet, and test green.
