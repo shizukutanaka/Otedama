@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1185 update — .dockerignore ↔ Dockerfile parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `.dockerignore` exclusions vs Dockerfile `COPY` | ✅ Clean — `COPY . .` needs `go.mod`/`go.sum`/`cmd/`/`internal/`/`LICENSE`/`NOTICE`, none excluded; `!LICENSE`/`!NOTICE` exceptions correct |
+| S | Secrets in build context | ✅ Clean — `wallet.dat`, `wallet.fingerprint`, `config.yaml`, `.git/` all excluded |
+| S | Image asset completeness | ✅ Clean — runtime stage copies `/out/otedama`, `/src/LICENSE`, `/src/NOTICE`, zoneinfo — all produced/carried by builder stage |
+
+All packages build, vet, and test green.
