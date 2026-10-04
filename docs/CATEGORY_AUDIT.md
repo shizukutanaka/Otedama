@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 764 update — lock-pairing + mutex-copy + goroutine-panic audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Manual `Lock()`/`Unlock()` pairing — a panic or early return between them leaving the mutex locked. | ✅ Clean: all 44 Lock sites pair Unlock on every path (overwhelmingly `defer Unlock` immediately after; the few manual pairs are short, panic-free critical sections). |
+| M | Struct with a `sync.Mutex` returned by value — copying a held mutex. | ✅ Clean: mutexes live as struct fields addressed via pointer receivers or passed explicitly as `*sync.Mutex` (arbitrate.go `updateStream`) — `go vet` copylocks is green; no value-return of lock-bearing structs. |
+| M | `panic()` reachable inside a spawned goroutine — an input-triggered process kill bypassing error handling. | ✅ Clean: all 12 panic sites are invariant/misuse guards on the main goroutine (init registration, duplicate Start, metric-name validation) — none reachable from wire data or spawned workers. |
+
+All packages build, vet, and test green.
