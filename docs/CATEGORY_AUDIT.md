@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 897 update — mkdir-perm + tmp-perm + os-mutation audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.MkdirAll` with a too-loose mode on a secret-bearing dir — secrets readable by other users. | ✅ Clean: daemon dirs are `0o755` (non-secret config); the wallet data dir is `0o700`. |
+| M | Temp-file write without a permission tighten — wallet backup left world-readable. | ✅ Clean: `lightning/wallet.go` `CreateTemp` + `Chmod 0o600` before rename — the atomic-save contract verified at s501/716. |
+| S | `os.Chtimes`/`Truncate`/`Readlink`/`Expand*`/`Hostname`/`Chown`/`Symlink`/`Link`/`RemoveAll`/`MkdirTemp`/`Getpagesize` in prod — unverified surface. | ✅ Clean: absent in prod — every residual `os.*` mutation is the mkdir/chmod set above. |
+
+All packages build, vet, and test green.
