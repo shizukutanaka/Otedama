@@ -3257,6 +3257,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1203 update — DEPLOYMENT.md flag/env parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `--flag` names in DEPLOYMENT | ✅ Clean — every flag (`--config`/`--log-file`/`--http-addr`/`--log-format`/`--data-dir`/`--wallet-passphrase`; `--name`/`--restart`/`--home`/`--shell`/`--system` are useradd/service flags, not product flags) maps to implementation |
+| S | `OTEDAMA_*` env names in DEPLOYMENT | ✅ Clean — `BITCOIN_ADDRESS`/`DATA_DIR`/`LOG_FORMAT`/`WALLET_PASSPHRASE` all implemented (passphrase env is read in run.go:120, not the config layer — verified) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
