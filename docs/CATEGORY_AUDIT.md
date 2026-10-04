@@ -1962,6 +1962,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 897 update — mkdir-perm + tmp-perm + os-mutation audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.MkdirAll` with a too-loose mode on a secret-bearing dir — secrets readable by other users. | ✅ Clean: daemon dirs are `0o755` (non-secret config); the wallet data dir is `0o700`. |
+| M | Temp-file write without a permission tighten — wallet backup left world-readable. | ✅ Clean: `lightning/wallet.go` `CreateTemp` + `Chmod 0o600` before rename — the atomic-save contract verified at s501/716. |
+| S | `os.Chtimes`/`Truncate`/`Readlink`/`Expand*`/`Hostname`/`Chown`/`Symlink`/`Link`/`RemoveAll`/`MkdirTemp`/`Getpagesize` in prod — unverified surface. | ✅ Clean: absent in prod — every residual `os.*` mutation is the mkdir/chmod set above. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
