@@ -1072,3 +1072,31 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-775 ecosystem update (2026-10-03)
+
+**sv2-spec:**
+- **#236 (open, active)** — `SetTarget.target` MUST NOT exceed the
+  channel's `max_target`: still open after the 2026-10-02 update;
+  Otedama already clamps pool-set targets to the block-target bound
+  (sessions 256/736), so conformance unaffected if it merges.
+- Normative open set unchanged: #236, #234 (authority key mgmt),
+  #203 (coinbase payout extension), #198 (coinbase_witness) —
+  quiet window continues; no new protocol requirement since #231.
+
+**SRI:** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps:** open set holds at 27. Since the session-761 check:
+- **#907 (merged)** — docs-only agents-file guidance; no protocol
+  impact.
+- **#908 (open)** — B08 type support in `bitcoin_core_sv2`: block-
+  template version coverage for newer core releases; worth tracking
+  for V2 job-source compatibility.
+- **#845 (open, updated)** — renames target message fields to match
+  the spec cleanup Otedama already adopted (session 704).
+- **#856 (open, updated)** — `bitcoin_core_sv2` hardening continues.
+- Tracked #881/#839/#903/#904/#902/#878/#883 remain open; no new
+  merged protocol-affecting work beyond what session-761 recorded.
+
+No conformance gap detected — Otedama's SV2 wire surface stays
+current with the normative spec text.
