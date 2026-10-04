@@ -2650,3 +2650,15 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1265-1267 update — CI gate coverage audit (security + test infrastructure)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| H | `govulncheck ./...` absent from all workflows — CLAUDE.md's three-layer scan lists it and AUDIT_CHECKLIST row 10 mandates it as the dep-vuln gate; Nancy/Trivy are advisory feeds, not the Go vuln DB's reachability analysis. | ⚠️ Fixed: added a `Run govulncheck` step to `security.yml` after the Nancy scan (`go install golang.org/x/vuln/cmd/govulncheck@latest`, matching the file's unpinned-tool convention). PR #1346. |
+| M | `make fuzz` never invoked by any workflow — 21 `Fuzz*` targets (wire parsers, config decode, BIP-39) ran only when a developer chose to run them locally; CLAUDE.md's inventory lists test.yml as "(fuzz+benchmark)". | ⚠️ Fixed: added a `Fuzz` job to `test.yml` running `make fuzz` (30 s/target, `timeout-minutes: 20`). PR #1347. |
+| S | AUDIT_CHECKLIST "CI gate summary" stale on both counts — claimed govulncheck absent from all workflows and fuzz unscheduled. | ⚠️ Fixed: gate summary updated to the post-fix state (this PR); go vet/staticcheck coverage confirmed accurate (`go vet` step in test.yml; govet+staticcheck linters via golangci-lint). |
+
+All packages build, vet, and test green.
