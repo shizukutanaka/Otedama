@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 824 update — binary-search + chan-under-lock + contains-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `sort.Search`/`slices.BinarySearch` on a slice never sorted — wrong-index results. | ✅ Clean: absent — lookups go through maps and `slices.Contains` on tiny sets; no binary-search call sites. |
+| M | Channel send/receive while holding a mutex — goroutine blocks on a full/empty chan, deadlocking the lock holder. | ✅ Clean: the two adjacent sites are the *correct* pattern — both unlock before touching the channel (worker.go:179-184 reads `cancel` under lock then `<-w.done` after unlock; stratumv1.go:234-239 deletes `pending[id]` under `pendingMu` then sends `ch <-` after unlock). |
+| P | `slices.Contains` linear scan inside a hot loop where a set map would be O(1). | ✅ Benign: the only site scans `AcceptsFamilies` (a 4-element static list) once per arbitration decision — not per hash — so the linear scan is cheaper than a map allocation. |
+
+All packages build, vet, and test green.
