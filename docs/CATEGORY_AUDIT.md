@@ -2971,6 +2971,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1175 update — Go-version pin parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Dockerfile builder image vs `go.mod` toolchain | ✅ Clean — `golang:1.24-alpine` matches `toolchain go1.24.0` |
+| S | CI Go pins vs `go.mod`/`godebug` | ⚠️ Noted — workflow pins (`GO_VERSION=1.23.x`, matrix 1.22.x/1.23.x, security.yml 1.21, `GOTOOLCHAIN=local`) cannot satisfy `toolchain go1.24.0` + `tlsmlkem`; this is the documented preexisting failure signature already recorded in KNOWN_LIMITATIONS (~§514-563), not new drift |
+| M | `go-version-file` usage | ✅ Clean — no workflow delegates to `go-version-file`; pins are explicit (consistent within themselves) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
