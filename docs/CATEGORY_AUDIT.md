@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 808 update — hex-format + ptr-method + subtest-capture audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%x` formatting vs `hex.EncodeToString` — divergent hex emission and odd-length padding bugs. | ✅ Clean: zero `%x` verb sites — all hex output goes through `hex.EncodeToString`/`DecodeString` uniformly (10 sites). |
+| M | Pointer-receiver method invoked on an unaddressable value — compile-visible but API-misleading. | ✅ Clean: pointer-receiver methods are called only on addressable receivers (`w.Stats()`, `s.Submit(...)` on `*session`/`*Worker`) — the compiler enforces this; no workaround patterns. |
+| S | `t.Run` inside a range loop capturing the loop var — subtest sees the last element only. | ✅ Clean: loopvar capture is safe under the repo's `go 1.22` semantics (`tt` is fresh per iteration); no `t.Parallel` subtests share the table (verified session 626). |
+
+All packages build, vet, and test green.
