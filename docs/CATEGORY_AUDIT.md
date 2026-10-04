@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 951 update — wallet-save + seed-encryption + unlock-oracle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | Killed mid-write leaving a truncated `wallet.dat` — a permanently bricked wallet. | ✅ Clean: `save()` writes a same-dir temp file, `Sync` then `Close`-checked, `Chmod 0600` before `Rename` — an atomic, permission-correct replace; startup sweeps `.wallet-*.tmp` files older than 1 min (won't unlink a live writer's temp). |
+| L | Weak KDF or reused nonce undermining AES-GCM at rest; plaintext key material surviving for the GC. | ✅ Clean: scrypt `N=2¹⁷, r=8, p=1` (~1 s interactive), random 16-byte salt + 12-byte nonce per encryption, non-empty passphrase enforced; `zeroBytes` defers wipe `pass`, `key`, and decrypted `plaintext`. |
+| L | Distinct errors for "wrong passphrase" vs "tampered file" — a decryption oracle; or unbounded unmarshal on corrupt input. | ✅ Clean: any `gcm.Open` failure collapses to opaque `ErrWrongPassphrase` and `loadExisting` surfaces only "unlock failed"; `UnmarshalEncryptedSeed` caps the file at 4 KiB (v1 is exactly 80 bytes). |
+| L | Fingerprint write failure bricking wallet creation. | ✅ Clean: fingerprint file is best-effort by design — recoverable from the seed, so a write error is intentionally non-fatal. |
+
+All packages build, vet, and test green.
