@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 851 update — walk-dir + glob + open-mode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `filepath.Walk` in a hot path — calls `Lstat` per entry (slow vs `WalkDir`'s DirEntry). | ✅ Clean: absent — both directory scans use `os.ReadDir` (returns DirEntry lazily), which is the recommended primitive for a bounded flat listing. |
+| M | `filepath.Glob` with a user-controlled pattern — `ErrBadPattern` panic risk, unintended traversal. | ✅ Clean: sole site (wallet.go:267) uses a fixed literal `.wallet-*.tmp` — no user input. |
+| M | `os.OpenFile` with write flags but loose mode — credentials/data written world-readable. | ✅ Clean: two opens — logfile `O_CREATE|O_WRONLY|O_APPEND` at `0600`, configfile `os.Open` read-only; wallet file handled separately at `0600`. |
+
+All packages build, vet, and test green.
