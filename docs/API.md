@@ -149,6 +149,18 @@ Manage the Lightning wallet without starting the engine.
 The wallet directory resolves through the usual four layers
 (`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
 
+### `otedama completion`
+
+Print a shell-completion script for bash, zsh, or fish to stdout.
+
+```
+otedama completion bash > /etc/bash_completion.d/otedama
+otedama completion zsh  > "${fpath[1]}/_otedama"
+otedama completion fish > ~/.config/fish/completions/otedama.fish
+```
+
+Passing an unsupported shell exits with a usage error (2).
+
 Suitable as a container healthcheck command:
 ```yaml
 healthcheck:
@@ -301,6 +313,7 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+| `otedama_devices_idle` | gauge | — | Devices left unassigned this cycle (no compatible accepting stream, or none cleared `min_yield_sats_per_sec`). A persistent non-zero value means the floor is parking hardware. |
 
 **Economics & power**
 
