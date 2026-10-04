@@ -217,8 +217,10 @@ func TestMnemonicToEntropy_RejectsWrongWordCount(t *testing.T) {
 func TestMnemonicToSeed_Deterministic(t *testing.T) {
 	// Same mnemonic + same passphrase must yield the same seed every time;
 	// this is the property that lets users recover wallets.
-	m := Mnemonic{"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-		"abandon", "abandon", "abandon", "abandon", "abandon", "about"}
+	m := Mnemonic{
+		"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+		"abandon", "abandon", "abandon", "abandon", "abandon", "about",
+	}
 	s1 := MnemonicToSeed(m, "")
 	s2 := MnemonicToSeed(m, "")
 	if s1 != s2 {
@@ -227,8 +229,10 @@ func TestMnemonicToSeed_Deterministic(t *testing.T) {
 }
 
 func TestMnemonicToSeed_DifferentPassphraseDifferentSeed(t *testing.T) {
-	m := Mnemonic{"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-		"abandon", "abandon", "abandon", "abandon", "abandon", "about"}
+	m := Mnemonic{
+		"abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+		"abandon", "abandon", "abandon", "abandon", "abandon", "about",
+	}
 	s1 := MnemonicToSeed(m, "")
 	s2 := MnemonicToSeed(m, "TREZOR")
 	if s1 == s2 {
@@ -554,5 +558,15 @@ func TestMnemonicEntropy_AllWordsReachable(t *testing.T) {
 		if idx != i {
 			t.Errorf("word %q index = %d, want %d", w, idx, i)
 		}
+	}
+}
+
+func TestUnmarshalEncryptedSeed_RejectsOversizedInput(t *testing.T) {
+	// A corrupt or adversarial wallet.dat must not drive an unbounded
+	// allocation: inputs over the 4 KiB cap are rejected outright.
+	buf := make([]byte, 5<<10)
+	buf[0] = currentEncryptedSeedVersion
+	if _, err := UnmarshalEncryptedSeed(buf); err == nil {
+		t.Fatal("UnmarshalEncryptedSeed must reject oversized input")
 	}
 }

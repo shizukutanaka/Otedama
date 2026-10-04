@@ -8,11 +8,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
@@ -26,7 +27,7 @@ func loadConfigFile(path string, stderr io.Writer) config.Config {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
 		}
 		return config.Config{}
@@ -38,7 +39,7 @@ func loadConfigFile(path string, stderr io.Writer) config.Config {
 	if err := dec.Decode(&cfg); err != nil {
 		// An empty or comments-only file yields io.EOF (no YAML document);
 		// that is not a parse error — it means "use defaults".
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return config.Config{}
 		}
 		fmt.Fprintf(stderr, "warning: cannot parse config file %q: %v\n", path, err)
