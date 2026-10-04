@@ -3805,6 +3805,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 791 update — hot-path-observability + share-drop + nonce-roll audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Observability cost inside the nonce loop — logging/labeling per hash. | ✅ Benign: the grind loop contains only `hashCount.Add` (one atomic per ~200ns+ SHA256d — small vs hash cost) plus `shareCount`/`dropCount` on share-hit only; zero logging, labeling, or allocation inside the batch (verified sessions 533/534/545). |
+| P | Share send blocking the grind loop — backpressure stalling hashing. | ✅ Clean: non-blocking `select` send with `default` — on full buffer the share drops into `dropCount` (observable counter) rather than stalling the thread. |
+| P | Nonce-wrap mishandled — rehashing identical work after u32 wrap. | ✅ Clean: `nonce < prev` detection rolls `ntimeRoll` and rebuilds the header time — distinct work continues (verified session 370). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
