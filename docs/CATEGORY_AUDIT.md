@@ -3506,6 +3506,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 750 update — coverage milestone checkpoint (post-700)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | Coverage checkpoint — sessions 706–749 added ~115 further mechanical classes on top of the ~100 verified at session 700 (total ~215 classes): wire/codec contracts, crypto API usage, concurrency lifecycle, stdlib idioms, platform service paths, API surface, resource ownership, and protocol-dispatch semantics. | ✅ All verdicts clean or benign-by-design across the full surface; the only real defects found were fixed in flight (quoteToken C1 gap → `unicode.IsControl`, XDG_CONFIG_HOME → systemd-manager-environment resolution — both shipped as fix PRs alongside the audit). |
+| P | Remaining unaudited surface. | ✅ Converged: new classes now yield near-zero first-time findings — the productive paths forward remain (a) periodic sv2-spec/SRI/sv2-apps ecosystem rechecks (done at ~7–8-session cadence, latest s746), (b) per-round fresh mechanical classes, and (c) prompt review of any new code landing on master. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
