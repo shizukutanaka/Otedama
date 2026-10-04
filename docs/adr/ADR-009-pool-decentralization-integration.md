@@ -1464,3 +1464,30 @@ as written; the next recheck is due around session 1200.
 ## Session-1201 ecosystem update (2026-10-02)
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1255 ecosystem update (2026-10-02)
+
+### sv2-spec (stratum-mining/sv2-spec)
+
+The normative open set is unchanged — every tracked item remains open:
+
+- **#236** (`SetTarget.target` MUST NOT exceed the channel's `max_target`) is the most active item: force-pushes and GitGab19 review on 2026-10-02. The proposed text now covers the group-channel bound, the UpdateChannel/SetTarget crossing race (a SetTarget sent before the UpdateChannel is accepted is held to the replaced max_target, with 5.3.7 forcing a corrected one), and a client-side grace period before treating an above-max target as a violation. If it lands, Otedama's dialer-side invariant is the existing pool-share-target clamp — the rule would make the bound mutual instead of client-advisory.
+- **#234** (authority key management and rotation) is converging: TheBlueMatt reviewed "lgtm, some tiny nits", bit-aloo review in flight, and it's referenced by the new doc PR #124. Clarification-only — adds §4.8, renames "Pool Authority Key" to "Authority Key" (non-pool entities can hold authority keys), and records that cert validity is checked at handshake time (an established session need not terminate at `not_valid_after`). No wire or crypto change.
+- **#198** (`coinbase_witness` in `NewTemplate`) still open — BIP141 future-proofing for TDP.
+- **Non-custodial payouts:** #202 (GitGab19's request-response variant) open with plebhash's review probing staleness semantics (a `RequestPayoutOutputs.Success` going stale against sliding-window PPLNS needs a reject-vs-re-request signal) and exact-sum rounding; #203 (push-based variant) open; #195 draft; discussion #192 active. The wire set Otedama's dialer implements is unchanged.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+No new low-level crate release: the workspace tag remains the 2026-09-17 line recorded as v1.12.0 (`stratum-apps` 0.8.0 on crates.io, same date). The GitHub Releases listing still tops out at v1.11.1 (Jul 22). No action.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+Open PR count holds at 17 (unchanged since the s1251 recheck). Latest GitHub release remains v0.7.0. Watch items: #310 (adapt apps to new extranonce APIs — the sole protocol-surface item), #325 (multiple-coinbase-outputs round-trip test — test coverage for the non-custodial payout direction), #326 (JD mining-mode negotiation integration test). The rest are monitoring/metrics/deps maintenance.
+
+### Japanese / English media scan
+
+Nothing new at the implementation layer: the Gomining/DMND first production JDP block and the Foundry/Antpool/F2Pool SV2 working-group commitment were already recorded; no new Qiita/Zenn posts touching Otedama's stratum surface.
+
+### Assessment
+
+Quiet window continues — no action. One observation for the record: `05-Mining-Protocol.md` on `main` now writes `maximum_target`/`min_ntime` while the stratumprotocol.org build still shows `max_target`/`ntime_start` — the spec's field naming is mid-evolution again (Otedama decodes positionally, so wire-immune; relevant only to doc drift). Next recheck due around session 1270.
