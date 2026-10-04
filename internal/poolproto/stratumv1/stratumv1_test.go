@@ -6,13 +6,16 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -135,6 +138,69 @@ func TestParseNotify_MalformedJSON(t *testing.T) {
 }
 
 // ============================================================================
+// parseNotify — malformed required fields (fail closed)
+// ============================================================================
+
+// A notify whose required fields fail to decode must be rejected:
+// a zero-filled or partially-degraded job produces shares that all
+// fail self-verification — silent wasted work. V1 has no pool-side
+// merkle path (that field exists only on the V2 NewMiningJob wire).
+func TestParseNotify_MalformedRequiredFields(t *testing.T) {
+	prev := `"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"`
+	base := func(p1, p2, p3, p4, p5, p6, p7 string) json.RawMessage {
+		return json.RawMessage(`["60",` + p1 + `,` + p2 + `,` + p3 + `,` + p4 + `,` + p5 + `,` + p6 + `,` + p7 + `,true]`)
+	}
+	cases := map[string]json.RawMessage{
+		"prevhash bad hex":      base(`"zz"`, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"prevhash short":        base(`"01"`, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb1 bad hex":        base(prev, `"zz"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb1 empty":          base(prev, `""`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb2 bad hex":        base(prev, `"01"`, `"zz"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"coinb2 empty":          base(prev, `"01"`, `""`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"merkle bad hex":        base(prev, `"01"`, `"ff"`, `["zz"]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"merkle wrong length":   base(prev, `"01"`, `"ff"`, `["aabb"]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`),
+		"version bad hex":       base(prev, `"01"`, `"ff"`, `[]`, `"gg"`, `"1d00ffff"`, `"68d36c5e"`),
+		"nbits bad hex":         base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"xx"`, `"68d36c5e"`),
+		"ntime bad hex":         base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"zz"`),
+		"ntime too wide (>32b)": base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"1ffffffff"`),
+	}
+	for name, raw := range cases {
+		if _, err := parseNotify(raw); err == nil {
+			t.Errorf("%s: expected parseNotify error, got nil", name)
+		}
+	}
+	// Fully well-formed params still parse.
+	if _, err := parseNotify(base(prev, `"01"`, `"ff"`, `[]`, `"00000002"`, `"1d00ffff"`, `"68d36c5e"`)); err != nil {
+		t.Fatalf("well-formed fixture should parse: %v", err)
+	}
+}
+
+// extranonce1 must be non-empty valid hex and extranonce2_size must be
+// > 0 at both entry points — completeV1Job silently skips the job
+// otherwise (zero MerkleRoot → every share self-verifies invalid).
+func TestExtranonce_ParseBoundaries(t *testing.T) {
+	for _, raw := range []string{
+		`["zz", 4]`,   // non-hex en1
+		`["abc", 4]`,  // odd-length en1
+		`["", 4]`,     // empty en1
+		`["dead", 0]`, // en2_size 0 — completeV1Job requires sz > 0
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(raw)); ok {
+			t.Errorf("parseSetExtranonce(%s) ok=true, want false", raw)
+		}
+	}
+	for _, result := range []any{
+		[]any{[]any{}, "zz", float64(4)},       // non-hex en1
+		[]any{[]any{}, "abc", float64(4)},      // odd-length en1
+		[]any{[]any{}, "deadbeef", float64(0)}, // en2_size 0
+	} {
+		if _, _, err := parseSubscribeResult(result); err == nil {
+			t.Errorf("parseSubscribeResult(%v) err=nil, want error", result)
+		}
+	}
+}
+
+// ============================================================================
 // parseDifficulty
 // ============================================================================
 
@@ -159,6 +225,23 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 	_, ok := parseDifficulty(json.RawMessage(`not json`))
 	if ok {
 		t.Error("malformed input should be !ok")
+	}
+}
+
+func TestParseDifficulty_NonPositive(t *testing.T) {
+	// d <= 0 collapses the share target to "accept every hash" — a pool
+	// (or MitM on cleartext V1) setting it floods the submit path.
+	for _, raw := range []string{`[0]`, `[-1.5]`, `[-0.0]`, `[1e999]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) should be !ok", raw)
+		}
+	}
+	// Fractional and very small positive difficulties stay valid
+	// (ESP-Miner #1594/#1779 show real pools use them).
+	for _, raw := range []string{`[0.5]`, `[0.001]`, `[5e-324]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); !ok {
+			t.Errorf("parseDifficulty(%s) should be ok", raw)
+		}
 	}
 }
 
@@ -273,7 +356,7 @@ func TestDialer_Protocol_TLS(t *testing.T) {
 
 func TestDialer_DialBadURL(t *testing.T) {
 	d := &Dialer{}
-	_, err := d.Dial(context.Background(), "ftp://example.com", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "ftp://example.com", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with non-stratum scheme should fail")
 	}
@@ -627,7 +710,7 @@ func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
 			return nil, fmt.Errorf("injected dial error")
 		},
 	}
-	_, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	_, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with failing dialFn should return error")
 	}
@@ -644,7 +727,7 @@ func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
 func TestDialer_Dial_TLSBadPEM_ReturnsError(t *testing.T) {
 	d := &Dialer{useTLS: true} // dialFn and tlsConfig are nil: production path
 	creds := poolproto.Credentials{TLSRootCAsPEM: []byte("not-a-pem-certificate")}
-	_, err := d.Dial(context.Background(), "stratum+tls://pool.example.test:3334", creds)
+	_, err := d.Dial(context.Background(), "stratum+tls://pool.example.test:3334", &creds)
 	if err == nil {
 		t.Error("Dial with invalid TLS CA PEM should return an error")
 	}
@@ -660,7 +743,7 @@ func makeNegotiateConn(t *testing.T) (*Dialer, poolproto.Connection, net.Conn) {
 			return clientConn, nil
 		},
 	}
-	conn, err := d.Dial(context.Background(), "stratum+tcp://test.local:3333", poolproto.Credentials{})
+	conn, err := d.Dial(context.Background(), "stratum+tcp://test.local:3333", &poolproto.Credentials{})
 	if err != nil {
 		clientConn.Close()
 		serverConn.Close()
@@ -797,7 +880,7 @@ func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
 			return clientConn, nil
 		},
 	}
-	c, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	c, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", &poolproto.Credentials{})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -866,11 +949,11 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if sess.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	if got := sess.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if sess.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
 	}
 }
 
@@ -989,7 +1072,7 @@ func TestSession_Close_CancelsPendingCalls(t *testing.T) {
 			t.Error("pending channel should be closed (not deliver a value) after Close")
 		}
 	case <-time.After(500 * time.Millisecond):
-		t.Error("pending call not cancelled within 500ms")
+		t.Error("pending call not canceled within 500ms")
 	}
 }
 
@@ -1067,7 +1150,7 @@ func TestDialer_Dial_UnreachableHost_TimesOut(t *testing.T) {
 	defer cancel()
 
 	// 198.51.100.1 is TEST-NET-2 (RFC 5737) — routable nowhere.
-	_, err := d.Dial(ctx, "stratum+tcp://198.51.100.1:39999", poolproto.Credentials{})
+	_, err := d.Dial(ctx, "stratum+tcp://198.51.100.1:39999", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial to unreachable host should fail")
 	}
@@ -1081,7 +1164,7 @@ func TestDialer_Dial_InvalidURL_ReturnsError(t *testing.T) {
 		"http://wrong-scheme:3333",
 		"stratum+tcp://",
 	} {
-		_, err := d.Dial(context.Background(), url, poolproto.Credentials{})
+		_, err := d.Dial(context.Background(), url, &poolproto.Credentials{})
 		if err == nil {
 			t.Errorf("Dial(%q) should fail", url)
 		}
@@ -1127,9 +1210,8 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 	select {
 	case _, ok := <-sess.Jobs():
 		if ok {
-			// Got a job before close — acceptable.
+			t.Log("a job arrived before close — acceptable")
 		}
-		// Channel closed — expected.
 	case <-time.After(2 * time.Second):
 		t.Error("Jobs channel did not close after pool disconnect")
 	}
@@ -1244,10 +1326,7 @@ func TestConnection_Close_NilRaw_DocumentsBehavior(t *testing.T) {
 // ============================================================================
 
 func TestParseReconnect_FullParams(t *testing.T) {
-	d, ok := parseReconnect(json.RawMessage(`["us-east.pool.example",4444,30]`))
-	if !ok {
-		t.Fatal("parseReconnect returned ok=false")
-	}
+	d := parseReconnect(json.RawMessage(`["us-east.pool.example",4444,30]`))
 	if d.Host != "us-east.pool.example" {
 		t.Errorf("Host = %q, want us-east.pool.example", d.Host)
 	}
@@ -1261,10 +1340,7 @@ func TestParseReconnect_FullParams(t *testing.T) {
 
 func TestParseReconnect_PortAsString(t *testing.T) {
 	// Some pools encode the port as a string.
-	d, ok := parseReconnect(json.RawMessage(`["host","3333",5]`))
-	if !ok {
-		t.Fatal("ok=false")
-	}
+	d := parseReconnect(json.RawMessage(`["host","3333",5]`))
 	if d.Port != 3333 {
 		t.Errorf("Port = %d, want 3333", d.Port)
 	}
@@ -1273,10 +1349,7 @@ func TestParseReconnect_PortAsString(t *testing.T) {
 func TestParseReconnect_EmptyAndBareParams(t *testing.T) {
 	// A bare client.reconnect with no params is still a valid directive.
 	for _, raw := range []string{``, `[]`, `null`, `"garbage"`} {
-		d, ok := parseReconnect(json.RawMessage(raw))
-		if !ok {
-			t.Errorf("parseReconnect(%q) ok=false, want true", raw)
-		}
+		d := parseReconnect(json.RawMessage(raw))
 		if d.Host != "" || d.Port != 0 || d.Wait != 0 {
 			t.Errorf("parseReconnect(%q) = %+v, want zero directive", raw, d)
 		}
@@ -1367,15 +1440,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"deadbeef01",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
@@ -1524,11 +1597,11 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if sv1.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	if got := sv1.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -1540,7 +1613,7 @@ func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
 		defer serverConn.Close()
 		r := bufio.NewReader(serverConn)
 		_, _ = r.ReadString('\n') // subscribe
-		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"abc",4]],"error":null}`+"\n")
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"deadbeef",4]],"error":null}`+"\n")
 		// Oops — that subscribe result is malformed (len=1), so the test below
 		// verifies that a minimal valid result still works. Let's fix it:
 		// We'll just read the authorize line but not respond (simulate immediate
@@ -1687,7 +1760,7 @@ func TestNegotiate_ExtranonceSubscribe_MethodNotFound_HandshakeSucceeds(t *testi
 	if err != nil {
 		t.Fatalf("Negotiate should succeed even when pool rejects extranonce.subscribe: %v", err)
 	}
-	defer sess.Close()
+	_ = sess.Close()
 }
 
 func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) {
@@ -1718,22 +1791,22 @@ func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Negotiate should succeed when pool accepts extranonce.subscribe: %v", err)
 	}
-	defer sess.Close()
+	_ = sess.Close()
 }
 
 // ============================================================================
-// sendJob — clean_jobs purge and normal queueing behaviour
+// sendJob — clean_jobs purge and normal queueing behavior
 // ============================================================================
 
-// makeTestSession returns a bare *session with a jobsCh of capacity cap.
+// makeTestSession returns a bare *session with a jobsCh of the given capacity.
 // The conn field is nil; only jobsCh is used in sendJob.
-func makeTestSession(cap int) *session {
-	return &session{jobsCh: make(chan poolproto.Job, cap)}
+func makeTestSession(capacity int) *session {
+	return &session{jobsCh: make(chan poolproto.Job, capacity)}
 }
 
 func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "j1", CleanJobs: false})
+	s.sendJob(&poolproto.Job{JobID: "j1", CleanJobs: false})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
 	}
@@ -1745,10 +1818,10 @@ func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 
 func TestSendJob_DropsOldestWhenFullAndCleanJobsFalse(t *testing.T) {
 	s := makeTestSession(2)
-	s.sendJob(poolproto.Job{JobID: "old1"})
-	s.sendJob(poolproto.Job{JobID: "old2"})
+	s.sendJob(&poolproto.Job{JobID: "old1"})
+	s.sendJob(&poolproto.Job{JobID: "old2"})
 	// Channel is now full (cap 2). Sending with clean_jobs=false must drop old1.
-	s.sendJob(poolproto.Job{JobID: "new"})
+	s.sendJob(&poolproto.Job{JobID: "new"})
 
 	// Drain channel; should contain old2 and new (old1 was dropped).
 	var got []string
@@ -1767,14 +1840,14 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 	s := makeTestSession(8)
 	// Pre-fill with 5 stale jobs.
 	for i := range 5 {
-		s.sendJob(poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
+		s.sendJob(&poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
 	}
 	if got := len(s.jobsCh); got != 5 {
 		t.Fatalf("pre-fill: jobsCh len = %d, want 5", got)
 	}
 
 	// New block: clean_jobs=true must discard all 5 stale jobs.
-	s.sendJob(poolproto.Job{JobID: "newblock", CleanJobs: true})
+	s.sendJob(&poolproto.Job{JobID: "newblock", CleanJobs: true})
 
 	if got := len(s.jobsCh); got != 1 {
 		t.Fatalf("after clean_jobs: jobsCh len = %d, want 1", got)
@@ -1787,7 +1860,7 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 
 func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
+	s.sendJob(&poolproto.Job{JobID: "only", CleanJobs: true})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
 	}
@@ -1887,5 +1960,233 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	}
 	if len(sess.noticeCh) != 0 {
 		t.Error("unknown method enqueued a notice")
+	}
+}
+
+// set_extranonce runs on the read goroutine while Submit reads
+// extranonce2Size on the caller's — exercise both concurrently so the
+// race detector catches a regression to plain fields.
+func TestSession_SetExtranonce_ConcurrentReaders(t *testing.T) {
+	sess := makeBareSess()
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				sess.dispatch([]byte(fmt.Sprintf(
+					`{"method":"mining.set_extranonce","params":["%08x",%d]}`,
+					i*1000+j, j%65)))
+			}
+		}(i)
+	}
+	for i := 0; i < 2000; i++ {
+		_ = sess.extranonce2Size.Load()
+		if p := sess.extranonce1.Load(); p != nil {
+			_ = *p
+		}
+	}
+	wg.Wait()
+}
+
+func TestDialer_DialTimeout(t *testing.T) {
+	// A dialFn that never completes must not pin Dial on the caller's
+	// ctx — the per-attempt dialTimeout bounds it so failover can proceed.
+	prev := dialTimeout
+	dialTimeout = 50 * time.Millisecond
+	defer func() { dialTimeout = prev }()
+
+	d := &Dialer{dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	start := time.Now()
+	_, err := d.Dial(context.Background(), "stratum+tcp://127.0.0.1:1", &poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("Dial should fail when the dial attempt times out")
+	}
+	if !strings.Contains(err.Error(), "dial timeout") {
+		t.Errorf("expected dial-timeout error, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Dial took %v; want <5s", elapsed)
+	}
+}
+
+func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
+	old := callTimeout
+	callTimeout = 50 * time.Millisecond
+	defer func() { callTimeout = old }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Server drains the request but never responds.
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+	}()
+
+	start := time.Now()
+	_, err := sess.call(context.Background(), 7, "mining.submit", nil)
+	if err == nil {
+		t.Fatal("call should return timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("err = %v, want timeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("call blocked %v, want <5s", elapsed)
+	}
+	// Pending entry must be released, not leaked.
+	sess.pendingMu.Lock()
+	n := len(sess.pending)
+	sess.pendingMu.Unlock()
+	if n != 0 {
+		t.Errorf("pending map has %d entries after timeout, want 0", n)
+	}
+}
+
+func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
+	sess := makeBareSess()
+	en1str := "c0ffee01"
+	sess.extranonce1.Store(&en1str)
+	sess.extranonce2Size.Store(4)
+
+	notify := func(id string) poolproto.Job {
+		sess.dispatch([]byte(fmt.Sprintf(
+			`{"method":"mining.notify","params":[%q,`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",`+
+				`"ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000",`+
+				`[],"00000002","1d00ffff","68d36c5e",true]}`, id)))
+		select {
+		case j := <-sess.jobsCh:
+			return j
+		default:
+			t.Fatal("notify did not enqueue a job")
+			return poolproto.Job{}
+		}
+	}
+
+	j1 := notify("1")
+	if j1.MerkleRoot == ([32]byte{}) {
+		t.Fatal("MerkleRoot not computed — coinbase fold did not run")
+	}
+	if len(j1.ExtraNonce) != 4 || hex.EncodeToString(j1.ExtraNonce) != "00000001" {
+		t.Fatalf("ExtraNonce = %x, want 00000001", j1.ExtraNonce)
+	}
+
+	j2 := notify("2")
+	if j2.MerkleRoot == j1.MerkleRoot {
+		t.Fatal("consecutive jobs share a merkle root — en2 did not roll")
+	}
+	if hex.EncodeToString(j2.ExtraNonce) != "00000002" {
+		t.Fatalf("job 2 ExtraNonce = %x, want 00000002", j2.ExtraNonce)
+	}
+
+	// Verify the fold end-to-end: merkle == dsha(coinb1|en1|en2|coinb2)
+	// with an empty branch list.
+	en1, _ := hex.DecodeString(*sess.extranonce1.Load())
+	coinb1, _ := hex.DecodeString("0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	coinb2, _ := hex.DecodeString("ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000")
+	want := btccrypto.Hash256(append(append(append(append([]byte{}, coinb1...), en1...), j1.ExtraNonce...), coinb2...))
+	if j1.MerkleRoot != want {
+		t.Fatalf("MerkleRoot = %x, want %x", j1.MerkleRoot, want)
+	}
+}
+
+func TestCompleteV1Job_SkipsWithoutParts(t *testing.T) {
+	sess := makeBareSess()
+	// No negotiated extranonces: notify arrives "unprepared".
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","aa","bb",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	j := <-sess.jobsCh
+	if j.MerkleRoot != ([32]byte{}) {
+		t.Errorf("MerkleRoot = %x, want zero (no negotiated en1)", j.MerkleRoot)
+	}
+}
+
+// ============================================================================
+// extranonce2_size bounds — a hostile/MitM pool could request a huge
+// padding size that strings.Repeat would turn into gigabytes per submit.
+// ============================================================================
+
+func TestParseSetExtranonce_SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`["ab", 0]`, false},
+		{`["ab", 4]`, true},
+		{`["ab", 64]`, true},
+		{`["ab", 65]`, false},
+		{`["ab", -1]`, false},
+		{`["ab", 1073741824]`, false},
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
+			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
+		}
+	}
+}
+
+func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		sz   float64
+		want bool
+	}{
+		{0, false},
+		{8, true},
+		{64, true},
+		{65, false},
+		{-1, false},
+		{1e9, false},
+		// Fractional values must not pass via int() truncation.
+		{64.5, false},
+		{-0.5, false},
+		{4.5, false},
+	} {
+		result := []any{[]any{}, "ab", tc.sz}
+		_, _, err := parseSubscribeResult(result)
+		if (err == nil) != tc.want {
+			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
+		}
+	}
+}
+
+func TestSanitizeNotice_StripsControlChars(t *testing.T) {
+	// ANSI escape sequence + newline that would forge a log line.
+	got := sanitizeNotice("maintenance\x1b[2J\x1b[H\nforged log line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "maintenance") || !strings.Contains(got, "forged log line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizeNotice_PreservesUnicode(t *testing.T) {
+	got := sanitizeNotice("メンテナンス 10分後")
+	if got != "メンテナンス 10分後" {
+		t.Errorf("unicode text mangled: %q", got)
+	}
+}
+
+func TestSanitizeNotice_TruncatesLongNotices(t *testing.T) {
+	long := strings.Repeat("x", maxNoticeRunes*2)
+	got := sanitizeNotice(long)
+	if len([]rune(got)) != maxNoticeRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxNoticeRunes)
+	}
+}
+
+func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
+	got := sanitizeNotice("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }

@@ -16,6 +16,1270 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   type assertions; /metrics output is deterministic (sorted
   entries + label keys).
 
+### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
+
+**変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
+sv2-spec リポジトリを SV2 の正典ソースとしてピン（messages.go + ADR-009）、
+KNOWN_LIMITATIONS の Akash 形状を修正（chain-sdk + on-chain Bidengine +
+AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安価な
+背信」を正直に記載）+ LN HTLC タイミング連関を追加、ADR-010 に SCaLE
+学習スイッチコスト（A2）・3 種ドリフトの非定常性 grounding + Sliding-
+Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
+報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
+
+### Changed (session 309 — server→client 入力面の監査判定を記録)
+
+**内容.** Stratum V1/V2 でサーバー→クライアント方向の入力面
+（reconnect/version_mask/未知フレーム/backoff/notify 各フィールド）を
+全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
+判定記録。closed #383 の未マージ変更を master へ再デリバー。
+
+### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
+
+`mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
+分割の disjoint 性、`TargetFromNBits`/`TargetFromDifficulty` の異常値
+拒否、`set_version_mask` の前方互換無視、notice キュー境界、
+TUI へのプール制御文字列不到達を全て確認・記録。ESP-Miner
+v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
+プール側機能）。stale な `otedama_build_info` backlog 行も訂正
+（session 54 で実装済み）。
+
+### Docs (session 326 — 衛生スイープ結果の記録)
+
+`govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
+（module-level advisory 22件は全て非到達）。`deadcode` の指摘は
+全てテスト専用/将来向けのエクスポート API 面であり実質デッド
+コードなし——削除対象とせず判定を記録。
+
+### Docs (session 328 — 残存監査面の判定記録)
+
+`mining.set_version_mask`（BIP320 未実装・無害に drop）、Worker
+Threads（NumCPU 固定で goroutine 爆発経路なし）、rates HTTP 境界
+（10s timeout + 64KiB 上限 + 中央値3ソース）、daemon ユニット権限
+（0644/0755 = 正規）、i18n フォールバック（base-tag → English）、
+config 数値パース（warn+skip）、provider quote チャネル（bounded）
+——全て master 上で健全と確認し記録。
+
+### Docs (session 329 — SRI 1.12.0 暗号整合確認)
+
+SRI 1.12.0 が noise_sv2 から AES-256-GCM を削除し
+ChaCha20-Poly1305 単一化（freedom.tech 2026-09-17）。Otedama は
+当初から `Noise_NX_secp256k1_ChaChaPoly_SHA256` のみ実装のため
+整合済み・相互運用影響なし。SRI の roles は sv2-apps リポへ分離
+（ライブラリ crate は stratum-mining/stratum に残留）。
+
+### Docs (session 330 — エコシステム+日本語ソース走査判定)
+
+internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
+SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
+知見なし、`0xf0xx0/stratumv2`（Go SV2 codec）は先行実装として
+記録（Otedama internal/stratum が scope を包含するため依存追加
+根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
+当方クライアント側バウンドで既にミラー済み。
+
+### Docs (session 334 — metrics エクスポジション判定・監査網羅完了)
+
+`internal/metrics` は健全: ラベル名は登録時検証、ラベル値は `\` `"` `\n`
+エスケープ、動的ラベル値は全て bounded cardinality（enum/hal 検証済み
+ID/マスク済みアドレス）。これで sessions 262–334 の master 全
+パッケージ外部入力監査が完了。
+
+### 監査判定 (session 356 — hal/V1 ディスパッチ)
+
+GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
+dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監査済みと
+記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
+文書化済み事項として再確認。
+
+### 監査判定 (session 362 — btccrypto/依存態勢)
+
+btccrypto（bech32 BIP-173/350 準拠・base58check 全検証・
+secp256k1 は正直な stub）を監査済みと記録。govulncheck で
+到達可能脆弱性ゼロを確認。
+
+### 監査判定 (session 363 — provider ライフサイクル)
+
+pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
+WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
+quoteCh 置換 caveat は未到達パスとして文書化。
+
+### 監査判定 (session 364 — ワイヤ形式/シャットダウン)
+
+V1 submit の ntime/nonce ビッグエンディアン hex シリアライズと
+ヘッダ LE ハッシュの整合性、SIGTERM/Interrupt → ctx → conn.Close
+の完全シャットダウン経路を監査済みと記録。
+
+### 監査判定 (session 397 — トランスポート/ファンイン/エンコード側)
+
+V1 アウトバウンドリクエスト面（authorize/submit はオペレータ由来フィールドのみ、
+pending-RPC マップは全出口で解放）。V1 `readLine` は ReadSlice+64KiB 上限。
+両 TLS ダイアラは TLS1.2+・検証常時・ServerName 自動・平文フォールバックなし。
+`fanIn` は ctx 双方向対応でリークなし。hal sysfs は kernel 生成値のみ。
+BIP-39 ワードリストは init 時 SHA-256 整合性チェック済み。SV2 `ExtraNonce2Size` は
+decode されるが未消費（プロトコル完全性の既知ギャップとして記録、v3.1.0 作業）。
+エコシステム不変（SRI v1.12.0）。
+
+### 監査判定 (session 400)
+
+プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
+発見・記録（電力無駄なし: ジョブなしワーカーはアイドル待機。AI 再配分は設計判断
+項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
+の収益計算・信頼度・フォールバックは監査 clean。
+
+### 監査判定 (session 401)
+
+最後の未個別監査ファイル `internal/lightning/seedstore.go` を監査 clean —
+空パスフレーズ拒否・`ErrWrongPassphrase` の不可分性（復号オラクル防止）・
+秘密バッファ全経路ゼロ化・バージョン付きバイナリ形式。`Decoder.ReadFrame`
+は確保前に `MaxFrameSize` 境界検査（メモリ枯渇 DoS 防御）。`WalletManager`
+の単一スレッドライフサイクルを文書化。これで `internal/` + `cmd/` 配下の
+全ファイル監査網羅が完了。
+
+### 修正 (session 402)
+
+`skills/` 内の実在しないテスト基盤の記述を訂正 — `//go:build
+integration`/`e2e` タグ、`make test-e2e` ターゲット、`otedama
+migrate-from-v2` サブコマンドはいずれも存在しません。統合テストは
+`testing.Short()` でゲート（`make test-integration` が全件実行）し、
+E2E スイートは意図的に未実装。LDK/regtest・ZKP の記述は v4.0
+スコープの将来指針として明記。
+
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist は master 側（session 485）で注記済みのため変更なし。
+
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
+### 修正 (session 411)
+
+GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
+しなかった問題を修正 — FIPS 140-3 の非対応理由（Noise NX の
+ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
+を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
+go.mod と完全整合を確認済み。
+
+### 修正 (session 412)
+
+SECURITY.md の非実在コマンド `otedama migrate-from-v2` への言及を
+`docs/MIGRATING-FROM-V2.md` への誘導に訂正。ADR-006/010/011・
+SECURITY.md のスコープ節は実装と整合を確認済み。
+
+### 修正 (session 414)
+
+competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
+ウォレット生成・プール自動選択を「実装済み」風の記述から v4.0 構想/
+ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
+`config.DefaultPoolURL` 単一フォールバック）を明記。
+
+### Docs (session 437 — ADR-011 依存先の上流進展を Erratum 2 として記録)
+
+- `docs/adr/ADR-011`: Erratum 2 追記 — `btcsuite/btcd/btcec/v2@v2.5.0`
+  が `ellswift`（BIP-324 公式ベクタ・`V2Ecdh` 含む）を上流同梱。
+  前回 erratum の「Go ellswift は手移植必須」記述を訂正し、Option A
+  が単一依存で完結する形に収束することを記録。
+
+### 修正 (session 463)
+
+1. RESEARCH_IMPROVEMENTS.md の「次の高優先アクション」一覧が陳腐化
+   していた問題を修正 — 既に実装済みの3項目（reject 分類+メトリクス、
+   submit レイテンシ、poolproto 配線 — V1 のみ）を残件と区別して状態注記。
+
+### 修正 (session 465)
+
+1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0`
+   （GOTOOLCHAIN=auto で 1.24 へ自動切替）と `godebug tlsmlkem`
+   （1.24 未満ではパース不能）により実質 Go 1.24+ が必要なため、実際の
+   最小ツールチェーン要件を明記。
+
+### Fixed (session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正)
+
+* `skills/tdd.md`: 「CI上で継続的にファズ実行」→ CI にファズジョブ非存在（`make fuzz` ローカルのみ）、`//go:build integration` タグ → 宣言ファイルゼロ（実際は `testing.Short()` ゲート）、`make test-e2e`/`//go:build e2e` → 両方非実在（E2E スイート未実装、ターゲット削除済み）の3件を訂正。
+* `skills/security-audit.md`: ファズ「CIで継続的に実行」→ 同上、govulncheck「CIで毎回実行」→ CI 非存在（Makefile ローカルのみ）、`web/` 配下の管理 UI 前提記述 → CLAUDE.md 禁止パスの3件を訂正。
+* `skills/release-procedure.md`: `otedama migrate-from-v2` phantom コマンド → `docs/MIGRATING-FROM-V2.md` 手順に言い換え、「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
+### Fixed (session 484 — BENCHMARKS.md の虚偽 CI 記述・phantom ベンチマークを訂正)
+
+* 「>5% 回帰で自動失敗」→ CI はベンチマークを実行して artifact をアップロードするのみで回帰ゲートなし。
+* 「CI が PR に比較を投稿」→ 比較・投稿処理は非実在。
+* 「デコーダーは CI で継続的にファズされる」→ CI にファズジョブなし（`make fuzz` ローカルのみ — session 483 の skills/ 訂正と同クラス）。
+* `BenchmarkDecoder_ReadFrame` の再現コマンド → 関数非実在のため、その throughput 表は未検証の推定値と明示。
+* 「Go 1.22 で計測」の表記に、現 master は Go ≥1.24 必須（`godebug tlsmlkem`）の注意書きを追加。
+* （マージ時注記）回帰ゲート・デコーダー推定値/ファズの訂正は master 側で先行済みのため BENCHMARKS.md への重複追記は行わず、本 PR は PR 比較投稿の訂正と Go ≥1.24 注記のみを反映。
+
+### Fixed (session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正)
+
+* Windows のログ参照手順 `Get-EventLog -Source Otedama` → イベントソース非登録の phantom（SCM で stdout 破棄・`--log-file` 非通過も併記）。
+* `contrib/grafana/otedama-dashboard.json`「lives at」→ `contrib/` 非実在のため v3.1.0 計画として訂正。
+* ハードニングチェック「Binary cosign signature verified」→ 署名リリース非実在（#562 で記録済みの release.yml 欠陥）と訂正。
+* 「Dependabot for the Otedama container image tag」→ dependabot docker エコシステムは Dockerfile のベースイメージ pin を更新するのみでデプロイ済みタグは更新しない、と訂正。
+
+### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
+
+* §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
+* §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
+
+### Fixed (session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記）
+
+* `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` も非実在（プラグイン基盤・ZKP 認証未実装、auth は CLAUDE.md 禁止パス）を日英両免責に追加。
+* 「SRI の Go バインディングを統合利用」/「自前実装ではなく SRI を選択」の理由付けが実態と逆であることを追記 — SRI は Rust のみで Go バインディング非存在、`internal/stratum` は自前実装。LDK のメンテ済み Go バインディングも非存在。
+
+### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
+
+* Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
+* リスク1 の「govulncheck は週次で自動実行済み」→ CI に非存在で Makefile ローカルのみ。
+
+### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
+
+* 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
+* 行11「SHA pinning」・行13「cosign 署名済み」は master 側の Gap 注記が先に着地済みのため重複追記せず。
+* CI gate 節を実態に書換 — ci.yml に独立した `go vet`/`staticcheck`/`govulncheck` ジョブは非存在（govet+staticcheck は golangci-lint 内で実行、5-OS ビルド行列は Build ジョブに実在）、nightly ファズ・ベンチマーク比較ジョブも非存在。
+
+### Fixed (session 490 — docs/SUSTAINABILITY.md の実装状況欄3件を訂正)
+
+* §2・§5 の実装状況は master 側で同内容の訂正が先に着地済みのため重複追記せず。
+* §10「SECURITY.md は v3.1.0 スコープ」→ 作成済み（残る v3.1.0 は LEGAL.md のみ）。
+
+### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
+
+* 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
+* 「`otedama --log-level=debug doctor`」→ サブコマンド前のフラグは `unknown subcommand` で失敗し、`doctor` は `--log-level` を持たない。
+
+### Documentation & audit (session 511 — engine package fully read; first production JDP block recorded)
+
+- **`internal/engine` audit surface complete.** All six non-test files
+  (run.go, arbitrate.go, metrics.go, stats.go, setup.go, fanin.go) have
+  now been read end-to-end across sessions 509–511: every goroutine
+  spawn site audited for shared-state access; the only findings were the
+  `rejectByReason` map race (fixed session 509, PR #591) and the
+  arbitration-pause flap (fixed session 510, PR #592). `miner.Worker`'s
+  SetWork↔grind path verified race-free (mutex + workVer generation
+  counter); `LatencyTracker`, `HashrateMonitor`, the V1/V2 session-loop
+  state maps, `fanIn`, and `arbitration.Decide`'s full-device assignment
+  coverage all verified correct.
+- **ADR-009 ecosystem update:** recorded the first known production
+  Stratum V2 Job-Declaration block — mainnet block 955,318, mined by
+  DMND for GoMining on June 25–26, 2026 (verified against DMND's
+  announcement and Bitcoin Magazine). Miner-declared templates are now
+  proven in production, strengthening the ADR's "Why now" premise.
+
+### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
+
+- **Core-path audit surface complete.** `internal/arbitration`,
+  `internal/logger`, and `internal/version` read end-to-end, finishing
+  the non-test sweep of the core packages (engine, miner, hal,
+  arbitration, logger, version) started in session 509. Verdicts:
+  arbitration `Decide` is deterministic (sorted device order, duplicate-
+  ID rejection, policy-space hysteresis, full-device assignment
+  coverage); logger's default singleton is race-free via
+  `atomic.Pointer` with nil-safe `IntoContext`/`SetDefault`; version's
+  ldflags layout matches the documented defaults. The only residual
+  class — non-finite arbitration inputs — is already owned by open PRs
+  #437 and #443.
+
+### Documentation & audit (session 514 — provider/daemon read; toolchain current)
+
+- **`internal/provider` + `internal/daemon` read end-to-end.** Verdicts:
+  pollingProvider's double-start guard, Stop ordering (cancel → wait →
+  recreate channel), and drop-oldest sendQuote all correct;
+  AkashProvider honors the publish-zero-don't-go-silent contract;
+  daemon's quoting helpers, `sc.exe query` state parse, and
+  ProtectHome/ReadWritePaths carve-out all verified. The
+  install-but-don't-start semantics of `installWindowsService` is a
+  closed-PR-owned decision (#552) — recorded, not re-delivered.
+  Toolchain pin `go1.26.8` confirmed still current (released Sep 1,
+  2026; 1.26.5–1.26.8 carried security fixes).
+
+### Documentation & audit (session 515 — metrics/clock/tui read)
+
+- **`internal/metrics`, `internal/clock`, `internal/tui` read
+  end-to-end.** Verdicts: metric cross-type collisions panic at
+  registration (one bad name would silently kill the whole scrape);
+  exposition escaping, NaN/±Inf rendering, and deterministic ordering
+  correct; Fake clock's non-monotonic contract documented; Dashboard
+  Start/Stop atomics + WaitGroup ordering close the writer race they
+  describe; `truncateVisible` correctly preserves ANSI state. Two
+  residuals recorded without code change: `metricKey`'s unescaped
+  label-value serialization (needs a `,`/`=` in a device ID — today's
+  producers can't emit one) and a `truncateToBudget`/`shortenURL`
+  duplication candidate for the Issue ledger.
+
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
+### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
+
+- **`go test -race ./...` green on all 23 packages** (go1.26.8);
+  33 K lines of test code mechanically audited — skips environmental,
+  error-swallows fixture-scoped, no tautological assertions. Ecosystem
+  recheck: SRI still at v1.12.0, go1.26.8 confirmed current; toolchain
+  bump remains closed-PR-owned (#369).
+
+### Documentation & audit (session 518 — sv2-spec tracking)
+
+- **ADR-009 ecosystem update:** sv2-spec #194 merged — error codes may
+  now drive automated actions (upstream blessing for our reject-code
+  classification); #202/#203 compete on a non-custodial JDP payout
+  extension (miner-declared payout outputs — on Otedama's sovereignty
+  axis, tracked for future JDC work).
+
+### Documentation & audit (session 519 — rule-3 duplication ledger)
+
+- Recorded two candidates in `docs/CATEGORY_AUDIT.md` (not fixed —
+  consolidation is a contract decision): `tui` truncator family
+  (`truncateToBudget` hard-cuts vs `shortenURL` returns over-limit
+  intact at budget <4, Issue #3 class) and `metrics.metricKey`
+  label-value `,`/`=` collision (latent; unreachable from today's
+  producers but live on the API surface).
+
+### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
+
+- Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
+  block parses under 1.27's removed-setting acceptance rule; no >1.22
+  stdlib symbols so `stdversion` vet is clean). Recorded upstream's
+  `stratum-mining/sv2-ui` orchestrated JDP stack in ADR-009; ESP-Miner
+  2.15.3 / DATUM v0.4.1beta unchanged.
+
+### Documentation & audit (session 521 — ecosystem recheck)
+
+- ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
+  40–60% by end-2026), `stratum` vs `sv2-apps` repo landscape
+  clarified, single-port SV1/SV2 auto-detection pattern noted.
+  Japanese-source recheck: no drift.
+
+### Documentation & audit (session 522 — EROSION threat modeled)
+
+- `docs/THREAT_MODEL.md`: added the missing network-adversary DoS
+  class — the EROSION single-packet Noise-nonce-desync attack (S&P'24),
+  with Otedama's verified posture (frame/decrypt error → reconnect →
+  fresh handshake; no silent degradation) and its residual (bounded
+  reconnect loop, inherent).
+
+### Documentation & audit (session 524 — golangci-lint pin divergence)
+
+- `docs/KNOWN_LIMITATIONS.md` §13: recorded that golangci-lint is
+  pinned at three different versions (ci.yml `v1.55.2` curl-install,
+  `golangci-lint-action@v3`, local `v1.64.8`) while upstream is at
+  `v2.13.x`; v2.13.0 adds the go1.27 support the local toolchain
+  already needs. Upgrade implies a `.golangci.yml` v2-config migration
+  — maintainer-owned.
+
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
+### Documentation & audit (session 527 — end-to-end binary smoke)
+
+- First real-binary smoke: `version`, `completion`, `doctor` (17
+  checks, documented 0/1/2 exit contract), `config show`, and `config
+  validate` (exit 78 per §2.1) all verified against their documented
+  contracts on the go1.27.1-built artifact.
+
+### Documentation & audit (session 528 — non-custodial E2E)
+
+- Verified the core non-custodial path on the real binary: first run
+  creates the wallet and shows the 24-word phrase exactly once
+  (`wallet.dat` at 0600); second run loads the same fingerprint and
+  never re-shows the phrase; connect loop backs off gracefully and
+  shuts down clean on SIGTERM.
+
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
+### Documentation & audit (session 530 — sv2-spec cert version)
+
+- `docs/adr/ADR-009`: recorded sv2-spec #230 — the Noise certificate
+  `version` field is now normative (MUST be 0; reject unsupported).
+  Forward requirement for Otedama's future cert validation.
+
+### Documentation & audit (session 531 — coverage measured)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
+  results — all 24 packages green, median ~97%; only `cmd/otedama`
+  (88%) below the 90% intent, its uncovered residue being the
+  integration-only `cmdRun` live path already exercised by the
+  binary E2E smokes.
+
+### Documentation & audit (session 534 — escape analysis)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-gcflags=-m` sweep — every heap
+  escape is on a cold path (package init, invalid-input errors,
+  construction); the grind loop is allocation-free, matching the
+  benchmark's 0 allocs/op.
+
+### Documentation & audit (session 535 — flake sweep)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: repeat-run sweep — engine `-count=3`,
+  `-race -count=2` on engine/stratum/poolproto, all green on
+  go1.27.1/arm64; no nondeterminism evidence anywhere in the suite.
+
+### Documentation & audit (session 536 — extended vet)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `nilness` zero findings tree-wide;
+  `shadow`'s 13 hits are all the checked-immediately `if err :=`
+  idiom (verified benign, no dropped errors).
+
+### Tests (session 537 — stdlib modernization)
+
+- `internal/i18n/messages/messages_test.go`: `sort.Strings` →
+  `slices.Sort` — the tree no longer imports `sort` or calls
+  `reflect.DeepEqual` anywhere (all other sorts were already on
+  `slices`/`cmp`/`maps`).
+
+### Documentation & audit (session 538 — checkptr)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-d=checkptr` instrumented full
+  suite — all 24 packages green, zero unsafe.Pointer violations;
+  the tree imports neither `unsafe` nor `syscall` directly.
+
+### Documentation & audit (session 539 — dependency boundaries)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `go mod verify` clean; external
+  deps = x/crypto + yaml.v3 only; import graph verified as a DAG
+  matching the architecture map (13 leaf packages, engine sole
+  aggregator, no upward imports).
+
+### Documentation & audit (session 540 — order dependence)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-shuffle=on` ×2 full-suite runs
+  all green — no order-dependent tests; suite is deterministic.
+
+### Documentation & audit (session 542 — ecosystem recheck)
+
+- `docs/adr/ADR-009`: sv2-spec #220 (Noise Act 2 = 234 bytes —
+  forward requirement for the §2 noise completion), #221/#224
+  (docs-only), #209 (job_id/SetNewPrevHash prohibitions — engine
+  conformance verified). SRI still v1.11.1.
+
+### Documentation & audit (session 541 — serialized scheduling)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `-cpu=1` (GOMAXPROCS=1) full
+  suite ×2 all green — no test needs multi-CPU scheduling;
+  suite robust across every scheduler dimension.
+
+### Documentation & audit (session 544 — runtime integrity)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `checkptr=2` + `invalidptr=1`
+  clean on the raw-byte packages; `go version -m` confirms the
+  release path pins CGO_ENABLED=0 (fully static) per ADR-003.
+
+### Documentation & audit (session 545 — pprof)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: hot loop confirmed 0-alloc via
+  benchmem+pprof, 98.5% CPU inside FIPS SHA-256; midstate reuse
+  (~30% headroom) analyzed and rejected — stdlib has no midstate
+  API and custom compression violates the no-custom-crypto rule.
+
+### Documentation & audit (session 565 — atomic API)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all `sync/atomic` uses are the
+  typed Go-1.19+ API; zero legacy `AddInt64`-style calls, so the
+  386-misalignment panic class is absent.
+
+### Documentation & audit (session 566 — JSON/YAML decode)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: every JSON Unmarshal takes a
+  pointer and checks its error; yaml config decode uses
+  `KnownFields(true)`; the only ignored results are documented
+  best-effort tolerations.
+
+### Documentation & audit (session 567 — init surface)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: four `init()` sites, all
+  canonical — BIP-39 wordlist integrity panic + plugin-registry
+  registration; no I/O or goroutines at init time.
+
+### Documentation & audit (session 568 — recover/spawn)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: zero `recover()` in non-test
+  code (no panic-swallowing surface); 20 spawn sites match the
+  session-553 leak-coverage map.
+
+### Documentation & audit (session 569 — any usage)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: `any` appears only in V1
+  JSON-RPC wire fields (spec-mandated), `sync.Pool.New`, and a
+  generic constraint — zero loose-typing escapes internally.
+
+### Documentation & audit (session 570 — enum exhaustiveness)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all switches over the five
+  iota-enum types are exhaustive or use a correct default — no
+  silent pass-through on unhandled values.
+
+### Documentation & audit (session 571 — ctx cancel)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: all six WithTimeout/WithCancel
+  sites pair their cancel (defer or lifecycle-invoked) — zero
+  leaked contexts.
+
+### Added (session 315 — SV2 submit インフライト深さゲージ)
+
+**追加.** `otedama_shares_submit_in_flight` ゲージを新設——`submitTimes`
+の未判定深さ（submit→ack のペンディング数）を 30s ティックで公開。
+ESP-Miner v2.15.0 の「pending SV2 shares」ダッシュボードと同じ観測面:
+持続的に増える深さはプールの ack 遅延・停止を意味する。
+V1 は同期 submit のため常に 0。SPECIFICATION §6 カタログ行を追加済み。
+
+### テスト (session 388)
+
+- `internal/arbitration` に `FuzzDecide` プロパティテストを追加 — Decide の文書化済み不変条件（デバイス割当の全単射・ソート順、互換ストリーム限定、TotalYield の総和一致、ForegoneSatsPerSec 非負、決定性、MaximizeEarnings 無ヒステリシス時のグリーディ最適性）をランダム入力で検証。従来は「プロパティテストで検証済み」との記載のみで実物が存在しなかったギャップを解消（90秒・1350万 exec でクリーン）。
+
+### Performance (session 543 — sync.Pool wiring)
+
+- `internal/stratum/noise.go`: hkdf2/hkdf3 now call the pooled
+  `hmacSHA256Pooled` — eliminates ~12 discarded sha256 hasher
+  allocations per Noise handshake (reconnect-heavy fleets). The
+  unpooled `hmacSHA256` remains the test reference.
+
+### テスト (session 398)
+
+`FuzzMessageRoundTrip` を追加 — SV2 steady-state メッセージ6種（NewMiningJob /
+SetNewPrevHash / SetTarget / SubmitSharesStandard / SubmitSharesSuccess /
+SubmitSharesError）のエンコード方向を検証: Encode 不敗・decode 完全一致・
+再エンコード byte 一致（canonical-form 安定性）。decode 側 fuzz（#479）の補完として
+双方向のプロパティカバレッジを完成。
+
+### テスト (session 389)
+
+- `internal/miner` に `FuzzTargetFromNBits`/`FuzzTargetFromDifficulty`/`FuzzTargetFromDifficultyMonotonic` を追加 — プール供給の nBits/難易度変換の不変条件（受理値は正ターゲット・再エンコード往復・ゼロハッシュ恒真・単調性、不正値はエラー）をランダム検証。
+- `internal/config` に `FuzzResolveNumericEnv` を追加 — 数値系 OTEDAMA_* 環境変数の「パース成功時は値適用+env origin、失敗時は警告1件+値不変」の契約を任意文字列で検証。
+
+### Fixed (session 482 — ROADMAP.md の陳腐化エントリ4件を実装状況と照合して訂正)
+
+* `engine → poolproto 統合` 項: 「SV1 transport が使えない」という前提は陳腐化 — V1 は `poolproto.DialURL` 経由で動作済み。残ギャップは V2 側の native `stratum.NewDecoder` パスと、engine から未参照の `poolproto/stratumv2` dialer のみと注記。
+* `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` 項: 「informational」は不正確 — CI ワークフローに両者とも存在せず（Makefile ローカルのみ・osv-scanner は未導入）と訂正。
+* `internal/poolproto/ 抽象化レイヤ` 項: SV1 切替のみ部分完了と注記（SV2 native・DATUM 未実装）。
+* `Stratum V1 互換の追加` 項: 接続層は完了（stratum+tcp://・stratum+tls:// 動作）とマークし、coinbase 未再構成のため V1 シェアは pool 受理されない残ギャップを併記。
+
+### Fixed (session 481 — コミット済み `.claude/settings.local.json`（古いコードベース構成の死んだパスを指す130超の許可エントリ）を削除し、`.gitignore` でローカル設定の再混入を防止)
+
+* SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
+* 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
+
+### テスト (session 395)
+
+- `poolproto/stratumv1` の V1 通知パーサに fuzz を追加 — `mining.notify`・`client.reconnect`・`mining.set_extranonce`・`client.show_message` の4関数（従来の dispatch 層 fuzz では構造的に到達困難だった深い JSON 境界）。任意 params で panic/ハングなし、`client.reconnect` はどんな入力でも directive を返す契約を検証（計 ~1,500万 exec クリーン）。#478 と併せて V1 サーバ→クライアント全通知経路に fuzz カバレッジが揃った。
+
+### Chore (session 332 — yaml.v3 のメンテ先へ移行)
+
+`gopkg.in/yaml.v3`（2025年4月にアーカイブ、CLAUDE.md の依存
+メンテ基準を満たさない）を、Yaml プロジェクトの正式な継続先
+`go.yaml.in/yaml/v3` v3.0.5 へ移行。API 互換のためコード変更は
+import パスのみ（configfile.go / config_file_test.go）。
+
+### テスト (session 391)
+
+- `cmd/otedama` に `FuzzLoadConfigFile` を追加 — 任意バイト列の YAML 設定ファイルがロード経路で panic/ハングせず、デコード失敗は常に「警告 + 空 Config」へ縮退することを検証（非UTF8・深いネスト・alias・バイナリ・未知フィールドを含む入力、98K exec でクリーン）。これで非信頼入力を受ける全パーサ/境界に fuzz または property カバレッジが揃った。
+
+### テスト (session 392)
+
+- `internal/lightning` に BIP-39 パース境界の fuzz を追加 — `FuzzMnemonicToEntropy` は任意の語列（不正な語数・未知語・大文字・空文字・チェックサム破損）で panic せず常にエラー、受理した語列は再エンコードが一致することを検証（150万 exec クリーン）。`FuzzMnemonicRoundtrip` は全合法エントロピー長（16–32B）でエンコード→デコードが bit-exact に往復することを検証（300万 exec クリーン）。ウォレット復元の入力境界をカバー。
+
+### 追加 (session 434 — サブコマンド did-you-mean 提案)
+
+- `otedama verson` 等の誤記時に stderr へ `did you mean "version"?` を
+  提案（Levenshtein 距離 ≤2 の最近接。exit 64 は不変、無関係入力には
+  提案なし、先頭ダッシュは無視）。新規依存なし。
+
+### テスト (session 396)
+
+- `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。
+
+### 修正 (session 413)
+
+solo-operations.md の CODEOWNERS サンプルが非実在パス
+（`/internal/security/`・`/internal/auth/` — CLAUDE.md の作成禁止
+パス）を参照していた問題を実ファイルと同じ構成に訂正。
+`.github/dependabot.yml` の無効な `automerge` キー（Dependabot に
+存在しないオプション — 自動マージは発動していなかった）を除去し
+実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
+
+### 修正 (session 415)
+
+**lint 債務の一括解消** — .golangci.yml が必須とする linter 群（errorlint・
+gosec・gocritic・misspell・gofumpt・prealloc・goconst・unparam・dogsled・
+bodyclose 等）に対する ~350 件の違反を解消し 65 件まで削減。主な実修正:
+`err ==` 等価比較を `errors.Is`/`errors.As` へ統一（ラップ済み fatalError が
+無限再試行されていた意味的バグを含む）、systemd/launchd サービス定義の
+パーミッションを 0644→0600 へ厳格化、未使用コード（remoteStatic・test
+parseFloat）の削除、pruneStaleStreams/parseReconnect の冗長シグネチャ整理、
+テストの bodyclose・unnecessaryDefer 等。BIP-39 ワードリストと i18n
+カタログは正規データのため misspell 対象外として恒久的に除外。残りは
+hugeParam（値渡しシグネチャ）×53・gocyclo ×12 で、意図的設計/別途リファクタ
+案件として記録。
+
+### Fixed (session 296 — 接続維持のままジョブが止まるサイレントプールに警告を追加)
+
+**問題.** 接続が生きたままプールからの新規ジョブが止まると、reject も
+切断もないまま収益が止まる——難易度飢餓と同型だが別経路。closed #396
+の未マージ修正を master へ再デリバー。
+
+**修正.** V1/V2 両経路で `jobStallWarnAfter`（10 分、テストでは縮小
+可能）を超えてジョブ未着が続くとエピソードごと一度だけ warn。カーテイル
+中は抑制。最初のジョブが一度も来ない場合も同じく検出（タイマーは
+セッション開始から起算）。
+
+### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
+
+**問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
+電気代割れの採掘を止める手段が `curtail_below_btc_usd` の手計算しか
+なかった。closed #373 の未マージ修正を master へ再デリバー。
+
+**修正.** `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐
+フロアを導出（powerWatts/1000 × price $/h → `SatsPerSecond` で sats/sec
+換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+`max(min_yield_sats_per_sec, floor)` を適用。新メトリクス
+`otedama_power_breakeven_floor_sats_per_second`（未設定時 0）。
+
+### 修正 (session 464)
+
+1. `internal/version` のデフォルト値が `v3.0.0-alpha.0-dev` で
+   VERSION ファイル（v3.0.0-alpha.1）とずれていた問題を修正 —
+   ldflags を介さない `go build`/`go install` ビルドが古い
+   バージョンを報告していた。Makefile の VERSION 欠損時
+   フォールバックも同値に揃えた。
+
+### Fixed (session 523 — test-hygiene lint findings)
+
+- Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
+  (unused linter finding).
+- Closed the response body on the success path of the post-shutdown
+  probe in `internal/httpserver/server_test.go` (bodyclose finding).
+- Verified the remaining golangci-lint output maps to the open #526–#528
+  refactor family or documented false positives; govulncheck remains
+  zero-reachable under go1.26.8.
+
+### テスト (session 367 — SV2 メッセージ decode fuzz)
+
+SV2 型付きメッセージデコーダ6種と STR0_255/B0_255/U16/U32 ワイヤ
+プリミティブに fuzz カバレッジを追加（270万 exec クリーン）。
+短いペイロードの境界契約を単体テストでも固定。
+
+### Fixed (session 350 — V1 ジョブIDのログクォート)
+
+`mining.notify` の `job.JobID`（プール制御文字列）をログ出力する
+2箇所で `%s` → `%q` に変更。ANSI エスケープ・改行による
+ログ偽造を防止。
+
+### 修正 (session 416 — lint 債務フォローアップ: hugeParam クラス全滅)
+
+- 内部 API の大きい構造体 (80–200B: `Config`, `Stats`, `Job`, `Input`,
+  `Credentials`, `SetupConnection` 等) を値渡しからポインタ渡しへ一括変換 —
+  gocritic `hugeParam` 53件全て解消。ホットパスの `HashHeader`(nonce 毎),
+  `Decide`, `sendQuote`, TUI 描画経路を含む。
+- チャネル (`jobsCh`, `updateCh`, `quoteCh`) は意図的に値意味論を維持 —
+  送受境界でのみポインタ化し、プロデューサ/コンシューマ間のエイリアシングを回避。
+- `Decide` に nil `Input` ガードを追加。
+
+### 修正 (session 409)
+
+SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
+チェックサムは config 読み込み時に実際に検証される（旧記述は
+「未検証」と誤記）、`tls_ca_file` は `stratum+v2tls://` にも適用。
+`validateBitcoinAddress`・`TLSCAFile` の古い godoc も同様に訂正。
+
+### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
+
+**問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
+超える場合、reject も切断もないまま収益が実質ゼロになる——オペレータに
+気づかれない飢餓。closed #394 の未マージ修正を master へ再デリバー。
+
+**修正.** V1 統計ティックで `estimatedShareIntervalSeconds` > 3600 のとき
+エピソードごと一度だけ warn を出し、間隔が回復したら再アームする。
+
+### 修正 (session 377)
+
+- `make fuzz` が機能していなかった問題を修正 — `go list` の出力はインポートパスであり `{}/*.go` グロブがファイルシステム上のディレクトリに一致せずループが常に空回りしていた。ファイルシステムから fuzz テストを発見し、ターゲット毎に `-fuzz=^Name$` で30秒実行するよう変更（1パッケージ複数 fuzz 関数での "matches more than one" 失敗も解消）。
+
+### 修正 (session 426 — .gitignore の v2 遺構除去)
+
+- 存在しないツリーを対象とする8セクションを削除: `web/`（Node.js 系 —
+  CLAUDE.md の作成禁止パス）、`scripts/`（Python 系）、docs サイト生成物
+  （.docusaurus/.vuepress — SSG 未導入）、Lightning ノードファイル
+  （channel.db/neutrino.db/lnd.conf — `internal/lightning` は BIP-39 シード
+  保管庫でありノードではない）、Bitcoin Core データ（プール接続のみ）、
+  docker-compose override（compose ファイル自体が非存在）、v2 クリーンアップ
+  残骸（fix_*.sh）、マイニングキャッシュ（work-cache/ 等 — 生成コード無し）。
+- 死んだ許可リスト項目 `!config.production.yaml` / `!SHA256SUMS.example` を
+  削除（`SHA256SUMS*` グロブは release ジョブの生成物なので維持 —
+  session 429 で復元）。
+- 実際に生成される全て（wallet.dat、config.yaml、coverage、prof、リリース
+  アーカイブ、ビルドバイナリ）は引き続き除外済み。
+
+### 修正 (session 428 — 監査文書の検証済み虚偽記述を訂正)
+
+- `BENCHMARKS.md`: 「>5% リグレッションで CI 失敗」は未実装（CI は実行+
+  アーティファクト保存のみ）— 実態に訂正し、未コミットの
+  `BenchmarkDecoder_ReadFrame` 参照と「CI で継続 fuzz」記述も訂正。
+- `AUDIT_CHECKLIST.md` 項目11/13: 「全 action SHA-pin」「cosign 署名済み」の
+  検証欄は虚偽（全 `uses:` がタグ参照、trivy-action は `@master` 追尾、
+  release.yml は署名非生成）— Gap 表記に訂正。
+- `SUSTAINABILITY.md` 実装状況: §2 SV1/SV2「v3.2.0 スコープ」→ 実装済み、
+  §5 「SHA pinning + cosign 実装済み」→ 未実施、に訂正。
+
+### 修正 (session 429 — Makefile の幻影ターゲットと未ガードツール)
+
+- `make migrate-from-v2` が非実在サブコマンド `otedama migrate-from-v2`
+  への手順を echo — docs/MIGRATING-FROM-V2.md への誘導に置き換え。
+- `make security` / `make licenses` が gosec・govulncheck・go-licenses を
+  未ガードで呼び未導入環境で即失敗 — `audit` ターゲットと同じ
+  「未導入なら install 手順を表示してスキップ」パターンに統一。
+- `SHA256SUMS*` グロブを復元 — release ジョブが `artifacts/*/SHA256SUMS`
+  を生成するため除去は誤り（Devin Review 指摘）。
+
+### 修正 (session 430 — v2 時代のエージェント許可ファイルを untrack)
+
+- 追跡されていた `.claude/settings.local.json`（v2 の木を対象とする
+  ~100件の許可エントリ — `internal/mining`・`internal/pool`・
+  `cmd/demo`・WSL パス・ethereum 依存等、全て非実在）を削除し
+  gitignore に追加 — settings.local.json は規約上マシンローカル。
+
+### 修正 (session 431 — Dockerfile の無効宣言とビルドコンテキスト)
+
+- `EXPOSE 0` を削除 — 0 は有効ポート宣言ではなく（Podman は build を
+  拒否）、`--http-addr` は固定ポートではないため EXPOSE 自体不要。
+- `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
+  `config.yaml` 等を build context にアップロードしていた問題を解消。
+
+### 修正 (session 432 — ROADMAP のステータスドリフト)
+
+- `ROADMAP.md`: 「Stratum V1 互換の追加」は実装済み（stratumv1 ダイアラ
+  + `runSessionV1`）、「engine → poolproto 統合」と「poolproto 完全
+  分離」は V1 経路で完了・V2 配線が残件 — 完了/部分完了マークに訂正。
+- `internal/engine/run.go`: 「V2 poolproto ダイアラ Step 3b 待ち」の
+  コメントは陳腐（§3 resolved・Step 3b 完了済み、ダイアラ存在）—
+  実態（engine 配線が残件）に訂正。
+
+### 修正 (session 433 — CATEGORY_AUDIT バックログの陳腐行)
+
+- `docs/CATEGORY_AUDIT.md`: deferred/flagged 行を master と再照合し
+  3件を解決済みに更新 — Windows `Status()`（sc.exe query 実装済み）、
+  `sc.exe binPath=` quoting（serviceArgv 再設計で解消）、
+  `MaxTargetNBits`（spec 照合済み・意図的非実装として文書化）、
+  DATUM 現在形誤記（"is planned" 表記へ訂正済み・§14 で開示済み）。
+  さらに `DispatchFrame` decode error の「無言 continue」記述も陳腐
+  と訂正 — 実際は `engine: pool read` でセッション死亡する fail-fast
+  （提案の debug ログより厳格）。
+
+### テスト (session 369 — btccrypto fuzz)
+
+payout アドレスの bech32/bech32m + Base58Check バリデータに fuzz 追加
+（140万 exec クリーン）。wallet.dat scrypt パラメータがコンパイル時
+定数であること（ファイル経由の KDF DoS 不可）を監査済みと記録。
+
+### 修正 (session 376)
+
+- `.goreleaser.yaml` のリリースノート本文が存在しない `docs/verify-release.md` を参照し、チェックサムファイル名も `checksums.txt`（実際の生成名は `otedama_<ver>_checksums.txt`）と不一致だった点を修正 — リンクは絶対 URL で `docs/DEPLOYMENT.md` へ。
+
+### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
+
+- `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
+  （argv 経由禁止 — プロセスリスト漏洩防止）、BIP-39 チェックサム検証後に
+  派生シードの公開フィンガープリントを `wallet.fingerprint` と比較。
+  `wallet.dat` の復号不要。mnemonic パスフレーズ付きウォレットは
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` で対応。フィンガープリントファイル
+  不在時は `OTEDAMA_WALLET_PASSPHRASE` による wallet.dat 復号へフォールバック。
+- `otedama wallet change-passphrase`: 既実装・テスト済みだが未接続だった
+  `WalletManager.ChangePassphrase` を CLI へ配線。パスフレーズは
+  `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE` 環境変数経由。
+- 両 verb は `wallet.dat` を事前 stat — `--data-dir` のタイポで空ウォレットを
+  誤作成しない（`NewWalletManager` は不在時に新規作成する契約のため）。
+- データディレクトリは `run` と同一の4層優先（flag > env > config.yaml >
+  プラットフォーム既定）で解決。
+- バックアップ復元（wallet.dat 単体コピー）で欠落した `wallet.fingerprint`
+  を既存ウォレット open 時に再生成 — フィンガープリント照合が復元後も
+  復号不要で動作する。既存ファイルは上書きしない（不一致は改竄シグナル）。
+
+### Added (session 336 — pool show_message 通知をログへ)
+
+Stratum V1 の `client.show_message`（メンテナンス予告、資格情報
+エラー、移行告知などプール運営者通知）が解析済みながら消費者ゼロ
+の dead channel で破棄されていた問題を修正。`PoolNoticeReceiver`
+経由で notices を取得し info ログへ転送。#405/#424 由来の再
+デリバー。
+
+### Security (session 353 — dialer ハンドシェイクエラーのクォート)
+
+`poolproto/stratumv2` の `Negotiate` で `SetupConnectionError` /
+`OpenMiningChannelError` のプール理由文字列を `%q` クォート —
+session 351 のエンジン側修正を dialer 側にも適用。
+
+### 修正 (session 405)
+
+`.goreleaser.yaml` の実在しないパス2件を修正 — アーカイブ同梱 glob
+`docs/locales/*.toml`（i18n は `internal/i18n/messages/` の Go ソース
+内蔵で当該ディレクトリなし、全リリースで空一致）と、リリース本文の
+死リンク `docs/verify-release.md`（正しくは `VERIFY.md`）。
+
+### セキュリティ (session 372 — argv パスフレーズ警告)
+
+`--wallet-passphrase` / `--wallet-mnemonic-passphrase` をフラグ経由で
+指定すると stderr に警告 — argv はプロセスリスト (ps) で全プロセス
+から可視。推奨経路の OTEDAMA_WALLET_*_PASSPHRASE 環境変数を案内。
+
+### セキュリティ (session 393)
+
+- `--http-addr` が非ループバックアドレス（`0.0.0.0` 等）に bind される際、起動時に stderr 警告を発行 — metrics/health エンドポイントのネットワーク公開をオペレータに通知（`--pprof` 有効時はヒープ/ゴルーチンプロファイル公開についても明記）。ループバック bind は従来通り無警告。
+
+### 修正 (session 385)
+
+- `TestSetupWallet_MnemonicNeverReachesLogger` の確率的フレークを解消: 24語ニーモニックのランダム語（BIP-39 語彙は一般英単語）が固定ログ文（"recovery phrase" 等）の散文と衝突し誤検出していた。既知の定数行をスキャン対象外にし、動的ログ内容のみを検査（実際の漏洩は引き続き検出）。(closed #371 の該当半分の再デリバー)
+- TUI ダッシュボードが常に80カラム固定で描画され、実端末幅を一切検出していなかった既知の制限（KNOWN_LIMITATIONS §15）を解消。`internal/tui` が描画ティック毎にカーネルへ端末幅を問い合わせ（Unix: `TIOCGWINSZ`、Windows: `GetConsoleScreenBufferInfo`）、端末リサイズにも追従。出力先が端末ファイルでない場合やクエリ失敗時は従来の80カラムにフォールバックし、`SetWidth` による固定指定も従来通り優先される。`golang.org/x/sys` を间接依存から直接依存へ昇格（BSD・Go チーム保守・既存 module graph 内のため新規モジュール追加なし）。
+
+### Fixed (session 351 — ハンドシェイクエラーのサニタイズ)
+
+V2 `SetupConnectionError`/`OpenMiningChannelError` のプール理由
+文字列を `%q` でクォート（制御文字エスケープ）し、OpenMiningChannel
+拒否の理由を fatal としてログに明示。従来は理由が破棄されていた。
+
+### Fixed (session 295 — V2 経路でプール難易度がメトリクスに公開されず飢餓警告も出なかった問題を解消)
+
+**問題.** `publishDifficulty` は V1 の stats tick でのみ呼ばれ、V2 経路では
+`otedama_pool_difficulty` ゲージが更新されず、難易度飢餓の warn も発火
+しなかった（V1/V2 の非対称）。closed #395 の未マージ修正を master へ
+再デリバー。
+
+**修正.** V2 の share target（OpenMiningChannelSuccess/SetTarget の
+U256）を新 `miner.DifficultyFromTarget` で Stratum 難易度へ変換し、
+V2 stats tick で publish + 飢餓 warn（session-294 と同閾値）。ゼロ
+target は +Inf で「収益ゼロ」を表現。
+
+### 修正 (session 390)
+
+- save() のクラッシュ/失敗で残った `.wallet-*.tmp` がデータディレクトリに永久蓄積していた問題を修正 — NewWalletManager 起動時に mtime が1分超の古い temp ファイルのみ掃除（インフライトの save() や他プロセスの新規 tmp は保全、best-effort で起動を阻害しない）。併せて `save()` の失敗経路（暗号化エラー・書き込み不可ディレクトリ・tmp 残留なし）のテストを追加。
+
+### Added (session 320 — ライブ・ネットワークハッシュレートフィード)
+
+**問題.** マイニング収益推定はコンパイル時定数（1e21 H/s）を使っていた
+——実際のネットワークハッシュレートは変動するのに値が固定。
+KNOWN_LIMITATIONS §7 の「live difficulty feed」未実装項を着地。
+closed #378/#415 の未マージ修正を master へ再デリバー。
+
+**修正.** `rates.HashrateFetcher` が mempool.space + blockchain.info を
+ポーリングし、中央値（妥当性バンド内）を `MiningProvider.
+NetworkHashrateFunc` 経由で収益推定へ注入。フィード不可・未配線時は
+従来の定数へフォールバック（オフライン起動に影響なし）。
+
+### 修正 (session 379)
+
+- リコネクトの指数バックオフが確立済みセッション後にリセットされなかった問題を修正 — 数時間安定稼働したセッションの切断でも、直前の死んだエンドポイント連打防止用に育った backoff（最大64s）を引き継いでいた。確立した試行後は初期値(1s)に戻す。リセットをログ行より前に置き「reconnecting in Ns」の表示値が実際の待機時間と一致するよう保証。
+
+### 修正 (session 399)
+
+マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
+(header, nonce) を各デバイスが重複計算し、後着シェアが duplicate 拒否されていた。
+`WorkerConfig.NonceOffset` を追加し、エンジンがワーカー i に `i*Threads` オフセット・
+共有ステップ `next-pow2(threads×workers)` を割当 — 各 (worker, thread) がジョブ全期間で
+互いに素な剰余類を所有。単一デバイス時の挙動は不変。
+
+### 修正 (session 462)
+
+1. TUI のカラム揃えずれを修正 — ANSI エスケープを含むフィールドを
+   `%-Ns` でパディングするとルーン数ベースのため不足し、後続カラムが
+   エスケープ長分左にずれていた。`padToVisibleWidth` で表示幅準拠の
+   パディングに統一（pool 状態・デバイス数・est. earned の3箇所）。
+
+### Added (session 318 — client.reconnect の wait_seconds を尊重)
+
+**問題.** `client.reconnect`/`mining.reconnect` の `wait_seconds` は
+記録のみで適用されない dead write だった。closed #388/#413 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.ReconnectWaiter` インターフェース + V1
+`ReconnectWait()`（[0,300s] クランプ）を追加し、`runSessionV1` の
+終了経路で ctx キャンセル可能に適用。Host:Port は従来どおり
+非追従（リダイレクト防御）。
+
+### Fixed (session 512 — hal.Identity.Validate whitespace coverage)
+
+- **`Identity.Validate` now rejects all Unicode whitespace, matching its
+  documented contract.** The check covered only `' '`, `'\t'`, and
+  `'\n'`, so IDs containing `'\r'`, `'\v'`, `'\f'`, or non-ASCII
+  whitespace (e.g. U+00A0) passed validation despite the doc stating IDs
+  "must not contain whitespace". Replaced the explicit character list
+  with `unicode.IsSpace`. Driver-supplied IDs with such characters (a
+  sysfs entry name, say) would previously flow into log lines and metrics
+  labels where control/space characters corrupt output or split label
+  values. Also recorded the `internal/miner` + `internal/hal`
+  audit-complete verdicts (all files read; only residual is the
+  open-PR-owned nonce-wrap item).
+
+### 修正 (session 394)
+
+- `--log-file` にサイズ上限ローテーションを追加 — 長期稼働マイナーの監査ログが無制限に増大していた問題を修正。32 MiB 超過で単一 `.old` バックアップへローテーション（合計 ~64 MiB にバウンド）。パーミッション 0600・append 継続・ローテーション失敗時は既存ファイルへの追記継続でログ書き込みを喪失しない。
+
+### Fixed (session 321 — SV2 バッチ受理数の正しい計上)
+
+**問題.** `SubmitSharesSuccess` の受理を常に +1 で数えていた——
+プールが `NewSubmitsAccepted`（バッチ受理数）を報告しても無視し、
+受理率が実際より低くドリフトした。closed #386/#400/#410 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `shares_accepted` が `NewSubmitsAccepted` を計上。
+
+### Fixed (session 322 — SV2 canonical reject コードの明示分類)
+
+**問題.** `rejectClass` が標準 `SubmitSharesError` コードを部分一致
+ヒューリスティックのみで処理し、`invalid-job-id`/`invalid-channel-id`
+が `hardware` に誤分類されていた（本来は stale 系）。closed
+#387/#399/#409 の未マージ修正を master へ再デリバー。
+
+**修正.** 標準コードを部分一致の前に明示分類: invalid-* → stale 系、
+`difficulty-too-low` → difficulty（従来の other から改善、
+benign-retarget 経路にも乗る）。
+
+### 修正 (session 370 — ntime roll)
+
+nonce 空間枯渇時にヘッダ時刻をロール前進 — 同一 (header, nonce) の
+再ハッシュと重複シェア拒否を防止（ntime roll、V1/V2 両経路で
+ロール値が送信されることを確認済み）。
+
+### Fixed (session 335 — retarget 起因の良性 reject を分類)
+
+プールが難易度/ターゲットを変更した直後、旧ターゲットで掘られて
+いた in-flight share が "above target" reject として本物の不良
+share 扱いされ reject 率を水増ししていた問題を修正（ESP-Miner
+#212 系）。発行時ターゲットと現在ターゲットを比較する
+`transitionReject` で difficulty 系 reject のみ良性
+`difficulty-transition` として分離 — V1/V2 両対応。#367 由来の
+再デリバー。
+
+### Fixed (session 361 — config 非有限値拒否)
+
+5 つの float 設定項目で NaN/±Inf がバリデーションを通過する
+問題を修正（`x < 0` は NaN で偽）。`.nan`/env "NaN" が裁定計算を
+汚染する経路を遮断。
+
+### Fixed (session 325 — 裁定エンジンの非有限 yield を collapse)
+
+**問題.** `Yield.Effective()` の `<= 0` ガードは NaN を通す——
+上流プロバイダの 0/0 除算等で NaN が来ると `y <= 0` が false となり
+NaN 候補がソートへ混入、`TotalYield` を NaN 汚染しうる。
+
+**修正.** 積が非有限（NaN/±Inf）なら 0 に collapse——壊れたクォートは
+ソートに勝てず集計も汚さない。`TestYield_Effective` に NaN/±Inf
+の5ケース追加。
+
+### Fixed (session 338 — set_extranonce のデータレース修正)
+
+`mining.set_extranonce`（リードゴルーチン）が `extranonce1`/
+`extranonce2Size` を書き換え、`Submit`（呼び出し元ゴルーチン）が
+同フィールドを読む — 素のフィールドでデータレースが発生していた
+問題を `atomic.Pointer[string]`/`atomic.Int64` 化で修正。
+
+### 修正 (session 383)
+
+- Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
+
+### 修正 (session 374)
+
+- プール URL 検証を強化: `validatePoolURL` は従来スキーム接頭辞と「残りが非空」のみを検査していたため、`stratum+tcp://pool`（ポート欠落）、`:abc`（非数値ポート）、`:99999`（範囲外）、`user:pass@host`（userinfo）、`host:3333/path`（パス混入）が config 検証を素通りし、dial 時に不親切なエラーで失敗していた。残り部分を `host:port` として厳密に検証（`net.SplitHostPort` + ポート 1-65535 + userinfo/path/空白の拒否）。config.yaml 由来の `pools[].url` はこの経路一箇所で全てカバーされる。
+
+### Fixed (session 310 — SubmitSharesSuccess の未来シーケンス受理を遮断)
+
+**問題.** SV2 の SubmitSharesSuccess が `LastSequenceNumber` を未検証で
+受理し、未送信 seq の bogus success フレームで受理率を水増しできた
+（reject 側 session-277/#389 の鏡像）。closed #403 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `LastSequenceNumber > seqNum` のフレームを debug 落ちさせ、
+受理クレジット・レイテンシ確定を行わない。
+
+### Fixed (session 331 — 非有限な裁定パラメータの拒否)
+
+`arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
+±Inf を設定できてしまい（YAML `.nan`、env `nan`/`inf` は
+ParseFloat を通過）、`< 0` チェックをすり抜けてヒステリシスが
+無効化・ incumbent 固定・フロア無効化が静かに起きていた問題を
+修正。`Decide` が非有限値を明示的にエラー拒否するようになり
+設定ミスが警告として可視化される。
+
+### 修正 (session 378)
+
+- `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
+- `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
+
+### 修正 (session 371 — scheme dispatch + dial bound)
+
+`datum://`（ADR-009 で認識されるが未実装）を fail-fast で拒否 —
+従来は平文 SV2 経路へフォールスルーし DATUM プールへバイナリ V2
+フレームを送出していた。フェイルオーバー経路のライブ V2 ダイアルに
+15 秒の接続タイムアウトを追加（TCP 接続＋TLS ハンドシェイク）。
+
+### Fixed (session 345 — プール接続タイムアウト)
+
+V1/V2 ダイアラが 1 回の接続試行を 15 秒で打ち切るよう変更（TCP
+コネクト + TLS ハンドシェイク）。呼び出し側 ctx に期限がない場合、
+ブラックホール端点が OS の SYN 再送既定（Linux 約2分）まで
+フェイルオーバー全体を停滞させていた。
+
+### Fixed (session 314 — stale ntime を現在時刻へロール（SRI 1.12.0 nTime 境界対応）)
+
+**問題.** V1 `mining.notify` の ntime・V2 の min_ntime/SetNewPrevHash ntime が
+検証なしにブロックヘッダへ直行し、ジョブが古くなるほど提出シェアの
+タイムスタンプが陳腐化。SRI 1.12.0（2026-09-17）が min_ntime/nTime
+境界のシェア検証を全チャネル型で強制したため、stale ntime のシェアは
+サーバーで一律拒否＝ハッシュレートの空費。
+
+**修正.** `rollNTime()` で stale な宣言 ntime をローカル時刻へ前倒し
+（ntime rolling は標準的マイナー挙動で実効 nonce 空間の一部）。
+未来 ntime は min_ntime 下限として原文のまま保持——現在時刻への
+丸め込みは逆に reject になるため。
+
+### 新機能 (session 387)
+
+- 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)
+
+### Fixed (session 311 — SubmitSharesError の未送信シーケンス棄却)
+
+**問題.** SV2 の SubmitSharesError がシーケンス未検証で受理され、
+未送信 seq の偽 reject フレームが reject 率を水増しできた
+（curtailment 悪用）。closed #404 の未マージ修正を master へ再デリバー。
+
+**修正.** `SequenceNumber > seqNum` のフレームを debug 落ち。
+受理済み seq のエラー応答は従来どおり `submitTimes` を settle。
+
+### Fixed (session 366 — NaN 価格注入 + V1 パーサ fuzz)
+
+価格ソースが `"NaN"`/`"Inf"` リテラルを返した場合、
+`strconv.ParseFloat` が受理し sanity band を通過して BTC/USD に NaN が
+混入する経路を遮断（extractor 層の `parseRate` で非有限値を拒否 +
+band を否定形 in-range 判定に変更し将来のソースでも fail-closed）。
+`parseSubscribeResult` が空 extranonce1 を受理する問題を修正
+（fuzzer が発見）。V1 JSON-RPC dispatcher と subscribe 応答に
+fuzz カバレッジを追加（350万+ exec クリーン）。
+
+### 修正 (session 382)
+
+- 裁定エンジンによるデバイス停止が次のプールジョブで巻き戻る問題を修正: `applyAllocation` が収益フロア未達・アイドル・AI系ストリーム割当のデバイスに対して `SetWork(nil)` で一時停止していたが、プールの新ジョブ到着時に `updateWork`/`applyJob` が全ワーカーへ無条件で `SetWork(w)` を呼んでいたため、次の Decide ティック（30秒間隔）まで停止が無効化されていた。カーテイルメントの `curtailGate` と同型の共有一時停止セット `pauseSet` を導入し、`reconcileArbPauses` が Decide 毎にセットを最新アロケーションへ一致させ、ジョブ配信側が一時停止中のデバイスをスキップするよう変更。併せて `updateLiveness` が全ワーカー一時停止時にハッシュレート停滞を誤報しないようゲート（curtailment と同一の「意図的アイドル」扱いで `otedama_up`=1 を維持）。
+
+### 修正 (session 373)
+
+- ドキュメントとコードの不整合を修正: `docs/THREAT_MODEL.md` および `docs/AUDIT_CHECKLIST.md` がウォレット暗号化の scrypt 作業係数を `N=32768` と記載していたが、実装は `scryptN = 1 << 17`（`internal/lightning/seedstore.go:69`）で 131072（4倍）。チェックリストの対象ファイルも `seed.go` → `seedstore.go` に修正し、監査者が正しい KDF 定数と正しいファイルを検証できるようにした。
+
+### Added (session 319 — doctor が wallet.dat のファイルモードを監査)
+
+**問題.** `wallet.dat` の権限監査はディレクトリのみで、
+scp/rsync 復元や tarball 展開で 0700 ディレクトリ内に 0644 で
+置かれた暗号化シードファイルを見逃していた。closed #381/#414 の
+未マージ修正を master へ再デリバー。
+
+**修正.** doctor が wallet.dat 自身のモードを監査し、`chmod 0600` の
+修正手順とともに警告（Unix のみ）。
+
+### Fixed (session 365 — V2 handshake deadline 再デリバー)
+
+live V2 `handshake`（実稼働経路）の `ReadFrame` 待ちに 15s deadline を
+再適用（s358/#470 の再デリバー）。TCP 受理・応答停止プールが
+フェイルオーバーホップを無期限占有する問題を遮断。
+
+### Fixed (session 358 — V2 ハンドシェイク期限)
+
+engine 内蔵 V2 `handshake`（実稼働経路）の `ReadFrame` に期限がなく、
+TCP 受付・応答停止のプールがフェイルオーバー全体を無期限占有する
+問題に 15 秒の共有 deadline を追加（戻り時に解除、s327/#439 の
+adapter 側修正と同型だが live path に適用）。
+
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
+### Fixed (session 337 — SV2 他チャネル宛フレームを拒否)
+
+`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/
+`SubmitSharesError` の `channel_id` を開設済みチャネルと照合し、
+不一致フレームを warn ログ付きで破棄。プール障害や悪意あるフレーム
+が別チャネルの job/prev-hash/share-target 状態を汚染するのを防止。
+
+### Fixed (session 317 — 無制限 V2 ジョブマップの境界化)
+
+**問題.** SV2 の未処理ジョブを保持する map が無制限——悪意プールが
+tip 更新なしに NewMiningJob を洪水させるとメモリ増大（Noise は暗号化
+するが攻撃者はプール自身）。closed #385/#397/#412 の未マージ修正を
+master へ再デリバー。
+
+**修正.** エンジン側 `jobsCap`=64 と adapter `pendingCap`=64 を
+最古優先 FIFO で境界化。THREAT_MODEL に脅威記録済み。
+
+### Fixed (session 355 — V1 RPC タイムアウト)
+
+`session.call` の応答待ちに 60 秒タイムアウトを追加。TCP 生存・
+応答停止の wedged プールでゴルーチン + pending エントリが
+シェア毎にリークする問題を修正。
+
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
+### Fixed (session 327 — V2 ハンドシェイクの読み取りデッドライン)
+
+Stratum V2 の `Negotiate` ハンドシェイク（SetupConnection +
+OpenMiningChannel の応答読み取り）が deadline も ctx 観測もなく
+ブロッキング read で、`DialURL` が応答しないプールで無期限に
+ハングしエンジンの reconnect ループ全体を stall させていた問題を
+修正。ハンドシェイク全体を 15s にバウンドし、定常状態では
+従来どおり Close()/ctx で解除されるよう終了時にクリア。
+
+### Fixed (session 324 — SV2 書き込み deadline の追加)
+
+**問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
+いた——プールが TCP を開いたまま読み止めると、カーネル送信バッファ
+満杯時に `Write` が無期限ブロックし runSession 全体がサイレントに
+stall した。V1 には 10s の write deadline があり非対称だった。
+
+**修正.** `writeTimeout`（10s、V1 と同値）を全 V2 書き込みに適用。
+新テスト `TestSendMsg_WriteDeadline` が未読 net.Pipe で timeout
+を確認。
+
+### Fixed (session 333 — wallet.dat サイズ上限)
+
+`UnmarshalEncryptedSeed` が入力長を無制限に `make([]byte, len-29)`
+で確保していたため、破損・異常な wallet.dat が巨大アロケーションを
+強制できた問題を修正。v1 ペイロードは厳密 80 バイトのため、将来
+バージョン用の余裕を持たせた 4 KiB 上限を追加。
+
+### Fixed (session 305 — V1 シェアがコインベース/マークル再構築なしで検証不能だった問題を修正)
+
+**問題.** V1 ジョブのコインベース（coinb1‖en1‖en2‖coinb2）とマークル
+ブランチが保持されず、submit 前に share の二重 SHA-256d 検証が不可能
+だった（プール reject まで無効シェアの見分けが付かない）。closed #401
+の未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.Job` に `ExtraNonce`/`Coinb1`/`Coinb2`/`MerkleBranch`
+（V1 のみ）、`miner.Work`/`Share` に `ExtraNonce` を通線。`en2Counter`
+（BE カウンタ）+ `completeV1Job()` でジョブ毎にコインベースを畳み込み
+（`btccrypto.Hash256` + per-branch `Hash256(merkle‖branch)`）。
+
+### Security (session 349 — プール文字列サニタイズ)
+
+V1/V2 のシェア拒否理由（pool 制御文字列）をログ出力前に
+`poolproto.SanitizePoolText` でサニタイズ — 制御文字除去＋
+256 rune 上限。ANSI エスケープ注入・ログ偽造を防止。
+
+### 修正 (session 375)
+
+- `install.sh` が実際のリリース成果物と一致しない問題を修正: スクリプトは goreleaser 形式の `otedama_<ver>_<os>_<arch>.tar.gz` と `checksums.txt` を前提としていたが、実稼働の release.yml は `otedama-<os>-<arch>.tar.gz`（チェックサムなし）、ci-cd.yml は裸バイナリ `otedama-<os>-<arch>` を公開する。3 候補を順に試行し、チェックサム不在時は `--skip-verify` なしでは拒否（存在時の不一致も fatal）。裸バイナリは tar 展開をスキップして直接インストール。
+- ドキュメントのセキュリティ過大記載を訂正: THREAT_MODEL は「リリース成果物は cosign 署名済み」「`-trimpath` による再現ビルド」「GitHub Actions は全て SHA ピン留め」を主張していたが、いずれも実装なし（release.yml に cosign なし、`-trimpath` なし、ldflags がビルド時刻を含むため再現不可、全 workflow が `@vN` タグ参照）。実態を正確に記述し、SHA ピン留めと Sigstore 署名公開をハードニング項目として明記。AUDIT_CHECKLIST の item 11/13/17/22 も同様に修正（scrypt N=131072、wallet.dat の atomic write、cosign 未配線、SHA ピン未適用）。
+
+### Fixed (session 307 — difficulty→0 による submit 嵐をレートキャップで遮断)
+
+**問題.** プール/MitM が難易度 0 を割当てると share-target が巨大化し、
+ワーカーが全 nonce で「シェア成立」→ submit 嵐（帯域・CPU DoS）になった。
+closed #402 の未マージ修正を master へ再デリバー。
+
+**修正.** 両 submit パスにトークンバケット（8/s + burst 32）を導入し、
+超過分は drop + `otedama_shares_submit_dropped_total` カウンタで可視化。
+SPECIFICATION/API/THREAT_MODEL 同期済み。
+
+### Security (session 343 — HTTP リダイレクト拒否)
+
+価格ソースと clock-skew プローブの HTTP クライアントがリダイレクトを
+追従しないよう変更。ハードコード済み HTTPS 端点に対するリダイレクトは
+https→http 降格（改ざん価格の注入）にしかなりえないため。
+
+### Fixed (session 348 — プール通知サニタイズ)
+
+`client.show_message` のプール送信テキストから制御文字（C0/DEL/C1、
+ANSI エスケープ introducer を含む）を除去し 256 rune に切り詰める
+ように変更。通知はログ・将来的に TUI に流れるため、エスケープ
+シーケンスによる表示操作やログ偽造を防止。
+### セキュリティ (session 384)
+
+- プール URL の userinfo（`scheme://user:pass@host` 形式の認証情報）がログ・`doctor` 出力・TUI・`config show` に平文で出力されうる経路を遮断。表示境界に `poolproto.StripUserinfo` を適用し、authority 内の認証情報を除去（dial 経路の挙動は不変）。設定検証で userinfo を拒否する変更とは独立した多層防御。
+
+### Fixed (session 368 — v2tls サイレントダウングレード)
+
+`stratum+v2tls://` を処理する poolproto adapter が `useTLS` を無視して
+平文 TCP を張っていた問題を修正（engine のライブ経路は既に正しく
+TLS 化済みだったが、adapter 配線時にサイレント降格となる設計罠を排除）。
+非信頼証明書で検証エラーを確認するテストを追加。
+
+### Security (session 344 — 非正 difficulty の拒否)
+
+`mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に
+拒否するよう修正。従来は無検証で格納され、シェアターゲットが
+「全ハッシュ受理」に縮退して submit フラッドが可能だった
+（平文 V1 上の MitM/悪意プール）。
+
+### Security (session 316 — extranonce2_size の境界化（平文 V1 のメモリ DoS 対策）)
+
+**問題.** `mining.subscribe`/`mining.set_extranonce` の
+`extranonce2_size` はプール制御かつ未検証で `strings.Repeat("00", sz)`
+へ流れていた——平文 V1 の MitM/悪意プールが submit 毎に巨大アロケーション
+を強制できた。closed #384/#398/#411 の未マージ修正を master へ再デリバー。
+
+**修正.** 両入口で [0, 64] に境界化＋Submit で防御的クランプ。
+THREAT_MODEL に脅威記録済み。
+
+### Security (session 342 — サービス定義インジェクション防止)
+
+`--data-dir` 等の値に改行などの制御文字を含む場合、systemd unit
+の `ExecStart=`/`ReadWritePaths=` 行を抜け出して任意ディレクティブ
+（`ProtectHome=false` 等）を注入できた問題を `quoteToken` の
+制御文字クォートで防止。Windows sc.exe も同経路で修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
