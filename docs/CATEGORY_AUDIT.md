@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1222 update — container-manifest parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | docker-compose example | ✅ Clean — `otedama doctor` healthcheck semantics documented honestly (exit 1 warn / exit 2 fail), `OTEDAMA_BITCOIN_ADDRESS`/`OTEDAMA_LOG_FORMAT`/`OTEDAMA_DATA_DIR` all resolve to real env names, genesis-address placeholder warning intact, `/var/lib/otedama` volume matches the Dockerfile `VOLUME` and `OTEDAMA_DATA_DIR`. |
+| S | Kubernetes example | ✅ Clean — liveness/readiness probes hit real `/healthz` and `/readyz` endpoints on the named metrics port 9090; `runAsUser: 65532` matches the distroless `nonroot` UID in the Dockerfile; `OTEDAMA_WALLET_PASSPHRASE` via `secretKeyRef` matches `run.go`'s env read. |
+| M | ci.yml container health checks | ⚠️ Noted — `HEALTH_URL: http://localhost:8082/health` targets a path the server does not serve (`/healthz` is real) plus the previously recorded verify-docker script/ARG gaps; already logged as an open residual. |
+
+All packages build, vet, and test green.
