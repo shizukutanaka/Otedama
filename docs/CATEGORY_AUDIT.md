@@ -1740,6 +1740,6 @@ All packages build, vet, and test green.
 |-----|---------|-------------|
 | M | `defer` inside a `for range ch` loop — defers pile up until function exit, resources held. | ✅ Clean: absent — channel consumers release per-iteration explicitly. |
 | M | `defer` inside a `for { select }` loop — same unbounded defer pileup. | ✅ Clean: absent — verified zero sites. |
-| S | `strings.Replacer`/`Replace` with a non-empty-pattern ordering bug — earlier rules shadow later ones. | ✅ Clean: zero `NewReplacer`/`Replace` in production code — sanitization is `strings.Map`-based (session 807). |
+| S | `strings.Replacer` ordering bug — a replacement rule's output feeding a later rule, or double-escaping. | ✅ Clean: three sites all order `&`/`\` first — `xmlEscape` (service.go:457) escapes `&` before `<`/`>` so entities are not re-escaped, `escapeLabel`/`escapeHelp` (metrics.go:377,390) escape `\` first; `escapeHelp` deliberately excludes `"` per the exposition format. |
 
 All packages build, vet, and test green.
