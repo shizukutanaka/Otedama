@@ -4743,6 +4743,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 979 update — seed-encrypt + decrypt-oracle + fingerprint-sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | An empty passphrase producing a wallet.dat that is scrypt-of-nothing — "encrypted" in name only. | ✅ Clean: `EncryptSeed` and `NewWalletManager` both hard-reject empty passphrases. |
+| S | Scrypt running on a corrupt/oversized ciphertext before validation — CPU-burn oracle or version confusion. | ✅ Clean: `DecryptSeed` checks version and empty-ciphertext before key derivation; GCM `Open` failure maps to `ErrWrongPassphrase` — no distinguishing between wrong password and tampered file. |
+| S | Key/plaintext material lingering on the heap after use. | ✅ Clean: `zeroBytes` defers wipe the passphrase, derived key, and plaintext (best-effort semantics documented). |
+| M | A wallet.dat restored from backup without its fingerprint sidecar permanently breaking fingerprint identity checks, or a stale fingerprint silently overwritten. | ✅ Clean: missing sidecar is recreated best-effort from the loaded seed with `0600`, never overwriting an existing file — a disagreeing fingerprint is a signal, not masked. |
+| M | dataDir created with wide permissions before the wallet lands. | ✅ Clean: `MkdirAll(dataDir, 0o700)`; stale temp files swept before open. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
