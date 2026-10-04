@@ -4785,6 +4785,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 983 update — ansi-truncate + width-detect + url-shorten audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A truncated styled line bleeding its color into the rest of the frame — corrupted dashboard output. | ✅ Clean: `truncateVisible` copies every escape up to the cut verbatim, then appends `reset`, so no style stays open past the boundary. |
+| M | `visibleLen` miscounting non-color CSI sequences (e.g. `\x1b[2J`) — columns misalign after a clear-screen. | ✅ Clean: escape mode ends on any CSI final byte `'@'..'~'` (not just `m`); the `[` introducer and parameter bytes are consumed without ending the sequence. |
+| M | Truncate helpers slicing negative-length budgets — panic on a narrow terminal. | ✅ Clean: `truncateToBudget` returns "" at budget≤0; `shortenURL` returns the URL as-is under maxLen<4; `truncateVisible` returns "" at maxVisible≤0. |
+| M | Terminal resize invisible until restart (fixed-width render), or a transient ioctl failure collapsing the layout. | ✅ Clean: `detectWidth` queries TIOCGWINSZ every render tick; failures, non-files, and degenerate widths (<40) keep the previous value. |
+| M | `SetWidth` accepting a degenerate width that panics the renderer. | ✅ Clean: values below the documented 40-column minimum are rejected and the previous width stands; setting locks auto-detection for tests/embedders. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
