@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 945 update — sv2-pending + tip-activation + ntime-roll audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `pending` job map unbounded — hostile pool floods `NewMiningJob` to exhaust memory. | ✅ Clean: `pendingCap` (64) with FIFO eviction via insertion-ordered `pendingOrder`; dedup check prevents double-count on job-ID re-use. |
+| M | `SetNewPrevHash` activating the wrong job or leaking stale jobs across tips. | ✅ Clean: on each tip the map is cleared and only the *named* job is re-inserted (per spec, jobs must arrive after their tip); `emit` fires only when both `NewMiningJob` and a matching `SetNewPrevHash` are known — future jobs wait. |
+| M | `ntime` going backwards or a stale pool ntime reused as-is — shares with ancient times rejected. | ✅ Clean: emitted `ntime` is `max(tip.NtimeStart, job.NtimeStart)` — rolls forward, never back; `CleanJobs` set true on tip-activated jobs so workers drop old work immediately. |
+
+All packages build, vet, and test green.
