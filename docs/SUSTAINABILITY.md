@@ -43,7 +43,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **JDPは延期**: 3つのメジャープールが対応するまで実装しない（2026/Q2時点でBraiinsとDEMANDのみ）。
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
-**実装状況:** `internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ。
+**実装状況:** `internal/poolproto/` 抽象化に加え、`poolproto/stratumv1`・`poolproto/stratumv2` の両 dialer が v3.0.0-alpha で実装済み（本判断記述時より前倒しで着地 — JDP 延期方針は継続）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -84,7 +84,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況:** SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況:** Dependabot は配置済み。SHA pinning と cosign signing は**両方とも未実施** — 全 `uses:` がタグ参照（`@v4` 等、`aquasecurity/trivy-action@master` はブランチ追尾 — 本書 §5 が引用する TeamPCP 型攻撃そのものの形態）で、`release.yml` は署名を生成しない（VERIFY.md が現状を記載）。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
@@ -109,7 +109,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - 機密 type に `LogValuer` 実装 (private key、address、credentials を source で redact)。
 - 全 metric `otedama_*` prefix、minor release 間で名前/label set を維持、削除は6ヶ月 deprecation。
 - label cardinality を `WithCardinalityLimit(2000)` で明示cap。
-- `--metrics-addr`, `--otlp-endpoint`, `--pprof-addr` は全て opt-in、デフォルト無効。
+- 観測性 endpoint は全て opt-in、デフォルト無効 — 出荷中のフラグは `--http-addr`（metrics/health/readyz を同一 port で公開）と `--pprof`（loopback/private アドレスのみで有効化する bool）；OTLP push 用のフラグ名は `-tags otel` artifact (v3.3.0) 着手時に確定させる。
 - **絶対に phone home しない**。
 
 **実装状況:** Prometheus `internal/metrics` + httpserver `--http-addr` は実装済み。OTel build tag は v3.3.0 スコープ。
@@ -156,7 +156,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
 - 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org`/`otedama.dev` 確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
 
-**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は本セッションで CONTRIBUTING.md に追加。SECURITY.md と LEGAL.md は v3.1.0 スコープ。
+**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は CONTRIBUTING.md に存在。SECURITY.md も作成済み（**訂正 session 490**: 従来「SECURITY.md と LEGAL.md は v3.1.0 スコープ」と記載）— v3.1.0 スコープに残るのは LEGAL.md のみ。
 
 ---
 
