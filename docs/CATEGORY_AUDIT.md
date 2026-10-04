@@ -4359,6 +4359,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 847 update — sort-path + stability + comparator audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `sort`/`slices.Sort` inside a per-share or per-hash hot path — O(n log n) churn per iteration. | ✅ Clean: all 11 sort sites are cold/bounded — Decide candidates (30s tick, small lists), medians (per-fetch), i18n/catalog and name-list sorts (startup/CLI). Nothing sorts in the share/hash loop. |
+| M | `slices.Sort` where equal-key order matters — unstable sort scrambles equal elements. | ✅ Clean: `engine.go:412` correctly uses `SortStableFunc` for candidates (equal policy-score ordering is preserved); plain `Sort` sites are scalar types where stability is meaningless. |
+| M | Comparator returning non-total order (non-deterministic for equal keys) — sort correctness violated. | ✅ Clean: comparators terminate with a deterministic final key — DeviceID (arbitrate), StreamID (engine.go:495, session 842), or scalar ascending order. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
