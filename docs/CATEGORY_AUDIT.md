@@ -4814,6 +4814,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 985 update — log-rotate + config-display + cmd-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `--log-file` growing without bound, or rotation dropping writes. | ✅ Clean: `cappedLogFile` rotates at `maxLogFileBytes` to a single `.old` backup; a failed rotate falls back to appending — writes are never lost; 0600 perms; size seeded from `Stat` and re-stat after the marker. |
+| S | A config value containing ESC/newline/DEL injected into `config show` output — ANSI forgery or fake log lines on the operator's terminal. | ✅ Clean: `safeDisplay` strips every `unicode.IsControl` rune (which includes the C1 range the daemon's `quoteToken` still misses — the display path is already safe; the pending fix is #809); empty or all-control values render as the placeholder, never "". |
+| M | Log writes racing rotation — interleaved bytes across two files. | ✅ Clean: `Write`/`rotateLocked`/`Close` all hold `c.mu`; rotation marker written inside the same critical section. |
+| M | `version`/`doctor`/`config` verbs misrouting stdout vs stderr. | ✅ Clean: same help-to-stdout / errors-to-stderr convention as `run`; `config show` JSON writes to stdout only. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
