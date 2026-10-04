@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 939 update — v1-notify + field-validate + lenient-bool audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `parseNotify` indexing `p[i]` before checking the params count — out-of-range panic on a truncated notify. | ✅ Clean: `len(p) < 9` is checked before any index access; the unmarshal of `p[8]` is the only conditional and stays inside the bound. |
+| M | Rigid `clean_jobs` bool decoding — a pool sending `0`/`1` instead of `true`/`false` rejected outright (interoperability failure class). | ✅ Clean: explicit `0/1` tolerance fallback — re-unmarshal as `int`, `cleanJobs = n != 0`, error only if both fail. |
+| M | Malformed hex/length fields silently zero-filling — every share then fails self-verification (silent wasted work). | ✅ Clean: each decoded field is validated — `coinb1/2` non-empty, `merkle_branch` elements exactly 32 B, `prevhash` exactly 32 B, `version/nbits/ntime` ParseUint errors all reject the notify; the inline comment documents the reasoning. |
+
+All packages build, vet, and test green.
