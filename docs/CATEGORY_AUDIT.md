@@ -2921,6 +2921,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1170 update — mechanical-audit checkpoint
+
+Ledger stands at ~93 merged entries on master (in-flight entries on unmerged PRs excluded from this count). The mechanical drift/defect family continues:
+
+- Doc↔code numeric-claim census (s1166–s1169) found two real drifts and shipped both: CLAUDE.md workflow inventory missing `devin-direct-merge.yml` (#1248) and the stale OSS-Fuzz "one more fuzz target needed" criterion (#1250). All other documented numerics verified true (17 doctor checks, 15 run flags, 10 language catalogs, 4 config layers, ADR-001–011).
+- Doc path-reference existence (s1167): 297 backtick-quoted paths checked — zero actual missing references; every nominal miss is a labeled planned/forbidden path, a self-flagged KNOWN_LIMITATIONS gap, or historical ledger prose.
+- Test-fixture + benchmark + config-example parity (s1167–s1169): zero drift.
+
+Real fixes remain rare and mechanical-drift class coverage stays near-total; next: continue the class census and the periodic ADR-009 ecosystem recheck (~s1172).
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
