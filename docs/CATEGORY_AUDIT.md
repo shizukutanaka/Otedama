@@ -1731,3 +1731,14 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1069 update — Options-plumbing drift audit (engine entrypoint)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `engine.Options` fields declared but never consumed inside `Run` — a config knob that silently does nothing. | ✅ Clean: all 12 fields consumed — `Config` (16 reads), `Clock`/`Output`/`Input` (nil-defaulted, Input feeds the TTY-gated backup verify), `Logger`, `NoTUI`, `StatsInterval` (`run.go:458`), `MaxReconnectAttempts` (2 sites), `Metrics`, `OnReady` (6 sites), and both wallet passphrases reach `setupWallet` (`setup.go:167-177`, mnemonic passphrase applied only on first creation as documented). |
+| S | Option-field doc/behavior mismatch. | ✅ Clean: doc claims match behavior — `OnReady` called true-on-connect/false-on-drop-and-shutdown (verified all 6 call sites); `StatsInterval` zero→10s default; `MaxReconnectAttempts` zero→unlimited. |
+
+All packages build, vet, and test green.
