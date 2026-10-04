@@ -3745,6 +3745,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 786 update — subslice-alias + append-backing + bytes-split audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Subslice escaping its parent — a `b[i:j]` retained while the parent is reused, corrupting the kept view. | ✅ Clean: subslices are either copied out immediately (hash/header encodes) or are owned buffer-advance patterns like `readbuf = readbuf[n:]` that deliberately share their backing (verified session 607). |
+| S | `append` onto a subsliced backing — growing into bytes the parent still uses. | ✅ Clean: zero `append(x[i:j])` sites — matches the session-607 append-aliasing verdict; every append targets a fresh or wholly-owned slice. |
+| S | `bytes.Split`/`Fields` results retained — returned views pinned to the input buffer's lifetime. | ✅ Clean: `bytes.Split`/`Fields`/`Trim` absent — no retained subslice views exist to pin. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
