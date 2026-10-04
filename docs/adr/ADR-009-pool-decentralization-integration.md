@@ -1072,3 +1072,15 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1102 ecosystem update (2026-10-05)
+
+**sv2-spec**: quiet window continues. No new merged normative PRs since
+Session-1091. **#203 (open)** — non-custodial JDP payouts extension;
+the JDC-side piece Otedama phase 2 would push solutions through, still
+unresolved. **#234 / #198** remain open.
+
+**SRI** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps**: **#883** still open (community-multisig example payouts);
+**#881** (JDS work) still in progress. No new merges to track.
