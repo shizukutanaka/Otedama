@@ -2392,6 +2392,20 @@ No defect requiring a code change. All packages build, vet, and test green.
 
 ---
 
+## Session 1121 update — manual-contains census
+
+Hand-written `for range` loops that only test equality — candidates for
+`slices.Contains`.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero slice contains-loops | S |
+| S | metrics.go:312,322 iterate *map values* (key is name+labels; compare is bare name); documented linear scan over a few dozen entries | ⚠️ Noted (by design, not convertible) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
