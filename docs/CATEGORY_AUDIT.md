@@ -2555,6 +2555,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1134 update — nesting-depth census
+
+Brace nesting ≥6 levels — readability/cyclomatic-complexity concern class.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 8 sites at raw depth ≥6; manual inspection shows the count includes composite literals, switch-based wire dispatch (run.go V2 message handler), and per-check doctor blocks — legitimate structure, no dead nesting | S |
+| S | Deepest sites are dispatch/fan-out code where further extraction would add indirection, not clarity | ⚠️ Noted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
