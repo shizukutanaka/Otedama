@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1120 update — mechanical-audit checkpoint
+
+Third checkpoint of the mechanical defect-class family.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | s1111–s1119 added 8 classes: compiler-directive, numeric-parse-bound, duration-multiplication, loop-idiom, string-cut, boolean-idiom, redundant-else, defer-ordering — all clean | S |
+| S | Real fixes this window: none (s1103's `errors.New` PR was the sole code change; ledger total 98 entries) | S |
+| S | Tracked real defects unchanged: C1 gap (#809), XDG (#807), AEAD (#957), wallet subcommand (#1062), base58 bound (#633), RuntimeCollector (rejected #1158) | S |
+
+All packages build, vet, and test green.
