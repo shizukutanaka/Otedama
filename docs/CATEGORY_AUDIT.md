@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1007 update — quote-publish + hashrate-fallback + stop-recreate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Stale static hashrate polluting the quote when the engine's live measurement exists. | ✅ Clean: `publish` prefers `HashrateFunc` when it returns > 0 and falls back to per-family constants otherwise; the constants are exported once as `DefaultHashrates`, the same map the handshake's `nominalMiningHashrate` uses. |
+| M | A stale or absent network-hashrate feed driving quotes to zero/absurd. | ✅ Clean: `NetworkHashrateFunc` results are used only when `fresh && h > 0`; otherwise the documented 1e21 H/s constant stands in (KNOWN_LIMITATIONS §7). |
+| S | `Stop` recreating `quoteCh` while the loop goroutine could still write — send-on-closed or lost final quote. | ✅ Clean: `cancel` → `wg.Wait` → only then `quoteCh = make(...)` — the sole writer provably exited first; calling Stop before Start is a nil-cancel no-op. |
+| M | A full quote channel blocking the publish loop and starving liveness. | ✅ Clean: `sendQuote` drops the oldest buffered quote under `default` then sends — freshest estimate wins, the loop never blocks; ctx abort returns false. |
+| M | Quote confidence not reflecting the rate feed's health. | ✅ Clean: confidence is 0.95 on a fresh BTC/USD rate and 0.7 otherwise — `Effective()` down-weights stale quotes against other streams automatically. |
+
+All packages build, vet, and test green.
