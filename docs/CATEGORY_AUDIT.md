@@ -3684,3 +3684,12 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1309 update — cross-OS compile coverage
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `GOOS=windows/darwin/freebsd` (amd64) `go build ./...` | ✓ all clean after the s1308 uint64 fix |
+| M | Same `go vet ./...` (compiles build-tag variants — daemon windows/darwin/linux splits) | ✓ all clean — no tag-gated file fails to typecheck |
+| L | Other tag combinations worth checking (`arm64`, `arm` covered s1308) | ✓ amd64×3 OS + 386/arm×linux = 5 targets verified; coverage adequate for shipped platforms |
+
