@@ -2449,6 +2449,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 940 update — audit coverage checkpoint (~400 classes clean)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| — | Coverage checkpoint: sessions 931–939 added ~27 verified classes across `internal/stratum` (frame/decoder/wire/handshake/messages), `internal/stratum` noise surface (stub, pool), `internal/poolproto/stratumv1` (notify parse), `internal/hal`, `internal/poolproto`, and `internal/arbitration`. | ✅ Running total: ~400 mechanical defect classes verified clean across ~110 ledger entries (~300 finding rows). |
+| — | Real defects confirmed and fixed to date: C1 control-character gap (#809), XDG systemd-manager env (#807), AEAD-per-frame re-derivation (#957). No new real defect surfaced this block. | ✅ Defect rate remains ~0.8% of audited classes — the tree is mechanically clean; new findings are tracked/stub items (s937 x-only, s938 residue) already owned by open work or documented limitations. |
+| — | Deferred/tracked rows from earlier sessions unchanged: V2 decode-error session termination (session-537 stale entry resolved), x-only fallback (KNOWN_LIMITATIONS §2 / v3.1.0 Noise NX migration), transport AEAD reuse (open #957), noise stub non-production reachability. | ✅ No silent deferrals — every tracked row names its owning change or limitation entry. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
