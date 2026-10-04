@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 911 update — doctor-dispatch + check-name + result-slot audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Runner.Run` writing results concurrently to a shared map — race on collection. | ✅ Clean: results go to a preallocated `[]Result` by index (`results[idx]`), no shared map; the `wg` join makes every write visible before `Report` is built. |
+| M | Check overriding its own `Name` — inconsistent report identity. | ✅ Clean: `res.Name = chk.Name` is assigned post-run by the runner — the check can't spoof the registry entry. |
+| S | Check results arriving out-of-order — unstable report ordering. | ✅ Clean: index-positioned write → report order == `Checks` order; 17 named checks are all unique. |
+
+All packages build, vet, and test green.
