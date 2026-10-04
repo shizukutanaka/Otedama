@@ -3721,6 +3721,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 784 update — eof-handling + read-contract + write-result audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `io.EOF` surfaced as a hard error — end-of-stream treated as failure rather than termination. | ✅ Clean: the only site (`configfile.go:42`) explicitly isolates EOF via `errors.Is` and treats it as normal end-of-input; frame decoders handle short-read per session-602 contract. |
+| S | `Read` return values mishandled — using `n>0` bytes without checking `err`, or assuming `err==nil` means full read. | ✅ Clean: all production reads go through `io.ReadFull`/the frame decoder where `n,err` semantics are handled centrally (verified sessions 602/669). |
+| S | `Write` result discarded — partial write or error dropped, silent truncation on the wire. | ✅ Clean: network writes check `err` (noise.go:292/295, run.go:1665); `hash.Hash.Write` discards are contract-impossible (verified session 745). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
