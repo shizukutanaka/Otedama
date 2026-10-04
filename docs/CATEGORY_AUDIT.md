@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 917 update — validate-aggregate + nonfinite-guard + failover-validate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Validate` returning on the first failure — one bad field masks the rest. | ✅ Clean: collects `issues []string` and returns them all (aggregated error); `TestValidate_AggregatesMultipleIssues` pins the behavior. |
+| M | NaN/±Inf sailing through `< 0` range checks — poisoned arbitration math. | ✅ Clean: explicit `IsNaN || IsInf` sweep over all five float fields *before* the numeric range checks (the comparison-trap documented inline). |
+| S | Failover addresses validated only when reached — typo sits latent until a failover. | ✅ Clean: `BitcoinAddresses` loop validates each entry at config time with index-attributed errors. |
+
+All packages build, vet, and test green.
