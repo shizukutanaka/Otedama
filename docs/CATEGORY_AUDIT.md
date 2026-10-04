@@ -1938,6 +1938,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 895 update — text-pkg + utf8-validate + rune-conversion audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `image`/`color`/`draw`/`x/text`/`x/image` — heavyweight rendering deps for a CLI. | ✅ Clean: absent — only `text/template` (i18n catalog rendering) and `text/plain`/`text/html` content-type strings. |
+| M | External text accepted without `utf8.ValidString` — invalid UTF-8 into logs/messages. | ✅ Clean: the only external text boundary (BIP-39 words at seed.go:133) is `ValidString`-gated; wire text is byte-level protocol frames. |
+| S | `[]rune(s)` conversion for byte-per-byte iteration — needless allocation. | ✅ Clean: the three conversions (poolproto sanitize, stratumv1 sanitize, main.go distance) iterate runes deliberately — each is a cold path where byte-vs-rune correctness matters. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
