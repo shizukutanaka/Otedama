@@ -3205,6 +3205,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1198 update — dependabot ecosystem parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | dependabot ecosystems vs on-disk manifests | ✅ Clean — `gomod` (go.mod), `github-actions` (.github/workflows), `docker` (Dockerfile) all map to real files; no phantom or missing ecosystems |
+| S | Schedule/group/label config | ✅ Clean — weekly Monday 09:00 JST, PR cap 5, golang.org/x/* group; labels auto-created by Dependabot |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
