@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 926 update — hal-family + identity-chars + string-format audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unknown device family silently accepted — misrouted arbitration decisions. | ✅ Clean: `Family` is a closed 3-value set; `Identity.Validate()` calls `Family.Valid()` so detectors reject malformed family values before they reach the engine (s594 Unicode-whitespace fix confirmed). |
+| M | Whitespace or `/` in `Identity.ID` — breaks log/log-key parsing downstream. | ✅ Clean: `Validate()` rejects `unicode.IsSpace` and `/` character-by-character. |
+| S | `Identity.String()` parsed for routing or diffed for identity. | ✅ Clean: documented "format is not stable and should not be parsed"; callers consume the typed `Identity`, not the string form. |
+
+All packages build, vet, and test green.
