@@ -1072,3 +1072,11 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-1035 ecosystem update (2026-10-04)
+
+**sv2-spec** — normative open set unchanged: **#236** (`SetTarget.target` must not exceed channel `max_target`), **#234** (authority key management + rotation, §4.8 — handshake-time cert validation, no mid-session re-cert), **#203** (coinbase transaction payouts extension), **#198** (`coinbase_witness` in `NewTemplate`). Dormant formatting/WIP items **#232/#186/#103** still open and non-normative. No new normative activity since session-1015 — Otedama's v2 planned-codec conformance items (#236 bound, #234 cert flow) remain the ones to watch.
+
+**SRI** — latest release still **v1.12.0**.
+
+**sv2-apps** — open set stable at **27**. Previously tracked items all still open: **#881** (JDS `handle_push_solution` WIP — the piece phase-2 JDC submits through), **#839** (JDS mining-job tokens bound to `user_identity`), **#845** (target-message field renames aligning with the spec cleanup), **#856** (`bitcoin_core_sv2` hardening), **#883** (example configs pay mainnet reward to SRI community multisig). New since the session-1015 check: **#908** (B08 type support in `bitcoin_core_sv2`), **#904** (monitoring/config/release edge cases), **#903** (buffer hardening), **#902** (Windows CI). The open set continues to skew toward hardening (buffer bounds, descriptor-exhaustion back-off #718, monitoring edge cases) rather than protocol shape changes — consistent with the spec's quiet window.
