@@ -2180,6 +2180,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1043 update — lightning-test seed-vectors + mnemonic-exposure + file-hygiene audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | BIP-39 conformance relying on round-trip only (a symmetric bug would pass). | ✅ Clean: **official BIP-39 test vectors** pinned (standard vector, all-zero-entropy, all-FF) + all-2048-words-reachable + boundary-word checks — conformance is anchored to the spec, not self-consistency. |
+| M | Mnemonic exposure surface unbounded (mnemonic available on every load). | ✅ Clean: `NewRunExposesMnemonic` vs `LoadedRunDoesNotExposeMnemonic` — the first-run-only contract is pinned both ways, plus not-all-zero seed and stable fingerprint. |
+| M | Wallet-file hygiene gaps (permissions, temp residue, fingerprint overwrite). | ✅ Clean: 0600/not-world-readable, stale-temp sweep, encrypt-failure leaves no temp, restore **never overwrites** existing fingerprint, corrupted+empty files fail clean. |
+| M | Encryption oracle/padding/tamper classes untested. | ✅ Clean: wrong-passphrase reject, **tampered-ciphertext detection**, distinct ciphertexts for identical input (nonce uniqueness), **no plaintext in ciphertext**, empty-passphrase reject, unknown-version + short + oversized-input rejects. |
+| S | Derivation options diverging (mnemonic passphrase vs. direct call). | ✅ Clean: with-passphrase ≡ `MnemonicToSeed` direct, no-option ≡ empty-passphrase, passphrase not needed on reload — the equivalence matrix is covered. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
