@@ -328,6 +328,7 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	reg.RegisterCollector(metrics.RuntimeCollector())
 	if !isLoopbackAddr(httpAddr) {
 		detail := "metrics/health endpoints"
 		if pprofEnabled {
