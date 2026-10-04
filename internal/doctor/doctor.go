@@ -98,7 +98,7 @@ type Check struct {
 	Run  func(ctx context.Context) Result
 }
 
-// Report summarises all Check results.
+// Report summarizes all Check results.
 type Report struct {
 	Results  []Result
 	Duration time.Duration
