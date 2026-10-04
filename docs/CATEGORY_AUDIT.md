@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 976 update — logger-default + ctx-injection + adapter audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `FromContext` racing `SetDefault` under `-race`, or two goroutines each allocating a default — split log streams. | ✅ Clean: `atomic.Pointer[Logger]`; cold path uses `CompareAndSwap` and the loser returns the winner (`defaultLoggerSlow` is extracted for deterministic testing). |
+| M | `IntoContext(ctx, nil)` storing a typed-nil that shadows the default — nil-pointer log call. | ✅ Clean: nil is a no-op (`return ctx`); `FromContext` also guards `l != nil` and falls back to the default. |
+| M | `SetDefault(nil)` clobbering the live default — every downstream `FromContext` suddenly nil. | ✅ Clean: nil input is ignored. |
+| M | `Discard` still emitting on a slow path, corrupting the TUI. | ✅ Clean: belt-and-suspenders — `io.Discard` writer AND `LevelError+1` threshold. |
+| M | `Adapter` mis-mapping a level string the engine emits (e.g. "warning"). | ✅ Clean: `strings.ToLower` then explicit debug/warn|warning/error cases, Info fallback. |
+
+All packages build, vet, and test green.
