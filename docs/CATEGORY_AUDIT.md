@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 805 update — ctx-root + goroutine-exit + nil-ctor audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `context.Background()` mid-call severing parent cancellation — uninterruptible subtree. | ✅ Clean: only three `Background()` sites exist, all legitimate fresh roots — CLI entry (`run.go:209`), doctor timeout scope (`doctor.go:36`), HTTP shutdown scope (`server.go:139`) where a fresh context is required by design. |
+| M | Goroutine `for {}` loop lacking a ctx-done exit — leak on shutdown. | ✅ Clean: every spawned loop selects `ctx.Done()` (fanin drain, both ticker loops `run.go:217/:290`, share fan `:816`) — verified sessions 585/586/637/682. |
+| M | Constructor returning a typed-nil interface — `if p != nil` passes while calls panic. | ✅ Clean: zero provider/clock/dialer/scheme/driver constructors return typed-nil — all return either concrete pointers or errors. |
+
+All packages build, vet, and test green.
