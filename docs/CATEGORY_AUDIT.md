@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 981 update — curtail-hysteresis + payout-failover + submit-cap audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Curtail/reconnect toggling every tick on a rate hovering at the threshold — pause flapping. | ✅ Clean: `curtailDecision` only transitions on boundary crossings (below→pause, recovered→resume); threshold≤0, stale, or non-positive rates leave state untouched. |
+| M | `payoutAddresses` failover rotating away from a working payout on a transient pool failure — mining rewards redirected. | ✅ Clean: dedup preserves primary-first order and rotation happens only when the current address never established a session (documented in `runReconnectLoop`), so a proven address is never abandoned. |
+| M | `sessionUser` overriding an explicit per-pool `User` with the address-derived form. | ✅ Clean: precedence is `poolUser` > `addr.worker` > `addr`, matching the documented config contract. |
+| S | A pool driving difficulty to 0 → every worker submit spawns a wire frame, flooding pool and process. | ✅ Clean: `submitLimiter` token bucket — 8/s refill, burst 32, starts full, `take()` drops instead of blocking; refill goroutine exits on ctx.Done. |
+| M | `maskAddr` leaking payout addresses into logs. | ✅ Clean: first6…last4 for >12 chars; short strings pass through (regtest addresses only). |
+
+All packages build, vet, and test green.
