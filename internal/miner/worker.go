@@ -21,6 +21,11 @@ type Work struct {
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
 	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
+
+	// ExtraNonce is the Stratum V1 extranonce2 folded into Header's
+	// merkle root. Shares echo it back so the pool can rebuild the
+	// coinbase that was actually hashed. Unused (nil) for V2.
+	ExtraNonce []byte
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -37,12 +42,21 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the share target the hash was produced under, copied from
+	// the Work active at issue time. The engine compares it against the
+	// pool's current target to distinguish a mid-flight retarget reject
+	// (ESP-Miner #212) from a genuine bad share.
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
+
+	// ExtraNonce echoes Work.ExtraNonce: the Stratum V1 extranonce2
+	// that was folded into the hashed merkle root. Empty for V2.
+	ExtraNonce []byte
 }
 
-// WorkerConfig controls the behaviour of a Worker.
+// WorkerConfig controls the behavior of a Worker.
 type WorkerConfig struct {
 	// Threads is the number of goroutines to spawn. Zero or negative
 	// values are replaced with runtime.NumCPU().
@@ -58,6 +72,14 @@ type WorkerConfig struct {
 	// available hash rate (each of Threads goroutines redundantly
 	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
+
+	// NonceOffset shifts every thread's starting nonce so that several
+	// workers grinding the same job partition the space instead of
+	// duplicating it. The engine assigns worker i an offset of
+	// i*Threads with a shared power-of-two NonceStep, giving each
+	// (worker, thread) pair a residue class no other worker touches.
+	// Zero preserves the legacy single-worker layout.
+	NonceOffset uint32
 
 	// DeviceID is the HAL identity of the hardware device this worker
 	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
@@ -113,7 +135,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		cfg.Threads = runtime.NumCPU()
 	}
 	if cfg.NonceStep == 0 {
-		cfg.NonceStep = uint32(cfg.Threads)
+		cfg.NonceStep = uint32(cfg.Threads) //nolint:gosec // Threads defaults to NumCPU and stays far below 2^32
 	}
 	return &Worker{cfg: cfg, done: make(chan struct{})}
 }
@@ -138,7 +160,7 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			w.grind(innerCtx, uint32(threadID), shares)
+			w.grind(innerCtx, uint32(threadID), shares) //nolint:gosec // threadID < Threads, far below 2^32
 		}(i)
 	}
 
@@ -217,7 +239,12 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID
+		nonce        = w.cfg.NonceOffset + threadID
+		// ntimeRoll counts how many times this thread has exhausted the
+		// nonce space for localWork and rolled the timestamp forward.
+		// Without a roll the wrap would re-hash identical headers —
+		// duplicate shares the pool rejects — for the rest of the job.
+		ntimeRoll uint32
 	)
 
 	for {
@@ -232,7 +259,8 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID // restart nonce from thread offset on new job
+			nonce = w.cfg.NonceOffset + threadID // restart from the thread's own residue class on new job
+			ntimeRoll = 0
 		}
 		w.mu.Unlock()
 
@@ -248,20 +276,23 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		h.Time += ntimeRoll
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
-			hash := HashHeader(h)
+			hash := HashHeader(&h)
 			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {
 				share := Share{
-					ChannelID: localWork.ChannelID,
-					JobID:     localWork.JobID,
-					Nonce:     nonce,
-					NTime:     h.Time,
-					Version:   h.Version,
-					Hash:      hash,
-					DeviceID:  w.cfg.DeviceID,
+					ChannelID:  localWork.ChannelID,
+					JobID:      localWork.JobID,
+					Nonce:      nonce,
+					NTime:      h.Time,
+					Version:    h.Version,
+					Hash:       hash,
+					Target:     localWork.Target,
+					DeviceID:   w.cfg.DeviceID,
+					ExtraNonce: localWork.ExtraNonce,
 				}
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
@@ -276,7 +307,16 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
+			prev := nonce
 			nonce += w.cfg.NonceStep
+			if nonce < prev {
+				// Nonce space wrapped: roll ntime forward so the next
+				// sweep hashes distinct headers (standard ntime roll —
+				// pools accept forward-rolled ntime within the job's
+				// validity window).
+				ntimeRoll++
+				h.Time = localWork.Header.Time + ntimeRoll
+			}
 		}
 	}
 }
