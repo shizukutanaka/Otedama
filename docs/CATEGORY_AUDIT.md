@@ -2953,3 +2953,15 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+## Session 1285 update — in-tree fuzz smoke on synced master
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | FuzzValidateAddress (btccrypto) | ✅ 563k execs / 20s, 0 crashes, PASS |
+| R | FuzzParseNotify (stratumv1) | ✅ 2.38M execs / 20s, 0 crashes, PASS |
+| R | FuzzMnemonicToEntropy (lightning) | ✅ 533k execs / 20s, 0 crashes, PASS |
+| R | FuzzDecoder_ReadFrame (stratum) | ✅ 448k execs / 20s, 0 crashes, PASS |
+
+Four representative wire/secret decoders fuzzed 20s each on synced master (~3.9M execs total): zero crashes, zero hangs. Complements the CI fuzz job (#1347).
+
