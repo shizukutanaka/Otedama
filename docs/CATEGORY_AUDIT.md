@@ -2031,6 +2031,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1032 update — env-fallback matrix + loopback-table + resource-hygiene audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `OTEDAMA_WALLET_PASSPHRASE` documented but never read (silent config hole). | ✅ Clean (fixed + pinned): `applyRunEnvFallbacks` tests cover env-when-flag-empty, flag-beats-env, and unset≡empty; the comment records the defect history and the parallel `OTEDAMA_HTTP_ADDR` fix-by-promotion — regression-proof documentation in the test itself. |
+| M | Tests mutating process env without isolation. | ✅ Clean: `t.Setenv` throughout — auto-restore + parallel-conflict guard; the empty-string case deliberately exercises the same branch as unset. |
+| M | `isLoopbackAddr` branches under-covered. | ✅ Clean: 11-case table — `127.x` range, `localhost`/`LOCALHOST`, `[::1]`, bare host, `0.0.0.0`, `[::]`, RFC-1918, hostname, empty — every boundary pinned. |
+| M | `startHTTPServer` warnings firing/missing for the wrong bind classes. | ✅ Clean: non-loopback warns, pprof mention only when enabled, loopback silent — three-way assertion matrix; `ctx.WithCancel`+`srv.Stop()` deferred on every path. |
+| S | Zero-config startup regressing. | ✅ Clean: end-to-end `--dry-run` with only `--bitcoin-address` asserts `exitOK` + "dry-run" output. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
