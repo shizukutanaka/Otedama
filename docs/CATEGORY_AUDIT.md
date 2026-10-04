@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1057 update — lightning-coverage error-path + engine-fanin + metrics-doc + compile-guard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Wallet error paths untested (an error branch silently returns success). | ✅ Clean: `coverage_test.go` forces each failure via injected seams — wrong version, empty ciphertext, salt/nonce read errors, mkdir failure, encrypt/mnemonic/unmarshal/save/rename errors, wrong old passphrase, wordlist too small; entropy/word/index bounds. |
+| M | Mnemonic fuzz coverage gaps. | ✅ Clean: `FuzzMnemonicToEntropy` + `FuzzMnemonicRoundtrip` — parse boundary + round-trip invariance on the funds-critical path. |
+| M | fanIn merge dropping values or leaking producers. | ✅ Clean: all values merged, output closes when all inputs close, **ctx-cancel respected** (the leak class), empty list safe, buffer capping, concurrent producers — the merge-boundary is covered. |
+| M | Metrics drifting from the documented catalogue. | ✅ Clean: `MetricsDocumentedInSpecification` cross-checks the registered set against `docs/` — a metric that appears without docs (or is documented but absent) fails the gate; rejectByReason concurrent-safe. |
+| S | Compile-level contract erosion. | ✅ Clean: every package reachable (import-graph gate), Options fields all accessible, Run fails fast without devices; `FuzzDecide` on the arbitration boundary. |
+
+All packages build, vet, and test green.
