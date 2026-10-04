@@ -1073,6 +1073,198 @@ and (c) treat static-key rotation as transparent to the session.
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
 
+## Session-775 ecosystem update (2026-10-03)
+
+**sv2-spec:**
+- **#236 (open, active)** — `SetTarget.target` MUST NOT exceed the
+  channel's `max_target`: still open after the 2026-10-02 update;
+  Otedama already clamps pool-set targets to the block-target bound
+  (sessions 256/736), so conformance unaffected if it merges.
+- Normative open set unchanged: #236, #234 (authority key mgmt),
+  #203 (coinbase payout extension), #198 (coinbase_witness) —
+  quiet window continues; no new protocol requirement since #231.
+
+**SRI:** remains at v1.12.0 (2026-09-17) — no new release.
+
+**sv2-apps:** open set holds at 27. Since the session-761 check:
+- **#907 (merged)** — docs-only agents-file guidance; no protocol
+  impact.
+- **#908 (open)** — B08 type support in `bitcoin_core_sv2`: block-
+  template version coverage for newer core releases; worth tracking
+  for V2 job-source compatibility.
+- **#845 (open, updated)** — renames target message fields to match
+  the spec cleanup Otedama already adopted (session 704).
+- **#856 (open, updated)** — `bitcoin_core_sv2` hardening continues.
+- Tracked #881/#839/#903/#904/#902/#878/#883 remain open; no new
+  merged protocol-affecting work beyond what session-761 recorded.
+
+No conformance gap detected — Otedama's SV2 wire surface stays
+current with the normative spec text.
+
+## Session-793 ecosystem update (2026-10-04)
+
+### sv2-spec
+- Normative open set unchanged: #236 (`SetTarget.target` ≤ `max_target` bound), #234 (authority-key management), #203 (coinbase payouts extension), #198 (`coinbase_witness` field) — all still open, no new conformance-relevant text.
+- Newly merged since last check: #231 (Server/Client relationship clarified across roles — documentation alignment only, no wire change for a downstream mining client), #233 (AGENTS.md conventions). New editorial PR #186 open (markdown table fix) — non-normative.
+- Otedama impact: none — the Oct-1 normative batch (session-678/#703) already covered the landed semantic changes; Otedama's SetTarget handling predates #236's bound and remains conformant.
+
+### stratum (SRI)
+- Latest release remains v1.12.0 (2026-09-17) — no new tag since last check.
+
+### sv2-apps
+- Open PR count steady at 27. Recently merged: #875 (crates consolidated into a single cargo workspace), #865 (`bitcoin_core_sv2` bumped to 0.6.0), #907 (docs: agent-comment guidance). No protocol-surface change affecting Otedama's client role.
+
+## Session-817 ecosystem update (2026-10-04)
+
+**sv2-spec (upstream spec PRs):**
+- Normative open set unchanged: **#236** (`SetTarget.target` MUST NOT
+  exceed `max_target`; last touched 2026-10-02 — active discussion
+  continues, still open), **#234** (authority key management/rotation),
+  **#198** (`coinbase_witness` on `NewTemplate`), **#203** (coinbase
+  transaction payouts extension).
+- New open: **#232** (editorial — unwrap multi-line table cells);
+  **#186** and **#103** (Proxy Annex WIP) unchanged.
+- Otedama conformance: no new normative deltas — the `max_target`
+  bound (session-443 direction, PR #538) remains ahead of the
+  still-open #236 requirement.
+
+**SRI** remains at **v1.12.0** (2026-09-17) — no release since
+session-793.
+
+**sv2-apps (upstream SRI applications):** open count steady at **27**.
+Recently merged: **#907** (agents docs), **#900** (stratum-core bump),
+**#875** (workspace consolidation — already recorded), **#857** (pool
+payout-policy isolation for solo mining — landed; the tracked isolation
+item), **#871** (version-bump check only on PRs). The session-793 open
+tracking items (#881 JDP push-solution, #883 fee-transparent config)
+stay on the watch list.
+
+## Session-833 ecosystem update (2026-10-02)
+
+sv2-spec: the normative open set is unchanged — #236 (SetTarget `target` must not exceed `max_target`; still active, updated Oct-2), #234 (authority key management), #198, #203. Since the last check the merged batch is #227 (spec-gap normative clarifications, Oct-1), #228 (field renames — tracked since our wire-field rename), #231 (Server/Client roles clarified, Oct-2), #233 (shared AGENTS.md, editorial). #232 remains an open editorial pass. No new constraint lands on the client side; #236 stays the one to watch.
+
+SRI: still v1.12.0 (2026-09-17) — no new tag.
+
+sv2-apps: open set holds at 27. Recent merges are operational hygiene — #907 (docs), #900 (stratum-core bump), #875 (single cargo workspace), #871/#868 (CI version-bump gate), #869 (JDP docs). No client-facing behavior change for us.
+
+Takeaway: stable window continues — nothing actionable. Next recheck in ~2 weeks or on #236 movement.
+
+## Session-856 ecosystem update (2026-10-02)
+
+### sv2-spec
+Open set unchanged: 7 PRs — normative {236 SetTarget `max_target` bound (active, updated 10-02), 234 authority key mgmt, 198 `coinbase_witness`, 203 payouts extension}, editorial/WIP {103 Proxy Annex, 186 table consolidation, 232 cell unwrap}. No new client-impacting merges since s833 (#231 already recorded).
+
+### SRI
+Still v1.12.0 (2026-09-17) — no new release.
+
+### sv2-apps
+open=27; one merge since s833: #907 (docs/agents hygiene). No client-relevant changes.
+
+**Verdict**: quiet window continues; no action required. Next scheduled recheck ~s872.
+
+## Session-872 ecosystem update (2026-10-03)
+
+### sv2-spec
+
+Open PR set unchanged at seven:
+
+- **Normative**: #236 `SetTarget.target` MUST NOT exceed `max_target` (still
+  active, updated 2026-10-02 — the wording iteration continues; our client
+  clamps to `max_target` and needs no change regardless of how it lands),
+  #234 authority key management documentation (2026-09-25), #203 coinbase
+  transaction payouts extension (2026-09-15), #198 `coinbase_witness` field
+  on `NewTemplate` (2026-09-23).
+- **Editorial/WIP**: #232, #186, #103.
+
+No new client-impacting merges since Session-856: #231 (role relationship
+clarification, merged 2026-10-02) was already recorded.
+
+### SRI
+
+Still v1.12.0 (2026-09-17).
+
+### sv2-apps
+
+Open PR count steady at 27. Notable merge: **#875 "Merge all crates into a
+single cargo workspace"** (2026-09-25) — the sv2-apps repo consolidated its
+crate layout into one workspace, simplifying downstream builds but not
+changing the protocol. #907 docs-hygiene landed too. No client-facing
+impact for Otedama.
+
+*Quiet window continues — verdict unchanged: track, don't chase.*
+
+## Session-887 ecosystem update (2026-10-02)
+
+**sv2-spec** — open=7, normative set unchanged: #236 (`SetTarget`
+max_target bound), #234 (authority key mgmt/rotation), #203 (coinbase
+payouts extension), #198 (`coinbase_witness` in `NewTemplate`).
+Editorial/WIP remainder {232, 186, 103}. No new normative activity.
+
+**sv2-apps** — open=27. Since the session-872 check only two merges:
+#900 (stratum-core bump) and #907 (docs). The #875 single-workspace
+consolidation noted at s872 is the last structural change; #881
+(JDS push-solution) remains open.
+
+**SRI** — v1.12.0 (2026-09-17) still latest.
+
+Quiet window continues — no action required.
+
+## Session-908 ecosystem update (2026-10-04)
+
+### sv2-spec
+
+Open set is **unchanged at 7** — identical to s887:
+
+- **Normative-track** (4): #236 `SetTarget.target` MUST NOT exceed `max_target`; #234 authority key management + rotation; #203 coinbase payouts extension; #198 `coinbase_witness` in `NewTemplate`.
+- **Editorial / WIP** (3): #232, #186, #103.
+- Nothing newly merged or newly opened; the spec quiet window persists (~3 weeks).
+
+### SRI (stratum-mining/stratum)
+
+Latest release remains **v1.12.0** (2026-09-17). No v1.13.x yet.
+
+### sv2-apps
+
+- **Open = 27** — 4 new since s887, all infra/quality: #908 B08 type in `bitcoin_core_sv2`; #904 monitoring/config/release edge cases; #903 Buffer sv2 hardening; #902 Windows CI support. None changes the wire surface Otedama implements.
+- **Recently merged**: #907 (AGENTS.md docs, 10-02), #900 (stratum-core bump, 09-26) — both hygiene.
+- #881 JDS push-solution and #856 bitcoin-core-sv2 hardening still open — tracked.
+
+**Disposition**: no change required in Otedama; continue tracking #236/#234 (normative) and #881 (JDS).
+
+## Session-922 ecosystem update (2026-10-02)
+
+**sv2-spec** — open=7, normative set unchanged from session-908:
+`#236` (SetTarget must not exceed `max_target`; last touched 2026-10-02),
+`#234` (authority key management/rotation), `#203` (coinbase payouts
+extension), `#198` (`coinbase_witness` on `NewTemplate`), plus the two
+editorial cell-unwrap PRs (`#232`, `#186`) and the WIP `#103` Proxy
+Annex. The ~3-week quiet window continues: no new normative text has
+landed that would change Otedama's wire layout since #228 (field
+renames, tracked at session-622/PR-#704).
+
+**SRI** — still v1.12.0 (2026-09-17); no new release.
+
+**sv2-apps** — open=27, one merge since session-908 (`#907` docs
+hygiene). Open set now includes several security-relevant items worth
+tracking:
+
+- **#839** — binds mining-job tokens to `user_identity` and enforces
+  the binding on `SetCustomMiningJob`. This is upstream's fix for the
+  job-token→identity gap Otedama already avoids by not issuing
+  unbound tokens (single-tenant JDC).
+- **#845** — renames target message fields to match the post-#228
+  spec cleanup; mirrors the Otedama rename landed at PR #704.
+- **#878** — `stratum-apps` rejects empty coinbase reward scripts;
+  upstream converging on the fail-closed parser direction Otedama
+  adopted at session-595.
+- **#881** (open, WIP) — JDS `handle_push_solution` still open,
+  updated 2026-10-02; remains the piece phase-2 JDC submits through.
+- **#856** — `bitcoin_core_sv2` hardening, updated 2026-10-02.
+
+No action items: the normative SV2 surface Otedama implements is
+unchanged, and the two tracked upstream convergence items (#845 field
+rename, #878 empty-script rejection) are already reflected in-tree.
+
 ## Session-936 ecosystem update (2026-10-02)
 
 Re-checked after ~14 sessions.
