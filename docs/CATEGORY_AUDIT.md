@@ -2314,6 +2314,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 928 update — registry-guard + detect-ctx + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Registry` silently accepting an empty driver set — confusing "no devices". | ✅ Clean: `NewRegistry()` constructor required; the zero value is unusable by design. Duplicate driver name + nil driver both rejected on `Register`. |
+| M | One slow/buggy driver's `Enumerate` stalling detection or dropping every device on any driver error. | ✅ Clean: per-driver goroutine + buffered results channel; a driver error is logged via `logger` and its siblings still contribute; `ctx.Done` returns partial results + `ctx.Err()`. |
+| M | A device with an invalid `Identity` (empty ID, bad family, forbidden char) entering `all`. | ✅ Clean: every enumerated device runs `Identity().Validate()` and rejected entries are logged and skipped — the `detect` path re-enforces the device-level contract. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
