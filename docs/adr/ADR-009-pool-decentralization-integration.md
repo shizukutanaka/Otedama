@@ -1072,3 +1072,34 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+
+## Session-872 ecosystem update (2026-10-03)
+
+### sv2-spec
+
+Open PR set unchanged at seven:
+
+- **Normative**: #236 `SetTarget.target` MUST NOT exceed `max_target` (still
+  active, updated 2026-10-02 — the wording iteration continues; our client
+  clamps to `max_target` and needs no change regardless of how it lands),
+  #234 authority key management documentation (2026-09-25), #203 coinbase
+  transaction payouts extension (2026-09-15), #198 `coinbase_witness` field
+  on `NewTemplate` (2026-09-23).
+- **Editorial/WIP**: #232, #186, #103.
+
+No new client-impacting merges since Session-856: #231 (role relationship
+clarification, merged 2026-10-02) was already recorded.
+
+### SRI
+
+Still v1.12.0 (2026-09-17).
+
+### sv2-apps
+
+Open PR count steady at 27. Notable merge: **#875 "Merge all crates into a
+single cargo workspace"** (2026-09-25) — the sv2-apps repo consolidated its
+crate layout into one workspace, simplifying downstream builds but not
+changing the protocol. #907 docs-hygiene landed too. No client-facing
+impact for Otedama.
+
+*Quiet window continues — verdict unchanged: track, don't chase.*
