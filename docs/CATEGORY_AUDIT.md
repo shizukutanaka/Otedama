@@ -1740,3 +1740,14 @@ All packages build, vet, and test green.
 | float64-precision | No `float64(uint64)`/`uint64(float64)` conversions in production code — only `Float64bits` bit-reinterpret at stratumv1/parse.go:339. `float64(hashes)` at miner/worker.go:222 loses precision only above 2^53 hashes (~9×10^15, unreachable on CPU) | Clean |
 | uint-sub-underflow | `cols - len(prefix) - len(statusPlain) - 2` at tui/dashboard.go:324 is `int` arithmetic floored at 8 — guarded | Clean |
 | duration-cast | 3 `time.Duration(x)` casts: `d.Wait` capped by `maxReconnectWaitSeconds` before conversion; `p50` bounded by latency-ring contents; `UnixNano - startTime` negative only under wall-clock rewind (benign, one-shot stat) | Clean |
+---
+
+## Session 1250 — ADR-004~008 parity pass
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| adr-004-parity | ANSI escape claims match dashboard.go verbatim (`\x1b[2J`+cursorHome :424, `\x1b[?25l/h` :428/:432); padRight/visibleLen/shortenURL/renderLoop all present | Clean |
+| adr-005-parity | Stale: "direct count three (x/crypto, yaml.v3)" → actual go.yaml.in/yaml/v3 + x/crypto + x/sys; stale: "have to write runtime metrics" → RuntimeCollector() exists in metrics/runtime.go | **S: fixed** — both bullets corrected |
+| adr-006-parity | Scheme/SignerScheme/PublicKey/Signature/PrivateKey interfaces, ErrSchemeNotImplemented, Lookup, SchemeForAddressType+AddressP2MR case, Hash256/TaggedHash, Pool/Connection/Session — all present; dcrd referenced only in comments (delegation pending per ADR-011) | Clean |
+| adr-007/008-parity | Both **Proposed** roadmap ADRs (B1–B10, `otedama lightning`/`otedama power` UX) — proposals not claims; internal/power/ absent consistent with unexecuted proposal | Clean |
+| runtime-collector | `RuntimeCollector()` exported but `RegisterCollector` has zero non-test callers — dead-export drift; output claim remains honest | ⚠️ Noted (s1076 tracked) |
