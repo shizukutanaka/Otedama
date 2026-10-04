@@ -2290,6 +2290,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 926 update — hal-family + identity-chars + string-format audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unknown device family silently accepted — misrouted arbitration decisions. | ✅ Clean: `Family` is a closed 3-value set; `Identity.Validate()` calls `Family.Valid()` so detectors reject malformed family values before they reach the engine (s594 Unicode-whitespace fix confirmed). |
+| M | Whitespace or `/` in `Identity.ID` — breaks log/log-key parsing downstream. | ✅ Clean: `Validate()` rejects `unicode.IsSpace` and `/` character-by-character. |
+| S | `Identity.String()` parsed for routing or diffed for identity. | ✅ Clean: documented "format is not stable and should not be parsed"; callers consume the typed `Identity`, not the string form. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
