@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 822 update — sleep-in-test + tempdir + fatal-goroutine audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Sleep` in tests where a condition channel would be deterministic — flake source. | ✅ Benign: all sleeps are bounded (10 ms–1.5 s) and gate observable state transitions (handshake+share in the V1 integration test); the flake sweep (session 535) stayed green — no unbounded waiting. |
+| S | `os.MkdirTemp`/`ioutil.TempDir` in tests — manual cleanup leaks vs `t.TempDir`. | ✅ Clean: absent — every temp dir goes through `t.TempDir()` with automatic cleanup. |
+| M | `t.Fatal`/`t.FailNow` called from a spawned goroutine — only kills that goroutine, silently passes. | ✅ Clean: zero sites — post-teardown goroutine calls were removed in session-623 (PR #705); assertions live on the test goroutine. |
+
+All packages build, vet, and test green.
