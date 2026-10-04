@@ -1998,6 +1998,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 900 update — audit coverage checkpoint
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Cumulative mechanical defect-class coverage. | ~**340 classes** audited across s502–s899 (93 session entries): every package in `cmd/` + `internal/` covered at least once; wire paths (stratum, stratumv1, stratumv2, poolproto, engine, miner) covered multiple times; the stdlib/API surface is nearly exhausted — remaining work is ecosystem rechecks and per-change review. |
+| M | Real defects found and fixed to date. | 3 shipped: **C1 control-char gap** in `quoteToken` (PR #809), **XDG systemd-manager env** not honored (PR #807), **AEAD per-frame re-derivation** on the Noise hot path (PR #957). Every other class audited clean or benign. |
+| M | Deferred rows still open. | Unchanged since s647: TUI width (resolved by open PR #721), `clock.Clock` test-only gap, CODEOWNERS-gated funds-critical item — all tracked. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
