@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 834 update — lock-send + print-discard + builder-write audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Channel send while holding a mutex — blocks the critical section on receiver readiness (deadlock risk). | ✅ Clean: `stratumv1.go:234-239` deletes under `pendingMu`, unlocks, then sends; `dashboard.go:195-198` stores under `d.mu`, unlocks, then proceeds — the send/write is always outside the critical section. |
+| S | `fmt.Fprint*(w)` return value discarded — write failure silently lost. | ✅ Benign: all discarded Fprint calls target the user-facing display boundary (injected `w`/`out` writers, `strings.Builder`); errors are non-actionable at display time and `strings.Builder` never returns an error (session-745). |
+| S | Read from a `strings.Builder`/`bytes.Buffer` after concurrent write — torn read. | ✅ Clean: builders are function-local construction buffers, never shared across goroutines (session-745 census). |
+
+All packages build, vet, and test green.
