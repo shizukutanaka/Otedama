@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -167,7 +169,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	for _, w := range config.EnvWarnings(nil) {
 		fmt.Fprintf(stderr, "config: warning: %s\n", w)
 	}
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return exitConfig
@@ -210,7 +212,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	// Build the structured logger. closeLog flushes/closes the --log-file.
-	structlog, closeLog := buildLogger(f, cfg, stdout)
+	structlog, closeLog := buildLogger(&f, &cfg, stdout)
 	defer closeLog()
 
 	// Start HTTP health/metrics server if requested.
@@ -274,14 +276,16 @@ func isTerminal(f *os.File) bool {
 //
 // A file that cannot be opened is a warning, not a fatal error: the run
 // proceeds without the audit trail rather than refusing to mine.
-func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logger, func()) {
+func buildLogger(f *runFlags, cfg *config.Config, stdout io.Writer) (*logger.Logger, func()) {
 	cleanup := func() {}
 
 	var fileW io.Writer
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		// Size-capped: an unattended miner must not grow the file without
+		// bound — it rotates to a single ".old" backup at 32 MiB.
+		lf, err := openCappedLogFile(f.logFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {
@@ -324,6 +328,13 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	if !isLoopbackAddr(httpAddr) {
+		detail := "metrics/health endpoints"
+		if pprofEnabled {
+			detail += " and pprof heap/goroutine profiles"
+		}
+		fmt.Fprintf(stderr, "warning: --http-addr %s exposes %s to non-loopback clients\n", httpAddr, detail)
+	}
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
@@ -331,4 +342,19 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 	}
 	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
+}
+
+// isLoopbackAddr reports whether addr ("host:port" or a bare host)
+// names a loopback interface — 127.0.0.0/8, ::1, or "localhost".
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

@@ -7,11 +7,14 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/shizukutanaka/Otedama/internal/metrics"
 )
 
 // TestMetricsDocumentedInSpecification guards against SPECIFICATION §6 metric-
-// catalogue drift: every otedama_* metric the engine registers must be documented
+// catalog drift: every otedama_* metric the engine registers must be documented
 // in docs/SPECIFICATION.md §6. Gap G17 in that spec was exactly this drift — 22
 // metrics were live at /metrics but undocumented, so an operator could not discover
 // them — and it was caught only by a manual audit (session 190) with no guard to
@@ -48,7 +51,7 @@ func TestMetricsDocumentedInSpecification(t *testing.T) {
 		}
 		seen[name] = true
 
-		// The §6 catalogue omits the otedama_ prefix and renders each metric as
+		// The §6 catalog omits the otedama_ prefix and renders each metric as
 		// `name` or `name{labels}` in a table cell. Anchoring on the opening
 		// backtick and requiring the closing backtick or a `{` makes the marker
 		// precise: it resists incidental prose mentions and, crucially, prevents
@@ -56,7 +59,41 @@ func TestMetricsDocumentedInSpecification(t *testing.T) {
 		// documented one (`uptime_seconds`).
 		bare := strings.TrimPrefix(name, "otedama_")
 		if !strings.Contains(specText, "`"+bare+"`") && !strings.Contains(specText, "`"+bare+"{") {
-			t.Errorf("metric %q is registered in metrics.go but not documented in docs/SPECIFICATION.md §6 (expected a `%s` catalogue entry)", name, bare)
+			t.Errorf("metric %q is registered in metrics.go but not documented in docs/SPECIFICATION.md §6 (expected a `%s` catalog entry)", name, bare)
 		}
 	}
+}
+
+// TestRejectByReasonConcurrent guards the V1 submit-goroutine data race:
+// runSessionV1 fires a goroutine per submitted share, and a rejected one
+// calls rejectReason — so two concurrent rejections (or a rejection racing
+// the stats loop's updateShareRates read) touched rejectByReason unlocked.
+// An unsynchronized map there is a "concurrent map read/write" fatal, not a
+// data-loss bug. Run under -race: without rejectByReasonMu this fails.
+func TestRejectByReasonConcurrent(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+	m.sharesFound.Add(4)
+	m.sharesRejected.Add(4)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				m.rejectReason([]string{"stale", "duplicate", "other"}[(i+j)%3]).Inc()
+			}
+		}()
+	}
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				m.updateShareRates()
+			}
+		}()
+	}
+	wg.Wait()
 }
