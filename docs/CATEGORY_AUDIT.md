@@ -1876,6 +1876,22 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1022 update — run-flags + tui-autodisable + sink-matrix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | Wallet secrets round-tripping through `config show` or `config.yaml`. | ✅ Clean by construction: both passphrases live only on `runFlags`, never on `config.Config` — documented as deliberate; flag > env via `applyRunEnvFallbacks`; argv-passage warns (process-list exposure). |
+| M | TUI ANSI noise flooding a redirected/service-managed stdout. | ✅ Clean: `isTerminal` (ModeCharDevice, stdlib-only — no x/term dep) auto-disables; narrowing only ever goes toward the safe plain-output default and no flag exists to force the TUI on a non-terminal. |
+| M | Log sink matrix corrupting the dashboard or losing the audit trail. | ✅ Clean: TUI→discard-or-file-only, non-TUI→stdout-or-MultiWriter; `--log-file` is 0600 and size-capped (32 MiB, single .old rotation); an unopenable file warns instead of aborting mining. |
+| M | A failing/non-loopback HTTP server killing startup or silently exposing metrics+pprof. | ✅ Clean: startup failure logs a warning and the run continues; non-loopback binds warn with the exposed surface named (endpoints + pprof when enabled). |
+| M | SIGTERM leaving shutdown noise or a wrong exit code. | ✅ Clean: `NotifyContext` on Interrupt+SIGTERM with deferred cancel; `context.Canceled` is suppressed at the engine boundary so a signal produces the normal shutdown path + exitOK. |
+| S | `--dry-run` starting side effects. | ✅ Clean: it returns before logger/HTTP/engine construction. |
+| S | `isLoopbackAddr` misclassifying `localhost`/`[::1]`. | ✅ Clean: bracket trim + EqualFold for localhost + `net.ParseIP().IsLoopback()`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
