@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -40,8 +41,9 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		merkleBranchHexs                                                         []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
@@ -49,9 +51,21 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — the session folds
+	// these into the job's MerkleRoot (see completeV1Job). V1 notify has
+	// no pool-supplied merkle field, so malformed hex is fatal: an empty
+	// coinb or dropped branch yields a wrong root and every share fails
+	// self-verification — silent wasted work. (The "pool-side merkle"
+	// path on poolproto.Job is the V2 NewMiningJob wire field, not V1.)
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[4], &merkleBranchHexs); err != nil {
+		return poolproto.Job{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -76,29 +90,85 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
-		job.Version = uint32(v)
+	b, err := hex.DecodeString(coinb1Hex)
+	if err != nil || len(b) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb1: malformed or empty")
 	}
-	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
-		job.NBits = uint32(v)
+	job.Coinb1 = b
+	if b, err = hex.DecodeString(coinb2Hex); err != nil || len(b) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb2: malformed or empty")
 	}
-	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
-		job.NTime = uint32(v)
+	job.Coinb2 = b
+	for _, h := range merkleBranchHexs {
+		b, err := hex.DecodeString(h)
+		if err != nil || len(b) != 32 {
+			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch: malformed or wrong length")
+		}
+		job.MerkleBranch = append(job.MerkleBranch, b)
 	}
+	// Header fields are required: a malformed value would zero-fill and
+	// produce a job whose every share fails self-verification — silent
+	// wasted work until the next notify. Reject the notify instead.
+	v, err := strconv.ParseUint(versionHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: version: %w", err)
+	}
+	job.Version = uint32(v)
+	if v, err = strconv.ParseUint(nbitsHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: nbits: %w", err)
+	}
+	job.NBits = uint32(v)
+	if v, err = strconv.ParseUint(ntimeHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: ntime: %w", err)
+	}
+	job.NTime = uint32(v)
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
+	} else {
+		return poolproto.Job{}, fmt.Errorf("notify: prevhash: malformed or wrong length")
 	}
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	// MerkleRoot is completed by the session (completeV1Job) once the
+	// negotiated extranonce1/2 are folded into the coinbase.
 	return job, nil
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+// Difficulty must be a positive, finite float: NaN/±Inf would poison the
+// share-target computation downstream, and d <= 0 collapses the target
+// to "accept every hash" — a share-flood vector on cleartext V1.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return 0, false
 	}
-	return p[0], true
+	d := p[0]
+	if d <= 0 || math.IsNaN(d) || math.IsInf(d, 0) {
+		return 0, false
+	}
+	return d, true
+}
+
+// maxExtranonce2Size bounds the pool-supplied extranonce2_size. The value
+// flows into strings.Repeat on every mining.submit, so an unbounded value
+// is a memory-exhaustion vector on cleartext V1 (hostile pool or MitM).
+// Real pools use 4–8; 64 leaves generous headroom for pool-side schemes
+// while capping the padding at 128 hex chars.
+const maxExtranonce2Size = 64
+
+// extranonce2SizeOK reports whether sz is a usable extranonce2_size.
+// completeV1Job requires sz > 0 to fold the client's en2 into the
+// coinbase — 0 would leave MerkleRoot zeroed and every share invalid.
+func extranonce2SizeOK(sz int) bool { return sz > 0 && sz <= maxExtranonce2Size }
+
+// extranonce1OK reports whether en1 is usable hex: completeV1Job
+// hex-decodes it and silently skips the job when decode fails, so a
+// non-hex or empty extranonce1 must be rejected at the parse boundary.
+func extranonce1OK(en1 string) bool {
+	if en1 == "" {
+		return false
+	}
+	b, err := hex.DecodeString(en1)
+	return err == nil && len(b) > 0
 }
 
 // parseSetExtranonce decodes mining.set_extranonce params:
@@ -116,7 +186,34 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	if err := json.Unmarshal(p[1], &sz); err != nil {
 		return "", 0, false
 	}
+	if !extranonce1OK(en1) || !extranonce2SizeOK(sz) {
+		return "", 0, false
+	}
 	return en1, sz, true
+}
+
+// maxNoticeRunes caps the length of a pool-sent notice. Notices end up
+// in the log (and potentially the TUI), so an unbounded pool string is a
+// log-flooding vector.
+const maxNoticeRunes = 256
+
+// sanitizeNotice removes control characters (C0, DEL, C1 — including
+// ANSI escape introducers) and truncates to maxNoticeRunes runes. The
+// text is pool-controlled; consumers write it to terminals and log
+// files, where escape sequences could manipulate the display or forge
+// log lines.
+func sanitizeNotice(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxNoticeRunes {
+		clean = string(runes[:maxNoticeRunes])
+	}
+	return clean
 }
 
 // parseShowMessage decodes a client.show_message notification.
@@ -127,7 +224,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return "", false
 	}
-	return p[0], true
+	return sanitizeNotice(p[0]), true
 }
 
 // reconnectDirective is a parsed client.reconnect notification.
@@ -135,7 +232,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 // V1 client.reconnect params: [hostname, port, wait] — all optional.
 // A pool sends this to gracefully move a miner to another node (load
 // balancing / maintenance / failover). Otedama deliberately records but
-// does NOT follow the pool-supplied Host:Port: honouring an arbitrary
+// does NOT follow the pool-supplied Host:Port: honoring an arbitrary
 // endpoint from an unauthenticated notification is a redirection vector,
 // and the reconnect loop already owns the operator-configured pool list.
 // Wait is advisory (seconds to pause before reconnecting).
@@ -149,16 +246,16 @@ type reconnectDirective struct {
 // All three fields are optional; an empty or malformed params list still
 // yields a valid (zero-value) directive with ok=true, because the bare
 // notification itself is the signal to reconnect.
-func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
+func parseReconnect(raw json.RawMessage) reconnectDirective {
 	var d reconnectDirective
 	if len(raw) == 0 {
-		return d, true
+		return d
 	}
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil {
 		// A bare "client.reconnect" with no/garbage params is still a
 		// valid directive — the method alone means "reconnect".
-		return d, true
+		return d
 	}
 	if len(p) >= 1 {
 		_ = json.Unmarshal(p[0], &d.Host) // best-effort; tolerate non-string
@@ -175,7 +272,7 @@ func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
 	if len(p) >= 3 {
 		_ = json.Unmarshal(p[2], &d.Wait)
 	}
-	return d, true
+	return d
 }
 
 // parseSubscribeResult extracts extranonce1 and extranonce2Size from a
@@ -196,9 +293,18 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
 	}
+	if !extranonce1OK(en1) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce1 not hex: %q", en1)
+	}
 	en2SizeF, ok := arr[2].(float64)
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
+	}
+	// Validate on the float: int() truncation would let 64.5 or -0.5 pass
+	// the bounds check below as 64 or 0. completeV1Job requires sz > 0,
+	// so 0 is rejected at the boundary too.
+	if en2SizeF != math.Trunc(en2SizeF) || en2SizeF <= 0 || en2SizeF > maxExtranonce2Size {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range (0, %d]", en2SizeF, maxExtranonce2Size)
 	}
 	return en1, int(en2SizeF), nil
 }

@@ -25,7 +25,7 @@
 //     {SatsPerSecond:0, Confidence:0} rather than going silent, so that
 //     the arbitration engine can route away from the unavailable market.
 //
-//  3. Honour context cancellation: when ctx is cancelled, the quote
+//  3. Honor context cancellation: when ctx is canceled, the quote
 //     channel must be closed and all goroutines must exit.
 //
 // # Which external markets fit this interface
@@ -169,6 +169,14 @@ type RateSource interface {
 	// BTCUSDRate returns the current BTC/USD rate and whether the rate
 	// is fresh (fetched within the last 5 minutes).
 	BTCUSDRate() (rate float64, fresh bool)
+}
+
+// NetworkHashrateSource reports a live estimate of the Bitcoin
+// network's total hashrate (H/s) and a freshness flag. Implemented by
+// rates.HashrateFetcher; the mining provider uses it in place of its
+// compile-time constant when fresh (KNOWN_LIMITATIONS §7).
+type NetworkHashrateSource interface {
+	CurrentHashrate() (hps float64, fresh bool)
 }
 
 // SatsPerSecond converts a USD-per-hour yield to sat/s using rate.

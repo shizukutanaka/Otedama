@@ -50,14 +50,13 @@ func TestIsFatal_FalseForNil(t *testing.T) {
 	}
 }
 
-func TestIsFatal_FalseForWrappedFatal(t *testing.T) {
-	// A wrapped fatalError should NOT currently be detected as fatal
-	// (isFatal uses type assertion, not errors.As). This documents the
-	// current behavior; if we later switch to errors.As, flip this test.
+func TestIsFatal_TrueForWrappedFatal(t *testing.T) {
+	// errors.As unwraps: a fatalError stays fatal through wrapping, so a
+	// wrapped pool-rejection is still treated as fatal rather than retried.
 	inner := &fatalError{msg: "inner"}
 	wrapped := fmt.Errorf("outer: %w", inner)
-	if isFatal(wrapped) {
-		t.Error("isFatal currently does not unwrap; change this test if that changes")
+	if !isFatal(wrapped) {
+		t.Error("isFatal should detect a wrapped fatalError")
 	}
 }
 
@@ -77,7 +76,7 @@ func TestMergeShares_SingleChannel(t *testing.T) {
 
 	merged := mergeShares(ctx, []<-chan miner.Share{src})
 
-	var got []miner.Share
+	got := make([]miner.Share, 0, 3)
 	for s := range merged {
 		got = append(got, s)
 	}
@@ -485,7 +484,7 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 			provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000}),
 		},
 	}
-	stats := buildStats(opts, 1234.5, 42, nil, false)
+	stats := buildStats(&opts, 1234.5, 42, nil, false)
 
 	if stats.HashRate != 1234.5 {
 		t.Errorf("HashRate = %v, want 1234.5", stats.HashRate)
@@ -525,7 +524,7 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 
 	// No latency samples: PoolLatency must be zero (unknown).
 	lt := NewLatencyTracker(16)
-	stats := buildStats(opts, 0, 0, lt, false)
+	stats := buildStats(&opts, 0, 0, lt, false)
 	if stats.PoolLatency != 0 {
 		t.Errorf("PoolLatency with no samples = %v, want 0", stats.PoolLatency)
 	}
@@ -534,7 +533,7 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 	for range 8 {
 		lt.Record(50.0)
 	}
-	stats = buildStats(opts, 0, 0, lt, false)
+	stats = buildStats(&opts, 0, 0, lt, false)
 	want := 50 * time.Millisecond
 	if stats.PoolLatency != want {
 		t.Errorf("PoolLatency = %v, want %v", stats.PoolLatency, want)
@@ -548,12 +547,12 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 func TestBuildStats_StalledPropagated(t *testing.T) {
 	opts := sessionOpts{startTime: time.Now()}
 
-	notStalled := buildStats(opts, 100.0, 0, nil, false)
+	notStalled := buildStats(&opts, 100.0, 0, nil, false)
 	if notStalled.Stalled {
 		t.Error("buildStats(stalled=false): Stats.Stalled should be false")
 	}
 
-	stalled := buildStats(opts, 0, 0, nil, true)
+	stalled := buildStats(&opts, 0, 0, nil, true)
 	if !stalled.Stalled {
 		t.Error("buildStats(stalled=true): Stats.Stalled should be true")
 	}
@@ -596,7 +595,7 @@ func TestDetectDevices_ReturnsBuiltinCPU(t *testing.T) {
 }
 
 func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
-	// With a cancelled context, hal.Detector.Detect races between delivering
+	// With a canceled context, hal.Detector.Detect races between delivering
 	// the (fast, synchronous) CPU result and observing ctx.Done(), so the
 	// outcome varies run-to-run. The invariant that must hold every time:
 	// detectDevices either returns devices, or an error that surfaces the
@@ -612,7 +611,7 @@ func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
 				t.Fatalf("iter %d: error must wrap context.Canceled, got %v", i, err)
 			}
 			if strings.Contains(err.Error(), "no devices detected") {
-				t.Fatalf("iter %d: cancelled detection misreported as 'no devices detected': %v", i, err)
+				t.Fatalf("iter %d: canceled detection misreported as 'no devices detected': %v", i, err)
 			}
 		case len(devices) == 0:
 			t.Fatalf("iter %d: nil error with zero devices", i)
@@ -810,7 +809,7 @@ func TestPruneStaleStreams_RemovesExpiredKeepsFresh(t *testing.T) {
 		"ai.akash:gpu-0":       now.Add(-5 * time.Minute),  // stale (> 3m)
 		"mining.stratum:cpu-0": now.Add(-30 * time.Second), // fresh
 	}
-	pruned := pruneStaleStreams(m, seen, now, streamStaleTimeout)
+	pruned := pruneStaleStreams(m, seen, now)
 
 	if len(pruned) != 1 || pruned[0] != "ai.akash:gpu-0" {
 		t.Fatalf("pruned = %v, want [ai.akash:gpu-0]", pruned)
@@ -833,7 +832,7 @@ func TestPruneStaleStreams_NeverPrunesUntimestampedEntries(t *testing.T) {
 	m := map[string]arbitration.Stream{"mining.stratum:cpu-0": {ID: "mining.stratum"}}
 	seen := map[string]time.Time{} // no timestamp recorded
 
-	if pruned := pruneStaleStreams(m, seen, now.Add(100*time.Hour), streamStaleTimeout); len(pruned) != 0 {
+	if pruned := pruneStaleStreams(m, seen, now.Add(100*time.Hour)); len(pruned) != 0 {
 		t.Errorf("pruned untimestamped entry: %v", pruned)
 	}
 	if _, ok := m["mining.stratum:cpu-0"]; !ok {
@@ -848,7 +847,7 @@ func TestPruneStaleStreams_BoundaryAtTTL(t *testing.T) {
 		"a:x": now.Add(-streamStaleTimeout),               // exactly ttl old → not yet stale (> ttl is the test)
 		"b:y": now.Add(-streamStaleTimeout - time.Second), // just past ttl → stale
 	}
-	pruned := pruneStaleStreams(m, seen, now, streamStaleTimeout)
+	pruned := pruneStaleStreams(m, seen, now)
 	if len(pruned) != 1 || pruned[0] != "b:y" {
 		t.Errorf("pruned = %v, want [b:y] (exactly-ttl entry must survive)", pruned)
 	}

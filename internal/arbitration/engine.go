@@ -88,12 +88,18 @@ type Yield struct {
 }
 
 // Effective returns the confidence-adjusted yield. A quote with zero
-// confidence is treated as zero yield.
+// confidence is treated as zero yield. Non-finite inputs (NaN/±Inf —
+// e.g. a provider division producing 0/0 upstream) collapse to 0 so a
+// bad quote can never win the sort or poison TotalYield.
 func (y Yield) Effective() float64 {
-	if y.SatsPerSecond <= 0 || y.Confidence <= 0 {
+	if !(y.SatsPerSecond > 0) || !(y.Confidence > 0) {
 		return 0
 	}
-	return y.SatsPerSecond * y.Confidence
+	v := y.SatsPerSecond * y.Confidence
+	if math.IsInf(v, 0) {
+		return 0
+	}
+	return v
 }
 
 // Stream is a revenue source's quote for what it will pay for each
@@ -237,7 +243,7 @@ type Assignment struct {
 }
 
 // Idle reports whether this assignment leaves the device idle.
-func (a Assignment) Idle() bool { return a.Stream == "" }
+func (a *Assignment) Idle() bool { return a.Stream == "" }
 
 // Allocation is the complete set of Assignments for a decision cycle.
 //
@@ -313,15 +319,18 @@ type DeviceRef struct {
 // impossible (all streams offline, no compatible streams for a device)
 // are handled by leaving the affected devices idle, not by returning
 // an error.
-func Decide(in Input) (*Allocation, error) {
+func Decide(in *Input) (*Allocation, error) {
+	if in == nil {
+		return nil, errors.New("arbitration: nil Input")
+	}
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
-	if in.HysteresisMargin < 0 {
-		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
+	if in.HysteresisMargin < 0 || math.IsNaN(in.HysteresisMargin) || math.IsInf(in.HysteresisMargin, 0) {
+		return nil, errors.New("arbitration: HysteresisMargin must be non-negative and finite")
 	}
-	if in.MinYieldSatsPerSec < 0 {
-		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
+	if in.MinYieldSatsPerSec < 0 || math.IsNaN(in.MinYieldSatsPerSec) || math.IsInf(in.MinYieldSatsPerSec, 0) {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative and finite")
 	}
 
 	// Reject duplicate device IDs up front, since silently ignoring
@@ -355,7 +364,8 @@ func Decide(in Input) (*Allocation, error) {
 	}
 
 	for _, dev := range devices {
-		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
+		p := prev[dev.Identity.ID]
+		a := chooseForDevice(dev, in.Streams, &p, in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
 		if a.Idle() {
 			alloc.SkippedDevice++
 		}
@@ -371,7 +381,7 @@ func Decide(in Input) (*Allocation, error) {
 func chooseForDevice(
 	dev DeviceRef,
 	streams []Stream,
-	previous Assignment,
+	previous *Assignment,
 	policy Policy,
 	hysteresis float64,
 	minYield float64,
@@ -385,7 +395,7 @@ func chooseForDevice(
 	// positive yield that nonetheless failed the minYield floor. It lets the idle
 	// reason distinguish "nothing wanted this device" from "the work on offer was
 	// not worth running", which is actionable for an operator tuning the floor.
-	var candidates []candidate
+	candidates := make([]candidate, 0, len(streams))
 	var belowFloor bool
 	for _, s := range streams {
 		if !s.SuitableFor(&dev) {
@@ -425,8 +435,8 @@ func chooseForDevice(
 	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
 	slices.SortStableFunc(candidates, func(a, b candidate) int {
-		sa := policyScore(a.stream, a.yield, policy)
-		sb := policyScore(b.stream, b.yield, policy)
+		sa := policyScore(&a.stream, a.yield, policy)
+		sb := policyScore(&b.stream, b.yield, policy)
 		if sa != sb {
 			return cmp.Compare(sb, sa) // descending: higher score first
 		}
@@ -434,7 +444,7 @@ func chooseForDevice(
 	})
 
 	best := candidates[0]
-	bestScore := policyScore(best.stream, best.yield, policy)
+	bestScore := policyScore(&best.stream, best.yield, policy)
 
 	// Hysteresis: if we currently have a previous assignment on a still-
 	// available stream, keep it unless the best candidate beats it by the
@@ -449,7 +459,7 @@ func chooseForDevice(
 	if previous.Stream != "" {
 		for _, c := range candidates {
 			if c.stream.ID == previous.Stream {
-				incScore := policyScore(c.stream, c.yield, policy)
+				incScore := policyScore(&c.stream, c.yield, policy)
 				threshold := incScore * (1.0 + hysteresis)
 				if bestScore <= threshold {
 					// Held only counts when a *different*, higher-scoring stream
@@ -509,7 +519,7 @@ const (
 // policyScore assigns a comparison score that reflects the active policy.
 // Higher scores are preferred. When scores are equal, sort falls back to
 // yield, then StreamID.
-func policyScore(s Stream, yield float64, p Policy) float64 {
+func policyScore(s *Stream, yield float64, p Policy) float64 {
 	switch p {
 	case PolicyStackBTC:
 		if s.IsBitcoinMining {
@@ -521,7 +531,7 @@ func policyScore(s Stream, yield float64, p Policy) float64 {
 	case PolicyEnvironmentFriendly:
 		return yield * (1.0 + float64(s.EnvironmentalRating)*ratingBonusPerPoint)
 	case PolicyMaximizeEarnings:
-		fallthrough
+		return yield
 	default:
 		return yield
 	}
