@@ -3279,6 +3279,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1206 update — TROUBLESHOOTING.md parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `otedama <cmd>` references | ✅ Clean — every subcommand is dispatched; `--log-level` is a real flag (run.go/service.go) and the doc correctly notes doctor does not take it (L232-236) |
+| S | `--flag` names | ✅ Clean — all implemented |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
