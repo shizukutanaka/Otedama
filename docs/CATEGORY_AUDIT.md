@@ -4179,6 +4179,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 831 update — break-select + labeled-exit + return-escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `break` inside a `select` case — exits only the select, loop spins on the dead channel. | ✅ Clean: the single select+loop site (`hal/registry.go:175-193`) uses labeled `break loop` — explicit and correct. |
+| S | `return` inside a `select` case — function exits before cleanup/defers? | ✅ Clean: 81 sites; Go `return` in a select case runs deferred calls normally — correct escape semantics. |
+| S | Unlabeled `break` inside `for-select` intending to exit the loop — infinite spin. | ✅ Clean: all loop-exit breaks are labeled (`break loop` at registry.go:178,193); remaining `break` occurrences are doc comments / non-select loops. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
