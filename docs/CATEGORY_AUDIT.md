@@ -2502,6 +2502,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1129 update — duplicate-error census
+
+Identical error literal text constructed at multiple sites — drift risk if
+one copy changes.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 11 dup sets, all intra-package symmetric paths (lightning encrypt/decrypt mirror, V1/V2 dial-timeout, daemon 3-OS dispatch, engine V1/V2 connection-close) | ⚠️ Noted (intentional symmetry — same text = same failure mode; no cross-package copies) |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
