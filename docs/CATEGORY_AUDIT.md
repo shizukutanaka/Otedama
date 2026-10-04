@@ -3781,6 +3781,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 789 update — callback-lock + register-guard + positional-literal audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Callback invoked while holding a mutex — re-entrant lock attempt or hidden deadlock. | ✅ Clean: arbitration log callbacks were moved outside `streamsMu` (session 714 fix); the remaining lock scopes are leaf field updates — no function calls into unknown code under any lock. |
+| M | `Register` accepting duplicates silently — a second registration shadowing the first. | ✅ Clean: both registries (`poolproto.Register`, `btccrypto.Register`) panic on duplicate names — fail-closed by design; all call sites run once at `init()`. |
+| M | Positional struct literal — field reorder silently rebinding values. | ✅ Clean: zero unkeyed multi-field struct literals — all composite literals use field names (verified session 694). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
