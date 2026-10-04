@@ -1731,3 +1731,33 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1050 update — test-file audit mid-pass checkpoint
+
+Coverage checkpoint: the test-file audit pass (sessions 1031–1049) has now
+covered ~13,800 lines of `*_test.go` across cmd/, clock, metrics, logger,
+arbitration, config, rates, lightning, miner, stratum, httpserver, i18n,
+provider, and tui — bringing the cumulative mechanical defect-class count to
+~560, all clean or benign. Zero new real defects found in the test pass so far.
+
+Structural observations worth recording:
+
+- Every previously-shipped fix has a dedicated regression test (wallet
+  no-mint, C1-control-char quoting, completion list, nonce partition, ntime
+  roll, reject classification, XDG env, completion sync, wallet subcommand
+  list — the missing-"wallet" class now fails at test time).
+- The funds-critical packages (lightning, stratum) anchor to external
+  vectors: BIP-39 official vectors, genesis-block hash, HMAC-SHA256 RFC
+  vector — not just self-consistency.
+- Concurrency claims are numerically falsified rather than merely
+  race-detector exercised: exact counter totals, torn-read set-membership,
+  CAS winner identity, coalesced-caller ctx honoring.
+
+Remaining test surface: internal/engine (≈8.5k lines: run/coverage/helpers/
+integration), internal/doctor extras, internal/poolproto/stratumv1,
+internal/poolproto/stratumv2 dialer, internal/daemon, internal/hal,
+internal/version, internal/btccrypto.
+
+All packages build, vet, and test green.
