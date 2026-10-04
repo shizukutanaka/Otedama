@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 944 update — sv1-subscribe-result + dial-timeout + tls-downgrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `extranonce2_size` float like 64.5 or -0.5 slipping past the bounds check via `int()` truncation. | ✅ Clean: `parseSubscribeResult` checks `en2SizeF != math.Trunc(en2SizeF) \|\| <= 0 \|\| > maxExtranonce2Size` on the float *before* `int()` — non-integral values are rejected at the boundary. |
+| M | `Dial` unbounded — TCP connect + TLS handshake stalling failover for the OS SYN-retry default (~2 min). | ✅ Clean: `context.WithTimeout(ctx, dialTimeout)` wraps the whole attempt; `DeadlineExceeded` is re-labeled as a dial timeout for clarity. |
+| M | `stratum+tls://` silently downgrading to plaintext — encrypted-looking link exposing the payout address. | ✅ Clean (fixed defect, documented): `tls.go`'s header records the previous silent-downgrade hole; `dialTLS` now opens a certificate-verified TLS connection (system roots + optional extra CAs, MinVersion TLS 1.2) or errors — never plaintext. |
+
+All packages build, vet, and test green.
