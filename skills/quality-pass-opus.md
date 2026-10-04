@@ -19,7 +19,7 @@ Opusには、資金クリティカル領域の監査・並行性/暗号/プロ�
 ## 1. 現状サマリー（検証済みの事実）
 
 **長所**: 全24パッケージ build/vet/test green。カバレッジ全域90%超（最低
-internal/lightning 91.2%）。以下はコード直読で clean 確認済み — arbitration
+internal/lightning 92.0%（session 508 実測））。以下はコード直読で clean 確認済み — arbitration
 （純関数・境界テスト完備）、rates（median・single-flight）、miner（SHA-256dは
 genesisベクタ検証、nonce完全分割、target比較正確、SetWork同期安全）、stratum
 wire（境界安全・round-trip一致）、btccrypto（BIP-173/350準拠）、
@@ -31,7 +31,7 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 
 | 短所 | ブロック要因 |
 |---|---|
-| CI全Goジョブ赤: workflowはGo 1.23.x/1.21ピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードは1.24.7でgreen | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
+| CI全Goジョブ赤: workflowはGo 1.23.x/1.22.xピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードはgo1.26.8でgreen（session 508 実測） | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
 | Noise NX未配線（既定`stratum+v2://`は平文） | CODEOWNERS + 監査済みellswift Go実装が世に存在しない（ADR-011 Erratum） |
 | secp256k1がスタブ（decred v4はBIP-340でもellswiftでもない — EC-Schnorr-DCRv0） | 依存追加が環境制約で不可 + v3.1.0スコープ |
 | 依存陳腐化: yaml.v3アーカイブ済（後継go.yaml.in）、x/crypto 31版遅れ（CVEはssh/openpgp配下で到達不能）、toolchain 1.24（containermaxprocs未享受） | 実行環境がsum.golang.orgをForbiddenで拒否 |
