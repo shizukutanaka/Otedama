@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 953 update — work-target + jobid-guard + ntime-roll audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Grinding to the nBits block target instead of the pool-assigned share target — hardware "never" produces a creditable share. | ✅ Clean: `updateWork` prefers `shareTarget` and only falls back to `TargetFromNBits` when the pool assigned none; `v1JobTarget` applies `TargetFromDifficulty(difficulty)` when `difficulty > 0`. |
+| M | Malformed job ID or target silently mined — hashrate burned on work the pool cannot credit. | ✅ Clean: `applyJob` rejects a bad `job.NBits` target and an unparseable `JobID` with errors (`%q`-quoted) rather than mining a zero-value job. |
+| M | Stale pool-declared ntime carried into shares — SRI ≥1.12 rejects shares outside the ntime window (guaranteed pool-side reject). | ✅ Clean: `rollNTime` rolls a stale ntime forward to the wall clock; a future ntime is kept verbatim (undershooting `ntime_start` is itself a reject). |
+| M | Arbitration-paused devices re-armed by an incoming pool job. | ✅ Clean: `updateWork`/`applyJob` consult `pauseSet.Paused(deviceID)` before `SetWork` — a pause persists across job updates until the next `Decide`. |
+
+All packages build, vet, and test green.
