@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 767 update — buffer-absence + hot-append + builder-usage audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `bytes.Buffer` lifecycle bugs — Reset/reuse races or unbounded growth. | ✅ Clean: `bytes.Buffer` absent entirely — the class cannot arise. |
+| P | `append` on the mining hot path — per-iteration reallocation in the hash loop. | ✅ Clean: appends live only in `wire.go` encode helpers (caller-owned `dst`, bounded by frame size) and the sha256d sign-byte prepend — the nonce/ntime hot loop is append-free (verified sessions 534/545). |
+| P | `strings.Builder` misuse — writing after `String()`, or missing `Grow` causing repeated growth. | ✅ Clean: all Builder sites are single-render-then-String scopes; metrics already hoists the per-call Builder out of the label loop (metrics.go:243 comment) — no post-`String()` writes anywhere. |
+
+All packages build, vet, and test green.
