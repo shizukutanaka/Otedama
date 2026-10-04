@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 766 update — case-normalize + trim-boundary + equalfold-scope audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ToLower`/`ToUpper` applied inconsistently — a comparison missing canonicalization on one side. | ✅ Clean: all 6 canonicalization sites lower once before matching (stats reason, lang tag, log level, bech32); no mixed-case comparisons anywhere. |
+| M | `TrimSpace` missing on a comparison boundary — whitespace-padded input failing validation or leaking through. | ✅ Clean: 10 trim sites cover the input boundaries that need it (env values, mnemonic words, config strings); wire fields are exact-match by spec and correctly untrimmed. |
+| M | `EqualFold` used on wire-protocol fields — case-folded matches the spec forbids. | ✅ Clean: `EqualFold` only on user-input boundaries (mnemonic verify, `localhost` host check); protocol method/hex fields stay case-sensitive per spec (verified session 749). |
+
+All packages build, vet, and test green.
