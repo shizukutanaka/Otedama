@@ -1734,6 +1734,76 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1013 update — stop-race + update-drop + width-budget audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Stop` writing to `w` while the render loop still owns it. | ✅ Clean: CAS `started` is the single-shot gate (safe pre-Start and multi-call); `close(doneCh)` → `wg.Wait` → only then `showCursor`/`Fprintln` — no racing writer, documented inline. |
+| M | A full update channel blocking the engine's stats push. | ✅ Clean: `Update` drains one stale entry then enqueues — bounded loss is the documented contract (freshest wins, never blocks). |
+| M | A torn stats snapshot mid-render. | ✅ Clean: `lastStats` guarded by `mu`; the tick copies under lock then renders the copy. |
+| S | The critical pool-status field silently truncated at narrow widths. | ✅ Clean: every line is budget-truncated to `cols` and the key field is sized from a dynamic budget, not a fixed offset — safe at the documented 40-column minimum; live width re-probed per tick (TIOCGWINSZ / Windows counterpart), `SetWidth` locks detection for tests. |
+| S | Emoji section labels under-padding and leaving stale glyph fragments. | ✅ Clean: section labels are deliberately plain text — emoji render width-2 but `visibleLen` counts 1 rune; the mismatch is documented and avoided. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1014 update — i18n-fallback + immutability + degrade audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A missing translation leaving the UI with an empty string. | ✅ Clean: `Render` falls exact → base tag → mandatory English → `"!{id}!"` placeholder + error — conspicuous in logs and never blank; English presence is enforced at `NewBundle`. |
+| M | Caller-side mutation corrupting a shared catalog across goroutines. | ✅ Clean: `NewCatalog` deep-copies the messages map; `Bundle` holds its own catalog map; both are documented lock-free-after-construction (the deliberate no-lock design matters on the log-line hot path). |
+| M | An invalid message ID or duplicate language slipping into the bundle. | ✅ Clean: `ID.Valid`/`Lang.Valid` charset checks reject bad IDs at construction; `NewBundle` rejects duplicate languages. |
+| M | A template variable missing from `data` breaking message rendering. | ✅ Clean: `RenderWith` fast-paths messages without `{{`; parse/exec failures return the raw template + error — degrades, never breaks rendering. |
+| S | Translation-completeness drift between English and the ten priority languages going unnoticed. | ✅ Clean: `MissingTranslations` emits sorted per-language gaps for the CI completeness check; complete languages are omitted. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1016 update — wallet-atomicity + oracle + sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | A killed mid-write leaving a half-written wallet.dat. | ✅ Clean: CreateTemp→Write→Sync→Close→Chmod(0600)→Rename in the same dir (same filesystem); Close errors are honored because the final flush can happen there; every failure path removes the temp file; `sweepStaleTempFiles` reaps >1-minute leftovers at startup without touching a live writer. |
+| S | The wallet file briefly world-readable between write and chmod. | ✅ Clean: Chmod(0600) happens **before** the rename, so the final path is never visible with loose permissions; data dir itself is MkdirAll 0700. |
+| S | Decrypt errors leaking an oracle (wrong passphrase vs corrupt file distinguishable). | ✅ Clean: `loadExisting` and `ChangePassphrase` collapse `DecryptSeed` failures into opaque fixed strings ("wallet unlock failed", "incorrect old passphrase"); the documented intent is oracle-resistance. |
+| S | A restored-backup wallet.dat losing fingerprint identity checks. | ✅ Clean: missing `wallet.fingerprint` is recreated from the decrypted seed on load — but never overwritten when present, since a mismatching fingerprint is a signal, not a bug to mask. |
+| M | The BIP-39 25th-word silently deriving a different seed. | ✅ Documented benign: `WithMnemonicPassphrase` spells out the decoy-wallet property (wrong phrase → valid-looking different seed, no error) and why it is creation-only (the phrase is folded into the stored seed). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1017 update — bip39-math + secret-hygiene + wordlist-integrity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | Entropy or a reader short-read silently producing weak seeds. | ✅ Clean: `GenerateEntropy` rejects non-BIP-39 bit lengths up front and uses `io.ReadFull` — a short or failed read is fatal, never retried with a weaker source (documented contract). |
+| C | A malformed or malicious wordlist breaking index consistency. | ✅ Clean: `NewWordList` requires exactly 2048 non-empty valid-UTF-8 unique words and defensive-copies the slice; the bundled English list is SHA-256 integrity-checked at init (english_wordlist.go). |
+| S | A transcription typo restoring the wrong wallet without notice. | ✅ Clean: `MnemonicToEntropy` re-derives and compares the ENT/32 checksum bit-for-bit — a mismatch returns an explicit transcription-error, never a wrong seed. |
+| S | Secret material surviving in heap buffers after derivation. | ✅ Clean: the `bits` working buffer is `zeroBytes`'d on both encode and decode paths; `MnemonicToSeed` wipes the password bytes and the intermediate PBKDF2 output after copying into the fixed `[64]byte` Seed. |
+| M | The public fingerprint leaking seed information. | ✅ Clean: `Fingerprint` is 4 bytes of HMAC-SHA256 keyed by a domain string — non-reversible, safe for UI confirmation. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1018 update — runtime-exposition + summary-substitute + escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `go_gc_duration_seconds` silently mis-typed vs client_golang. | ✅ Clean: the summary this package cannot emit is deliberately re-expressed as two counters (`_total` pause seconds + `_total` cycles) — the rate()-able form dashboards actually use; the substitution is documented at the top of the file. |
+| M | A Go version string breaking label syntax in `go_info`. | ✅ Clean: the label value goes through `escapeLabel` (Prometheus escaping), not `%q` — the nolint comment explains why the obvious-looking gocritic fix would be a bug. |
+| M | Dashboards keyed on client_golang names silently breaking. | ✅ Clean: all emitted names match the client_golang `go_*` surface; kind strings (gauge/counter) are per-entry, not a blanket type. |
+| S | An inconsistent snapshot mixing memstats from different instants. | ✅ Clean: one `ReadMemStats` + one `NumGoroutine` per scrape feeds all 12 metrics. |
+| M | Write failures swallowed mid-exposition. | ✅ Clean: `Fprintf` errors propagate to the collector caller. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 1019 update — service-dispatch + help-exit + injectable-seam audit
 
 | Cat | Finding | Disposition |
