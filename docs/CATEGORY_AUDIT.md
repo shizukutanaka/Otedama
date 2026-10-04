@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 797 update — trim-discard + clock-in-loop + sort-stability audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Trim*` result discarded — mutating nothing, input silently unchanged. | ✅ Clean: zero discarded `Trim`/`TrimSpace`/`TrimPrefix`/`TrimSuffix` sites — every call's result is used. |
+| P | `time.Now()` called per element inside a loop — jittered elapsed math / needless syscall. | ✅ Clean: the only loop-scoped `time.Now()` is `run.go:920` inside a ticker-select (one call per stats tick — required for the timestamp), not per element. |
+| M | Unstable sort where equal-key order is semantically meaningful. | ✅ Clean: `SortStableFunc` is used exactly where ties must preserve input order (arbitration candidate ranking `arbitration/engine.go:412`); all `slices.Sort` sites sort unique keys where stability is moot. |
+
+All packages build, vet, and test green.
