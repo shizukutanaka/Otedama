@@ -2595,6 +2595,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 974 update — arb-pause + stream-staleness + merge audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A pool job update clobbering an arbitration pause — device resumes hashing after being routed away. | ✅ Clean: `reconcileArbPauses` rewrites the pause set to mirror every Decide's allocation (idle/`ai.*` → Pause, else Resume); the s382 persistence fix holds. |
+| M | A dead provider's last quote still routing devices — revenue to a stream that no longer exists, or pruning too eagerly on jitter. | ✅ Clean: `pruneStaleStreams` drops streams unseen for 3 min (3–6× the 30/60s quote cadence) from both `m` and `seen`. |
+| M | `streamsSlice` first-seen de-dup losing `YieldPerDevice` for all but one device, or aliasing the map under mutation. | ✅ Clean: same-`StreamID` entries merge into a representative; the rep's `YieldPerDevice` is a deep copy so later `updateStream` writes can't mutate the slice handed to Decide. |
+| M | `updateStream` writing into a nil `YieldPerDevice` (panic) or a missing power-rate producing a garbage floor. | ✅ Clean: map allocated when nil; `powerFloor` returns 0 on unconfigured power, no rate, or zero devices, and the even-split approximation is documented. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
