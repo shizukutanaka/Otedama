@@ -2772,6 +2772,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1152 update — rwmutex census
+
+`sync.RWMutex` declared where `sync.Mutex` would suffice (no `RLock`).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Zero dead RLocks — all 7 RWMutex sites (clock, btccrypto, hal, metrics, poolproto, rates fetcher + hashrate) exercise `RLock`; remaining mutexes are plain `sync.Mutex` | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
