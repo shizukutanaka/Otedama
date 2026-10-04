@@ -4059,6 +4059,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 821 update — runtime-surface + tuning-override + finalizer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `runtime.*` used beyond platform/metadata needs — layout dependence or scheduler poking. | ✅ Clean: `runtime.` sites are `NumCPU` (worker-count default, device model string), `GOOS`/`GOARCH` platform dispatch, `Version` metadata — no layout or scheduler dependency. |
+| M | `GOMAXPROCS`/`SetGCPercent`/`FreeOSMemory` called from inside the binary — overriding operator tuning. | ✅ Clean: absent — process tuning stays with the operator (GOMAXPROCS is the documented knob, per the --worker-threads doc fix in session 464). |
+| S | `runtime.SetFinalizer`/`KeepAlive` — resurrection hazards and GC-pinning bugs. | ✅ Clean: absent — the only `KeepAlive` hits are literal launchd-plist XML keys, unrelated to `runtime`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
