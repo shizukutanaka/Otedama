@@ -1776,6 +1776,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1017 update — bip39-math + secret-hygiene + wordlist-integrity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| C | Entropy or a reader short-read silently producing weak seeds. | ✅ Clean: `GenerateEntropy` rejects non-BIP-39 bit lengths up front and uses `io.ReadFull` — a short or failed read is fatal, never retried with a weaker source (documented contract). |
+| C | A malformed or malicious wordlist breaking index consistency. | ✅ Clean: `NewWordList` requires exactly 2048 non-empty valid-UTF-8 unique words and defensive-copies the slice; the bundled English list is SHA-256 integrity-checked at init (english_wordlist.go). |
+| S | A transcription typo restoring the wrong wallet without notice. | ✅ Clean: `MnemonicToEntropy` re-derives and compares the ENT/32 checksum bit-for-bit — a mismatch returns an explicit transcription-error, never a wrong seed. |
+| S | Secret material surviving in heap buffers after derivation. | ✅ Clean: the `bits` working buffer is `zeroBytes`'d on both encode and decode paths; `MnemonicToSeed` wipes the password bytes and the intermediate PBKDF2 output after copying into the fixed `[64]byte` Seed. |
+| M | The public fingerprint leaking seed information. | ✅ Clean: `Fingerprint` is 4 bytes of HMAC-SHA256 keyed by a domain string — non-reversible, safe for UI confirmation. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
