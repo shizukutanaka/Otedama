@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1125 update — time.After census
+
+`time.After` in loops/hot paths leaks timers until fire (pre-1.23) and
+allocates a fresh channel per iteration.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | One site (engine/run.go:1431): one-shot reconnect-honor wait, ctx-cancellable, on the connection-close path (not a hot loop) | ⚠️ Noted (correct as-is) |
+| S | Hot-path select uses `time.NewTimer` + explicit `Stop`, with a code comment documenting the time.After pitfall (run.go:600) | S |
+
+All packages build, vet, and test green.
