@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 763 update — http-status + encoder-error + rand-error audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `http.Client.Do` response used without a `StatusCode` check — a 5xx body parsed as success. | ✅ Clean: all 3 call sites check `err` then `StatusCode` before parsing (verified session 708) — non-2xx bodies are rejected with the status in the error. |
+| S | `json.Encoder` errors ignored, or a `Flush` assumed needed — truncated stdout output. | ✅ Clean: `Encoder` streams per `Encode` call (no Flush needed); all 3 sites check the Encode error and report it to stderr. |
+| S | `crypto/rand` errors unchecked — a failed entropy draw returning a predictable or zero value. | ✅ Clean: `rand.Int` errors trigger an explicit deterministic-fallback path (documented), `GenerateKey` and the seedstore reader propagate or inject safely — no unchecked draws. |
+
+All packages build, vet, and test green.
