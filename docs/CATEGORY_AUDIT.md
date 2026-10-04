@@ -1731,3 +1731,18 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1095 update — identifier stutter census
+
+`pkg.Pkg`-style stutter (type named after its package) — a readability
+smell per Go review conventions, tolerable only when the type IS the
+package's singular concept.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 4 stutters found, all canonical: `clock.Clock`, `config.Config`, `logger.Logger`, `provider.Provider` — each is the package's singular domain type | S (idiomatic per Go review convention) |
+| S | Zero function stutter (no `func Package()` in `package package`) | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
