@@ -10,8 +10,10 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-visible.** `go test -bench` runs in CI and results are
+   uploaded as a workflow artifact (`benchmark-results`) on every run —
+   compare against the baseline artifact before merging a perf-sensitive
+   PR. (No automatic regression gate exists yet.)
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -24,6 +26,7 @@ mining-related performance.
 |------------------------|------------------|--------------------------------|
 | AMD Ryzen 9 7950X (1 thread) | ~2.5 MH/s  | AES-NI + SHA-NI auto-used      |
 | Apple M2 Pro (1 thread)      | ~1.9 MH/s  | ARM SHA extensions             |
+| Apple M4 (1 thread)          | ~8.9 MH/s  | ARM SHA extensions; measured ~112 ns/op under go1.27.1 on a virtualized M4 (session 529) |
 | Intel i7-12700K (1 thread)   | ~2.1 MH/s  | AVX2 + SHA-NI                  |
 | Raspberry Pi 5 (1 thread)    | ~0.3 MH/s  | No SHA extensions in stdlib    |
 
@@ -58,7 +61,7 @@ Scaling is near-linear because SHA-256d is embarrassingly parallel
 with per-thread nonce spaces. Sub-linear scaling above core count
 reflects hyperthread contention on L2/L3 caches, not Otedama overhead.
 
-## Stratum V2 frame decode (fuzz-verified)
+## Stratum V2 frame decode
 
 The framing layer must process frames as fast as the network can
 deliver them. A slow decoder becomes a DoS vector.
@@ -68,13 +71,19 @@ deliver them. A slow decoder becomes a DoS vector.
 | Header decode          | ~50 M frames/s | ~20 ns     |
 | Full frame (1KB payload)| ~5 M frames/s | ~200 ns    |
 
-**Reproduce:**
-```bash
-go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/
-```
+*(Unverified estimates — no decode benchmark exists in the tree yet;
+the figures above are targets, not measurements. `FuzzDecoder_ReadFrame`
+exists and passes under `go test -fuzz`, but no CI job runs it — see
+KNOWN_LIMITATIONS §13.)*
+*Numbers predate the committed benchmark set — no `BenchmarkDecoder_*`
+exists in the tree yet, so these figures are currently indicative rather
+than reproducible.*
 
-**Correctness:** The decoder is fuzzed continuously in CI. See
-`FuzzDecoder_ReadFrame` for the active corpus.
+**Correctness:** the decoder is covered by `FuzzDecoder_ReadFrame`
+(run locally — no continuous CI fuzzing today).
+**Correctness:** `FuzzDecoder_ReadFrame` covers the decode boundary; run
+it locally (`go test -fuzz=FuzzDecoder_ReadFrame ./internal/stratum/`) —
+no fuzz job runs in CI yet.
 
 ## Economic comparison (2026-04-24 market data)
 
@@ -150,7 +159,10 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+CI runs benchmarks on every push to main and on every PR, uploading
+`benchmark.txt` as the `benchmark-results` workflow artifact. **Correction
+(session 484):** this item previously claimed CI posts a comparison
+to PRs — no comparison job or PR comment exists today.
 
 ## Hardware used for published numbers
 
@@ -160,6 +172,11 @@ Numbers above are measured on:
 - **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go 1.22
 - **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
 - **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
+
+**Note (session 484):** the published numbers were measured with Go
+1.22, but current master requires Go ≥1.24 (`godebug tlsmlkem` in
+`go.mod` fails to parse on older toolchains), so the reproduce
+commands above must be run with Go 1.24 or newer.
 
 Readers may see different numbers on different hardware; the relative
 rankings should remain stable.
