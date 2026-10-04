@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 894 update — process-handle + pid-kill + process-lifecycle audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.StartProcess`/`ForkExec`/raw `*os.Process` handles — un-reaped processes or pid reuse races. | ✅ Clean: absent — no `Process` handles, `Pid` fields, or `ForkExec` in the codebase. |
+| M | `Process.Kill`/`Signal`/`Wait`/`Release` — signals to a possibly-reused pid. | ✅ Clean: absent — process control reaches children only through `exec.Cmd`'s own lifecycle (verified s748/s864). |
+| S | `os.FindProcess` on an arbitrary pid — returns a handle to a possibly-different process. | ✅ Clean: absent. |
+
+All packages build, vet, and test green.
