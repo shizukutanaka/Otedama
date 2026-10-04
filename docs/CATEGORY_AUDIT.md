@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 969 update — config-precedence + env-typo + origins audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A malformed numeric `OTEDAMA_*` env var (e.g. `300w`, `300,5`) silently ignored — operator thinks it's applied, file value stands. | ✅ Clean: unparseable values are never applied, and `EnvWarnings` surfaces each one to stderr; both `ResolveWithOrigins` and `EnvWarnings` iterate the same `numericEnvVars` slice so the applied set and warned set cannot drift. |
+| M | Layer precedence inverted or inconsistent — env overriding flags, file overriding env. | ✅ Clean: file → env → flags → OS-default, applied strictly in that order; `Origins` records the winning layer per field (`config show --origin`). |
+| M | Empty-string env var treated as "set" and blanking a higher-priority value. | ✅ Clean: every `getEnv` check requires `v != ""` before applying — empty env cannot shadow a file value. |
+| M | Missing `--data-dir`/`OTEDAMA_DATA_DIR` leaving `DataDir` empty instead of the OS default. | ✅ Clean: layer 4 fills `config.DefaultDataDir()` only when no higher layer set a value. |
+
+All packages build, vet, and test green.
