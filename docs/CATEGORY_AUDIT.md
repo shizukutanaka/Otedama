@@ -1779,3 +1779,15 @@ All packages build, vet, and test green.
 | M | Blank imports (`import _ "..."`) with undocumented side effects — hidden init() work the reader can't see. | ✅ Clean: 2 sites, both `_ "internal/poolproto/stratumv1"` — the documented self-registration import (V1's init() registers its dialer into the poolproto registry); no hidden side effect beyond the deliberate one. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 723 update — builtin-adoption + chan-convention + slices-delete audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `clear`/`min`/`max` builtin misuse or non-adoption — `clear` on a map other code still views (wiping shared state), or hand-rolled clamps where the builtins belong. | ✅ Clean: the single `clear` (`opts.activity` in the arbitration loop) wipes a private per-round scratch map that is rebuilt each iteration — no shared view exists; the `min`/`max` sites are the canonical clamp idiom (yield floors, extranonce2 bound, Levenshtein DP). |
+| M | `chan bool` for pure signals — a bool channel implying a payload it doesn't carry (zero-size `struct{}` is the convention). | ✅ Uniform: zero `chan bool` — all ~40 signal channels (`done`, `started`, `runDone`, limiter tokens, test gates) are `chan struct{}`. |
+| P | `slices.Delete*`/`Insert`/`Replace` tail-pointer retention — a removed element's slot still referencing a live object (GC pin). | ✅ Absent: zero prod `slices.Delete`/`DeleteFunc`/`Insert`/`Replace` sites — removal goes through the bounded-FIFO `s[1:]` pattern (no tail retention beyond the cap) or map `delete`. |
+
+All packages build, vet, and test green.
