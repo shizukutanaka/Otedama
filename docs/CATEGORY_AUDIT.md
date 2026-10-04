@@ -4395,6 +4395,20 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 850 update — milestone checkpoint (~280 classes)
+
+Session 850 marks another 50-session span (s800→s850). Cumulative mechanical audit coverage is now ~280 defect classes across the entire tree, all clean/benign. Real defects fixed in this arc remain the two from earlier milestones (C1 control-char gap #809, XDG systemd-manager env #807). Forward plan: continue new-class sweeps, biweekly ecosystem rechecks, and scrutiny of any code landing on master.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `==`/`!=` on structs containing non-comparable fields — silent compile-time trap in future edits (values, not reachability). | ✅ Clean: no struct-equality comparisons; comparison sites use scalar fields/IDs. |
+| M | Non-comparable key types in maps (`map[[]T]`, `map[func]`, `map[[N][]T]`). | ✅ Clean: absent — map keys are strings/ints/pointers. |
+| S | Direct `slog.*`/`log.*` calls bypassing the logger wrapper — divergent format/level routing. | ✅ Clean: zero direct `slog`/`log` calls — all logging via the injected `logger.Logger` (session 733 verified the wrapper contract). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 877 update — runtime-surface + tuning-override + cpu-default audit
 
 | Cat | Finding | Disposition |
