@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1064 update — test-meta family 4 (cwd coupling + test-init + discarded results)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `os.Chdir` in tests (cwd-coupled, breaks parallel execution and sibling tests). | ✅ Clean: zero occurrences; tests use `t.TempDir()` + absolute paths. |
+| M | `init()` side effects inside `*_test.go` (test-order dependence). | ✅ Clean: zero `func init()` in test files. |
+| M | Discarded call results masking weak assertions (`_ = f()` with no check). | ✅ Clean: all ~30 discard sites are contract-correct — fuzz no-panic boundaries (`cfg.Validate()` proves the decoder's output is validatable, the contract is degrade-to-default), deterministic `rand.Read` fills, `httptest` writes, leader-claim setup. The one `_ = recover()` (logger_extras) encodes "must panic somewhere" — a nil adapter return still panics at the call site, so the fail-loud contract holds. |
+| S | Timing-dependent sleeps in tests. | ✅ Benign: the single `time.Sleep(50ms)` (fetcher leader-claim) is a producer-priming delay before an assertion-independent wait on a channel — failure would make the test slower, not wrong. |
+
+All packages build, vet, and test green.
