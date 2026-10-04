@@ -1582,6 +1582,16 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
+		return 0, miner.Hash{}, fmt.Errorf("engine: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
+	}
+	// SetupConnectionSuccess.flags is the subset of offered flags the server
+	// requires. We offer none, so any nonzero value is unhonorable — fail
+	// closed rather than silently proceed (sv2-apps #695 class).
+	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
+		return 0, miner.Hash{}, fmt.Errorf("engine: pool requires flags 0x%08x outside offered set 0x%08x",
+			msg.SetupConnectionSuccess.Flags, sc.Flags)
+	}
 
 	var hashRate float32
 	for _, w := range workers {
@@ -1616,6 +1626,10 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+	}
+	if msg.OpenMiningChannelSuccess.ReqID != omc.ReqID {
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel response echoes req_id %d, sent %d",
+			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes

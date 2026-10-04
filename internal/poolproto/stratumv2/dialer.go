@@ -172,6 +172,10 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if msg.OpenMiningChannelSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during channel open", f.Header.MsgType)
 	}
+	if msg.OpenMiningChannelSuccess.ReqID != omc.ReqID {
+		return nil, fmt.Errorf("stratumv2: channel response echoes req_id %d, sent %d",
+			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
+	}
 
 	sess := &session{
 		conn:   conn,
