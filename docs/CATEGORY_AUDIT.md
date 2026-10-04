@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 924 update — hysteresis-space + held-accuracy + switch-flag audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hysteresis applied in raw yield while the selection is policy-scored — a "better" raw yield with a worse privacy/environment rating flips the incumbent. | ✅ Clean: the margin comparison runs in `policyScore` space (`threshold := incScore * (1+h)`), so "meaningful improvement" matches what "better" means under the active policy. |
+| M | `Held` flagged even when the incumbent itself was the best candidate — false "yield left on the table" reporting. | ✅ Clean: `held := best.stream.ID != c.stream.ID` — only set when a *different*, higher-scoring stream was suppressed. |
+| S | `SwitchedFromID` set when the device stayed — phantom switch records. | ✅ Clean: only assigned when `previous.Stream != "" && previous.Stream != best.stream.ID`. |
+
+All packages build, vet, and test green.
