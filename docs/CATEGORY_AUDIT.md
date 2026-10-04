@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 993 update — worker-lifecycle + nonce-partition + ntime-roll + share-drop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Double `Start` spawning a second grind fleet, or `Stop` on a never-started worker deadlocking. | ✅ Clean: `started` CAS panics on double-start (init invariant); `Stop` is cancel-nil-safe and only waits on `done` when Start ran. |
+| M | Threads colliding in nonce space — two threads hashing identical headers (duplicate shares the pool rejects). | ✅ Clean: residue-class partition — each thread starts at `NonceOffset + threadID` and advances by `NonceStep`; on job change both `localWork` and `workVer` are re-read and the nonce resets to the thread's own class. |
+| M | u32 nonce wrap re-hashing identical headers for the rest of the job. | ✅ Clean: on wrap `ntimeRoll++` and `h.Time` advances (standard ntime roll, pool-accepted within the job's validity window). |
+| M | Grind threads mutating shared job state — `h.Time += ntimeRoll` corrupting `localWork`. | ✅ Clean: `h` is a per-batch copy of `localWork.Header`; `*Work` is treated read-only and only ever pointer-replaced via `SetWork`. |
+| M | A blocked share consumer stalling the hash loop, or a dropped share vanishing silently. | ✅ Clean: shares channel is `Threads*4`-buffered with a non-blocking send; every drop increments `dropCount` (observable, never silent). |
+
+All packages build, vet, and test green.
