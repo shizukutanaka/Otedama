@@ -1818,6 +1818,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 884 update — net-poll + bufio-surface + reset-target audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `net.Poller`/epoll/kqueue/raw `select` syscalls — non-portable poller hacks. | ✅ Clean: absent — the runtime's netpoller is the only poll mechanism. |
+| M | `bufio` `ReadBytes`/`Peek`/`Unread*` in prod — unbounded buffering or invalid peek/consume ordering. | ✅ Clean: `ReadSlice` is the only bufio read primitive in prod (ceiling + copy contract documented in stratumv1); no Peek/Unread. |
+| S | `Reset` called on the wrong pooled target — state leakage across borrows. | ✅ Clean: the only `Reset` is `h.Reset()` on a `hash.Hash` obtained from `hashPool` — the reset-on-borrow contract verified at s874. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
