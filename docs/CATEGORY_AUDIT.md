@@ -2106,6 +2106,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 910 update — domain-type + yield-dup + qualified-ref audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Domain-type census — ambiguous same-name types on the arbitration path. | ✅ Clean: 6 concrete types (Share/Job/Session/Yield/Quote) — all referenced by qualified name at every site. |
+| M | `arbitration.Yield` vs `provider.Yield` — two types with the same name diverging silently. | ✅ Intended layering, documented: `provider.Yield` carries gross+net (fee-aware), `arbitration.Yield` is the engine-facing SatsPerSecond+Confidence view; the boundary is `updateStream`'s explicit conversion, and every reference is qualified — no unqualified `Yield` anywhere. |
+| S | `Quote`/`Job`/`Share`/`Session` fields with zero-value ambiguity. | ✅ Clean: each field's godoc specifies its zero-value contract (verified at s629); no field reads a zero value as a meaningful state. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
