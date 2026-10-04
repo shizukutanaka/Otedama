@@ -849,7 +849,7 @@ func TestFetcher_Fetch_CoalescesConcurrentCalls(t *testing.T) {
 
 // TestFetcher_Fetch_CoalescedCallerHonorsOwnContext verifies that a caller
 // which coalesces onto an in-flight fetch is released when its own context is
-// cancelled, rather than being pinned to the leader's lifetime.
+// canceled, rather than being pinned to the leader's lifetime.
 func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	// The leader's request takes ~200ms; a fixed delay (rather than an
 	// indefinite block) keeps the server's in-flight request bounded so the
@@ -885,25 +885,13 @@ func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	start := time.Now()
 	err := f.Fetch(ctx)
 	if err == nil {
-		t.Fatal("coalesced caller with cancelled context should return an error")
+		t.Fatal("coalesced caller with canceled context should return an error")
 	}
 	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
 		t.Errorf("coalesced caller blocked %v, expected prompt (~30ms) context cancellation", elapsed)
 	}
 
 	<-leaderDone // let the leader finish before the deferred srv.Close()
-}
-
-// parseFloat is the strict numeric parser used by the rates package: it
-// mirrors strconv.ParseFloat so test fixtures exercise the same semantics as
-// the production extract functions (rejects trailing garbage like "95000foo").
-func parseFloat(s string, out *float64) (int, error) {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, err
-	}
-	*out = v
-	return 1, nil
 }
 
 // ============================================================================
@@ -1088,7 +1076,7 @@ outer:
 
 // TestStartBackground_GoroutineTerminatesOnContextCancel verifies that the
 // background refresh goroutine launched by StartBackground actually exits when
-// its context is cancelled — i.e. it does not leak. A goroutine that keeps
+// its context is canceled — i.e. it does not leak. A goroutine that keeps
 // running after its owning context is done is the classic Go leak (it pins its
 // stack, its Fetcher, and any captured resources for the life of the process).
 //
@@ -1162,5 +1150,29 @@ func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
 	final := waitForGoroutines(baseline, 2*time.Second)
 	if final > baseline {
 		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
+	}
+}
+
+func TestFetcher_RedirectRefused(t *testing.T) {
+	// A rate source answering with a redirect (even to a valid-looking
+	// URL) must fail rather than follow it — https→http downgrade on a
+	// price feed lets a network attacker inject a manipulated rate.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://evil.example/price", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	f := NewFetcher(50000)
+	f.sources = []Source{{
+		Name: "redirecting",
+		URL:  srv.URL,
+		extract: func(b []byte) (float64, error) {
+			t.Error("extract must not be reached on a redirect")
+			return 0, nil
+		},
+	}}
+
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch should refuse to follow a redirect")
 	}
 }

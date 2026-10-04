@@ -79,6 +79,11 @@ seed is unrecoverable. This is by design: the seed is encrypted with
 scrypt + AES-GCM, and the passphrase is the only decryption key.
 See `docs/adr/ADR-001-non-custodial-wallet.md` for why.
 
+Related CLI tools: `otedama wallet verify` confirms a written-down
+recovery phrase derives to the stored wallet without decrypting
+`wallet.dat`; `otedama wallet change-passphrase` rotates the passphrase
+once you are able to unlock it. See `docs/API.md#otedama-wallet`.
+
 ---
 
 ## Otedama uses 100% CPU and the system becomes unresponsive
@@ -94,10 +99,12 @@ scheduler does not yield to other processes the way OS processes do.
 
 ### Fix
 
-Limit the number of mining threads:
+Limit the CPU cores Go runs goroutines on — `GOMAXPROCS` caps how many
+grinding threads execute in parallel (workers spawn one per
+`runtime.NumCPU()`, but at most `GOMAXPROCS` run at once):
 
 ```bash
-otedama run --bitcoin-address bc1q... --worker-threads 4
+GOMAXPROCS=4 otedama run --bitcoin-address bc1q...
 ```
 
 Or set a CPU limit at the OS level:
@@ -107,8 +114,13 @@ Or set a CPU limit at the OS level:
 - **Windows:** Task Manager > Details > right-click otedama.exe > Set
   affinity.
 
-For laptops, consider the `service` option which binds Otedama to an
-idle scheduling class automatically.
+On laptops you can also run Otedama under a systemd user unit or launchd
+agent via `otedama service install`, then apply the OS-level limits above
+to the installed unit. **Correction (session 491):** this paragraph
+previously claimed the `service` option "binds Otedama to an idle
+scheduling class automatically" — no service definition sets a scheduling
+class or priority; the units only provide restart-on-failure and
+auto-start.
 
 ---
 
@@ -215,10 +227,13 @@ If this still fails, ensure `go env GOPROXY` includes `https://proxy.golang.org`
 
 ## Still stuck?
 
-1. Re-run `otedama doctor` with the highest log level:
-   ```bash
-   otedama --log-level=debug doctor
-   ```
+1. Re-run `otedama doctor` — it already prints every check result
+   (there is no quieter mode; **Correction (session 491):** the previous
+   suggestion `otedama --log-level=debug doctor` could not work — flags
+   belong after the subcommand, so that invocation fails with
+   `unknown subcommand`, and `doctor` defines no `--log-level` flag
+   anyway; only `run` and `service install` do). For verbose run-time
+   logs, use `otedama run --log-level=debug ...`.
 2. Search existing issues:
    https://github.com/shizukutanaka/Otedama/issues
 3. Open a new issue using the bug-report template. Include:
