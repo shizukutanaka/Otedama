@@ -2130,6 +2130,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 912 update — hal-sysfs + sysfs-boundary + capability-flag audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `readSysFile` reading unbounded sysfs content — OOM on a hostile file. | ✅ Clean: single-point `os.ReadFile` on the kernel-controlled `/sys/class/drm` tree (fixed `drmBasePath` constant); every value is trimmed and routed through `Identity.Validate` before use. |
+| M | Missing `/sys/class/drm` on a headless host — Enumerate panics. | ✅ Clean: `os.ReadDir` error propagates as an error return; the device-level driver failure is tolerated by `device.go:212` (one driver failing doesn't kill the enumeration). |
+| S | `SHA256d: true` on a detected GPU — spawns a duplicate CPU pool per GPU. | ✅ Clean: deliberately `false` with a long comment documenting the oversubscription fix; `GeneralCompute: true` (Akash-only, no worker threads). |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
