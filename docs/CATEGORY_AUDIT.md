@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1055 update — engine-test e2e-matrix + regression-pin coverage + wallet-print-guard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Session E2E paths (handshake→job→submit) unverified. | ✅ Clean: V1 subscribe→notify→submit accept + reject + transition-benign; V2 handshake→mine + job echo; every handshake failure path (write/read/decode/unexpected ×2 phases); reconnect multi-pool + multi-addr failover + backoff-reset; pool-closes/dial-error/ctx-cancel. |
+| M | Wallet phrase printing unguarded (re-print or log leak). | ✅ Clean: new wallet prints once, **existing never re-prints**, **`MnemonicNeverReachesLogger`** pins the log-boundary, empty passphrase/dir no-ops, verify-backup failure matrix + TTY guards — the s498 fix is fully regression-pinned. |
+| M | Curtailment/arb-pause state leaks into work application. | ✅ Clean: gate **blocks work application** end-to-end, curtailed job silenced/ignored both protocols, liveness curtailed/all-paused → healthy (not stalled), `SkipsArbitrationPausedWorker` + `ResumesAfterArbResume` + `ReconcileArbPauses` (pins s494). |
+| M | Shipped-fix regressions unpinned (each fix's claim unverified). | ✅ Clean — every engine fix has a dedicated test: batch-accept credits pool count, future-seq accept/reject ignored, StoreBoundedJob bound, SubmitLimiter burst+refill, retarget-reject excluded, nominal_hashrate declared, unimplemented-scheme fails fast, v2tls attempts real TLS, ntime roll, transitionReject benign, merkle+EN2 roll. |
+| M | Metrics/monitor gaps (rate publish, stall warn, acceptance). | ✅ Clean: rate gauge post/pre-fetch branches, source-health untouched before fetch, difficulty zero-hashrate→zero interval + zero-difficulty no-op; hashrate window interval/stall/counter-reset-saturation; stall + starvation warn **once** per episode; acceptance no-div-zero + warning; latency quantiles/clamps/ring. |
+
+All packages build, vet, and test green.
