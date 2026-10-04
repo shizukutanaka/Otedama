@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 902 update — crypto-import + fips-godebug + cipher-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `crypto/*` import census — custom or weak crypto on the wire. | ✅ Clean: 13 stdlib packages only (aes, cipher, ecdh, ecdsa, elliptic, hmac, rand, sha256, sha512, subtle, tls, x509, x509/pkix); md5/sha1/des/rc4 absent (s645/727/792). |
+| M | `tlsmlkem=1` godebug forcing hybrid-PQ KEX — compile failure on go1.23.x CI leg. | ✅ Intended: `go 1.22` + `toolchain go1.24.0` pin documented in go.mod + GODEBUG_NOTES.md (s263/465); the 1.23.x CI failure is the known signature, not a defect. |
+| S | `crypto/x509/pkix` or `x509` use bypassing `tls.Config` — custom cert parsing. | ✅ Clean: both imports only appear in the doctor fingerprint + Noise NX cert handling — the standard code paths. |
+
+All packages build, vet, and test green.
