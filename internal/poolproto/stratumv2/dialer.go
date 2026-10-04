@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -247,7 +248,7 @@ func (s *session) readLoop(ctx context.Context) {
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
-			JobID:      fmt.Sprintf("%d", j.JobID),
+			JobID:      strconv.FormatUint(uint64(j.JobID), 10),
 			Version:    j.Version,
 			PrevHash:   prevHash,
 			MerkleRoot: j.MerkleRoot,
