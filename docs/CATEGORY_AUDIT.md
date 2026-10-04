@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 857 update — counter-inc + interface-surface + wrap-reach audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `seqNum`/`counter`/`nonce` `++` arithmetic — wraparound to a previously-sent value on uint32 fields. | ✅ Clean: sole counter increment is `seqNum++` (engine/run.go:1191) — a u32 at ≤10 submits/s needs ~13 years to wrap, and the future-sequence guard tolerates any residual case (sessions 738, 772). |
+| S | Interfaces too large (ISP violation) or too small to be useful — bad API boundaries. | ✅ Clean: 12 interface declarations, all 1–4 methods — `Clock`, `Connection`, `Session`, `Dialer`, `Provider`, `RateSource`, `NetworkHashrateSource`, plus file-local `encodable`/`rateStats`; proper ISP. |
+| M | Counter incremented then read unsynchronized — torn state between `++` and `Load`. | ✅ Clean: `seqNum` is guarded by the session mutex on both paths; share counters are `atomic.Int64` (s739). |
+
+All packages build, vet, and test green.
