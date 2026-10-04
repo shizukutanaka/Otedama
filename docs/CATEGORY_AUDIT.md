@@ -2810,6 +2810,19 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1156 update — panic-style census
+
+`panic(literal)` vs `panic(fmt.Sprintf(...))` vs `panic(errors.New(...))` —
+argument-style consistency for programmer-contract violations.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 12 sites: 3 literal strings (double-start, nil/unknown dialer) and 9 `fmt.Sprintf` for values needing substitution; zero `errors.New` needed since all messages are static or interpolated; all are documented contract violations, matching the panic-contract audit | S |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
