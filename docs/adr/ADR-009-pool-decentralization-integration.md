@@ -1460,3 +1460,7 @@ release-level change affecting this ADR's client-side scope.
 
 Quiet window confirmed — no action. ADR-009's proposal sections stand
 as written; the next recheck is due around session 1200.
+
+## Session-1201 ecosystem update (2026-10-02)
+
+Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
