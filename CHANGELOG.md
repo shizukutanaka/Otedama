@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1315 — gocyclo wire/codec 層の分解、5/15 件)
+
+**変更.** 循環複雑度 >15 の残存クラスを段階的に解消。第 1 弾はワイヤ/コーデック
+層の 5 関数: `stratum.DispatchFrame` を 12 ケース switch から `frameDecoders`
+テーブル検索へ、`stratumv1 session.dispatch` をハンドラーメソッド群へ、
+`stratumv2 session.readLoop` のジョブ組立状態を `sv2JobAssembler` 構造体へ、
+`stratumv1 parseNotify` を `unmarshalNotifyParams` + `decodeNotifyJob` へ、
+`btccrypto.ValidateBech32Address` を `decodeBech32String` + `classifyWitnessProgram`
+へ分割。動作は不変（FIFO 退避・clean-jobs・厳格 decode・BIP-350 チェックサム選択
+を保持）。gocyclo 検出数は 15→10。
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:

@@ -4928,3 +4928,17 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+---
+
+## Session 1315 update — gocyclo decomposition: wire/codec layer (batch 1 of 3)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `stratum.DispatchFrame` — cyclo 25: 12-case switch repeating the decode-then-assign idiom per MsgType. | **S: fixed** — replaced with a `frameDecoders` table (`map[uint8]func([]byte, *Message) error`) + a single lookup; adding a message type is now one table entry, not a new case arm. Unknown types still route to `Message.Unknown`. |
+| S | `session.dispatch` (stratumv1) — cyclo 19: RPC parse + response matching + 5 notification handlers in one switch. | **S: fixed** — per-handler methods (`handleResponse`, `handleNotify`, `handleSetDifficulty`, `handleSetExtranonce`, `handleShowMessage`, `handleReconnect`); dispatch is now a 5-case method table. Behavior identical (drop-oldest notice, close-on-reconnect preserved). |
+| S | `session.readLoop` (stratumv2) — cyclo 19: frame loop + pending-job map + prevhash tracking + emit select interleaved. | **S: fixed** — extracted `sv2JobAssembler` state struct with `onNewMiningJob`/`onSetNewPrevHash`; the loop is now ReadFrame → DispatchFrame → one call per frame type. FIFO eviction and clean-jobs semantics preserved. |
+| S | `parseNotify` (stratumv1) — cyclo 25: 9-positional JSON unmarshal + strict hex/uint decode in one function. | **S: fixed** — split at the format boundary: `unmarshalNotifyParams` (positional → typed strings, incl. the 0/1 cleanJobs tolerance) and `decodeNotifyJob` (strict hex/uint decode). Strictness comments retained — a wrong merkle root is silent wasted work. |
+| M | `btccrypto.ValidateBech32Address` — cyclo 22: surface checks + charset decode + checksum + witness rules + classification. | **S: fixed** — split into `decodeBech32String` (BIP-173 surface: bc1 prefix, case, ≤90, hrp, ≥8 data chars, charset→ints), the checksum/witness-program middle section (BIP-350 const selection, `convertBits`, 2–40 length), and `classifyWitnessProgram` (v0: 20→P2WPKH/32→P2WSH; v1: 32→P2TR). |
+| L | gocyclo remains (10 findings after this batch) — `cmdRun` 17, `chooseForDevice` 16, `ResolveWithOrigins` 32, `Config.Validate` 26, `checkPoolReachability` 17, `runArbitrationLoop` 21, `Run` 24, `runReconnectLoop` 26, `runSession` 88, `runSessionV1` 53. | ⚠️ Noted: deferred to the next two lint batches — config/arbitration/doctor/cmd layer next, then the engine `run.go` monsters (state-plumbing risk warrants their own PR). |
+
+All packages build, vet, and test green (`stratum`, `poolproto/...`, `btccrypto` — the packages that exercise these paths).

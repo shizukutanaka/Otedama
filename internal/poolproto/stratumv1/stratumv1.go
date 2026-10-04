@@ -230,68 +230,95 @@ func (s *session) dispatch(line []byte) {
 	}
 	// Response (has id, no method).
 	if msg.Method == "" && msg.ID != nil {
-		id := msg.uintID()
-		s.pendingMu.Lock()
-		ch, ok := s.pending[id]
-		delete(s.pending, id)
-		s.pendingMu.Unlock()
-		if ok {
-			ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
-			close(ch)
-		}
+		s.handleResponse(msg)
 		return
 	}
 	// Notification or request from pool.
 	switch msg.Method {
 	case "mining.notify":
-		job, err := parseNotify(msg.Params)
-		if err != nil {
-			return
-		}
-		s.completeV1Job(&job)
-		s.sendJob(&job)
+		s.handleNotify(msg.Params)
 	case "mining.set_difficulty":
-		if d, ok := parseDifficulty(msg.Params); ok {
-			s.difficulty.Store(float64ToUint64(d))
-		}
+		s.handleSetDifficulty(msg.Params)
 	case "mining.set_extranonce":
-		// Some pools rotate extranonce mid-session. Update our copy.
-		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1.Store(&en1)
-			s.extranonce2Size.Store(int64(sz))
-		}
+		s.handleSetExtranonce(msg.Params)
 	case "client.show_message":
-		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
-		// Surface it via PoolNotices(); if the caller is not draining the
-		// channel, drop the oldest notice to avoid blocking the read loop.
-		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
-			select {
-			case s.noticeCh <- notice:
-			default:
-				select {
-				case <-s.noticeCh:
-				default:
-				}
-				select {
-				case s.noticeCh <- notice:
-				default:
-				}
-			}
-		}
+		s.handleShowMessage(msg.Params)
 	case "client.reconnect", "mining.reconnect":
-		// The pool is asking us to move to another node (load balancing,
-		// maintenance, failover). Record the directive, then end the
-		// session cleanly: closing the connection makes the read loop
-		// return and Jobs() close, which is exactly the signal the
-		// reconnect machinery uses to re-dial the configured pool list.
-		// We deliberately do NOT follow the pool-supplied Host:Port — see
-		// reconnectDirective for the rationale.
-		d := parseReconnect(msg.Params)
-		s.lastReconnect.Store(&d)
-		go s.Close()
+		s.handleReconnect(msg.Params)
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
 	}
+}
+
+// handleResponse matches a response to its pending call and delivers it.
+func (s *session) handleResponse(msg rpcMessage) {
+	id := msg.uintID()
+	s.pendingMu.Lock()
+	ch, ok := s.pending[id]
+	delete(s.pending, id)
+	s.pendingMu.Unlock()
+	if ok {
+		ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
+		close(ch)
+	}
+}
+
+func (s *session) handleNotify(params json.RawMessage) {
+	job, err := parseNotify(params)
+	if err != nil {
+		return
+	}
+	s.completeV1Job(&job)
+	s.sendJob(&job)
+}
+
+func (s *session) handleSetDifficulty(params json.RawMessage) {
+	if d, ok := parseDifficulty(params); ok {
+		s.difficulty.Store(float64ToUint64(d))
+	}
+}
+
+func (s *session) handleSetExtranonce(params json.RawMessage) {
+	// Some pools rotate extranonce mid-session. Update our copy.
+	if en1, sz, ok := parseSetExtranonce(params); ok {
+		s.extranonce1.Store(&en1)
+		s.extranonce2Size.Store(int64(sz))
+	}
+}
+
+func (s *session) handleShowMessage(params json.RawMessage) {
+	// Pool is sending an operator notice (e.g. "maintenance in 10 min").
+	// Surface it via PoolNotices(); if the caller is not draining the
+	// channel, drop the oldest notice to avoid blocking the read loop.
+	notice, ok := parseShowMessage(params)
+	if !ok || notice == "" {
+		return
+	}
+	select {
+	case s.noticeCh <- notice:
+	default:
+		select {
+		case <-s.noticeCh:
+		default:
+		}
+		select {
+		case s.noticeCh <- notice:
+		default:
+		}
+	}
+}
+
+func (s *session) handleReconnect(params json.RawMessage) {
+	// The pool is asking us to move to another node (load balancing,
+	// maintenance, failover). Record the directive, then end the
+	// session cleanly: closing the connection makes the read loop
+	// return and Jobs() close, which is exactly the signal the
+	// reconnect machinery uses to re-dial the configured pool list.
+	// We deliberately do NOT follow the pool-supplied Host:Port — see
+	// reconnectDirective for the rationale.
+	d := parseReconnect(params)
+	s.lastReconnect.Store(&d)
+	go s.Close()
 }
 
 // maxReconnectWaitSeconds caps a pool-supplied reconnect wait so a

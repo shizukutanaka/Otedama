@@ -31,6 +31,16 @@ import (
 // V1 mining.notify format:
 //
 //	[job_id, prevhash, coinb1, coinb2, merkle_branch, version, nbits, ntime, clean_jobs]
+//
+// notifyStrings holds the raw JSON fields of a mining.notify before
+// the hex/binary decoding pass.
+type notifyStrings struct {
+	jobID, prevHashHex, coinb1Hex, coinb2Hex string
+	merkleBranchHexs                         []string
+	versionHex, nbitsHex, ntimeHex           string
+	cleanJobs                                bool
+}
+
 func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -39,67 +49,40 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if len(p) < 9 {
 		return poolproto.Job{}, fmt.Errorf("notify: expected 9 params, got %d", len(p))
 	}
-
-	var (
-		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
-		merkleBranchHexs                                                         []string
-		cleanJobs                                                                bool
-	)
-	if err := json.Unmarshal(p[0], &jobID); err != nil {
+	ns, err := unmarshalNotifyParams(p)
+	if err != nil {
 		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
-		return poolproto.Job{}, err
-	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — the session folds
-	// these into the job's MerkleRoot (see completeV1Job). V1 notify has
-	// no pool-supplied merkle field, so malformed hex is fatal: an empty
-	// coinb or dropped branch yields a wrong root and every share fails
-	// self-verification — silent wasted work. (The "pool-side merkle"
-	// path on poolproto.Job is the V2 NewMiningJob wire field, not V1.)
-	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[4], &merkleBranchHexs); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[5], &versionHex); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[6], &nbitsHex); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[7], &ntimeHex); err != nil {
-		return poolproto.Job{}, err
-	}
-	if err := json.Unmarshal(p[8], &cleanJobs); err != nil {
-		// Some pools encode this as 0/1 instead of true/false; tolerate.
-		var n int
-		if err2 := json.Unmarshal(p[8], &n); err2 == nil {
-			cleanJobs = n != 0
-		} else {
-			return poolproto.Job{}, err
-		}
 	}
 
+	job, err := decodeNotifyJob(ns)
+	if err != nil {
+		return poolproto.Job{}, err
+	}
+	return job, nil
+}
+
+// decodeNotifyJob runs the hex/binary decode pass over the parsed notify
+// fields. The decodes are strict — a malformed coinb or dropped merkle
+// branch yields a wrong root and every share fails self-verification:
+// silent wasted work. (The "pool-side merkle" path on poolproto.Job is
+// the V2 NewMiningJob wire field, not V1; V1 builds its own from the
+// negotiated extranonce.)
+func decodeNotifyJob(ns notifyStrings) (poolproto.Job, error) {
 	job := poolproto.Job{
-		JobID:      jobID,
-		CleanJobs:  cleanJobs,
+		JobID:      ns.jobID,
+		CleanJobs:  ns.cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	b, err := hex.DecodeString(coinb1Hex)
+	b, err := hex.DecodeString(ns.coinb1Hex)
 	if err != nil || len(b) == 0 {
 		return poolproto.Job{}, fmt.Errorf("notify: coinb1: malformed or empty")
 	}
 	job.Coinb1 = b
-	if b, err = hex.DecodeString(coinb2Hex); err != nil || len(b) == 0 {
+	if b, err = hex.DecodeString(ns.coinb2Hex); err != nil || len(b) == 0 {
 		return poolproto.Job{}, fmt.Errorf("notify: coinb2: malformed or empty")
 	}
 	job.Coinb2 = b
-	for _, h := range merkleBranchHexs {
+	for _, h := range ns.merkleBranchHexs {
 		b, err := hex.DecodeString(h)
 		if err != nil || len(b) != 32 {
 			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch: malformed or wrong length")
@@ -109,20 +92,20 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	// Header fields are required: a malformed value would zero-fill and
 	// produce a job whose every share fails self-verification — silent
 	// wasted work until the next notify. Reject the notify instead.
-	v, err := strconv.ParseUint(versionHex, 16, 32)
+	v, err := strconv.ParseUint(ns.versionHex, 16, 32)
 	if err != nil {
 		return poolproto.Job{}, fmt.Errorf("notify: version: %w", err)
 	}
 	job.Version = uint32(v)
-	if v, err = strconv.ParseUint(nbitsHex, 16, 32); err != nil {
+	if v, err = strconv.ParseUint(ns.nbitsHex, 16, 32); err != nil {
 		return poolproto.Job{}, fmt.Errorf("notify: nbits: %w", err)
 	}
 	job.NBits = uint32(v)
-	if v, err = strconv.ParseUint(ntimeHex, 16, 32); err != nil {
+	if v, err = strconv.ParseUint(ns.ntimeHex, 16, 32); err != nil {
 		return poolproto.Job{}, fmt.Errorf("notify: ntime: %w", err)
 	}
 	job.NTime = uint32(v)
-	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
+	if b, err := hex.DecodeString(ns.prevHashHex); err == nil && len(b) == 32 {
 		copy(job.PrevHash[:], b)
 	} else {
 		return poolproto.Job{}, fmt.Errorf("notify: prevhash: malformed or wrong length")
@@ -130,6 +113,52 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	// MerkleRoot is completed by the session (completeV1Job) once the
 	// negotiated extranonce1/2 are folded into the coinbase.
 	return job, nil
+}
+
+// unmarshalNotifyParams decodes the nine positional mining.notify fields
+// into their string/scalar forms. p[2] coinb1, p[3] coinb2,
+// p[4] merkle_branch — the session folds these into the job's MerkleRoot
+// (see completeV1Job). V1 notify has no pool-supplied merkle field, so
+// malformed hex is fatal: an empty coinb or dropped branch yields a wrong
+// root and every share fails self-verification — silent wasted work. (The
+// "pool-side merkle" path on poolproto.Job is the V2 NewMiningJob wire
+// field, not V1.)
+func unmarshalNotifyParams(p []json.RawMessage) (notifyStrings, error) {
+	var ns notifyStrings
+	if err := json.Unmarshal(p[0], &ns.jobID); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[1], &ns.prevHashHex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[2], &ns.coinb1Hex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[3], &ns.coinb2Hex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[4], &ns.merkleBranchHexs); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[5], &ns.versionHex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[6], &ns.nbitsHex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[7], &ns.ntimeHex); err != nil {
+		return ns, err
+	}
+	if err := json.Unmarshal(p[8], &ns.cleanJobs); err != nil {
+		// Some pools encode this as 0/1 instead of true/false; tolerate.
+		var n int
+		if err2 := json.Unmarshal(p[8], &n); err2 == nil {
+			ns.cleanJobs = n != 0
+		} else {
+			return ns, err
+		}
+	}
+	return ns, nil
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
