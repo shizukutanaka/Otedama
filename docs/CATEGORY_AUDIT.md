@@ -3138,6 +3138,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1191 update — issue-template parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Commands/flags referenced in ISSUE_TEMPLATE | ✅ Clean — `otedama doctor` (doctor.go:17) and `--bitcoin-address` (run.go:67, doctor.go:19) both exist |
+| S | Template structure | ✅ Clean — bug_report.yml + feature_request.yml well-formed; required validations, hardware dropdown, scrub-secrets + non-custodial acknowledgements present |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
