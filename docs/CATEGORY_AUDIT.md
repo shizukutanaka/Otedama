@@ -1731,3 +1731,11 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1200 update — mechanical-audit checkpoint
+
+The ledger holds 93 merged `## Session` entries on master covering roughly 700+ defect/drift classes. Sessions 1121–1199 (~78 entries) live on open, unmerged audit PRs — the append-conflict sweep convention applies when one lands. Findings since s1163: five real fixes shipped (SUSTAINABILITY flags, CLAUDE.md workflow list, OSS-Fuzz readiness, and this round's dead `main.*` ldflags in 3 workflows) plus three honest non-defects noted (stale CHANGELOG `[Unreleased]`, kubeconfig secret-name divergence, skills inventory gap, no-security-supported-alpha policy).
+
+All packages build, vet, and test green.
