@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 977 update — doctor-checkset + perm-gate + cross-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | The "17 parallel checks" count in docs drifting from `DefaultChecks`. | ✅ Clean: the slice lists exactly 17 — config, address, failover, datadir, wallet, reachability, diversity, endpoint-diversity, encryption, TLSCA, payout scheme, power, profitability floor, hardware, network, clock skew, env vars. |
+| M | doctor inspecting a different data dir than the engine uses — `DataDir` empty vs default-resolved mismatch. | ✅ Clean: `checkDataDir`/`checkWallet` mirror `config.DefaultDataDir()` exactly; empty with no home → Skip, not a false Fail. |
+| M | A restored 0644 wallet.dat passing the enclosing-directory check — readable encrypted seed. | ✅ Clean: `checkWallet` separately warns on `perm&0o077` for the file itself (non-Windows); fingerprint display is best-effort/non-fatal; constants mirrored without importing crypto. |
+| M | `tls_ca_file` set on a non-`stratum+tls://` pool silently ignored at dial time, or doctor and the dialer disagreeing on "valid PEM". | ✅ Clean: warns on scheme mismatch; validates with the same `x509.NewCertPool().AppendCertsFromPEM` the dialer uses. |
+| M | `power_watts` set without `electricity_price_per_kwh` (or vice versa) — a silently-dead cost metric the operator believes is live. | ✅ Clean: `checkPowerEconomics` validates the pair as cross-field intent, not each field alone; plaintext-pool warning redacts userinfo via `StripUserinfo` before display. |
+
+All packages build, vet, and test green.
