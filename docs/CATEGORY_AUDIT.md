@@ -2266,6 +2266,18 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 924 update — hysteresis-space + held-accuracy + switch-flag audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hysteresis applied in raw yield while the selection is policy-scored — a "better" raw yield with a worse privacy/environment rating flips the incumbent. | ✅ Clean: the margin comparison runs in `policyScore` space (`threshold := incScore * (1+h)`), so "meaningful improvement" matches what "better" means under the active policy. |
+| M | `Held` flagged even when the incumbent itself was the best candidate — false "yield left on the table" reporting. | ✅ Clean: `held := best.stream.ID != c.stream.ID` — only set when a *different*, higher-scoring stream was suppressed. |
+| S | `SwitchedFromID` set when the device stayed — phantom switch records. | ✅ Clean: only assigned when `previous.Stream != "" && previous.Stream != best.stream.ID`. |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 726 update — compiler-directive + pipe-fd + slog-attr audit
 
 | Cat | Finding | Disposition |
