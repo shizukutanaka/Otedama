@@ -1731,3 +1731,16 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1129 update — duplicate-error census
+
+Identical error literal text constructed at multiple sites — drift risk if
+one copy changes.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | 11 dup sets, all intra-package symmetric paths (lightning encrypt/decrypt mirror, V1/V2 dial-timeout, daemon 3-OS dispatch, engine V1/V2 connection-close) | ⚠️ Noted (intentional symmetry — same text = same failure mode; no cross-package copies) |
+
+All packages build, vet, and test green.
