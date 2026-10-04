@@ -1731,3 +1731,20 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1077 update — single-source-of-truth drift sweep
+
+Sweep for constants/literals defined independently in two or more
+production files where a rename on one side silently desynchronizes
+the other (doctor ↔ writer mirrors, shared magic numbers, env names).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Repeated 4+-digit numeric literals in prod code: only `1024` (4 files) — each is a purpose-local value (frame size, ring cap, batch size, byte limit), not a shared constant | ⚠️ Noted |
+| S | `wallet.dat`/`wallet.fingerprint` defined in both `internal/lightning/wallet.go` and `internal/doctor/checks.go` — deliberate documented mirror to keep doctor free of lightning's crypto deps; behavior pinned by `extras_test.go` wallet tests | ⚠️ Noted |
+| S | `OTEDAMA_WALLET_PASSPHRASE` referenced at 3 sites (run-flags env fallback, wallet command, docs parity) — all are the intended layered resolution path, not independent spellings | ⚠️ Noted |
+| S | Duplicated string literals census: all repeats are import paths or i18n package names — no domain string is spelled in two prod files | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
