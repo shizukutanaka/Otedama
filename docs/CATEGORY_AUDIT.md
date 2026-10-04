@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 928 update — registry-guard + detect-ctx + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Registry` silently accepting an empty driver set — confusing "no devices". | ✅ Clean: `NewRegistry()` constructor required; the zero value is unusable by design. Duplicate driver name + nil driver both rejected on `Register`. |
+| M | One slow/buggy driver's `Enumerate` stalling detection or dropping every device on any driver error. | ✅ Clean: per-driver goroutine + buffered results channel; a driver error is logged via `logger` and its siblings still contribute; `ctx.Done` returns partial results + `ctx.Err()`. |
+| M | A device with an invalid `Identity` (empty ID, bad family, forbidden char) entering `all`. | ✅ Clean: every enumerated device runs `Identity().Validate()` and rejected entries are logged and skipped — the `detect` path re-enforces the device-level contract. |
+
+All packages build, vet, and test green.
