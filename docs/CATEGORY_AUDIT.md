@@ -1731,3 +1731,17 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 1100 update — mechanical-audit checkpoint
+
+Checkpoint after the SSOT/decl-drift family and style-mechanics pass.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Ledger holds 93 session entries; ~27 mechanical defect-classes audited since the plumbing-drift family began (~6 in this most recent segment) | S |
+| S | Segment classes: build-tag parity, tag symmetry, pkg-name parity, identifier stutter, var-vs-const, (T,error) contract, commented-code, bare-bool — all clean or idiomatic | S |
+| S | Cumulative real defects found by the mechanical family: 6 (C1 control chars, XDG systemd env, AEAD reuse, wallet subcommand, base58 bound, RuntimeCollector) — all tracked as PRs | S |
+
+No defect requiring a code change. All packages build, vet, and test green.
