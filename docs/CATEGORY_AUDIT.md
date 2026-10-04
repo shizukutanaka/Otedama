@@ -2841,6 +2841,16 @@ All packages build, vet, and test green.
 | S | Doc flag surface drift | ✅ Clean — whole-docset `--flag` census (s1214) verified; remaining non-implemented flag names are OS-tool invocations or ADR-planned commands. |
 
 All packages build, vet, and test green.
+---
+## Session 1216 update — i18n catalog + locale-declaration parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Language set vs CLAUDE.md | ✅ Clean — `PriorityLanguages()` returns exactly the ten declared languages (en/ja/zh/ko/es/fr/de/pt/ru/ar); a unit test pins the count. Catalogs exist for all ten (en.go, ja.go, zh.go, ko.go, es.go, ru_ar.go, other_langs.go). |
+| S | BCP-47 doc claims | ✅ Clean — DetectLang handles tag→base-language fallback (`ja-JP`→`ja`) as documented; `--language` flag and `BCP 47` mentions in API.md/MIGRATING-FROM-V2.md match. |
+| S | Machine-translation claim | ⚠️ Noted — CLAUDE.md's "機械翻訳で1,000言語以上" is a policy statement about doc translation, not a code surface; no in-code claim contradicts it. |
+
+All packages build, vet, and test green.
 
 ---
 
