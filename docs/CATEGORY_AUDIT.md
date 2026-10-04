@@ -3160,6 +3160,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1194 update — README/API flag-surface parity census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | README `--flag` references | ✅ Clean — every flag named in README.md exists in the flag sets (doc-only `--help` is universal) |
+| S | Implemented flags undocumented in API.md | ✅ Clean — all 13 runtime flags (`--data-dir` … `--wallet-mnemonic-passphrase`) covered in `docs/API.md` |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
