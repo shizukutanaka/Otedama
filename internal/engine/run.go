@@ -36,6 +36,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1482,7 +1483,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID:      fmt.Sprintf("%d", capturedShare.JobID),
+					JobID:      strconv.FormatUint(uint64(capturedShare.JobID), 10),
 					Nonce:      capturedShare.Nonce,
 					NTime:      capturedShare.NTime,
 					ExtraNonce: capturedShare.ExtraNonce,
