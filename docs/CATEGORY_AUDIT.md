@@ -1731,3 +1731,15 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+
+---
+
+## Session 932 update — decoder-guard + length-before-alloc + scratch-read audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Zero-value `Decoder` silently usable with `MaxFrameSize=0` — every frame misrejected or, worse, unbounded. | ✅ Clean: `ReadFrame` rejects `MaxFrameSize <= 0` up front; `NewDecoder` always seeds `DefaultMaxFrameSize` (16 MiB, matching SRI). |
+| M | `make([]byte, MsgLength)` executed before the size bound — memory-exhaustion attack on a crafted header. | ✅ Clean: `total := HeaderSize + int(h.MsgLength)` is checked against `MaxFrameSize` *before* any allocation; the check precedes `make`. |
+| S | Discarded `DecodeHeader` error on the scratch buffer masking a real decode bug. | ✅ Clean: `d.scratch` is `[HeaderSize]byte` by construction, so `DecodeHeader`'s `len(src) < HeaderSize` guard is unreachable — the `_` discard is documented at the site. |
+
+All packages build, vet, and test green.
