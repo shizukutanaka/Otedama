@@ -1731,3 +1731,13 @@ All packages build, vet, and test green.
 | M | Deadlock-prone concurrency primitives — bare `select{}` (permanent block), `sync.Cond` (lost-wakeup risk), `context.AfterFunc` (callback-after-cancel races). | ✅ Absent: zero `select{}`, zero `sync.Cond`, zero `AfterFunc` — all blocking is `select`+`ctx.Done()` or `wg.Wait()` joins (the `fanin.go` closer idiom is canonical). |
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
+---
+## Session 1227 update — embed/testdata/fixture parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | go:embed directives | ✅ Clean — zero `//go:embed` in the tree; the one "embedded" asset (BIP-39 English wordlist) is a Go string literal with an init-time 2048-word integrity self-check. |
+| S | testdata fixtures | ✅ Clean — the only testdata content is one well-formed fuzz seed corpus at `testdata/fuzz/FuzzParseSubscribeResult/`, correctly named under the fuzzer it feeds. |
+| M | Fixture I/O surface | ✅ Clean — zero `os.Open`/`os.ReadFile` on testdata paths; no golden-file pattern in use (deterministic assertions instead). |
+
+All packages build, vet, and test green.
