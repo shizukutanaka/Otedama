@@ -2885,6 +2885,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1165 update — subcommand-invocation drift + gofmt hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | docs `otedama <sub>` invocations vs real subcommand set {run, version, config, service, doctor, wallet, completion, help} | ✅ Clean — `lightning` (ADR-007), `power`/`device` (ADR-008), `template` (ADR-009), `arb` (ADR-010) refs are all inside **Proposed** ADRs scoped to v3.5+; `migrate-from-v2`/`verson`/`rnu` hits are historical ledger prose recording the very fixes discussed |
+| M | `gofmt -l cmd internal` → 0 files | ✅ Clean — entire tree gofmt-formatted |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
