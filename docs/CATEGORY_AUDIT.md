@@ -6790,3 +6790,17 @@ All packages build, vet, and test green; lint clean on touched files.
 | S | Does script presence prove *amount* (a solo coinbase paying 1 sat to the user)? | ⚠️ Noted honestly: presence is the custody invariant; amount is not verifiable without decoding outputs — a pool paying dust would satisfy the check. Out of scope for the warn gate; recorded for the ledger. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1320 update — first-principles audit of the arbitration-pause claim (Socratic pass 2)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "arbPaused=真 means mining is paused" — does a paused worker actually stop hashing, or just stop receiving new jobs? | ✅ Verified real: `applyAllocation` calls `w.SetWork(nil)` on idle/AI-switched devices; `grind` then sees `localWork == nil` and sleeps at a 10ms poll — true idle, not stale-work grinding. The curtail gate uses the same mechanism. |
+| S | Does the pause survive subsequent pool job updates between Decide ticks? | ✅ Verified: `reconcileArbPauses` rewrites the shared set every tick *before* applyAllocation, and `applyJob`/`updateWork` skip workers still in the set — the #494 invariant holds both directions. |
+| S | Does resume actually re-arm? | ✅ Verified: `Resume` removes the device from the set; the next pool job arms it via the same dispatch path. |
+| S | What happens on a `Decide` error mid-loop? | ✅ Conservative: tick logs a warning and retains `prevAlloc`; the pause set is left untouched (last-known-good allocation), no half-applied state. |
+| S | Would a permanently-paused rig be invisible to liveness? | ✅ Intentional and now honest: `allArbPaused` keeps `otedama_up=1` and skips the stall monitor — justified *because* the pause is a real `SetWork(nil)` idle, not silent work starvation. (This ordering matters: the metric semantics are only correct as long as pause means idle.) |
+
+All packages build, vet, and test green; no code changes required — verification only.
