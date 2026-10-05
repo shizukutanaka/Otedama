@@ -1098,6 +1098,24 @@ upstream repo is `stratum-mining/stratum` (merged workspace).
 - **#367** — adds `network` to `GlobalInfo` (sv2-ui API surface).
 - **#212** — mimalloc adoption (build-infra).
 
+## Session 1238 ecosystem update (2026-10-02)
+
+- **sv2-spec** — open PR set unchanged at 7: #236 (SetTarget max_target
+  MUST NOT exceed), #234 (authority key management), #232/#186 (table
+  style), #203 (payouts ext), #198 (coinbase_witness), #103 (Proxy
+  Annex WIP). No new normative items since session 1232.
+- **sv2-apps v0.8.0** released (2026-09-17): a security-hardening
+  release driven by the Loupe audit — tProxy SV1 session/channel
+  lifecycle hardened (idempotent handshake, jobs only after
+  subscribe+authorize, extranonce.subscribe honored, malformed
+  notifications no longer panic, late-share validation), structured
+  runtime lifecycles for every application, simpler containerized
+  config. Open PR set at 27. Otedama's own V1 stack already mirrors
+  the tProxy hardening direction (subscription ordering gates,
+  extranonce atomics, notification validation from sessions 594–599).
+- **SRI** remains at v1.12.0 (2026-09-17) — unchanged.
+
+
 ## Session-775 ecosystem update (2026-10-03)
 
 **sv2-spec:**
