@@ -7000,3 +7000,12 @@ CHANGELOG entry added under Fixed (session 1339).
 | S | Residual edge? | ⚠️ Noted: `client.reconnect` *with no host* still always closes the session — a pool can force a reconnect loop (bounded by the existing backoff). This is the protocol's intended load-balance behavior; treating it as advisory-only would break legitimate pool migrations. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1341 update — first-principles audit of "an unauthenticated session can never run" (Socratic pass 23)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can `mining.authorize` be treated as accepted on a non-true result — and could a failed handshake leave a live session? | ✅ Verified strict: `resp.result.(bool)` must be exactly `true` — `false`, `null`, a string, or any other shape fails with `ErrHandshakeFailed` and `sess.Close()`. Every handshake failure path (call error, errResult, subscribe parse failure, non-true authorize) closes the session before returning, so a rejected/crippled handshake can never hand a live session to the engine. The `authorized` flag that gates all pool-initiated methods (s1336/s1339) is therefore only reachable on genuine `true`. |
+| S | Is the optional `extranonce.subscribe` failure path a correctness risk? | ✅ Verified deliberate: step 3 errors are ignored by design — unsupported pools answer "Method not found" and a torn connection surfaces through the normal Jobs-channel lifecycle. Skipping it never marks the session un-authenticated or un-authorized. |
+
+Ledger only — verification round, no behavior-visible change.
