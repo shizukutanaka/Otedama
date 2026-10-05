@@ -7731,3 +7731,7 @@ Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, activ
 1. V2 `SetTarget` is symmetric with the V1 path verified in s1353: the new share target is applied immediately and the active job is re-issued to workers (no next-job wait), logged once. `active == nil` guards the re-issue correctly — nothing to retarget before the first job.
 2. The one-response-per-sequence invariant is enforced on BOTH settlement paths: SubmitSharesError drops future seqs AND already-settled/reaped seqs before any rejection is counted — a hostile pool cannot inflate the reject rate by replaying or fabricating error frames. submitTimes and submitTargets are deleted pairwise on every settlement path (success, error, cap-reaper) — no unbounded growth.
 3. `seqNum++` consuming a sequence for a share then dropped by the stale-job gate (active==nil or wrong JobID) leaves a gap the pool can never ack — harmless by construction: settlement only iterates outstanding entries, and a fabricated mid-gap seq lands in the `!outstanding` drop. Honest accounting.
+
+## Session 1474 update (ADR-009 ecosystem recheck)
+
+sv2-spec normative open set unchanged: #236 (SetTarget ≤ max_target), #234 (authority key management), #203 (coinbase-payout ext — output-cap debate continuing), #198 (coinbase_witness). Non-normative churn only: #232/#186 table formatting, #103 Proxy Annex WIP. SRI latest tag v1.12.0; sv2-apps latest v0.8.0 — both re-confirmed. No action needed; anchors stay as recorded.
