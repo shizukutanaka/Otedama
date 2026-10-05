@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1318 — 非カストディ検証: TIDES/solo コインベースの支払先確認)
+
+**変更.** 「非カストディ」主張の第一原理検証（ソクラテス式監査）で見つかった実ギャップを修正。
+Stratum V1 の `mining.notify` は `coinb1`/`coinb2` の両半を保持するが、
+プール供給のコインベースが設定済み支払先アドレスへ実際に支払うかは
+一切検証されていなかった。`pools[].payout_scheme` が `tides`/`solo`
+（コインベース内にユーザースクリプトを約束する2方式）を宣言する場合、
+新規 `btccrypto.ScriptForAddress` でアドレスから標準ロッキングスクリプトを導出し、
+各ジョブのコインベース両半を `engine.coinbasePaysTo` で検査 —
+含まれなければエピソードにつき1回警告を出力（fpps/pplns は
+コインベースが正当にプール所有のため対象外）。V2 ジョブはプロトコル上
+`merkle_root` のみで出力を確認不能 — JDP（sv2-spec #203、ADR-009 追跡）
+待ちの構造的制約として godoc に記録。テスト: スクリプト導出ベクトル5件
+（P2PKH/P2SH/P2WPKH/P2WSH/P2TR）+ V1 結合3件 + ヘルパー単体。
+
 ### Changed (session 1316 — gocyclo 分解第2弾、config/arbitration/doctor/cmd 層 6 関数)
 
 **変更.** 循環複雑度 >15 の残存クラスの第 2 弾。`config.ResolveWithOrigins`

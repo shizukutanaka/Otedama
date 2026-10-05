@@ -28,6 +28,7 @@
 package engine
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/tls"
@@ -42,6 +43,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
@@ -474,6 +476,17 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword = r.opts.Config.Pools[poolIdx].Password
 		}
 		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
+		// A direct-coinbase scheme (tides/solo) must place the user's locking
+		// script in the coinbase itself; that is only verifiable when the user
+		// identity derives from the configured address rather than an opaque
+		// pools[].user override.
+		var payoutAddr, payoutScheme string
+		if poolIdx < len(r.opts.Config.Pools) {
+			payoutScheme = r.opts.Config.Pools[poolIdx].PayoutScheme
+		}
+		if poolUser == "" && addrIdx < len(addrs) {
+			payoutAddr = addrs[addrIdx]
+		}
 
 		loc := fmt.Sprintf("attempt %d", attempt)
 		if len(pools) > 1 {
@@ -511,6 +524,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			nominalHashrate: r.nominalHashrate,
 			tlsCAFile:       poolTLSCAFile,
 			poolPassword:    poolPassword,
+			payoutAddr:      payoutAddr,
+			payoutScheme:    payoutScheme,
 			activityMu:      r.activityMu,
 			activity:        r.activity,
 			onConnected: func() {
@@ -644,6 +659,15 @@ type sessionOpts struct {
 	// .Password), sent in the Stratum V1 mining.authorize call. Most V1
 	// pools accept any value, but not all — see KNOWN_LIMITATIONS.md §10.
 	poolPassword string
+	// payoutAddr is the configured payout address when the session's user
+	// identity derives from it (no pools[].user override). For pools whose
+	// payout_scheme pays the coinbase directly (tides/solo) runSessionV1
+	// verifies each job's coinbase carries this address's locking script —
+	// the only spot on the wire where a non-custodial payout is observable.
+	payoutAddr string
+	// payoutScheme is the active pool's configured payout_scheme
+	// (fpps/pplns/tides/solo; empty = unset).
+	payoutScheme string
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -1316,6 +1340,21 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		notices = nr.PoolNotices()
 	}
 
+	// Direct-coinbase schemes (tides/solo) promise the user's locking script
+	// verbatim inside every job's coinbase — the only spot where the
+	// non-custodial payout path is observable on the wire. A missing script
+	// means hashpower pays the pool's wallet, not the user's; warn once per
+	// episode rather than silently mining for nothing. V2 carries only a
+	// merkle_root, so no equivalent check exists there (the JDP extension,
+	// sv2-spec #203, is the protocol answer — tracked in ADR-009).
+	var payoutScript []byte
+	if (opts.payoutScheme == "tides" || opts.payoutScheme == "solo") && opts.payoutAddr != "" {
+		if s, err := btccrypto.ScriptForAddress(opts.payoutAddr); err == nil {
+			payoutScript = s
+		}
+	}
+	var payoutMissingWarned bool
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1435,6 +1474,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %q ignored (curtailed)", job.JobID))
 			} else {
+				if len(payoutScript) > 0 && len(job.Coinb1)+len(job.Coinb2) > 0 {
+					if !coinbasePaysTo(job.Coinb1, job.Coinb2, payoutScript) {
+						if !payoutMissingWarned {
+							payoutMissingWarned = true
+							opts.log("warn", fmt.Sprintf(
+								"engine: pool's coinbase does not pay to %s — payout_scheme %q promises direct coinbase payouts; your shares may fund the pool's wallet, not yours",
+								maskAddr(opts.payoutAddr), opts.payoutScheme))
+						}
+					} else {
+						payoutMissingWarned = false
+					}
+				}
 				if err := applyJob(opts.workers, opts.arbPaused, &job, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
@@ -1781,6 +1832,15 @@ func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
+// coinbasePaysTo reports whether the configured locking script appears in
+// the pool-supplied coinbase halves. coinb1/coinb2 bracket the extranonce
+// gap inside the generation input, so every output script sits wholly
+// within one half — scanning each half suffices without reassembling the
+// transaction.
+func coinbasePaysTo(coinb1, coinb2, script []byte) bool {
+	return bytes.Contains(coinb1, script) || bytes.Contains(coinb2, script)
+}
+
 func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, chanID uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {

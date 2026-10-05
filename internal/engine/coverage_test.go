@@ -3067,3 +3067,148 @@ func TestChannelIDOf(t *testing.T) {
 		}
 	}
 }
+
+// fakeV1PoolCoinb2 is fakeV1Pool with a parameterised coinb2, for the
+// TIDES direct-coinbase payout verification tests.
+func fakeV1PoolCoinb2(t *testing.T, coinb2 string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolCoinb2 listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`%q,%q,[],"00000002","1d00ffff","68d36c5e",true]}`+"\n",
+			"01", coinb2)
+		time.Sleep(300 * time.Millisecond)
+	}()
+
+	return ln.Addr().String()
+}
+
+// The coinbase in a notify lacks the configured payout script → warn.
+func TestRunSessionV1_TIDESPayoutMissingWarns(t *testing.T) {
+	addr := fakeV1PoolCoinb2(t, "ff")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	err := runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns == 0 {
+		t.Error("expected missing-payout warning (tides coinbase lacks our script), got err:", err)
+	}
+	if warns > 1 {
+		t.Errorf("missing-payout warning fired %d times, want once per episode", warns)
+	}
+}
+
+// The coinbase carries the P2PKH script of the configured address → no warn.
+func TestRunSessionV1_TIDESPayoutPresentNoWarn(t *testing.T) {
+	// coinb2 = the P2PKH locking script for the genesis address.
+	addr := fakeV1PoolCoinb2(t, "76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 0 {
+		t.Errorf("payout present but %d missing-payout warnings fired", warns)
+	}
+}
+
+// Conventional schemes (fpps/pplns) legitimately pay the pool's wallet in
+// the coinbase — the check must not fire for them.
+func TestRunSessionV1_FPPSPayoutCheckSkipped(t *testing.T) {
+	addr := fakeV1PoolCoinb2(t, "ff")
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "fpps",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 0 {
+		t.Errorf("fpps pool triggered %d payout warnings, want 0 (pool-owned coinbase is expected)", warns)
+	}
+}
+
+// coinbasePaysTo finds the script in either half and correctly rejects a
+// script split across the coinb1/coinb2 boundary (the extranonce gap sits
+// inside the input, so no output script can legitimately straddle it).
+func TestCoinbasePaysTo(t *testing.T) {
+	script := []byte{0x76, 0xa9, 0x14, 0x01, 0x02, 0x88, 0xac}
+	if !coinbasePaysTo([]byte{0x99}, append([]byte{0xaa}, script...), script) {
+		t.Error("script inside coinb2 must match")
+	}
+	if !coinbasePaysTo(append(script, 0xbb), nil, script) {
+		t.Error("script inside coinb1 must match")
+	}
+	if coinbasePaysTo([]byte{0x76, 0xa9}, []byte{0x14, 0x01, 0x02, 0x88, 0xac}, script) {
+		t.Error("script split across the halves must not match")
+	}
+	if coinbasePaysTo(nil, nil, script) {
+		t.Error("empty coinbase must not match")
+	}
+}

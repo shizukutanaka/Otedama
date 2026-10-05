@@ -6766,3 +6766,14 @@ All packages build, vet, and test green.
 | L | Marker debt crept back via merged branches — TODO/FIXME/XXX/HACK landing inside code or as unannotated prose debt. | ✅ Clean: zero markers in `internal/`+`cmd/` (AUDIT_CHECKLIST rule 6 holds post-wave); doc-side hits are the checklist rule itself plus audit-ledger meta-references — all legit. |
 
 All packages build, vet, and test green.
+---
+
+## Session 1318 update — first-principles audit of the non-custodial claim (Socratic pass)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The product's foundational claim is "non-custodial": does the code ever verify that pool-provided work actually pays the configured payout address? | ❌ Real gap, fixed: nothing checked it. V1 `mining.notify` carries raw `coinb1`/`coinb2` (`stratumv1/parse.go`), `completeV1Job` folds them into `Job.MerkleRoot` and retains both halves — the payout script is inspectable but never was. Fix: `btccrypto.ScriptForAddress` (address → standard locking script) + `engine.coinbasePaysTo`; each V1 job's coinbase halves are scanned for the user's script and a once-per-episode warning fires when absent. |
+| S | Does the fix apply to every pool? — fpps/pplns coinbases legitimately pay the *pool's* wallet (miners are paid later via accounting), so a blanket check false-warns on honest pools. | ✅ Gated correctly: check runs only when `pools[].payout_scheme` is `tides` or `solo` — the two schemes that promise the user script inside the coinbase (config validation at `config.go:690-694`); poolUser override (`sessionUser`) makes the payout address opaque, so the check also skips that case. |
+| S | Can V2 jobs get the same verification? | ⚠️ Structural limitation, documented: `NewMiningJob` carries only `{channel_id, job_id, ntime, version, merkle_root}` — coinbase outputs are opaque by protocol design. Verifiable only via JDP template flow (`sv2-spec` #203, tracked in ADR-009); godoc on the check records this honestly. |
+
+All packages build, vet, and test green; lint clean on touched files.
