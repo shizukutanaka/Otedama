@@ -1072,6 +1072,15 @@ and (c) treat static-key rotation as transparent to the session.
 
 **SRI** remains at v1.12.0 (2026-09-17) — no new release since the
 session-600 check.
+## Session-1232 ecosystem update (2026-10-02)
+
+**sv2-spec:** quiet window continues — the normative open set is unchanged: **#203** (non-custodial payouts via push-based extension, alternative to #202/#195) still open with the payout-output cardinality debate ongoing (`SEQ0_255` vs `SEQ0_64K` — maintainers noting legacy Sv1 firmware coinbase-output caps and blockspace economics bound the set in practice); **#202** open; **#234** key-management section open. No new normative PRs since session-1201.
+
+**SRI:** remains at **v1.12.0** (2026-09-17) — the hardening release that dropped AES-256-GCM, leaving ChaCha20-Poly1305 as the sole Noise cipher, matching Otedama's existing cipher surface. No new upstream release.
+
+**sv2-apps:** latest remains **v0.7.0** (2026-07-24) — JDS `DownstreamState` isolation, JDC `RequestTransactionData` race fix, `SharedSet` synchronization wrapper. The tracked work item **#881** (`handle_push_solution` JDS/JDC — the submission path ADR-009 phase 2 requires) remains open WIP; **#883** (SRI community-multisig example payouts) still open.
+
+**Verdict:** no action required — the phase-2 dependency (#881) is unchanged, and the payout-extension debate (#203) has not produced new normative text Otedama would need to track.
 
 ## Session-1246 ecosystem update (2026-10-02)
 
