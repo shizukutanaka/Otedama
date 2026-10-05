@@ -39,6 +39,16 @@ kind リテラル14箇所を `metricKindCounter`/`metricKindGauge` へ集約、
 
 **変更.** golangci-lint v2 で可視化された misspell 指摘46件（US ロケール基準の英語スペル）を一括正規化 — `cancelled→canceled`、`serialisation→serialization`、`honour→honor` 等。コメントおよび doctor 診断の `Detail`/`Fix` メッセージ文字列のみ、識別子の改名なし。残存クラス（gosec/gocyclo/gocritic/goconst/staticcheck/errorlint/errcheck）は後続バッチで処理。
 
+### Changed (session 1313 — lint debt batch 3: staticcheck + gocritic)
+
+Clear the mechanical classes the golangci-lint v2 migration (#1391)
+surfaced: all 5 staticcheck findings (De Morgan forms, `for ctx.Err() ==
+nil`, single-case select) and all 13 gocritic findings (hugeParam pointer
+receivers on `sessionOpts.allArbPaused`/`channelIDOf`, ifElseChain→switch,
+importShadow renames, httpNoBody, octalLiteral, zeroByteRepeat, initClause,
+offBy1 index guard). One deliberate test fixture (whitespace map key)
+annotated `//nolint:gocritic`.
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:

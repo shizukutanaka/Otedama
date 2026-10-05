@@ -461,10 +461,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		statsInterval = 10 * time.Second
 	}
 
-	for {
-		if ctx.Err() != nil {
-			break
-		}
+	for ctx.Err() == nil {
 		attempt++
 		if r.opts.MaxReconnectAttempts > 0 && attempt > r.opts.MaxReconnectAttempts {
 			return fmt.Errorf("engine: exceeded %d reconnect attempts", r.opts.MaxReconnectAttempts)
@@ -673,7 +670,7 @@ func (o *sessionOpts) isCurtailed() bool {
 // allArbPaused reports whether every worker is currently paused by
 // arbitration (idle below the yield floor or routed to a non-mining
 // stream). A nil set, or no workers, reports false.
-func (o sessionOpts) allArbPaused() bool {
+func (o *sessionOpts) allArbPaused() bool {
 	if o.arbPaused == nil || len(o.workers) == 0 {
 		return false
 	}
@@ -1025,7 +1022,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			// exempt: SV2 lets the pool address it to the group
 			// channel our standard channel belongs to, whose ID the
 			// handshake does not expose.
-			if cid, ok := channelIDOf(pm.msg); ok && cid != chanID && pm.msg.SetNewPrevHash == nil {
+			if cid, ok := channelIDOf(&pm.msg); ok && cid != chanID && pm.msg.SetNewPrevHash == nil {
 				opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
 				continue
 			}
@@ -1643,7 +1640,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 // channelIDOf reports the channel_id carried by a channel-scoped SV2
 // message. ok is false for frames with no channel field (unknown or
 // connection-scoped types), which callers should let through.
-func channelIDOf(m stratum.Message) (uint32, bool) {
+func channelIDOf(m *stratum.Message) (uint32, bool) {
 	switch {
 	case m.NewMiningJob != nil:
 		return m.NewMiningJob.ChannelID, true

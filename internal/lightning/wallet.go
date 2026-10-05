@@ -148,14 +148,15 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 
 	walletPath := filepath.Join(dataDir, walletFile)
 	_, err := os.Stat(walletPath)
-	if errors.Is(err, os.ErrNotExist) {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
 		// First run: generate a new seed.
 		if err := wm.createNew(passphrase, wo.mnemonicPassphrase, reader); err != nil {
 			return nil, err
 		}
-	} else if err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("lightning: stat wallet file: %w", err)
-	} else {
+	default:
 		// Existing wallet: decrypt and load.
 		if err := wm.loadExisting(passphrase); err != nil {
 			return nil, err

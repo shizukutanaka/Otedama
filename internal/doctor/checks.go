@@ -892,7 +892,7 @@ func checkClockSkew() Check {
 			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, nil)
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, http.NoBody)
 			if err != nil {
 				return Result{
 					Status: StatusWarn,
@@ -1024,7 +1024,7 @@ func isFingerprint(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !('0' <= c && c <= '9') && !('a' <= c && c <= 'f') {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
 			return false
 		}
 	}
