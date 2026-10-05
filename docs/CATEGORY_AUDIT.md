@@ -1815,6 +1815,15 @@ All packages build, vet, and test green.
 | chan-len | No `len()`/`cap()` calls on shared channels — no racy sizing decisions | Clean |
 | defer-in-init | 4 `init()` fns (wordlist integrity, secp256k1/v1/v2 registration) — no defer inside init, all atomic | Clean |
 ---
+
+## Session 1241 — http-request-ctx + unmarshal-reuse + url-construction
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| http-request-ctx | All 3 `http.NewRequest` sites are `NewRequestWithContext` (rates fetcher, hashrate, doctor skew probe) — no detached context | Clean |
+| unmarshal-reuse | Every `json.Unmarshal`/`yaml` site decodes into a fresh per-call local — no stale-field residue across calls | Clean |
+| url-construction | No `url.URL{}` literal, `RawQuery` mutation, or manual query assembly — provider/pool URLs parsed once via `net/url.Parse` + validated | Clean |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
