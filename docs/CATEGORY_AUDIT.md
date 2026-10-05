@@ -6311,3 +6311,11 @@ All packages build, vet, and test green.
 | R | Target surface | ✓ 21 targets enumerated (help/setup/deps/build/build-all/install/test*/coverage/bench/fuzz/lint*/fmt/vet/security/licenses/validate) — all previously doc-verified; no undocumented or phantom entries |
 | R | Build hygiene | ✓ `bin/` output is gitignored (not tracked); -trimpath+stripped binary ~10.8MB |
 
+## Session 1290 update — working-tree + tracked-file hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Working-tree cleanliness | ✓ `git status --porcelain` = 0 entries on synced master — no stray edits |
+| R | Helper-script residue | ✓ `.sweep.sh` (the backlog union-merge helper) is absent from master and untracked anywhere — `git ls-files` confirms zero sweep artifacts in any index |
+| R | Stray top-level scripts | ✓ No untracked `*.sh` at repo root; only committed scripts/ paths exist |
+
