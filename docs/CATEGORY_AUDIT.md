@@ -1939,6 +1939,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1225 update — DEPLOYMENT ↔ daemon service-definition parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | systemd unit claims | ✅ Clean — generated unit writes `NoNewPrivileges=true`, `ProtectHome=read-only`, `PrivateTmp=true`, `Restart=on-failure`, `RestartSec=10s` exactly as documented; `WantedBy=default.target` + linger advice consistent with a user service. |
+| S | launchd plist claims | ✅ Clean — label `com.otedama.daemon`, `~/Library/LaunchAgents` dir, `KeepAlive=true`, `RunAtLoad`, and the doc's note that launchd gets persistent logs (`StandardOutPath`/`StandardErrorPath` wired) all match `service.go`. |
+| M | Windows claims | ✅ Clean — service registered as `Otedama` via `sc.exe create`; the doc honestly discloses the missing persistent-log gap (no stdout redirect exists for the SCM path — matches `service.go`). |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
