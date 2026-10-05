@@ -6394,3 +6394,12 @@ Census over synced master; adoption gate is `go 1.24.0` in go.mod.
 | CI note | #1344 (Go-pin root fix): 21 checks still queued ~14h after the merge-wave backlog — observation only | ⚠️ Noted |
 
 Smoke run on darwin/arm64 go1.27.1 from synced master.
+## Session 1279 update — govulncheck + dependency-freshness verification
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| govulncheck | `govulncheck ./...` on synced master: **0 reachable vulnerabilities**; 23 CVE-class entries exist in required modules but none are reachable from our call graph | ✓ Clean |
+| dep freshness | x/crypto v0.23.0 / x/sys v0.20.0 (mid-2024) despite weekly dependabot — bumped to v0.48.0/v0.41.0 (newest keeping the go-1.24 floor) in session 1278 (#1359); latest releases require go 1.26 | ✓ Addressed |
+| go.mod | `go mod verify` all modules verified; `go mod tidy` clean | ✓ Clean |
+
+govulncheck v1.1.4, source analysis mode (calls into the vuln symbol are required to count).
