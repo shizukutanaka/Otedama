@@ -558,6 +558,9 @@ func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
 		if got := o.powerFloor(); got != 0 {
 			t.Errorf("%s: powerFloor() = %v, want 0", name, got)
 		}
+		if got := m.powerBreakevenFloor.Value(); got != 0 {
+			t.Errorf("%s: power_breakeven_floor gauge = %v, want 0 — the gauge must mirror the floor actually applied", name, got)
+		}
 	}
 
 	// 3000 W × $0.10/kWh = $0.30/h → at $100,000/BTC = 0.30/100000×1e8/3600
@@ -579,6 +582,16 @@ func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
 	o.devRefs = append(o.devRefs, arbitration.DeviceRef{Identity: hal.Identity{ID: "gpu-0"}})
 	if got := o.powerFloor(); math.Abs(got-want/2) > 1e-9 {
 		t.Errorf("powerFloor() with 2 devices = %v, want ~%v", got, want/2)
+	}
+	// The gauge must track the floor actually applied each round: collapsing
+	// an input (rate feed dead) must drop the gauge to 0, not leave a stale
+	// positive floor on display while none is in force.
+	o.rateSource = provider.StaticRateSource{Rate: 0}
+	if got := o.powerFloor(); got != 0 {
+		t.Errorf("powerFloor() with dead rate = %v, want 0", got)
+	}
+	if got := m.powerBreakevenFloor.Value(); got != 0 {
+		t.Errorf("power_breakeven_floor gauge after rate collapse = %v, want 0", got)
 	}
 }
 

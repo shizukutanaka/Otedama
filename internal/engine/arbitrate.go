@@ -131,18 +131,19 @@ const streamStaleTimeout = 3 * time.Minute
 // power draw is not yet measured; document power_watts as the dominant
 // device's draw if strict per-device gating is needed).
 func (o *arbitrationLoopOpts) powerFloor() float64 {
-	if o.powerWatts <= 0 || o.powerPricePerKWh <= 0 || len(o.devRefs) == 0 {
-		return 0
+	floor := 0.0
+	if o.powerWatts > 0 && o.powerPricePerKWh > 0 && len(o.devRefs) > 0 {
+		var rate float64
+		if o.rateSource != nil {
+			rate, _ = o.rateSource.BTCUSDRate()
+		}
+		if rate > 0 {
+			floor = provider.SatsPerSecond(o.powerWatts/1000*o.powerPricePerKWh, rate) / float64(len(o.devRefs))
+		}
 	}
-	var rate float64
-	if o.rateSource != nil {
-		rate, _ = o.rateSource.BTCUSDRate()
-	}
-	if rate <= 0 {
-		return 0
-	}
-	usdPerHour := o.powerWatts / 1000 * o.powerPricePerKWh
-	floor := provider.SatsPerSecond(usdPerHour, rate) / float64(len(o.devRefs))
+	// The gauge mirrors the floor actually applied this round — 0 included —
+	// so a dead rate feed or an emptied device list cannot leave a stale
+	// positive floor on display while no floor is in force.
 	o.metrics.powerBreakevenFloor.Set(floor)
 	return floor
 }

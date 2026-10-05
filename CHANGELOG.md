@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1410 — 損益分岐フロアのゲージがレート不通時に古い正値を残していた)
+
+`otedama_power_breakeven_floor_sats_per_second` はフロアが正に計算されたラウンドでのみ更新され、レート取得失敗・デバイス消滅で実適用フロアが 0 に潰れても古い値を保持し続けた（「毎ラウンド再計算」の記述と矛盾）。`powerFloor()` を再構成し、早期リターン経路を含め毎ラウンド実際に適用されるフロア値（0 を含む）をゲージへ反映。回帰テストは全無効入力でゲージ=0・レート断で正値→0 への遷移をピン。
+
 ### Fixed (session 1406 — solo payout_scheme のクォートが実在しないプール手数料を差し引いていた)
 
 採掘クォートの netSatsPerSec は `payout_scheme` に無関係な一律 1% 手数料を適用していた。`solo`（コインベースがユーザーアドレスへ直接支払われる全か無かの方式、session 1318 で構造検証済み）では報酬中にプール側の取り分が存在しないのに 1% 過小見積していた。MiningProvider.PayoutScheme（setup で pools[0] のスキームを注入）を導入し、solo 時は net=gross（fee なし）、その他スキーム・未設定は従来の 1% 目安を維持。回帰テストは solo=1.0×・fpps/pplns/tides/未設定=0.99×をピン。
