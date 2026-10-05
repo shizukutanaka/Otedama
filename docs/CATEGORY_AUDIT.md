@@ -7041,3 +7041,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | `handleResponse` sends on the pending call's channel — if the caller already timed out (callTimeout) or its ctx died, does the send block the read goroutine? | ✅ Verified non-blocking: `respCh` is created with capacity 1 and the pending entry is deleted atomically under `pendingMu` before send/close, so at most one buffered send ever happens and it never waits for a receiver. A response that lands after the caller gave up is dropped (`ok=false`), and `cancelPending` closes — never sends — so no send-on-closed panic either (the de-queuer is the only sender). |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1346 update — first-principles audit of "a share only counts accepted when the pool actually said so" (Socratic pass 28)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does `Submit` treat anything other than literal `result: true` as acceptance? | ✅ Verified strict: `Accepted` requires `resp.result.(bool) == true` — `false`, `null`, strings, objects, or a missing result all return `Accepted:false`, and `errResult` surfaces as `Reason`. A pool can never inflate our accepted-shares accounting with a non-bool truthy value. `call` transport errors propagate as errors rather than phantom rejects. |
+
+Ledger only — verification round, no behavior-visible change.
