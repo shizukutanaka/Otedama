@@ -6899,3 +6899,12 @@ No code change required this round.
 | S | Is per-job en2 reuse across shares a validity defect? | ✅ Verified: en2 rolls per job, not per share — shares sharing en2 differ in nonce and remain distinct, valid work (difficulty is what the pool credits). Not a defect; recorded honestly as a deliberate simplification. |
 
 No code change required this round.
+
+## Session 1330 update — first-principles audit of the "workers track pool retargets" claim (Socratic pass 12)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does a mid-job difficulty change reach in-flight workers, or do they grind the superseded target until the next notify? | 🔧 Fixed: V2 already re-issued the active job on `SetTarget` (`startJob(active, activeNTime)`); V1 stored `set_difficulty` but only applied it on the next job, so every find in between was a guaranteed stale-target reject (accounting stayed honest via `transitionReject`, but hashrate burned). New `poolproto.DifficultyWatcher` — stratumv1 pushes each parsed retarget on a buffered, coalescing `diffCh`; the engine re-issues `lastJob` through `applyJob` immediately, matching V2 semantics. Paused/curtailed workers still skipped; superseded-window rejects remain classified `difficulty-transition`. |
+| S | Can a burst of retargets wedge or mislead the consumer? | ✅ Verified: `diffCh` is buffered(1) and replaces any undelivered value — the read loop never blocks and the consumer always sees the newest target, never a stale one; channel closes with the session (nil'd in the engine's select). Malformed/non-positive values are dropped by `parseDifficulty` before the push. |
+
+Code change: `poolproto.DifficultyWatcher` + stratumv1 `diffCh`/`DifficultyUpdates()` + engine re-issue path (V1 parity with V2 `SetTarget` handling) + unit test.

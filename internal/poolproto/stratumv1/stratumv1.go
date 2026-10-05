@@ -101,6 +101,13 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// diffCh announces every parsed mining.set_difficulty to the caller so
+	// it can retarget in-flight work rather than waiting for the next
+	// notify. Buffered(1) and coalescing — a consumer sees the newest
+	// value even if several retargets arrive back-to-back. Closed when
+	// the session ends. Optional: surfaced via DifficultyUpdates().
+	diffCh chan float64
+
 	// noticeCh delivers pool-sent client.show_message notices to the caller.
 	// Buffered so the read loop never blocks on a slow consumer; closed when
 	// the session ends. The caller may type-assert the Session to
@@ -130,6 +137,7 @@ type session struct {
 var (
 	_ poolproto.Session            = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+	_ poolproto.DifficultyWatcher  = (*session)(nil)
 )
 
 // callTimeout bounds how long call waits for a pool response before
@@ -142,6 +150,7 @@ func newSession(conn *connection) *session {
 		conn:     conn,
 		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
@@ -158,6 +167,7 @@ func (s *session) start(ctx context.Context) {
 // It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	defer close(s.diffCh)
 	defer close(s.noticeCh)
 	// When the loop exits for any reason (EOF, network error, or ctx cancel),
 	// cancel all in-flight call() invocations so they return immediately
@@ -275,6 +285,20 @@ func (s *session) handleNotify(params json.RawMessage) {
 func (s *session) handleSetDifficulty(params json.RawMessage) {
 	if d, ok := parseDifficulty(params); ok {
 		s.difficulty.Store(float64ToUint64(d))
+		select {
+		case s.diffCh <- d:
+		default:
+			// Replace any undelivered value so the consumer always sees
+			// the newest retarget, never a stale one.
+			select {
+			case <-s.diffCh:
+			default:
+			}
+			select {
+			case s.diffCh <- d:
+			default:
+			}
+		}
 	}
 }
 
@@ -342,6 +366,11 @@ func (s *session) ReconnectWait() time.Duration {
 
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+
+// DifficultyUpdates returns the channel on which every parsed
+// mining.set_difficulty is delivered. The channel is closed when the
+// session ends. Implements poolproto.DifficultyWatcher.
+func (s *session) DifficultyUpdates() <-chan float64 { return s.diffCh }
 
 // PoolNotices returns the channel of pool-sent operator notices
 // (client.show_message). The channel is closed when the session ends.

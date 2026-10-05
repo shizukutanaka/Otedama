@@ -289,6 +289,24 @@ type ReconnectWaiter interface {
 	ReconnectWait() time.Duration
 }
 
+// DifficultyWatcher is an optional extension to Session implemented by
+// protocols that deliver mid-session difficulty retargets as discrete
+// events (mining.set_difficulty in Stratum V1). Callers should
+// type-assert a Session to this interface; protocols without the
+// concept are simply absent.
+//
+// The returned channel is closed when the Session ends. A nil channel
+// means no updates will ever be delivered. Values are the session's
+// current SuggestedDifficulty at the moment of the retarget — the
+// caller should treat each delivery as a hint to re-check, not as an
+// authoritative stream (consecutive equal values are possible).
+type DifficultyWatcher interface {
+	// DifficultyUpdates returns a channel on which pool-assigned
+	// difficulty changes are delivered. The channel is buffered and
+	// coalesces: a slow consumer sees at most the most recent value.
+	DifficultyUpdates() <-chan float64
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

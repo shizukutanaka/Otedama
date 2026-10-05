@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1330 — V1 set_difficulty を実行中ワークへ即時伝播)
+
+**変更.** 「プールの難易度変更にワーカーが追従する」主張の第一原理検証で
+実ギャップを修正。V2 は `SetTarget` 到着時に現行ジョブを即時再発行して
+いたが、V1 は `mining.set_difficulty` を原子格納するだけで、次の notify
+が来るまで実行中ワークは旧ターゲットで掘り続けた（拒否会計は
+`transitionReject` で正直だったが旧ターゲットでの発掘は燃費損失）。
+`poolproto.DifficultyWatcher` を新設し stratumv1 が各リターゲットを
+バッファ付き・合体式 `diffCh` で通知、エンジンは即座に `applyJob` で
+現行ジョブを再発行 — V2 と同じセマンティクスに揃えた。
+
 ### Changed (session 1323 — 失効ジョブのシェアを提出前に破棄)
 
 **変更.** 「正当なシェアのみ提出する」主張の第一原理検証（ソクラテス式監査）

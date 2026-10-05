@@ -2196,3 +2196,34 @@ func TestSanitizeNotice_StripsFormatAndSeparators(t *testing.T) {
 		t.Errorf("format/separator chars survived: %q", got)
 	}
 }
+
+func TestSession_DifficultyUpdates_DeliversRetargets(t *testing.T) {
+	s := newSession(&connection{})
+	s.handleSetDifficulty(json.RawMessage(`[1024]`))
+	select {
+	case d := <-s.DifficultyUpdates():
+		if d != 1024 {
+			t.Errorf("delivered difficulty = %v, want 1024", d)
+		}
+	default:
+		t.Error("set_difficulty did not reach DifficultyUpdates")
+	}
+
+	// Undelivered values coalesce: two retargets without a consumer drain
+	// leave only the newest — the channel never blocks the read loop.
+	s.handleSetDifficulty(json.RawMessage(`[2048]`))
+	s.handleSetDifficulty(json.RawMessage(`[4096]`))
+	select {
+	case d := <-s.DifficultyUpdates():
+		if d != 4096 {
+			t.Errorf("coalesced difficulty = %v, want 4096", d)
+		}
+	default:
+		t.Error("coalescing retarget missing")
+	}
+	select {
+	case d := <-s.DifficultyUpdates():
+		t.Errorf("unexpected extra delivery: %v", d)
+	default:
+	}
+}

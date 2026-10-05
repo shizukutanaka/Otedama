@@ -1376,6 +1376,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		notices = nr.PoolNotices()
 	}
 
+	// V1 pools may retarget mid-job via mining.set_difficulty: without a
+	// push, workers keep grinding the old share target until the next
+	// notify — every find in that window is a guaranteed stale-target
+	// reject. Sessions that can push retargets (DifficultyWatcher)
+	// re-issue the current job's work immediately, mirroring the V2
+	// SetTarget path. Nil channel when the session cannot push.
+	var diffCh <-chan float64
+	if dw, ok := sess.(poolproto.DifficultyWatcher); ok {
+		diffCh = dw.DifficultyUpdates()
+	}
+	var lastJob poolproto.Job
+	var appliedDifficulty float64
+
 	// Direct-coinbase schemes (tides/solo) promise the user's locking script
 	// verbatim inside every job's coinbase — the only spot where the
 	// non-custodial payout path is observable on the wire. A missing script
@@ -1526,10 +1539,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						payoutMissingWarned = false
 					}
 				}
-				if err := applyJob(opts.workers, opts.arbPaused, &job, chanID, sess.SuggestedDifficulty()); err != nil {
+				applied := sess.SuggestedDifficulty()
+				if err := applyJob(opts.workers, opts.arbPaused, &job, chanID, applied); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
+				lastJob = job
+				appliedDifficulty = applied
 				var jid uint64
 				if _, err := fmt.Sscanf(job.JobID, "%d", &jid); err == nil {
 					currentJobID = uint32(jid)
@@ -1541,6 +1557,26 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 			}
 			lastJobAt = time.Now()
+
+		case d, ok := <-diffCh:
+			if !ok {
+				diffCh = nil // session ended; never ready again
+				continue
+			}
+			// Pool retargeted mid-job: re-issue the current job's work so
+			// workers compare against the new share target immediately
+			// instead of grinding the superseded one until the next
+			// notify (finds in that window are wasted work). Paused and
+			// curtailed workers are skipped by applyJob as usual.
+			if !haveJob || opts.isCurtailed() || d == appliedDifficulty {
+				continue
+			}
+			appliedDifficulty = d
+			if err := applyJob(opts.workers, opts.arbPaused, &lastJob, chanID, d); err != nil {
+				opts.log("warn", err.Error())
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: V1 pool retargeted to difficulty %.6g — workers retargeted", d))
 
 		case share, ok := <-opts.merged:
 			if !ok {
