@@ -6374,4 +6374,13 @@ Four representative wire/secret decoders fuzzed 20s each on synced master (~3.9M
 | R | 🔵 rows unchanged | ✓ Verified: secp256k1 Noise rework (ADR-011), JDC/solo/DATUM (ADR-009), ASIC detection, temperature throttling, BOLT12/PSBT/descriptor rows remain planned/conditional |
 
 Open backlog rows re-verified against synced master; no shipped-but-stale rows remain.
+## Session 1281 update — Go 1.25/1.26 API surface adoption census
 
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| WaitGroup.Go | 30 `wg.Add(1)` + `go func` sites would simplify — but requires go 1.25; blocked by the go 1.24 module floor | ⏸ Deferred (floor) |
+| errors.AsType / t.Attr | require go 1.26 / 1.25 — blocked by floor | ⏸ Deferred (floor) |
+| runtime.AddCleanup | available under go 1.24 — but zero `SetFinalizer`/finalizer sites exist to migrate | ✓ Clean |
+| json/v2, synctest, omitzero | absent by design (experimental or covered by existing fakes) | ✓ Clean |
+
+Census over synced master; adoption gate is `go 1.24.0` in go.mod.
