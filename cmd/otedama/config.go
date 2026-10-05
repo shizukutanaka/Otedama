@@ -194,21 +194,30 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
+// unsafeDisplayRune reports whether r must be stripped from terminal
+// output: Cc control characters (ESC, newlines, DEL), Cf format
+// characters (bidi overrides, zero-width and tag characters — the
+// Trojan Source class), and Zl/Zp line/paragraph separators that
+// forge extra lines without being Cc.
+func unsafeDisplayRune(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp)
+}
+
 // safeDisplay sanitizes a config value for terminal output. It strips
-// control characters (ESC, newlines, DEL, …) so a malicious config value
-// cannot inject ANSI escape sequences or forge log lines when echoed to a
-// terminal, and renders the empty string as displayDefault.
+// characters unsafeDisplayRune rejects so a malicious config value
+// cannot inject ANSI escape sequences or forge log lines when echoed to
+// a terminal, and renders the empty string as displayDefault.
 func safeDisplay(v string) string {
 	if v == "" {
 		return displayDefault
 	}
-	if !strings.ContainsFunc(v, unicode.IsControl) {
+	if !strings.ContainsFunc(v, unsafeDisplayRune) {
 		return v
 	}
 	var b strings.Builder
 	b.Grow(len(v))
 	for _, r := range v {
-		if !unicode.IsControl(r) {
+		if !unsafeDisplayRune(r) {
 			b.WriteRune(r)
 		}
 	}
