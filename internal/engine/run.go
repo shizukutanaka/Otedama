@@ -955,11 +955,20 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
-			if dropped := totalDropped(opts.workers); dropped > lastDropped {
-				opts.log("warn", fmt.Sprintf(
-					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped,
-				))
+			if dropped := totalDropped(opts.workers); dropped != lastDropped {
+				if dropped > lastDropped {
+					opts.log("warn", fmt.Sprintf(
+						"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
+						dropped-lastDropped,
+					))
+					if opts.m != nil {
+						opts.m.sharesWorkerDropped.Add(dropped - lastDropped)
+					}
+				} else if opts.m != nil {
+					// Worker counters reset on reconnect; the new total
+					// holds drops already made in this session.
+					opts.m.sharesWorkerDropped.Add(dropped)
+				}
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
@@ -1430,11 +1439,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
-			if dropped := totalDropped(opts.workers); dropped > lastDropped {
-				opts.log("warn", fmt.Sprintf(
-					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped,
-				))
+			if dropped := totalDropped(opts.workers); dropped != lastDropped {
+				if dropped > lastDropped {
+					opts.log("warn", fmt.Sprintf(
+						"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
+						dropped-lastDropped,
+					))
+					if opts.m != nil {
+						opts.m.sharesWorkerDropped.Add(dropped - lastDropped)
+					}
+				} else if opts.m != nil {
+					// Worker counters reset on reconnect; the new total
+					// holds drops already made in this session.
+					opts.m.sharesWorkerDropped.Add(dropped)
+				}
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)

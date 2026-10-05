@@ -164,6 +164,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `device_shares_found_total{device}` † | counter | Per-device breakdown of shares found. |
 | `shares_submitted_total` | counter | Shares actually transmitted to the pool, counted at send time regardless of the eventual accept/reject response. Distinct from `shares_found_total`: a found share is never submitted if its worker's share channel was full. |
 | `shares_submit_dropped_total` | counter | Found shares dropped by the submit rate cap (8/s sustained, burst 32) before reaching the wire. Non-zero means the pool's difficulty is so low that shares arrive faster than any honest pool credits — normally a hostile or misconfigured `mining.set_difficulty`. |
+| `shares_worker_dropped_total` | counter | Found shares dropped at the worker because its share channel was full — found but never submitted (`shares_found_total` includes them, `shares_submitted_total` does not). Rising values mean the share consumer is the bottleneck. |
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
 | `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |

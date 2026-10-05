@@ -24,6 +24,12 @@ type engineMetrics struct {
 	sharesFound         *metrics.Counter
 	sharesSubmitted     *metrics.Counter
 	sharesSubmitDropped *metrics.Counter
+	// sharesWorkerDropped counts found shares that never reached the
+	// engine because a worker's share channel was full
+	// (otedama_shares_worker_dropped_total). Distinct from
+	// sharesSubmitDropped, which is the submit rate-cap drop on the
+	// engine side: this is the producer-side drop at the worker.
+	sharesWorkerDropped *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
@@ -246,6 +252,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"difficulty is so low that shares are produced faster "+
 				"than 8/s — normally only under a hostile or "+
 				"misconfigured mining.set_difficulty.",
+			nil),
+		sharesWorkerDropped: reg.NewCounter(
+			"otedama_shares_worker_dropped_total",
+			"Total found shares dropped at the worker because the share "+
+				"channel was full (consumer not keeping up). These shares "+
+				"were found but never submitted; shares_found_total "+
+				"includes them while shares_submitted_total does not. "+
+				"Rising values mean the share consumer is the bottleneck.",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",
