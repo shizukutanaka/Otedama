@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1414 — ハッシュレートフィード停滞時もクォートが 0.95 confidence を名乗っていた)
+
+ネットワークハッシュレートフィード配線済みで停滞（30分超/未取得）の場合、compile-time 定数へフォールバックしつつ confidence は価格フィード由来の 0.95 のままだった（confidence は `Effective()` 経由で裁定スコアを直接スケールするため実裁定スキュー）。劣化した設定済み入力として価格停滞と同じ 0.7 層へクランプするよう修正（未配線時は定数が設計上の基準入力のため 0.95 維持）。
+
 ### Fixed (session 1412 — フェイルオーバー先プールの payout_scheme が収益見積に反映されなかった)
 
 `pools` が複数でスキームが異なる場合（例： 先頭 `fpps`、フェイルオーバー先 `solo`）、採掘クォートの手数料控除係数が起動時の `pools[0]` 固定だったため、フェイルオーバー後の見積が最大 ~1% ずれ続けた。`runReconnectLoop` が各セッション試行で `miningProvider.SetPayoutScheme()` を呼び、実際に掘削対象のプールのスキームでクォートを再価格付けするよう修正（フィールドは `atomic.Pointer` 化し publish() との競合も解消）。

@@ -115,11 +115,17 @@ func (p *MiningProvider) publish(ctx context.Context) {
 
 	// Network hashrate: prefer the live feed (rates.HashrateFetcher via
 	// NetworkHashrateFunc); fall back to the compile-time ~1000 EH/s
-	// constant when the feed is unwired or stale.
+	// constant when the feed is unwired or stale. A wired-but-stale feed
+	// means the operator configured a better input that has degraded —
+	// the constant it falls back to could be off by the drift since the
+	// last reading, so the quote drops to the same degraded-input tier
+	// as a stale price feed rather than claiming full confidence.
 	networkHashrate := 1e21 // H/s
 	if p.NetworkHashrateFunc != nil {
-		if h, fresh := p.NetworkHashrateFunc(); fresh && h > 0 {
+		if h, hashFresh := p.NetworkHashrateFunc(); hashFresh && h > 0 {
 			networkHashrate = h
+		} else if confidence > 0.7 {
+			confidence = 0.7
 		}
 	}
 	const blockRewardBTC = 3.125

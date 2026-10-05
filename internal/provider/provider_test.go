@@ -174,6 +174,21 @@ func TestMiningProvider_LiveNetworkHashrate(t *testing.T) {
 		t.Errorf("live hashrate yield %e, want exactly 2× the constant-path yield %e",
 			liveQ.Yield.SatsPerSecond, staleQ.Yield.SatsPerSecond)
 	}
+
+	// A wired-but-stale feed is a degraded configured input: the quote must
+	// drop to the 0.7 tier (like a stale price feed) instead of claiming
+	// the 0.95 a fresh feed earns. Unwired keeps the constant at 0.95.
+	unwired := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	unwiredQ := readQuote(t, unwired)
+	if unwiredQ.Yield.Confidence != 0.95 {
+		t.Errorf("unwired: confidence %v, want 0.95 (constant is the design baseline)", unwiredQ.Yield.Confidence)
+	}
+	if staleQ.Yield.Confidence != 0.7 {
+		t.Errorf("wired-but-stale: confidence %v, want 0.7 (degraded configured input)", staleQ.Yield.Confidence)
+	}
+	if liveQ.Yield.Confidence != 0.95 {
+		t.Errorf("live feed: confidence %v, want 0.95", liveQ.Yield.Confidence)
+	}
 }
 
 func TestMiningProvider_SkipsNonSHA256dDevices(t *testing.T) {
