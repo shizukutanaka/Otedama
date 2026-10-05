@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1316 — gocyclo 分解第2弾、config/arbitration/doctor/cmd 層 6 関数)
+
+**変更.** 循環複雑度 >15 の残存クラスの第 2 弾。`config.ResolveWithOrigins`
+を `applyFileLayer`/`applyEnvLayer`/`applyFlagLayer` の層別ヘルパーへ、
+`config.Validate` を `appendAddressIssues`/`appendLogIssues`/`appendPoolIssues`/
+`appendNumericIssues` のドメイン別集約へ、`engine.runArbitrationLoop` の
+ティック処理を `arbitrationTick` へ（Decide エラー時は prevAlloc を
+ヒステリシス基準として保持 — 旧 `continue` と同一動作）、
+`cmdRun` を `resolveRunConfig`+`detectRunBundle` へ、
+`arbitration.chooseForDevice` を `candidateStreams`+`incumbentHold` へ、
+`doctor.checkPoolReachability` を `reachProbe`/`probePools`/
+`classifyProbes`/`reachabilityResult` へ分割。動作は不変（4 層優先順位・
+バリデーション集約順・ヒステリシス・並行プローブを保持）。
+残件: engine run.go の `runSession`/`runSessionV1`/`runReconnectLoop`/`Run`
+は batch C へ、`wire/codec` 5 関数は #1396 カバー。
+
+### Changed (session 1312 — lint 債務バッチ2: goconst/errcheck/errorlint)
+
+**変更.** golangci-lint v2（#1391 の設定）での残存指摘を機械修正:
+`"help"` サブコマンド文字列を `helpSubcommand` 定数へ、`# TYPE` 行の
+kind リテラル14箇所を `metricKindCounter`/`metricKindGauge` へ集約、
+`err == flag.ErrHelp`・`err != context.Canceled` を `errors.Is` 比較へ、
+`defer httpSrv.Stop()` の破棄エラーを明示的に `_ =` へ、pool URL の
+`%v` を `%w` へ修正。goconst/errcheck/errorlint の3クラスを0件に。
+
+### Changed (session 1311 — lint 債務バッチ1: misspell 一括正規化)
+
+**変更.** golangci-lint v2 で可視化された misspell 指摘46件（US ロケール基準の英語スペル）を一括正規化 — `cancelled→canceled`、`serialisation→serialization`、`honour→honor` 等。コメントおよび doctor 診断の `Detail`/`Fix` メッセージ文字列のみ、識別子の改名なし。残存クラス（gosec/gocyclo/gocritic/goconst/staticcheck/errorlint/errcheck）は後続バッチで処理。
+
+### Changed (session 1313 — lint debt batch 3: staticcheck + gocritic)
+
+Clear the mechanical classes the golangci-lint v2 migration (#1391)
+surfaced: all 5 staticcheck findings (De Morgan forms, `for ctx.Err() ==
+nil`, single-case select) and all 13 gocritic findings (hugeParam pointer
+receivers on `sessionOpts.allArbPaused`/`channelIDOf`, ifElseChain→switch,
+importShadow renames, httpNoBody, octalLiteral, zeroByteRepeat, initClause,
+offBy1 index guard). One deliberate test fixture (whitespace map key)
+annotated `//nolint:gocritic`.
+
 ### Changed (session 1315 — gocyclo wire/codec 層の分解、5/15 件)
 
 **変更.** 循環複雑度 >15 の残存クラスを段階的に解消。第 1 弾はワイヤ/コーデック
