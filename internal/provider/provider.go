@@ -72,6 +72,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -105,12 +106,19 @@ type Yield struct {
 }
 
 // Effective returns the confidence-weighted net yield, which is what
-// the arbitration engine uses for comparison.
+// the arbitration engine uses for comparison. Confidence is clamped
+// to 1.0 and non-finite values collapse to 0, mirroring
+// arbitration.Yield.Effective so a quote outside the documented
+// [0,1] contract cannot inflate its own score.
 func (y Yield) Effective() float64 {
-	if y.NetSatsPerSecond <= 0 || y.Confidence <= 0 {
+	if !(y.NetSatsPerSecond > 0) || !(y.Confidence > 0) {
 		return 0
 	}
-	return y.NetSatsPerSecond * y.Confidence
+	v := y.NetSatsPerSecond * min(y.Confidence, 1.0)
+	if math.IsInf(v, 0) || math.IsInf(y.Confidence, 0) {
+		return 0
+	}
+	return v
 }
 
 // Quote is a yield update published by a provider.

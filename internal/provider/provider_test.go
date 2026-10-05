@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ func TestYield_Effective(t *testing.T) {
 		{"zero sats", Yield{SatsPerSecond: 0, NetSatsPerSecond: 0, Confidence: 1.0}, 0},
 		{"zero confidence", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: 0}, 0},
 		{"negative net sats", Yield{SatsPerSecond: 100, NetSatsPerSecond: -1, Confidence: 1.0}, 0},
+		{"confidence above contract clamps at 1", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: 1.7}, 99},
+		{"NaN net sats collapses", Yield{SatsPerSecond: 100, NetSatsPerSecond: math.NaN(), Confidence: 1.0}, 0},
+		{"Inf net sats collapses", Yield{SatsPerSecond: 100, NetSatsPerSecond: math.Inf(1), Confidence: 1.0}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
