@@ -134,6 +134,10 @@ type session struct {
 	authorized atomic.Bool
 	preAuthMu  sync.Mutex
 	preAuthJob json.RawMessage
+	// authorizedUser is the username authorize succeeded with; Submit
+	// echoes it because ckpool-derived pools resolve the share's worker
+	// by name and reject names that were never authorized.
+	authorizedUser atomic.Pointer[string]
 	// en2Counter rolls extranonce2 per job so every job's coinbase (and
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
@@ -513,8 +517,12 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		// Pad to extranonce2_size if the worker passed empty.
 		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
 	}
+	workerName := "otedama"
+	if u := s.authorizedUser.Load(); u != nil && *u != "" {
+		workerName = *u
+	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		workerName,
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

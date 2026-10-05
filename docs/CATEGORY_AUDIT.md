@@ -6963,3 +6963,12 @@ CHANGELOG entry added under Fixed (session 1335).
 | S | Same gap on the V2 path? | ✅ Verified: SV2 cannot deliver mining jobs before `OpenMiningChannelSuccess`, which is itself the authorization point — the protocol's message ordering enforces the gate structurally. |
 
 CHANGELOG entry added under Fixed (session 1336).
+
+## Session 1337 update — first-principles audit of "submitted shares are creditable" (Socratic pass 19)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The share is valid — but is it *creditable*? Does the pool attribute it to the authorized worker? | 🔧 Fixed: `mining.submit` sent a hardcoded `"otedama"` as worker_name while `mining.authorize` used the configured pool user. ckpool-derived pools (public-pool.io, DATUM-style solo stacks) resolve the share's worker by name and reject names that were never authorized — 100% of shares silently rejected pool-side while the coinbase payout check (s1318) still passed, since the work itself was valid. `session.authorizedUser` now stores the username authorize succeeded with and Submit echoes it; `TestSession_Submit_EchoesAuthorizedWorkerName` pins the wire value. |
+| S | Can the share's wire encoding itself desync from what the pool re-validates? | ✅ Verified: nonce/ntime are `%08x` of the uint32 values (the Stratum convention — pool serializes back to header little-endian, matching `marshal`'s LE layout); `Share.NTime` is the post-roll header time (`h.Time` after ntimeRoll), not the job's original ntime, so a rolled share verifies against the header that was actually hashed; extranonce2 echoes the same hex bytes the pool issued. V1 submits carry no version field, so the notify's version is implicitly the share's version — consistent. |
+
+CHANGELOG entry added under Fixed (session 1337).

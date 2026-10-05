@@ -188,6 +188,9 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 	// From here the session is authenticated: allow job delivery and replay
 	// any notify the pool pushed during the handshake (see session.authorized).
+	// Submit echoes this exact username — ckpool-derived pools resolve the
+	// share's worker by name and reject names that were never authorized.
+	sess.authorizedUser.Store(&user)
 	sess.authorized.Store(true)
 	sess.flushPreAuthJob()
 

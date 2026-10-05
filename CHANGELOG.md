@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1337 — mining.submit のワーカー名を認証済みユーザー名に一致)
+`mining.submit` の worker_name が `"otedama"` のハードコードで、`mining.authorize` で使う設定プールユーザーと不一致だった。ckpool 派生プール（public-pool.io 等の DATUM 系ソロ構成）はシェアのワーカーを名前で解決し未認証名を reject するため、全シェアがプール側で拒否される可能性があった（コインベース支払検証は通るため静かな収益消失）。authorize 成功時のユーザー名を `session.authorizedUser` に保持し Submit がエコーするよう修正。
+
 ### Fixed (session 1336 — 認証前 notify による無認証ハッシュ収穫を遮断)
 V1 の readLoop は handshake 完了前に起動するため、`mining.authorize` 応答前の `mining.notify` がそのままジョブをアームしていた。敵対プールが authorize を保留しつつ notify を流せば handshakeTimeout 上限のハッシュを無認証で収穫可能（再接続毎に反復可）。`session.authorized` ゲートを追加し、認証前 notify は最新1件を stash、authorize 成功後に順序を保って replay（preAuthMu で直列化 — stash ジョブが新ジョブより後に再アームすることはない）。
 

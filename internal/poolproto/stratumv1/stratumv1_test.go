@@ -1184,6 +1184,62 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	}
 }
 
+func TestSession_Submit_EchoesAuthorizedWorkerName(t *testing.T) {
+	// ckpool-derived pools resolve the share's worker by name and reject
+	// names that were never authorized — Submit must echo the username
+	// mining.authorize succeeded with, not a hardcoded literal.
+	gotWorker := make(chan string, 1)
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			if req.Method == "mining.submit" {
+				var params []json.RawMessage
+				_ = json.Unmarshal(req.Params, &params)
+				var worker string
+				if len(params) > 0 {
+					_ = json.Unmarshal(params[0], &worker)
+				}
+				gotWorker <- worker
+				id, _ := json.Marshal(req.ID)
+				resp := `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+				_, _ = serverConn.Write([]byte(resp))
+			}
+		}
+	}()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
+	user := "bc1qworker.rig1"
+	sess.authorizedUser.Store(&user)
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "X", Nonce: 1, NTime: 1}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	select {
+	case w := <-gotWorker:
+		if w != user {
+			t.Fatalf("submit worker_name %q, want authorized user %q", w, user)
+		}
+	default:
+		t.Fatal("pool received no mining.submit params")
+	}
+}
+
 func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
 	// Closing the server before any submission causes Write in call to fail;
 	// Submit must propagate that error rather than silently swallowing it.
