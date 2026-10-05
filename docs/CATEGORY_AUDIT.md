@@ -6366,3 +6366,12 @@ All 8 open KNOWN_LIMITATIONS entries re-verified against synced master; no entry
 
 Four representative wire/secret decoders fuzzed 20s each on synced master (~3.9M execs total): zero crashes, zero hangs. Complements the CI fuzz job (#1347).
 
+## Session 1284 update — RESEARCH_IMPROVEMENTS open-set re-verification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Remaining 🟡 rows still genuinely open after s1282/s1283 shipped-row fixes | ✓ Verified: Akash REST still simulated (`AkashProvider.Name` discloses "(simulated)"), provider health/heartbeat absent (no liveness calls on Provider interface), OTel traces absent (no otel dep), SLO doc absent, carbon feed absent, pool-share-of-hashrate awareness absent, Markovian/bi-criteria bandit and federated rows still research-tier |
+| R | 🔵 rows unchanged | ✓ Verified: secp256k1 Noise rework (ADR-011), JDC/solo/DATUM (ADR-009), ASIC detection, temperature throttling, BOLT12/PSBT/descriptor rows remain planned/conditional |
+
+Open backlog rows re-verified against synced master; no shipped-but-stale rows remain.
+
