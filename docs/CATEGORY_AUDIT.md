@@ -6991,3 +6991,12 @@ Ledger only — verification round, no behavior-visible change.
 | S | Could the stash itself be a memory DoS? | ✅ Verified: capped at 16 params blobs (each already bounded by the 1 MiB read-line ceiling) → ≤16 MiB worst case, freed on flush/close; drop-oldest keeps the semantically-dominant newest message per method. |
 
 CHANGELOG entry added under Fixed (session 1339).
+
+## Session 1340 update — first-principles audit of "client.reconnect can't redirect the worker" (Socratic pass 22)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When a pool sends `client.reconnect`, can it steer our hashpower to an arbitrary host? | ✅ Verified no: `handleReconnect` deliberately does **not** follow the pool-supplied Host:Port (`parse.go` documents the redirection-vector rationale); it records the directive and closes the session, and the reconnect loop re-dials only the operator-configured pool list. Only `wait_seconds` is honored, clamped to [0, 300s] by `ReconnectWait` (s276/#388). A malicious or compromised pool can therefore end the session early and request a bounded pause — never redirect it. |
+| S | Residual edge? | ⚠️ Noted: `client.reconnect` *with no host* still always closes the session — a pool can force a reconnect loop (bounded by the existing backoff). This is the protocol's intended load-balance behavior; treating it as advisory-only would break legitimate pool migrations. |
+
+Ledger only — verification round, no behavior-visible change.
