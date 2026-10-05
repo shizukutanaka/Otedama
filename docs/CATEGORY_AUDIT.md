@@ -6296,3 +6296,10 @@ All packages build, vet, and test green.
 | R | Deprecated linter names | ✓ Zero in the enabled set: all 33 enabled linters (errcheck/govet/ineffassign/staticcheck/unused/typecheck/gosec/bodyclose/rowserrcheck/goconst/gocritic/revive/unconvert/unparam/dogsled/dupl/gocyclo/misspell/nakedret/prealloc/gosimple/gofmt/gofumpt/goimports/errorlint/nilerr/usestdlibvars/wastedassign) are valid golangci-lint v2 names — no deadcode/varcheck/structcheck/scopelint/maligned/interfacer/golint/ifshort/exportloopref remnants |
 | R | Scoping | ✓ `disable-all: true` + explicit allowlist — no surprise linter activation on tool upgrades |
 
+## Session 1292 update — merged-fix invariant + workflow YAML parse
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | PR #1293 invariant | ✓ Holds: every push/PR branch filter on synced master now includes `master` (ci/ci-cd/test/security `[main, master, develop]`, deploy `[main, master]`) — no workflow still targets only nonexistent branches |
+| R | Workflow YAML integrity | ✓ All 8 files (ci, ci-cd, code-review, deploy, devin-direct-merge, release, security, test) parse cleanly via `yaml.safe_load` |
+
