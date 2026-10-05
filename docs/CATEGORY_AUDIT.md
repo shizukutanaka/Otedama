@@ -1853,6 +1853,18 @@ All packages build, vet, and test green.
 THREAT_MODEL.md 500 lines fully verified; no stale mitigation claims remain after the #521/#522/#604 corrections.
 All packages build, vet, and test green.
 ---
+
+## Session 1236 update — ADR body parity audit (ADR-001〜011)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| adr002-v1-claim | "No V1 fallback is provided" conflicts with shipped `internal/poolproto/stratumv1/` + DialURL; ADR-009 referenced a nonexistent ADR-002 erratum | **S: fixed** — Erratum 1 added: V2-preference not V2-only |
+| adr003-dep-whitelist | Title's dep list missing `golang.org/x/sys` (used by tui width_* for terminal-width ioctl); erratum's "deferred" yaml migration actually completed in #444 | **S: fixed** — Erratum 2 added: yaml migration done + x/sys in effective whitelist |
+| adr007/008/009/010 | Proposed status correct — none of the proposed surfaces exist in code | Clean |
+| adr001/004/005/006/011 | Accepted status + claims verified against implementation; ADR-011 errata current | Clean |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
