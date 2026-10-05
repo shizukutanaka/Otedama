@@ -29,7 +29,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
 
-// detectDevices initialises the HAL registry, registers CPU and GPU
+// detectDevices initializes the HAL registry, registers CPU and GPU
 // drivers, and runs detection. Returns the list of detected devices,
 // or an error if registration fails or no devices are found.
 func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Device, error) {
@@ -45,7 +45,7 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 	})
 	devices, err := detector.Detect(ctx)
 	if len(devices) == 0 {
-		// Detect only returns an error when the context was cancelled or
+		// Detect only returns an error when the context was canceled or
 		// timed out (per-driver enumeration failures are logged via the
 		// callback above). The built-in CPU driver always enumerates a
 		// device, so an empty result effectively means detection was
@@ -86,9 +86,9 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 		// (worker, thread) pair owns a residue class forever.
 		// total can never exceed the nonce space: stride stays a power
 		// of two ≤ 2^31 and every offset is < total.
-		if total := cfg.Threads * len(sha256d); len(sha256d) > 1 && total <= 1<<31 {
+		if total := uint64(cfg.Threads) * uint64(len(sha256d)); len(sha256d) > 1 && total > 0 && total <= 1<<31 {
 			stride := uint32(1)
-			for uint64(stride) < uint64(total) {
+			for uint64(stride) < total {
 				stride <<= 1
 			}
 			//nolint:gosec // i*Threads < total ≤ 2^31 per the guard above
@@ -159,7 +159,7 @@ func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provide
 	return miningProvider, akashProvider
 }
 
-// setupWallet initialises the optional Lightning wallet. Returns the
+// setupWallet initializes the optional Lightning wallet. Returns the
 // wallet fingerprint, or an empty string if no wallet was configured
 // or initialisation failed (errors are logged, not propagated, so the
 // engine can run mining without a wallet).
@@ -375,7 +375,7 @@ func defaultPoolURL(cfg *config.Config) string {
 // poolURLs returns the ordered list of pool URLs to try, for failover.
 // The order is the user's configured priority; the engine rotates to
 // the next pool when the current one fails (matching the multi-pool
-// failover behaviour of cgminer/bfgminer/Braiins). Falls back to the
+// failover behavior of cgminer/bfgminer/Braiins). Falls back to the
 // built-in default when no pools are configured.
 func poolURLs(cfg *config.Config) []string {
 	if len(cfg.Pools) == 0 {
@@ -412,7 +412,7 @@ func payoutAddresses(cfg *config.Config) []string {
 }
 
 // sessionUser builds the Stratum user_identity sent in OpenMiningChannel,
-// honouring the documented config precedence:
+// honoring the documented config precedence:
 //   - an explicit per-pool User overrides everything (operator's choice);
 //   - otherwise the active payout address is used, suffixed with the
 //     configured worker name as "address.worker" — the standard Stratum

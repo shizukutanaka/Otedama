@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"go.yaml.in/yaml/v3"
 
@@ -52,9 +53,12 @@ func defaultConfigPath() string {
 	if p := os.Getenv("OTEDAMA_CONFIG"); p != "" {
 		return p
 	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "otedama", "config.yaml")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return home + "/.config/otedama/config.yaml"
+	return filepath.Join(home, ".config", "otedama", "config.yaml")
 }
