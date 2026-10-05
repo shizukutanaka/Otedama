@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,7 +134,7 @@ func TestWalletVerify_NoWallet_DoesNotCreate(t *testing.T) {
 	if code == exitOK {
 		t.Fatal("expected non-zero exit with no wallet present")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "wallet.dat")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "wallet.dat")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("verify created wallet.dat — must not create wallets")
 	}
 }
@@ -169,7 +170,7 @@ func TestWalletChangePassphrase_NoWallet_DoesNotCreate(t *testing.T) {
 	if code == exitOK {
 		t.Fatal("expected non-zero exit with no wallet present")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "wallet.dat")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "wallet.dat")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("change-passphrase created wallet.dat — must not create wallets")
 	}
 }

@@ -1464,3 +1464,44 @@ as written; the next recheck is due around session 1200.
 ## Session-1201 ecosystem update (2026-10-02)
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1307 ecosystem update (2026-10-02)
+
+### sv2-spec
+
+Normative open set unchanged: #203 (coinbase transaction payouts,
+plebhash — push-based extension), #236 (`SetTarget.target` MUST NOT
+exceed the channel's `max_target` — client-side bound Otedama already
+records in the session-1269 audit), #234 (authority key management and
+rotation), #198 (`coinbase_witness` field in `NewTemplate`) all remain
+open; none merged since the last recheck. The message set Otedama's
+dialer implements is unchanged.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+Latest release confirmed via tags+releases API: v1.12.0 (2026-09-17) —
+the hardening wave already recorded (bounded job storage, min_ntime/nTime
+bounds, codec_sv2/framing_sv2 split, AES-256-GCM removal leaving
+ChaCha20-Poly1305 as the sole cipher, matching Otedama's noise set). No
+v1.13.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+27 open PRs (was ~25 in session-1262's update). Recent activity is the
+same hardening wave plus infra: #908 (B08 type in bitcoin_core_sv2),
+#904 (monitoring/config/release edge cases), #903 (buffer hardening),
+#902 (Windows CI). The tracked set — #881 (WIP jds handle_push_solution),
+#883 (community-multisig coinbase config), #856 (bitcoin_core_sv2
+hardening), #845 (target-field rename matching spec cleanup), #839 (jds
+user_identity token binding) — all still open. Latest release remains
+v0.7.0-era alpha; no release-level change in client-side scope.
+
+### Assessment
+
+Quiet window confirmed — no action. ADR-009's proposal sections stand;
+next recheck due around session 1317.
+
+## Session-1297 ecosystem update (2026-10-04)
+
+sv2-spec normative open set unchanged — #203 (coinbase transaction payouts extension, last updated 2026-09-15), #236 (SetTarget.target MUST NOT exceed max_target — still active, updated 2026-10-02), #234 (authority key management docs, 2026-09-25), #198 (coinbase_witness field, 2026-09-23) all remain open and unmerged; no new normative candidate merged since the s1287 recheck. SRI latest release re-confirmed as v1.12.0 (2026-09-17) — the earlier "v1.12.0 stale" note in the ledger was wrong; v1.12.0 stands as the current release with the hardening wave intact. sv2-apps latest = v0.8.0 (2026-09-17); open-PR count 27 with the hardening wave continuing (#903 buffer hardening, #856 bitcoin_core_sv2 hardening, #878 empty-coinbase-script rejection, #845 spec-field rename alignment, #881 JDS push-solution WIP). No action required — quiet window continues.
+
