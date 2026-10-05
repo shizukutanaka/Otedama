@@ -6917,3 +6917,12 @@ Code change: `poolproto.DifficultyWatcher` + stratumv1 `diffCh`/`DifficultyUpdat
 | S | What does a resumed device lose between un-pause and the next job? | ⚠️ Noted: up to one job interval (~seconds to ~a minute) of hashing latency — the worker idles on nil work rather than a stale job, so it loses throughput, never validity. Mirrors the curtail path's documented semantics; the job-starvation warn (`jobStallWarnAfter`) covers the pathological case of a pool that stops sending jobs entirely. Benign; re-issuing on resume would need the session's current job plumbed into the arbitration loop for no additional safety. |
 
 No code change required this round.
+
+## Session 1332 update — first-principles audit of the "the submit rate cap protects without starving legitimate shares" claim (Socratic pass 14)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the 8/s + burst-32 cap drop a share the user actually needed? | ✅ Verified (with an honest edge): the cap is consumed only *after* the superseded-job gate, so no flood path burns tokens on dead work; a queued-instead-of-dropped design would make shares *more* stale by send time (the comment's stated reason for dropping). A legit device hits 8/s only at ~34 GH/s on a difficulty-1 pool — a configuration where each share credits ≈0 work anyway, so the revenue loss is negligible while the DoS bound is real. |
+| S | Is the accounting honest about what was lost? | ⚠️ Noted: `shares_submit_dropped` counts both superseded-job drops (s1323) and rate-cap drops — two distinct causes folded into one counter (each has a distinct debug log line; the metric itself can't tell them apart). Deliberate drop accounting is otherwise honest — capped shares are never counted as submitted or accepted. |
+
+No code change required this round.
