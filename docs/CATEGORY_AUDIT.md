@@ -6414,4 +6414,12 @@ govulncheck v1.1.4, source analysis mode (calls into the vuln symbol are require
 | sv2-apps latest | v0.7.0 (24 Jul 2026) remains the newest release; open-PR count ~27 (hardening wave: #908 B08 type, #904 monitoring edges, #902 Windows CI) | ✓ Monitored |
 
 No protocol or implementation change required.
+## Session 1276 update — post-merge-wave master verification
 
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| build | `go build ./...` clean on synced master (go1.27.1 darwin/arm64) | ✓ Clean |
+| vet | `go vet ./...` zero findings | ✓ Clean |
+| race | `go test -race -count=1 ./...` all 25 packages pass, zero flakes/detectors | ✓ Clean |
+
+Measured verification of master after the PR close-out wave — confirms the ledger's recurring "green" claim on the latest tree.
