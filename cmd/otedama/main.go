@@ -130,7 +130,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
-	case "help", helpFlag, "-h":
+	case helpSubcommand, helpFlag, "-h":
 		printUsage(stdout)
 		return exitOK
 	default:
@@ -146,7 +146,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 // knownSubcommands mirrors the dispatch switch in run(). Keep in sync —
 // it is only used to offer a "did you mean" hint on typos.
 var knownSubcommands = []string{
-	"run", "version", "config", "service", "doctor", "wallet", "completion", "help",
+	"run", "version", "config", "service", "doctor", "wallet", "completion", helpSubcommand,
 }
 
 // suggestSubcommand returns the closest known subcommand to what the user

@@ -1,8 +1,6 @@
 module github.com/shizukutanaka/Otedama
 
-go 1.22
-
-toolchain go1.24.0
+go 1.24.0
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS
@@ -27,7 +25,7 @@ require (
 	// implementation; required for the wallet KDF (AES-256-GCM key
 	// derivation in internal/lightning). BSD-3-Clause, actively
 	// maintained by the Go team. ADR-003 budget: stdlib + x/crypto + yaml.
-	golang.org/x/crypto v0.23.0
+	golang.org/x/crypto v0.48.0
 )
 
 // golang.org/x/sys is used by internal/tui to query the live terminal
@@ -35,4 +33,4 @@ require (
 // the frozen syscall package cannot express either portably. BSD
 // licensed, maintained by the Go team, already in the module graph as
 // an x/crypto dependency (no new modules added).
-require golang.org/x/sys v0.20.0
+require golang.org/x/sys v0.41.0

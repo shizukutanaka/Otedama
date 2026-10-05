@@ -526,7 +526,11 @@ func TestDashboard_PoolLine_StatusColumnAligned(t *testing.T) {
 	// (cols-8-len("✓ connected")-2) + 2-space gap.
 	urlBudget := cols - len("  Pool: ") - len("✓ connected") - 2
 	want := len("  Pool: ") + urlBudget + 2
-	vis := visibleLen(line[:strings.Index(line, "✓")])
+	idx := strings.Index(line, "✓")
+	if idx < 0 {
+		t.Fatalf("status column missing ✓ marker: %q", line)
+	}
+	vis := visibleLen(line[:idx])
 	if vis != want {
 		t.Errorf("status column = %d visible chars, want %d: %q", vis, want, line)
 	}
