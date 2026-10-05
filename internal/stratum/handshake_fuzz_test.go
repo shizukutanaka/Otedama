@@ -34,7 +34,7 @@ func FuzzHandshakeDecoders(f *testing.F) {
 		f.Add(enc)
 	}
 	if enc, err := (OpenMiningChannelSuccess{
-		ReqID: 7, ChannelID: 3, Extranonce: []byte{1, 2, 3}, ExtraNonce2Size: 4,
+		ReqID: 7, ChannelID: 3, Extranonce: []byte{1, 2, 3}, GroupChannelID: 4,
 	}).Encode(); err == nil {
 		f.Add(enc)
 	}
@@ -64,7 +64,7 @@ func FuzzHandshakeDecoders(f *testing.F) {
 			t.Fatalf("re-decoding own encoding failed: %v", err)
 		}
 		if again.ReqID != succ.ReqID || again.ChannelID != succ.ChannelID ||
-			again.Target != succ.Target || again.ExtraNonce2Size != succ.ExtraNonce2Size ||
+			again.Target != succ.Target || again.GroupChannelID != succ.GroupChannelID ||
 			!bytes.Equal(again.Extranonce, succ.Extranonce) {
 			t.Fatal("OpenMiningChannelSuccess round-trip not stable")
 		}

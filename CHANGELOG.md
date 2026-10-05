@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1493 — SV2 チャネルオープンの送受信がスペックレイアウトとずれていた)
+
+送側 0x10 `OpenStandardMiningChannel` は spec 上 `max_target U256` を必須とする（request_id、user_identity、nominal_hash_rate、max_target の固定レイアウト）が、`OpenMiningChannel.Encode()` が同フィールドを出力しておらず、spec 準拠の厳格なデコーダを持つプールは短いバッファを読んでフレーム全体を棄却し得た。意図的な省略とコメントにあったが、max_target は省略可能な「選好」ではなく固定レイアウトの必須フィールド——省略は設定欠落ではなくメッセージの不正形である。全 0xFF の `MaxTargetUnconstrained`（=「プールの割当を何でも受ける」正直な宣言）を送出するよう修正。受側 0x11 `OpenStandardMiningChannel.Success` は spec 末尾が `group_channel_id U32` なのに `ExtraNonce2Size uint16`（V1 由来の概念）を読んでおり、group id の下位 16bit を誤読し末尾 2 バイトを未消費にしていた。`GroupChannelID uint32` として spec 通りに読み直し（単一チャネル運用のため値自体は未消費だが、フレーム位置を正しく合わせる）。
+
 ### Fixed (session 1484 — 変換不能な set_difficulty が nBits ブロック難易度へ黙ってフォールバックしていた)
 
 V1 の `mining.set_difficulty` に正だが変換不能な値（天文的な巨大値でターゲットが0へアンダーフロー、~1e-77 未満で256bit超過のオーバーフロー）を送られた場合、`v1JobTarget` が変換エラーを握り潰して nBits ブロック難易度で掘り続けていた。巨大難易度ではプールが拒否する易しいシェアを量産し、極小難易度ではほぼ不可能なシェアを掘る静かな飢餓となり、記録された難易度と実際の掘削ターゲットが乖離して原因が可視化されなかった。変換失敗をエラーとして伝播し、`applyJob` が warn 付きで当該ジョブを棄却するよう修正（`v1ShareTarget` が同じ変換失敗で `ok=false` を返す対称設計と整合）。

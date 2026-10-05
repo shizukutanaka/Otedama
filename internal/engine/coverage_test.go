@@ -2872,9 +2872,9 @@ func (fp *dropAfterHandshakePool) handle(conn net.Conn) {
 		return
 	}
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF
@@ -2970,7 +2970,7 @@ func handshakeCaptureNominal(t *testing.T, serverConn net.Conn) <-chan float32 {
 		}
 		got <- msg.OpenMiningChannel.NominalHashrate
 
-		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, GroupChannelID: 4}
 		payload, _ = omcs.Encode()
 		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
 		encoded, _ = stratum.EncodeFrame(outF)

@@ -103,9 +103,9 @@ func (fp *fakePool) serve() {
 
 	// 4. Send OpenMiningChannelSuccess
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 		// All-0xFF target = easiest possible, so the CPU will find shares.
 	}
 	for i := range omcSucc.Target {
@@ -2582,10 +2582,10 @@ func (fp *responsivePool) serve() {
 
 	// Send OpenMiningChannelSuccess with the pool's configured share target.
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
-		Target:          fp.shareTarget,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
+		Target:         fp.shareTarget,
 	}
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
@@ -3225,7 +3225,7 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 		if err != nil {
 			return
 		}
-		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, GroupChannelID: 4}
 		for i := range omcSucc.Target {
 			omcSucc.Target[i] = 0xFF
 		}
