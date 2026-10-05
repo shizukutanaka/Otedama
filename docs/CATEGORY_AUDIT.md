@@ -7707,3 +7707,7 @@ Verified against live GitHub API (authenticated): sv2-spec open PR set unchanged
 ## Session 1468 update (ADR-009 ecosystem recheck)
 
 Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, active review), #234 (authority key management), #203 (coinbase-payout extension), #198 (coinbase_witness). Reference implementation anchors re-verified via the tags API: SRI latest tag remains v1.12.0; sv2-apps latest remains v0.8.0 — no new normative movement since s1458. No action required; Otedama's V1-limited payout verification disclosure stays aligned with the still-open upstream #203 debate.
+
+## Session 1469 update (Socratic pass 141)
+
+**Claim verified:** "A paused worker stops hashing" — true with a bounded, honest drain. SetWork(nil) is a mutex-guarded store plus version bump, so grind threads observe the nil at the top of their next loop iteration and drop to a 10ms sleep-retry (no busy spin). The only in-flight work is the current 1024-hash batch per thread — a pause can never take more than one batch to take effect, and the worker's own hashRate window decays to zero on the next sample so the stalled worker can't keep reporting stale throughput. Version-bump-on-every-SetWork also means a same-pointer re-issue is impossible to miss. Honest residual already on the ledger (s1360): lifetime-average hashrate continues to count the paused interval — cosmetic only, since the windowed rate used by arbitration and metrics reports truth.
