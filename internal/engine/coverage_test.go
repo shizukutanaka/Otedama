@@ -2935,7 +2935,7 @@ func TestNominalMiningHashrate(t *testing.T) {
 }
 
 // TestRunSession_UnimplementedSchemeFailsFast pins the datum:// dispatch
-// fix: datum:// is recognised by poolproto (ADR-009, OCEAN's SV1-transport
+// fix: datum:// is recognized by poolproto (ADR-009, OCEAN's SV1-transport
 // variant) but has no implementation, so runSession must reject it with a
 // clear error rather than dial an OCEAN-style pool and emit binary SV2
 // frames — which would only surface as a confusing handshake timeout.

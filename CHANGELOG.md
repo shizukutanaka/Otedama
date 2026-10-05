@@ -35,6 +35,10 @@ kind リテラル14箇所を `metricKindCounter`/`metricKindGauge` へ集約、
 `defer httpSrv.Stop()` の破棄エラーを明示的に `_ =` へ、pool URL の
 `%v` を `%w` へ修正。goconst/errcheck/errorlint の3クラスを0件に。
 
+### Changed (session 1311 — lint 債務バッチ1: misspell 一括正規化)
+
+**変更.** golangci-lint v2 で可視化された misspell 指摘46件（US ロケール基準の英語スペル）を一括正規化 — `cancelled→canceled`、`serialisation→serialization`、`honour→honor` 等。コメントおよび doctor 診断の `Detail`/`Fix` メッセージ文字列のみ、識別子の改名なし。残存クラス（gosec/gocyclo/gocritic/goconst/staticcheck/errorlint/errcheck）は後続バッチで処理。
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:

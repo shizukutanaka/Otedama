@@ -6064,3 +6064,12 @@ Post-change census on golangci-lint v2.14 + PR #1391's config: goconst, errcheck
 
 All packages build, vet, and test green.
 All packages build, vet, and test green.
+## Session 1311 update — lint-debt batch 1: misspell (46 sites)
+
+| Cat | Finding | Disposition |
+| --- | ------- | ----------- |
+| M | `misspell` (US locale) flagged 46 British-English spellings across comments and user-facing strings in 12 files (`Initialise`, `initialised`, `recognised`, `honouring`, `synchronise`, `cancelled`, `behaviour`, `serialisation`, `marshalling`, `colour`). | **S: fixed** — `misspell -locale US -w` on the 12 flagged files; diff verified to touch comments and doctor `Detail`/`Fix` message strings only — zero identifier renames. All packages build + test green; re-run reports 0 misspell findings. |
+| M | `gofumpt` formatting drift. | ✅ Clean: `gofumpt -l .` lists zero files. |
+
+Toolchain note: lint findings were enumerated with golangci-lint v2.14.0 + the v2 config from PR #1391; remaining classes (gosec 22, gocyclo 15, gocritic 13, goconst 6, staticcheck 5, errorlint 3, errcheck 1) are scheduled for follow-up batches.
+

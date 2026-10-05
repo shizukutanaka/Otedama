@@ -205,7 +205,7 @@ func (f *HashrateFetcher) fetchOne(ctx context.Context, src HashrateSource) (flo
 	return v, nil
 }
 
-// StartBackground polls at the given interval until ctx is cancelled.
+// StartBackground polls at the given interval until ctx is canceled.
 // The first fetch runs immediately so the provider sees a live value
 // within the first seconds of operation rather than after a full
 // interval.
