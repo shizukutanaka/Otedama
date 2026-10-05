@@ -76,8 +76,8 @@ func FingerprintFilePath(dataDir string) string {
 	return filepath.Join(dataDir, fingerprintFile)
 }
 
-// WalletOption configures optional NewWalletManager creation behaviour.
-// The zero value of every option's effect is the pre-existing behaviour,
+// WalletOption configures optional NewWalletManager creation behavior.
+// The zero value of every option's effect is the pre-existing behavior,
 // so adding a new WalletOption never requires touching an existing call.
 type WalletOption func(*walletOptions)
 
@@ -106,7 +106,7 @@ func WithMnemonicPassphrase(p string) WalletOption {
 	return func(o *walletOptions) { o.mnemonicPassphrase = p }
 }
 
-// NewWalletManager initialises the wallet subsystem.
+// NewWalletManager initializes the wallet subsystem.
 //
 // If wallet.dat exists in dataDir, it is decrypted using passphrase
 // and the existing seed is returned. If it does not exist, a new
@@ -120,7 +120,7 @@ func WithMnemonicPassphrase(p string) WalletOption {
 // call NewEnglishWordList() from this package. Passing nil returns an
 // error.
 //
-// opts configures optional creation behaviour; see WithMnemonicPassphrase.
+// opts configures optional creation behavior; see WithMnemonicPassphrase.
 func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *WordList, opts ...WalletOption) (*WalletManager, error) {
 	if dataDir == "" {
 		return nil, errors.New("lightning: dataDir must not be empty")
@@ -148,14 +148,15 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 
 	walletPath := filepath.Join(dataDir, walletFile)
 	_, err := os.Stat(walletPath)
-	if errors.Is(err, os.ErrNotExist) {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
 		// First run: generate a new seed.
 		if err := wm.createNew(passphrase, wo.mnemonicPassphrase, reader); err != nil {
 			return nil, err
 		}
-	} else if err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("lightning: stat wallet file: %w", err)
-	} else {
+	default:
 		// Existing wallet: decrypt and load.
 		if err := wm.loadExisting(passphrase); err != nil {
 			return nil, err

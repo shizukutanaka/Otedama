@@ -3191,7 +3191,8 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 			if err != nil || acked {
 				continue
 			}
-			if submits++; submits < 3 {
+			submits++
+			if submits < 3 {
 				continue
 			}
 			acked = true
@@ -3480,10 +3481,7 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	go func() {
 		_, _ = dec.ReadFrame()
 	}()
-	select {
-	case <-time.After(150 * time.Millisecond):
-		// success: read is still blocked (no deadline fired)
-	}
+	<-time.After(150 * time.Millisecond) // success: read is still blocked (no deadline fired)
 	_ = client.Close()
 }
 
