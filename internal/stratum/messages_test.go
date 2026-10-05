@@ -1210,3 +1210,74 @@ func TestDispatchFrame_SetupConnection_Malformed(t *testing.T) {
 		t.Error("DispatchFrame with 1-byte SetupConnection payload must return a decode error")
 	}
 }
+
+// ============================================================================
+// session 169 — CloseChannel (SV2 §5.3.9, msg_type 0x18)
+// ============================================================================
+
+func TestDispatchFrame_CloseChannel(t *testing.T) {
+	raw := make([]byte, 0, 16)
+	raw = appendU32LE(raw, 7)
+	raw, _ = appendStr0_255(raw, "pool maintenance")
+	f := Frame{Header: Header{MsgType: MsgCloseChannel, MsgLength: uint32(len(raw))}, Payload: raw}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.CloseChannel == nil {
+		t.Fatal("CloseChannel not populated")
+	}
+	if msg.CloseChannel.ChannelID != 7 {
+		t.Errorf("ChannelID = %d, want 7", msg.CloseChannel.ChannelID)
+	}
+	if msg.CloseChannel.Reason != "pool maintenance" {
+		t.Errorf("Reason = %q, want %q", msg.CloseChannel.Reason, "pool maintenance")
+	}
+}
+
+func TestCloseChannel_Encode_Roundtrip(t *testing.T) {
+	orig := CloseChannel{ChannelID: 42, Reason: "migrating endpoint"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeCloseChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip mismatch: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestCloseChannel_Encode_EmptyReason(t *testing.T) {
+	orig := CloseChannel{ChannelID: 1}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeCloseChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip mismatch: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDispatchFrame_CloseChannel_Malformed(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+	}{
+		{"empty", nil},
+		{"short channel_id", []byte{0x01, 0x00}},
+		{"channel_id only (missing reason)", []byte{0x01, 0x00, 0x00, 0x00}},
+		{"truncated reason", []byte{0x01, 0x00, 0x00, 0x00, 0x09, 'a', 'b'}},
+	} {
+		f := Frame{Header: Header{MsgType: MsgCloseChannel, MsgLength: uint32(len(tc.payload))}, Payload: tc.payload}
+		if _, err := DispatchFrame(f); err == nil {
+			t.Errorf("%s: malformed CloseChannel payload should return error", tc.name)
+		}
+	}
+}

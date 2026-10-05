@@ -2478,6 +2478,11 @@ type responsivePool struct {
 	// share 2 — a replayed response for an already-settled seq, which
 	// must not double-count in sharesRejected.
 	dupReject bool
+	// closeChannel makes serve() emit CloseChannel for the session's
+	// channel right after activation — SV2 §5.3.9's pool-initiated
+	// channel teardown. The engine must end the session rather than
+	// keep grinding a dead channel.
+	closeChannel bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2513,6 +2518,16 @@ func newResponsivePoolDupReject(t *testing.T) *responsivePool {
 	t.Helper()
 	fp := newResponsivePoolOpts(t, false, false)
 	fp.dupReject = true
+	return fp
+}
+
+// newResponsivePoolCloseChannel returns a pool that sends CloseChannel for
+// channel 1 right after job activation — the pool-initiated channel
+// teardown of SV2 §5.3.9.
+func newResponsivePoolCloseChannel(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.closeChannel = true
 	return fp
 }
 
@@ -2637,6 +2652,13 @@ func (fp *responsivePool) serve() {
 		}
 		payload, _ = resp.Encode()
 		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
+
+	if fp.closeChannel {
+		cc := stratum.CloseChannel{ChannelID: 1, Reason: "pool maintenance"}
+		payload, _ = cc.Encode()
+		fp.emit(conn, stratum.MsgCloseChannel, true, payload)
+		return
 	}
 
 	// Read shares and respond accordingly
@@ -3703,5 +3725,49 @@ func TestApplyAllocation_HeldIdle(t *testing.T) {
 	}
 	if w.HasWork() {
 		t.Error("HeldIdle assignment must still pause the worker")
+	}
+}
+
+// TestRunSessionV2_CloseChannelEndsSession verifies SV2 §5.3.9: when the
+// pool sends CloseChannel for the session's channel, the engine ends the
+// session (error propagates to the failover loop) instead of grinding a
+// dead channel until the job-stall warning fires.
+func TestRunSessionV2_CloseChannelEndsSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolCloseChannel(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log:        func(string, string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession should return an error when the pool closes the channel")
+	}
+	if !strings.Contains(err.Error(), "pool closed channel") {
+		t.Fatalf("runSession error = %v, want a 'pool closed channel' teardown", err)
+	}
+	if !strings.Contains(err.Error(), "pool maintenance") {
+		t.Fatalf("runSession error = %v, want the pool's sanitized reason echoed", err)
 	}
 }

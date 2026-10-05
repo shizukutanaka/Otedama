@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1495 — プール送信の CloseChannel が無視されデッドチャネルを掘り続けていた)
+
+SV2 spec §5.3.9 の `CloseChannel` (0x18, `channel_id U32 | reason_code STR0_255`) は「サーバーがチャネルを閉じた——クライアントはそのチャネルの使用を止めなければならない」と規定されるが、デコーダ未実装のため `Message.Unknown` に落ちて黙殺され、単一チャネル運用では接続切断までジョブ欠乏のまま掘り続ける状態だった。デコード/エンコードと `frameDecoders`・`channelIDOf` 登録を追加し、セッションループで「接続切断と同等のエラー」として返すよう修正 — 理由文字列は `poolproto.SanitizePoolText` 経由でログに安全化され、フェイルオーバーループが即座に引き継ぐ。誠実残余： グループチャネル宛の CloseChannel（spec では全メンバーチャネルを閉じる）は `GroupChannelID` がセッションループへ未配線のため foreign-channel の警告+棄却パスに残る。
+
 ### Fixed (session 1493 — SV2 チャネルオープンの送受信がスペックレイアウトとずれていた)
 
 送側 0x10 `OpenStandardMiningChannel` は spec 上 `max_target U256` を必須とする（request_id、user_identity、nominal_hash_rate、max_target の固定レイアウト）が、`OpenMiningChannel.Encode()` が同フィールドを出力しておらず、spec 準拠の厳格なデコーダを持つプールは短いバッファを読んでフレーム全体を棄却し得た。意図的な省略とコメントにあったが、max_target は省略可能な「選好」ではなく固定レイアウトの必須フィールド——省略は設定欠落ではなくメッセージの不正形である。全 0xFF の `MaxTargetUnconstrained`（=「プールの割当を何でも受ける」正直な宣言）を送出するよう修正。受側 0x11 `OpenStandardMiningChannel.Success` は spec 末尾が `group_channel_id U32` なのに `ExtraNonce2Size uint16`（V1 由来の概念）を読んでおり、group id の下位 16bit を誤読し末尾 2 バイトを未消費にしていた。`GroupChannelID uint32` として spec 通りに読み直し（単一チャネル運用のため値自体は未消費だが、フレーム位置を正しく合わせる）。

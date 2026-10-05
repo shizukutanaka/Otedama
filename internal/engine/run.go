@@ -1270,6 +1270,17 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 			}
+			if pm.msg.CloseChannel != nil {
+				cc := pm.msg.CloseChannel
+				// SV2 §5.3.9: the pool has ended this channel — without it
+				// a single-channel client has no jobs, no accepts, and no
+				// reason to keep the session alive. Surface it the same
+				// way as a connection close so the failover loop can take
+				// over instead of grinding a dead channel until the
+				// job-stall warning fires.
+				return fmt.Errorf("engine: pool closed channel %d (%s)",
+					cc.ChannelID, poolproto.SanitizePoolText(cc.Reason))
+			}
 
 		case share, ok := <-opts.merged:
 			if !ok {
@@ -1879,6 +1890,8 @@ func channelIDOf(m *stratum.Message) (uint32, bool) {
 		return m.SubmitSharesSuccess.ChannelID, true
 	case m.SubmitSharesError != nil:
 		return m.SubmitSharesError.ChannelID, true
+	case m.CloseChannel != nil:
+		return m.CloseChannel.ChannelID, true
 	}
 	return 0, false
 }

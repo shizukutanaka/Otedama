@@ -55,6 +55,7 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
 	MsgSubmitSharesError        uint8 = 0x1e
@@ -353,6 +354,37 @@ func DecodeSubmitSharesError(payload []byte) (SubmitSharesError, error) {
 }
 
 // ------------------------------------------------------------------
+// CloseChannel (server → client AND client → server, msg_type 0x18, channel_msg)
+// ------------------------------------------------------------------
+
+// CloseChannel ends a mining channel (SV2 spec §5.3.9). When the server
+// sends it, the channel is dead: the client must stop using it.
+type CloseChannel struct {
+	ChannelID uint32
+	Reason    string // reason_code, STR0_255
+}
+
+// Encode serializes CloseChannel (includes channel_id prefix).
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 5+len(m.Reason)), m.ChannelID)
+	return appendStr0_255(b, m.Reason)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	var m CloseChannel
+	r := newByteReader(payload)
+	var err error
+	if m.ChannelID, err = getU32LE(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.ChannelID: %w", err)
+	}
+	if m.Reason, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.Reason: %w", err)
+	}
+	return m, nil
+}
+
+// ------------------------------------------------------------------
 // Helper: wrap a message in a Frame
 // ------------------------------------------------------------------
 
@@ -390,6 +422,7 @@ type Message struct {
 	NewMiningJob             *NewMiningJob
 	SetNewPrevHash           *SetNewPrevHash
 	SetTarget                *SetTarget
+	CloseChannel             *CloseChannel
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
@@ -506,6 +539,14 @@ var frameDecoders = map[uint8]func([]byte, *Message) error{
 			return err
 		}
 		m.SubmitSharesError = &v
+		return nil
+	},
+	MsgCloseChannel: func(p []byte, m *Message) error {
+		v, err := DecodeCloseChannel(p)
+		if err != nil {
+			return err
+		}
+		m.CloseChannel = &v
 		return nil
 	},
 }
