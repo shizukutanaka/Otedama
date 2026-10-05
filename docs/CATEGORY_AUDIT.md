@@ -6228,3 +6228,12 @@ All packages build, vet, and test green.
 | R | `go test -race ./...` — all 23 packages | ✓ PASS (engine 30.2s, lightning 97.3s, miner cached; zero failures, zero data races) |
 | R | Post-merge drift between merged fix-PRs | ✓ none observed — all merged refactorings (slices.Sort, errors.Is, strconv) coexist cleanly |
 
+## Session 1305 update — Makefile self-consistency + cross-references
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `.PHONY` coverage | ✓ all 41 real targets declared .PHONY (34 `.PHONY:` lines; flagged items were make variables, not targets) |
+| M | Dangling prerequisites / non-tab recipe lines | ✓ none; `make -n` parses every target |
+| R | Workflow `make` targets | ✓ build / build-all / fmt / test-integration all defined |
+| R | Doc-referenced `make` targets | ✓ the only non-prose reference to a missing target is `make test-e2e`, and every occurrence already carries the correction (skills/tdd.md session-483 note, CHANGELOG history, Makefile comment block) — no action needed |
+
