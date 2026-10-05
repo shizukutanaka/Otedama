@@ -1351,6 +1351,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	if (opts.payoutScheme == "tides" || opts.payoutScheme == "solo") && opts.payoutAddr != "" {
 		if s, err := btccrypto.ScriptForAddress(opts.payoutAddr); err == nil {
 			payoutScript = s
+		} else {
+			opts.log("warn", fmt.Sprintf(
+				"engine: cannot verify %q payouts — configured address %s derives no locking script (%v)",
+				opts.payoutScheme, maskAddr(opts.payoutAddr), err))
 		}
 	}
 	var payoutMissingWarned bool

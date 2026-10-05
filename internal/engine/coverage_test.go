@@ -3212,3 +3212,30 @@ func TestCoinbasePaysTo(t *testing.T) {
 		t.Error("empty coinbase must not match")
 	}
 }
+
+func TestRunSessionV1_TIDESBadAddressWarns(t *testing.T) {
+	addr := fakeV1Pool(t, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "not-an-address",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "cannot verify") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 1 {
+		t.Errorf("unverifiable payout address produced %d warnings, want exactly 1", warns)
+	}
+}

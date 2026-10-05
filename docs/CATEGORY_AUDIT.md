@@ -6777,3 +6777,16 @@ All packages build, vet, and test green.
 | S | Can V2 jobs get the same verification? | ⚠️ Structural limitation, documented: `NewMiningJob` carries only `{channel_id, job_id, ntime, version, merkle_root}` — coinbase outputs are opaque by protocol design. Verifiable only via JDP template flow (`sv2-spec` #203, tracked in ADR-009); godoc on the check records this honestly. |
 
 All packages build, vet, and test green; lint clean on touched files.
+
+---
+
+## Session 1319 update — re-audit of the s1318 payout-verification patch (same lens, self-applied)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Is the address the check verifies identical to the one in the Stratum user identity? | ✅ Verified: `sessionUser(poolUser, addrs[addrIdx], worker)` embeds `addrs[addrIdx]` into the identity, and `payoutAddr = addrs[addrIdx]` — same element, same index. Failover to the next address re-derives the script on the next session attempt. |
+| S | When `pools[].user` overrides the identity, is skipping correct? | ✅ Verified: the override wins in `sessionUser`, so the address embedded in the identity is unknown to us — the skip matches the trust model (operator asserted custody via the override). |
+| S | If the configured address cannot derive a locking script, was the failure silent? | ❌ Was silent — fixed: `ScriptForAddress` error now logs a once-per-session `cannot verify` warning instead of quietly disabling the check (config validation should normally reject such addresses first, but defense in depth). Test added. |
+| S | Does script presence prove *amount* (a solo coinbase paying 1 sat to the user)? | ⚠️ Noted honestly: presence is the custody invariant; amount is not verifiable without decoding outputs — a pool paying dust would satisfy the check. Out of scope for the warn gate; recorded for the ledger. |
+
+All packages build, vet, and test green.
