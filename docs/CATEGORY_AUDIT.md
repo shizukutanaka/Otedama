@@ -6518,3 +6518,16 @@ All packages build, vet, and test green.
 All packages build, vet, and test green.
 
 ---
+
+---
+
+## Session 1257 update — Noted-row re-verification + suppression/file hygiene + race spot
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | Open `Noted` rows on master re-verified post-merge-wave: the V1 `en2` rollover bound (`en2Counter` uniqueness is pool-assigned-space only) and KNOWN_LIMITATIONS §11's residual `max_target`-clamp item — is either stale after the merged wave? | ✅ Still true, unchanged: `extranonce2SizeOK`/`maxExtranonce2Size` boundary intact (`stratumv1/parse.go:158-161`); `OpenMiningChannel` still intentionally omits `max_target` (`stratum/handshake.go:156-160`) so the clamp item remains moot exactly as documented. |
+| M | `//nolint`/`//go:embed`/`go:linkname` suppression census — stale, unjustified, or widened suppressions post-wave. | ✅ Clean: 19 `//nolint` sites, every one carries an inline justification matching the code it annotates (bounded casts, `nilerr` on `sc.exe` status probe, `errcheck` on TUI write, `pprof` import); zero `go:linkname`; embeds unchanged. |
+| L | File-hygiene on post-wave master — SPDX header presence across all tracked `.go` files; `package main` outside `cmd/otedama`. | ✅ Clean: all 146 tracked `.go` files carry the SPDX header; `package main` exists only under `cmd/otedama`. |
+| L | `go test -race` spot run on the two concurrency-heaviest packages (engine + miner). | ✅ Both pass race-clean (`internal/engine` 30.3s, `internal/miner` 1.0s). |
+
+All packages build, vet, and test green.
