@@ -6506,3 +6506,15 @@ All packages build, vet, and test green.
 | L | Newer-stdlib absence census — `os.Root` (1.24 FS confinement), `runtime.AddCleanup`, `testing/synctest`, `testing/quick`, `weak`, `unique`. | ✅ Clean: all absent and correctly so — no confined-FS-traversal site exists for `os.Root`; zero finalizers anywhere (s795/s1815 verified `SetFinalizer` absent, so no `AddCleanup` migration debt); `synctest` needs go1.24+ language anyway and tests already use `clock.Fake` for determinism; `testing/quick`/`weak`/`unique` have no applicable site (property tests are hand-rolled + fuzz; no caches to intern). |
 
 All packages build, vet, and test green.
+
+## Session 1259 update — test-API modernity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Test helpers calling `t.Errorf`/`t.Fatalf` without `t.Helper()` — failures then report the helper's line, not the caller's, hiding the real assertion site. | ✅ Clean: all 40 non-Test functions taking `*testing.T` (`decodeHex`, `waitFor`, `newMockPool`, `newResponsivePool*` variants, `fakeV1Pool*` helpers, …) call `t.Helper()` as their first statement. Zero exceptions. |
+| M | `context.Background()` inside tests — Go 1.24's `t.Context()` ties the ctx lifetime to the test; `testing/quick` (legacy property package); `b.Loop()` (Go 1.24) replaces manual `b.N` loops and prevents post-loop work from skewing timing. | ⚠️ Noted: `t.Context()` and `b.Loop()` are version-gated the same way s1258's `maps.Keys`/`AppendSeq` were — `go.mod` pins `go 1.22`, so the 378 `context.Background()` sites and 11 `for i := 0; i < b.N` benchmark loops cannot convert until the module floor reaches go1.24. `testing/quick`: zero imports (no legacy property-test residue). |
+| L | Residual `sort.*` calls — `sort.Ints`/`Strings`/`Slice`/`IsSorted` vs the `slices` modernization (merged #1235 claimed completion). | ✅ Clean: zero `"sort"` imports anywhere in the tree — production is 100% `slices`/`maps`/`cmp`/`min`/`max`/`clear`; the single `sort.` match is a prose word in a metrics.go comment ("Collect and sort."). |
+
+All packages build, vet, and test green.
+
+---
