@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 1554 — 長所50・短所50・改善点マップの文書化)
+
+`docs/STRENGTHS_WEAKNESSES.md` を追加 — 実コードと KNOWN_LIMITATIONS に裏付けられた長所50件・短所50件と、請求対実装のギャップ順に並べた P0–P3 の改善マップ。第一原理/Socratic 監査の集約成果物。
+
 ### Fixed (session 1553 — V1 シェアが Version=0・PrevHash=ゼロのヘッダをハッシュしていた)
 
 V1 ジョブ適用時 (`applyJob`) が `miner.Work.Header` に `Version`/`PrevHash` を一切コピーしておらず、ワーカーは両フィールドがゼロのヘッダをハッシュしていた — プール側が通知値で再構成するプリイメージと一致しないため V1 の全シェアがプール側検証で拒否される構造欠陥（2026-06-04 から存在、V2 の `updateWork` は正しかった）。併せて `decodeNotifyJob` が prevhash のワイヤ形式（各4バイトワードのバイトスワップ）を正規化せず格納していた問題を修正 — デコード時にワードごと逆スワップし、`Job.PrevHash` はヘッダ直列化バイト列を保持する契約へ明文化（従来の「big-endian」記述は誤り）。エンジンは通知値をヘッダへコピーするよう修正。回帰ピン: `TestParseNotify_PrevHashWordSwap`（デコード変換）・`TestApplyJob_HeaderFieldsReachHashedShare`（稼働ワーカーが出すシェアのハッシュが宣言フィールド入りヘッダの再計算値と一致）。
