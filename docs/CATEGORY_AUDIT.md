@@ -6815,3 +6815,14 @@ All packages build, vet, and test green; no code changes required — verificati
 | S | Is the cleartext exposure symmetric between V1 and V2? | 🔧 Fixed: V2 plaintext warned at connect but V1 (`stratum+tcp://`) logged only `connected` — and V1 is the protocol carrying the payout address as its username. Added the identical warn, gated on the TLS scheme. |
 
 All packages build, vet, and test green.
+
+## Session 1322 update — first-principles audit of the wallet↔payout relationship (Socratic pass 4)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the `wallet.dat` seed control the payout address? | ✅ Honestly designed, no: `WalletManager` exposes only `Seed`/`Fingerprint`/`Mnemonic` — it derives no addresses and feeds nothing into payout. Payout addresses come from `bitcoin_address`/`bitcoin_addresses` config (`payoutAddresses`, setup.go:397). |
+| S | Is that consistent with the "non-custodial" product claim? | ✅ Yes — non-custodial means the *pool* pays the operator's configured address directly; no Otedama-held key needs to mediate funds. The wallet is a separate sovereign-seed vault for the operator's own Lightning needs (encrypted at rest, BIP-39 recoverable). |
+| S | Do the docs overclaim wallet↔payout linkage? | ✅ No: README states plainly the wallet "only encrypts and stores a BIP-39 seed at rest; it does not process payments," and that the Bitcoin address must be supplied separately "inherent to the non-custodial design." |
+| S | Residual gap for operators? | ⚠️ Noted: nothing verifies the configured payout address is one the *operator* controls (e.g. by deriving it from wallet.dat). Deliberate — addresses are free-form so any external wallet/exchange address works — but a mistyped address routes payouts to a stranger; the s1318 coinbase check only verifies pool→configured-address, not configured-address→operator-ownership. |
+
+No code changes required; verification only.
