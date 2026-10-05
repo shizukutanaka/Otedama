@@ -6002,4 +6002,13 @@ All packages build, vet, and test green.
 | M | `Makefile:53` `setup` installed `golangci-lint@latest` — since upstream v2 (2025-03) `@latest` resolves to a v2 release that rejects the repo's v1-schema `.golangci.yml` (`linters-settings`/`disable-all`/`issues.exclude-rules`), so `make setup` + `make lint` on a fresh machine fails at config parse | **S: fixed** — pinned `@v1.64.8`, the same v1 release KNOWN_LIMITATIONS records as the local tooling version; v2 migration remains the documented maintainer decision |
 | R | `.golangci.yml` linter-name validity | ✓ all 28 enabled linters are valid v1 names; none renamed/removed in the pinned v1 line |
 | R | Linter-version drift ledger | ✓ KNOWN_LIMITATIONS (v1.55.2 ci.yml pin, action@v3, v2 schema) still accurate — now cites the Makefile fix so the four pin sites are: ci.yml v1.55.2, actions v3 (v1 era), Makefile v1.64.8 |
+---
 
+## Session 1316 update — gocyclo decomposition batch B (config/arbitration/doctor/cmd)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| F | gocyclo >15 — six remaining non-engine functions after batch A (#1396). | ✅ Fixed: `ResolveWithOrigins` 32→per-layer helpers `applyFileLayer`/`applyEnvLayer`/`applyFlagLayer`; `Config.Validate` 26→four `appendXxxIssues` domain appenders; `runArbitrationLoop` 21→`arbitrationTick` (Decide error keeps prevAlloc as hysteresis baseline, identical to the old `continue`); `cmdRun` 17→`resolveRunConfig`+`detectRunBundle`; `chooseForDevice` 16→`candidateStreams`+`incumbentHold` (hysteresis block); `checkPoolReachability` 17→`probePools`+`classifyProbes`+`reachabilityResult` (probe type promoted to `reachProbe`). Behavior unchanged; scoped tests green. |
+| F | Residual gocyclo — engine `run.go` monsters (`runSession` 88, `runSessionV1` 53, `runReconnectLoop` 26, `Run` 24) plus the five wire/codec functions covered by open #1396. | ⚠️ Noted: deferred to batch C — run.go needs state-plumbing care; wire/codec findings clear when #1396 merges. |
+
+All packages build, vet, and scoped-test green.

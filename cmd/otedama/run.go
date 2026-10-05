@@ -162,27 +162,12 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	fromFile := loadConfigFile(f.configFile, stderr)
-	// Surface env vars that were set but could not be parsed: they are
-	// silently ignored during resolution, so warn before starting rather than
-	// let an operator's typo'd setting vanish unnoticed.
-	for _, w := range config.EnvWarnings(nil) {
-		fmt.Fprintf(stderr, "config: warning: %s\n", w)
-	}
-	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "%s\n", err)
+	cfg, ok := resolveRunConfig(&f, stderr)
+	if !ok {
 		return exitConfig
 	}
 
-	// Initialise i18n bundle.
-	bundle, _ := messages.NewBundle()
-	lang := messages.DetectLang(cfg.Language)
-	if cfg.Language == "" {
-		// No explicit language configured (flag/env/file); fall back to the
-		// OS locale, as documented on config.Config.Language.
-		lang = messages.DetectLangFromEnv(os.Getenv)
-	}
+	bundle, lang := detectRunBundle(cfg.Language)
 
 	logln := func(level string, id i18n.ID, data map[string]any) {
 		msg, _ := bundle.RenderWith(lang, id, data)
@@ -245,6 +230,37 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 
 	logln("info", messages.StatusShuttingDown, nil)
 	return exitOK
+}
+
+// resolveRunConfig loads the config file, surfaces unparseable env vars as
+// warnings (they are silently ignored during resolution, so warn before
+// starting rather than let an operator's typo'd setting vanish), resolves
+// the four-layer config, and validates it. It reports whether the caller
+// may continue; on false it has already printed the error.
+func resolveRunConfig(f *runFlags, stderr io.Writer) (config.Config, bool) {
+	fromFile := loadConfigFile(f.configFile, stderr)
+	for _, w := range config.EnvWarnings(nil) {
+		fmt.Fprintf(stderr, "config: warning: %s\n", w)
+	}
+	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return config.Config{}, false
+	}
+	return cfg, true
+}
+
+// detectRunBundle loads the i18n message bundle and resolves the display
+// language: the configured language, or the OS locale when no explicit
+// language is configured (flag/env/file), as documented on
+// config.Config.Language.
+func detectRunBundle(language string) (*i18n.Bundle, i18n.Lang) {
+	bundle, _ := messages.NewBundle()
+	lang := messages.DetectLang(language)
+	if language == "" {
+		lang = messages.DetectLangFromEnv(os.Getenv)
+	}
+	return bundle, lang
 }
 
 // isTerminal reports whether f is connected to an interactive terminal,
