@@ -6190,3 +6190,15 @@ All packages build, vet, and test green.
 | node-deadweight | `code-review.yml` is Node-centric on a Go-only repo (no package.json): every PR gets a "No Node.js project detected" comment; common-issues greps only `*.js`/`*.json`; performance-check fully skipped. Only `dependency-review-action` does meaningful work (Go-module aware) | ⚠️ Noted — noise + wasted runner minutes; trimming is a workflow-design call for the maintainer |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1193 update — workflow build-reference census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| P | Dead ldflags symbols | **Fixed** — ci.yml ×2, ci-cd.yml, release.yml injected `main.Version`/`main.GitCommit`/`main.BuildTime`; real vars are `internal/version.{Version,Commit,BuildDate}` (linker silently no-ops nonexistent symbols). Now matches Makefile/.goreleaser convention |
+| M | Docker verify job defects (deferred) | ⚠️ Noted — `scripts/verify-docker.{sh,ps1}` referenced but absent; build-args `GIT_COMMIT`/`CGO_ENABLED`/`GOTAGS` unused by the Dockerfile (only VERSION/COMMIT/BUILD_DATE exist); version greps expect `Git Commit:` text the `Info.String()` format never emits; health checks assume an HTTP endpoint + Postgres the product doesn't have |
+| S | `make` targets in workflows | ✅ Clean — `fmt`/`build`/`build-all`/`test-integration` all exist |
+
+All packages build, vet, and test green.
