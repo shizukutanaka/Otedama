@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1404 — 裁定が手数料控除後収益を見ていなかった)
+
+クォート→ストリーム合成（updateStream）が provider.Yield の gross `SatsPerSecond` のみを仲裁 Yield に写し、`NetSatsPerSecond`（手数料控除後）を破棄していた。provider.go は「arbitration compares net」と文書化し provider.Yield.Effective() も net 加重なのに、実際の Decide は gross 比較だった — Akash の 20% プラットフォーム手数料とプールの 1% 手数料が両方とも決定から消え、ネット収益では採掘優位の局面で AI へ不当配分し得た（~21% の相対歪み）。netSats（NetSatsPerSecond > 0 時、未設定なら gross へフォールバック）を写すよう修正し、net 契約をピンする回帰テストを更新。
+
 ### Fixed (session 1396 — 未クォートデバイスへ兄弟デバイス収率の漏洩を閉塞)
 クォート→ストリーム合成（updateStream）が全デバイス別クォートの収率を DefaultYield に上書きしていたため、プロバイダーが意図的に除外したデバイス（例: 非 SHA256d の GPU が採掘ストリーム）が兄弟デバイスの収率で候補に混入し、実行不能な配分を受け得た — 代表エントリは Go マップ反復順で非決定的に選ばれ Decide の決定性保証にも亀裂があった。DefaultYield は本来の設計意図であるデバイス非依存クォート（DeviceID==""）のみが設定するよう修正し、マージ時も agnostic default を正しく引き継ぐようにした。回帰テスト3件追加。
 

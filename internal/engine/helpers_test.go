@@ -251,8 +251,12 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	// The stream must carry the net (post-fee) yield, not the gross:
+	// provider.go documents NetSatsPerSecond as the fee-adjusted rate the
+	// arbitration engine compares, and provider.Yield.Effective() is
+	// net-weighted. 0.099 = 0.1 gross − provider fee.
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.099 (net)", y.SatsPerSecond)
 	}
 }
 

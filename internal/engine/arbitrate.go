@@ -292,9 +292,20 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 	if existing.YieldPerDevice == nil {
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}
+	// Arbitration compares net yield: provider.go documents
+	// NetSatsPerSecond as "SatsPerSecond minus the provider's fee", and
+	// provider.Yield.Effective() ("what the arbitration engine uses for
+	// comparison") is net-weighted. Copying the gross figure here would
+	// drop every provider fee from the decision — Akash's 20% and the
+	// pool's 1% alike. A provider that sets no explicit fee leaves
+	// NetSatsPerSecond <= 0; then gross is the honest net.
+	netSats := q.Yield.NetSatsPerSecond
+	if netSats <= 0 {
+		netSats = q.Yield.SatsPerSecond
+	}
 	if q.DeviceID != "" {
 		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
+			SatsPerSecond: netSats,
 			Confidence:    q.Yield.Confidence,
 		}
 	} else {
@@ -304,7 +315,7 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 		// (e.g. a GPU skipped by the mining provider) silently inherits a
 		// sibling device's yield and can be assigned work it cannot do.
 		existing.DefaultYield = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
+			SatsPerSecond: netSats,
 			Confidence:    q.Yield.Confidence,
 		}
 	}
