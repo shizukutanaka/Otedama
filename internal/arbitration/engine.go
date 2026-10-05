@@ -208,6 +208,14 @@ type Assignment struct {
 	// hysteresis margin is costing them and tune it.
 	Held bool
 
+	// HeldIdle is true when the device was already idle in the previous
+	// decision and remains idle — no state transition occurred. Log
+	// readers should emit the idle state line only on the transition,
+	// matching the transition-only logging of stream switches
+	// (SwitchedFromID); without this marker a permanently idle device
+	// would re-log an identical "idle" line every decision tick.
+	HeldIdle bool
+
 	// ForegoneSatsPerSec is the raw revenue (satoshis/second) sacrificed by
 	// this assignment relative to pure yield maximization: the highest raw
 	// effective yield among all streams compatible with this device, minus the
@@ -345,6 +353,9 @@ func Decide(in *Input) (*Allocation, error) {
 		a := chooseForDevice(dev, in.Streams, &p, in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
 		if a.Idle() {
 			alloc.SkippedDevice++
+			if _, hadPrev := prev[dev.Identity.ID]; hadPrev && p.Stream == "" {
+				a.HeldIdle = true
+			}
 		}
 		alloc.TotalYield += a.ExpectedYield
 		alloc.Assignments = append(alloc.Assignments, a)

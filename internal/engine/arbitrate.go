@@ -418,10 +418,16 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 		switch {
 		case a.Idle():
 			// Device is idle: no stream accepts its family, or all compatible
-			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d.
+			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d
+			// unconditionally so the worker stays drained, but log only on the
+			// idle *transition*: HeldIdle means it was already idle last Decide,
+			// and re-logging the same line every tick would flood the log with
+			// one identical line per device per interval (~2880/day at 30s).
 			pauseDevice(a.DeviceID)
-			reason := cmp.Or(a.Reason, "no compatible stream")
-			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
+			if !a.HeldIdle {
+				reason := cmp.Or(a.Reason, "no compatible stream")
+				log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
+			}
 
 		case a.SwitchedFromID != "":
 			// Stream changed. Leaving a mining stream pauses the worker;

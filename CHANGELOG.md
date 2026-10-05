@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1442 — 恒常アイドルデバイスが毎ティック同一の idle ログを出力していた)
+
 ### Fixed (session 1439 — 未来日時のクォートタイムスタンプがストリームを実質不死身にできた)
 
 - `runArbitrationLoop` がクォートの `At` をそのまま鮮度台帳へ書き込んでいたため、

@@ -3635,3 +3635,25 @@ func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
 		t.Fatal("take should succeed after a refill tick")
 	}
 }
+
+// TestApplyAllocation_HeldIdle suppresses the repeat idle log while still
+// pausing the worker: a device that stays idle across Decide ticks must not
+// re-log the identical line every interval, but must stay drained.
+func TestApplyAllocation_HeldIdle(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{DeviceID: "cpu-0", Stream: "", HeldIdle: true},
+		},
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	w.SetWork(&miner.Work{JobID: 1})
+	var logged []string
+	applyAllocation(alloc, []*miner.Worker{w}, func(_, m string) { logged = append(logged, m) })
+
+	if len(logged) != 0 {
+		t.Errorf("HeldIdle assignment should not re-log idle; got %v", logged)
+	}
+	if w.HasWork() {
+		t.Error("HeldIdle assignment must still pause the worker")
+	}
+}

@@ -1378,3 +1378,50 @@ func TestDecide_Property_AboveFloorStreamPreventsIdle(t *testing.T) {
 		}
 	}
 }
+
+// TestDecide_HeldIdle marks a device that stays idle across two decisions so
+// log consumers emit the idle line only on the transition — a permanently
+// idle device would otherwise re-log one identical line every tick.
+func TestDecide_HeldIdle(t *testing.T) {
+	asic := DeviceRef{Identity: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}}
+	// Stream accepts only GPU → the ASIC idles on every decision.
+	gpuOnly := Stream{
+		ID:              "mining.pool",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
+	}
+	in := &Input{Devices: []DeviceRef{asic}, Streams: []Stream{gpuOnly}, Policy: PolicyMaximizeEarnings}
+
+	// First decision (no Previous): idle is a fresh state — must not be HeldIdle.
+	first, err := Decide(in)
+	if err != nil {
+		t.Fatalf("first Decide failed: %v", err)
+	}
+	if !first.Assignments[0].Idle() {
+		t.Fatalf("device should idle on GPU-only stream, got %q", first.Assignments[0].Stream)
+	}
+	if first.Assignments[0].HeldIdle {
+		t.Error("first idle decision must not be marked HeldIdle — it is a transition to log")
+	}
+
+	// Second decision with the first as Previous: still idle → HeldIdle.
+	second, err := Decide(&Input{
+		Devices: in.Devices, Streams: in.Streams, Previous: first, Policy: in.Policy,
+	})
+	if err != nil {
+		t.Fatalf("second Decide failed: %v", err)
+	}
+	if !second.Assignments[0].HeldIdle {
+		t.Error("persistently idle device should be marked HeldIdle so the log is not repeated each tick")
+	}
+
+	// Transition case: previously mining → now idle must log (HeldIdle false).
+	onStream := &Allocation{Assignments: []Assignment{{DeviceID: "asic-0", Stream: "mining.pool"}}}
+	trans, err := Decide(&Input{Devices: in.Devices, Streams: in.Streams, Previous: onStream, Policy: in.Policy})
+	if err != nil {
+		t.Fatalf("transition Decide failed: %v", err)
+	}
+	if !trans.Assignments[0].Idle() || trans.Assignments[0].HeldIdle {
+		t.Error("mining→idle transition must produce an un-held idle assignment (log once)")
+	}
+}
