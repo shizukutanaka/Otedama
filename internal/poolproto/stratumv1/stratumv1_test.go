@@ -1218,6 +1218,25 @@ func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
 	}
 }
 
+func TestSession_SendsAfterChannelClose_DoNotPanic(t *testing.T) {
+	// The stash replay (flushPreAuth) runs on the Negotiate goroutine and
+	// can race the read loop's deferred channel closes when the connection
+	// drops mid-handshake. Sends must skip a closed session, not panic.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.authorized.Store(true)
+	sess.closeChannels()
+	// None of these may panic (send on closed channel).
+	sess.sendJob(&poolproto.Job{JobID: "x"})
+	sess.handleSetDifficulty(json.RawMessage(`[1.0]`))
+	sess.handleShowMessage(json.RawMessage(`["hello"]`))
+	sess.flushPreAuth() // empty queue on this session — also must not panic
+}
+
 func TestSession_Submit_EchoesAuthorizedWorkerName(t *testing.T) {
 	// ckpool-derived pools resolve the share's worker by name and reject
 	// names that were never authorized — Submit must echo the username

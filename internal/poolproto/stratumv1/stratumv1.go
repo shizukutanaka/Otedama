@@ -146,6 +146,14 @@ type session struct {
 	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
+
+	// sendMu serializes sends on jobsCh/diffCh/noticeCh against the read
+	// loop's deferred closes. Sends happen on the read goroutine except
+	// the stash replay (flushPreAuth), which runs on the Negotiate
+	// goroutine — without the mutex a connection drop mid-handshake could
+	// close a channel just as the replay sends on it (panic).
+	sendMu sync.Mutex
+	closed bool
 }
 
 // Compile-time interface satisfaction checks.
@@ -181,9 +189,7 @@ func (s *session) start(ctx context.Context) {
 // readLoop is the single goroutine that reads and dispatches V1 messages.
 // It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
-	defer close(s.jobsCh)
-	defer close(s.diffCh)
-	defer close(s.noticeCh)
+	defer s.closeChannels()
 	// When the loop exits for any reason (EOF, network error, or ctx cancel),
 	// cancel all in-flight call() invocations so they return immediately
 	// instead of blocking until the caller's context expires. This mirrors
@@ -359,6 +365,11 @@ func (s *session) handleNotify(params json.RawMessage) {
 func (s *session) handleSetDifficulty(params json.RawMessage) {
 	if d, ok := parseDifficulty(params); ok {
 		s.difficulty.Store(float64ToUint64(d))
+		s.sendMu.Lock()
+		defer s.sendMu.Unlock()
+		if s.closed {
+			return
+		}
 		select {
 		case s.diffCh <- d:
 		default:
@@ -390,6 +401,11 @@ func (s *session) handleShowMessage(params json.RawMessage) {
 	// channel, drop the oldest notice to avoid blocking the read loop.
 	notice, ok := parseShowMessage(params)
 	if !ok || notice == "" {
+		return
+	}
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
 		return
 	}
 	select {
@@ -506,9 +522,26 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would
 // produce stale (rejected) shares, which is the #1 reject cause after
+// closeChannels marks the session ended and closes the outbound
+// channels under sendMu — the only place they may be closed, so any
+// send racing the close either lands beforehand or is skipped.
+func (s *session) closeChannels() {
+	s.sendMu.Lock()
+	s.closed = true
+	close(s.jobsCh)
+	close(s.diffCh)
+	close(s.noticeCh)
+	s.sendMu.Unlock()
+}
+
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job *poolproto.Job) {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
+		return
+	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {

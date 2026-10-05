@@ -7017,3 +7017,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | If the engine stops draining `Jobs()` (jobsCh cap 8), does `sendJob` block the read loop — freezing submit responses and every other pool message? | ✅ Verified non-blocking: `sendJob` drains the channel for `clean_jobs`, then always sends under `select{...default}` with a drop-oldest fallback, so it can never block the read goroutine. The read loop therefore keeps dispatching submit responses, difficulty updates and notices regardless of consumer health — a wedged engine degrades to "newest job wins", not a session freeze. Drop-oldest is the semantically right choice for mining (older queued jobs are superseded by newer ones anyway). |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1343 update — first-principles audit of "senders never race channel close" (Socratic pass 25)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `flushPreAuth` replays stashed messages on the Negotiate goroutine — can it race the read loop's deferred `close(jobsCh/diffCh/noticeCh)` and panic the process (send on closed channel)? | 🔧 Fixed: the race was real (connection drop mid-handshake: read loop exits and closes channels while the post-authorize replay sends on them). All outbound sends (`sendJob`, `handleSetDifficulty`, `handleShowMessage`) are now serialized with the closes under `sendMu` + `closed` flag — a send either lands before the close or is skipped. `TestSession_SendsAfterChannelClose_DoNotPanic` pins it; package still green under `-race`. |
+
+CHANGELOG entry added under Fixed (session 1343).

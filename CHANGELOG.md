@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1343 — stash replay とチャンネル close の競合 panic を修正)
+`flushPreAuth` は Negotiate goroutine 上で jobsCh/diffCh/noticeCh に送信するが、ハンドシェイク中の接続断で read loop の defer close と競合し send-on-closed panic（プロセス全体が終了）になり得た。全送信を `sendMu`+`closed` で close と直列化 — close 前に着地するかスキップされるかの二択に。
+
 ### Fixed (session 1339 — 認証前メッセージによるセッション状態改竄を遮断)
 s1336 のゲートは `mining.notify` のみで、`mining.set_difficulty`/`set_extranonce` が認証前に即適用されていた。authorize を保留した敵対プールが難易度・extranonce を未認証状態で書き換え可能（掘ったシェアが決してクレジットされない）。全プール起点メソッドにゲートを一般化し、認証前メッセージは wire 順キュー（上限16・最古破棄）に stash → authorize 成功後に `flushPreAuth` で順序 replay。
 
