@@ -1734,6 +1734,20 @@ All packages build, vet, and test green.
 ---
 ## Session 1209 update — CLI help/completion parity census
 
+## Session 725 update — sscan + user-home + XDG-config audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `fmt.Sscan*` parsing without error check — a malformed value passing as a plausible zero. | ✅ Clean: `run.go:1781` wraps the parse error (`unparseable job ID`); `dialer.go:403` is the verified fail-safe (malformed → 0 → fails validation). |
+| M | `os.UserHomeDir` callers ignoring `XDG_CONFIG_HOME` — `DefaultDataDir` honors `XDG_DATA_HOME` but the default config path and systemd unit path hardcoded `~/.config`, so a custom `XDG_CONFIG_HOME` split config lookup and installed units where `systemctl --user` never searches. | 🔧 Fixed: `defaultConfigPath` now resolves `$XDG_CONFIG_HOME/otedama/config.yaml` before the `~/.config` fallback (`OTEDAMA_CONFIG` still wins); `systemdUnitPath` installs under `$XDG_CONFIG_HOME/systemd/user`, matching systemd's own lookup. All other sites (launchd plist/logs, APPDATA, XDG_DATA_HOME) already platform-correct. |
+| M | `filepath.Abs`/`Rel`/`Clean`/`IsLocal` normalization gaps on user paths. | ✅ Absent: zero sites — the codebase never canonicalizes beyond `EvalSymlinks` on trusted roots (verified session 711); no user-supplied path needs it (all paths derive from constants + the home/config roots above). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | `printUsage` command list vs dispatch switch | ✅ Clean — all 8 subcommands (run/version/config/service/doctor/wallet/completion/help) listed; exit-code table matches implementation (0/1/64/78, doctor 0/1/2). |
@@ -5979,3 +5993,4 @@ All packages build, vet, and test green.
 |---|---|---|
 | M | `setup.go:89` — `1 << 31` untyped constant overflows `int` on 32-bit | **S: fixed** — compute `total` in uint64; GOARCH=386+arm `go build`/`go vet` now clean (releases ship amd64/arm64 only, but the source should compile everywhere) |
 | M | Other `1<<3x`/`math.Max*` constant-overflow sites | ✓ none — grep census across the tree found only the fixed site |
+All packages build, vet, and test green.
