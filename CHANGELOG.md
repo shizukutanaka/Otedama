@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1335 — セッション終了〜再接続間の無駄ハッシュを停止)
+セッション終了時にワーカーが最終ジョブをアームされたまま残り、再接続バックオフ（最大64秒×繰返し）中も掘り続けていた。次セッションは新 extranonce（V1）/新チャネル（V2）を協商するため、そのシェアは必ず破棄される無駄ハッシュだった。`runReconnectLoop` が `poolConnectionState.Set(0)` と同時に全ワーカーを `SetWork(nil)` でアイドル化（pause/未知prevhash と同一の冪等アイドル、次セッションの pause-aware applyJob で再アーム）。
+
 ### Fixed (session 1334 — TIDES/solo 支払検証を非出力位置の script 埋め込みで回避不能に)
 V1 コインベース検証が生バイトの部分一致だったため、敵対プールが支払先 script を OP_RETURN・scriptSig・witness など支払いを伴わない位置に埋め込んで検査をパスできた。`poolproto.Job.CoinbaseTx`（completeV1Job が既に合体しているトランザクションを保持）を新設し、btccrypto.CoinbasePaysScript が vout の scriptPubKey を位置限定で照合するよう変更。構造が壊れたコインベースは "cannot verify" を1回警告。
 

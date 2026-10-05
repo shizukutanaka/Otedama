@@ -543,6 +543,14 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if r.opts.OnReady != nil {
 			r.opts.OnReady(false) // session ended → not ready
 		}
+		// Idle the workers until the next session issues fresh work. A
+		// dead session's last job is guaranteed-superseded under the new
+		// session's IDs (V1 negotiates new extranonces, V2 a new
+		// channel), so hashing it through the backoff window burns power
+		// on shares the submit gate will always drop.
+		for _, w := range r.workers {
+			w.SetWork(nil)
+		}
 		if r.dashboard != nil {
 			// The session's own stats tick stops the instant it returns, so
 			// without this push the dashboard freezes on its last

@@ -6944,3 +6944,12 @@ No code change required this round.
 | S | Does the stricter check still miss anything? | ⚠️ Noted: as recorded in s1319, presence of a paying output still cannot verify the *amount* (a dust-value output passes) — inherent without output-value policy; also the check remains gated to `payout_scheme: tides`/`solo` where pool-paid coinbases are legitimate by design elsewhere. |
 
 CHANGELOG entry added under Fixed (session 1334).
+
+## Session 1335 update — first-principles audit of "workers can't hash guaranteed-dead work" (Socratic pass 17)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When a session ends, do workers keep grinding its last job through the reconnect backoff — producing shares the next session's superseded gate must always drop? | 🔧 Fixed: teardown updated metrics/dashboard/OnReady but left workers armed. The next session renegotiates extranonces (V1) or a channel (V2), so every hash on the dead job was guaranteed waste for up to 64s per cycle. `runReconnectLoop` now `SetWork(nil)`s all workers alongside the existing `poolConnectionState.Set(0)` — same idempotent idle used by pause/unknown-prevhash, re-armed by pause-aware `applyJob` on the next session (#494 invariant preserved). |
+| S | Could a share found in the gap still reach a valid destination? | ✅ Verified: merged shares produced between sessions block on the unbuffered channel until the next session drains them, then drop at the superseded check — accounting was already honest; only the wasted hashpower was the defect. |
+
+CHANGELOG entry added under Fixed (session 1335).
