@@ -408,83 +408,117 @@ type UnknownMessage struct {
 // it populates Message.Unknown. This ensures the client loop can continue
 // operating after receiving extension messages it has not yet implemented,
 // which is a requirement for forward compatibility with future pool software.
-func DispatchFrame(f Frame) (Message, error) {
-	var m Message
-	switch f.Header.MsgType {
-	case MsgSetupConnection:
-		v, err := DecodeSetupConnection(f.Payload)
+// frameDecoders maps a MsgType to the decoder that fills the matching
+// Message field. Unknown types fall through to Message.Unknown — see
+// DispatchFrame.
+var frameDecoders = map[uint8]func([]byte, *Message) error{
+	MsgSetupConnection: func(p []byte, m *Message) error {
+		v, err := DecodeSetupConnection(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SetupConnection = &v
-	case MsgSetupConnectionSuccess:
-		v, err := DecodeSetupConnectionSuccess(f.Payload)
+		return nil
+	},
+	MsgSetupConnectionSuccess: func(p []byte, m *Message) error {
+		v, err := DecodeSetupConnectionSuccess(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SetupConnectionSuccess = &v
-	case MsgSetupConnectionError:
-		v, err := DecodeSetupConnectionError(f.Payload)
+		return nil
+	},
+	MsgSetupConnectionError: func(p []byte, m *Message) error {
+		v, err := DecodeSetupConnectionError(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SetupConnectionError = &v
-	case MsgOpenMiningChannel:
-		v, err := DecodeOpenMiningChannel(f.Payload)
+		return nil
+	},
+	MsgOpenMiningChannel: func(p []byte, m *Message) error {
+		v, err := DecodeOpenMiningChannel(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.OpenMiningChannel = &v
-	case MsgOpenMiningChannelSuccess:
-		v, err := DecodeOpenMiningChannelSuccess(f.Payload)
+		return nil
+	},
+	MsgOpenMiningChannelSuccess: func(p []byte, m *Message) error {
+		v, err := DecodeOpenMiningChannelSuccess(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.OpenMiningChannelSuccess = &v
-	case MsgOpenMiningChannelError:
-		v, err := DecodeOpenMiningChannelError(f.Payload)
+		return nil
+	},
+	MsgOpenMiningChannelError: func(p []byte, m *Message) error {
+		v, err := DecodeOpenMiningChannelError(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.OpenMiningChannelError = &v
-	case MsgNewMiningJob:
-		v, err := DecodeNewMiningJob(f.Payload)
+		return nil
+	},
+	MsgNewMiningJob: func(p []byte, m *Message) error {
+		v, err := DecodeNewMiningJob(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.NewMiningJob = &v
-	case MsgSetNewPrevHash:
-		v, err := DecodeSetNewPrevHash(f.Payload)
+		return nil
+	},
+	MsgSetNewPrevHash: func(p []byte, m *Message) error {
+		v, err := DecodeSetNewPrevHash(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SetNewPrevHash = &v
-	case MsgSetTarget:
-		v, err := DecodeSetTarget(f.Payload)
+		return nil
+	},
+	MsgSetTarget: func(p []byte, m *Message) error {
+		v, err := DecodeSetTarget(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SetTarget = &v
-	case MsgSubmitSharesStandard:
-		v, err := DecodeSubmitSharesStandard(f.Payload)
+		return nil
+	},
+	MsgSubmitSharesStandard: func(p []byte, m *Message) error {
+		v, err := DecodeSubmitSharesStandard(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SubmitSharesStandard = &v
-	case MsgSubmitSharesSuccess:
-		v, err := DecodeSubmitSharesSuccess(f.Payload)
+		return nil
+	},
+	MsgSubmitSharesSuccess: func(p []byte, m *Message) error {
+		v, err := DecodeSubmitSharesSuccess(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SubmitSharesSuccess = &v
-	case MsgSubmitSharesError:
-		v, err := DecodeSubmitSharesError(f.Payload)
+		return nil
+	},
+	MsgSubmitSharesError: func(p []byte, m *Message) error {
+		v, err := DecodeSubmitSharesError(p)
 		if err != nil {
-			return m, err
+			return err
 		}
 		m.SubmitSharesError = &v
-	default:
+		return nil
+	},
+}
+
+func DispatchFrame(f Frame) (Message, error) {
+	var m Message
+	d, ok := frameDecoders[f.Header.MsgType]
+	if !ok {
 		m.Unknown = &UnknownMessage{MsgType: f.Header.MsgType, Payload: f.Payload}
+		return m, nil
+	}
+	if err := d(f.Payload, &m); err != nil {
+		return m, err
 	}
 	return m, nil
 }

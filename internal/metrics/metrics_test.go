@@ -842,7 +842,7 @@ func TestWriteText_SameNameSeriesSortedByLabel(t *testing.T) {
 	if i200 < 0 || i404 < 0 || i500 < 0 {
 		t.Fatalf("missing a series in output:\n%s", out)
 	}
-	if !(i200 < i404 && i404 < i500) {
+	if i200 >= i404 || i404 >= i500 {
 		t.Errorf("series not sorted by label: 200@%d 404@%d 500@%d\n%s", i200, i404, i500, out)
 	}
 }
