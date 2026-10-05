@@ -6432,3 +6432,12 @@ Measured verification of master after the PR close-out wave — confirms the led
 | httptest leak | All 49 `httptest.NewServer` sites across rates/doctor tests paired with `Close()` | ✓ Clean |
 
 All packages build, vet, and test green.
+## Session 1273 update — Go 1.24 unlock surface (post-#1344 pins)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| os.Root | Candidate confinement sites: `lightning` wallet dataDir writes (0700 dir + atomic temp+rename already) and `daemon` system-dir unit writes (root-owned absolute paths). Log-file path is user-supplied arbitrary → `os.Root` confinement inapplicable without breaking the flag. | ⚠️ Noted — evaluated, modest gain; not required |
+| runtime.AddCleanup / SetFinalizer | Zero call sites of either API; no GC-managed resource lifetimes | ✓ Clean |
+| testing/synctest | Zero usage; clock-sensitive paths already test via `internal/clock.Fake` injection — synctest would be an alternative seam, not a fix | ✓ Clean |
+
+All packages build, vet, and test green.
