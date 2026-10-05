@@ -1667,9 +1667,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 					return
 				}
+				// A reject is a final response too — settle latency for
+				// accept and reject alike (the V2 path does the same for
+				// SubmitSharesError), or slow pools that answer only with
+				// rejects would skew the percentiles flattering.
+				latency.Record(elapsed)
 				if result.Accepted {
 					opts.log("info", "engine: V1 share accepted")
-					latency.Record(elapsed)
 					if opts.m != nil {
 						opts.m.sharesAccepted.Inc()
 					}

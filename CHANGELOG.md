@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1363 — V1 reject 応答の submit レイテンシを計上)
+V1 パスでプールが reject を返した場合のみラウンドトリップ遅延が `latency` リングに記録されず（accept や接続エラー時は計上済み）、reject 中心に応答する遅いプールがあると p50/p95/p99 が実態より楽観的に見えた。応答到着時に一律計上するよう修正（V2 の SubmitSharesError 処理と対称）。
+
 ### Fixed (session 1362 — ワーカーのシェアドロップをメトリクスで可視化 + リセット時の警告抑制バグ修正)
 ワーカーのシェアチャネル満杯で落とした発見済みシェアが warn ログにしか現れず、Prometheus メトリクスには専用カウンタがなかった。`otedama_shares_worker_dropped_total` を追加（エンジン側のレート上限ドロップ `otedama_shares_submit_dropped_total` とは別系）。あわせて `lastDropped` が増分時のみ更新されていたため、ワーカー再生成で `dropCount` がリセットされると古い大きな値が以降の警告を抑制する欠陥を修正 — セッション内ドロップ数を常に正しくベースライン化し、リセット後の新規ドロップも警告・計上されるようになった。`docs/SPECIFICATION.md` と `docs/API.md` のメトリクス表に追記。
 

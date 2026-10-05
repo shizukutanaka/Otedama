@@ -7166,3 +7166,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | Do channel-full share drops surface in metrics, or only in the warn log? | 🔧 Fixed: drops were warn-logged but had no dedicated counter — `otedama_shares_worker_dropped_total` added (distinct from `otedama_shares_submit_dropped_total`, the submit *rate-cap* drop on the engine side); both stats ticks (V2 run.go ~958 / V1 ~1433) now Add the per-tick delta and handle the worker-recreation counter reset by re-baselining (a stale `lastDropped` previously suppressed warns until the new cumulative total exceeded the old — `lastDropped` is now updated unconditionally). Metrics table updated in SPECIFICATION.md §3.2 + API.md. |
+
+## Session 1363 update — first-principles audit of submit-latency honesty (Socratic pass 42)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Do p50/p95/p99 submit latencies reflect only real measured round-trips? | ✅ Mostly verified + 🔧 one fix: V2 batch-acks settle every seq ≤ LastSequenceNumber with `now−sent` (never-acked entries stay out of the ring until the 1024 cap drops them unrecorded — honest, documented); future-seq bogus accepts/rejects are ignored before settling; `SubmitSharesError` settles latency as a final response. V1 records latency on submit error (disconnect p99 is surfaced signal, deliberate) and on accept — but the *pool-reported reject* path returned without recording: a slow pool answering mostly with rejects would flatter the percentiles. Fixed by hoisting `latency.Record(elapsed)` above the accept/reject branch (covers the retarget-artifact early return too — it is also a final response). |
