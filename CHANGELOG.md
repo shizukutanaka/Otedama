@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1439 — 未来日時のクォートタイムスタンプがストリームを実質不死身にできた)
+
+- `runArbitrationLoop` がクォートの `At` をそのまま鮮度台帳へ書き込んでいたため、
+  未来日時（スキューした時計・不良プロバイダー）で `now.Sub(ts)` が負になり
+  `pruneStaleStreams` が永遠に期限切れ判定できず、死んだプロバイダーのクォートが
+  デバイスをルーティングし続け得た。ゼロ/未来日時は now へクランプする
+  `quoteFreshness` を導入（純粋関数として単体テスト可能に抽出）。
+
 ### Fixed (session 1436 — Confidence>1 のクォートが自己の net を超えて裁定スコアを水増しできた)
 
 `arbitration.Yield` の Confidence は [0,1] と文書化されながら未クランプで、`Effective()` は `sats × confidence` を素通ししたため、Confidence=1.5 のクォートは自身の net の 150% まで実効収益を水増しできた。両プロバイダーは内部的に confidence を 0.7–0.95 に制限するためライブ欠陥はなく、第三プロバイダー追加時の拡張点としての潜在境界だったが、`min(confidence,1)` を適用して正規化（+Inf confidence は従来通り非有限→0 へ潰れるピン動作を維持）。回帰テストは 1.5/2.0/+Inf をピン。

@@ -176,11 +176,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				return
 			}
 			key := updateStream(opts.streamsMu, opts.streamMap, &q)
-			ts := q.At
-			if ts.IsZero() {
-				ts = time.Now()
-			}
-			lastQuoteAt[key] = ts
+			lastQuoteAt[key] = quoteFreshness(q.At, time.Now())
 		case <-ticker.C:
 			prevAlloc = arbitrationTick(&opts, lastQuoteAt, prevAlloc)
 		}
@@ -270,6 +266,19 @@ func arbitrationTick(opts *arbitrationLoopOpts, lastQuoteAt map[string]time.Time
 	reconcileArbPauses(alloc, opts.paused)
 	applyAllocation(alloc, opts.workers, opts.log)
 	return alloc
+}
+
+// quoteFreshness resolves the timestamp a quote contributes to the
+// freshness ledger. A zero or future-dated At must not set the clock
+// forward: now.Sub(ts) would go negative, so the stream could never
+// age out of pruneStaleStreams and a dead provider's quote would keep
+// routing devices indefinitely. Extracted as a pure function so the
+// clamp is unit-testable without a running loop.
+func quoteFreshness(at, now time.Time) time.Time {
+	if at.IsZero() || at.After(now) {
+		return now
+	}
+	return at
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is

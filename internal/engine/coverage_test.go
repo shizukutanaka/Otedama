@@ -3355,3 +3355,27 @@ func TestRunSessionV1_TIDESBadAddressWarns(t *testing.T) {
 		t.Errorf("unverifiable payout address produced %d warnings, want exactly 1", warns)
 	}
 }
+
+// TestQuoteFreshness pins the freshness-ledger clamp: a quote timestamp
+// that is zero or dated in the future must resolve to now, so a skewed
+// or malformed At cannot make the stream immortal to pruneStaleStreams.
+func TestQuoteFreshness(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want time.Time
+	}{
+		{"zero resolves to now", time.Time{}, now},
+		{"future resolves to now", now.Add(time.Hour), now},
+		{"far future resolves to now", now.AddDate(10, 0, 0), now},
+		{"past is kept", now.Add(-time.Minute), now.Add(-time.Minute)},
+		{"exact now is kept", now, now},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := quoteFreshness(tc.at, now); !got.Equal(tc.want) {
+				t.Errorf("quoteFreshness(%v, %v) = %v, want %v", tc.at, now, got, tc.want)
+			}
+		})
+	}
+}
