@@ -7719,3 +7719,7 @@ Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, activ
 ## Session 1471 update (Socratic pass 143)
 
 **Claim held:** the SV2 `OpenMiningChannel.nominal_hashrate` declaration is finite and honest. Searched for a NaN/Inf route: Stats().HashRate divides hashCount by uptime.Seconds(), and since uptime is guarded `> 0` at nanosecond granularity, Seconds() is ≥ ~1e-9 — never a literal zero divisor — so rate is always finite (0 early, bounded ~1e28 worst case, within float32 range). NaN and +Inf are structurally unreachable, so the `hashRate <= 0 → nominal fallback` guard is sufficient. On reconnect the live (possibly throttled) rate wins; on a fresh session the capability-derived nominal seeds vardiff — both documented and correct. No code change.
+
+## Session 1472 update (Socratic pass 144)
+
+**Claim held:** OpenMiningChannelSuccess's extranonce_prefix being decoded-but-unused is consistent with the standard-channel wire contract — SubmitSharesStandard carries no extranonce field (channel_id, sequence_number, job_id, nonce, ntime, version only), so for a direct standard channel the pool fixes the extranonce inside the precomputed merkle_root it serves. Honest residual: the field exists for proxy/aggregation semantics the engine doesn't exercise; discarding it is spec-consistent, not a bug. omcs.Target flows to share-target (with zero-target → block-target fallback, s1380) and omcs.ChannelID stamps every outbound frame (s1383). No code change.
