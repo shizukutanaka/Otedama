@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1499 — 未実装のプール送信 msg_type がログなしで黙殺されていた)
+
+`DispatchFrame` は前方互換のため未実装 msg_type を `Message.Unknown` へ落とす設計だが、セッションループはそれを一切ログなく黙殺していた — プールが Reconnect・ChannelEndpointChanged・将来の拡張型を送っても運用者からは完全に不可視。uint8 型空間で 256 エントリに構造的に制限される `seenUnknown` マップで「型ごと1回」の警告を追加（ログフラッド不可）。UpdateChannel (0x16) は spec 上 client→server 方向限定で棄却が正しいこと、SetExtranoncePrefix の無消費者残余（s1375 系列）も再確認。`TestRunSessionV2_UnknownMsgTypeWarnedOnce`（同型2回送信→警告1回、CloseChannel まで生存）を追加。
+
 ### Fixed (session 1497 — グループチャネル宛の CloseChannel が foreign-channel 棄却に残っていた)
 
 SV2 spec §5.3.9 はグループチャネル宛の CloseChannel が「そのグループの全メンバーチャネルを閉じる」と規定するが、s1495 の誠実残余として group 宛フレームは foreign-channel の警告+棄却に留まっていた — 単一チャネル運用のクライアントは自分が唯一のメンバーなので、これは実質「閉じられるべき自分のチャネルを閉じない」状態。`handshake` が `OpenMiningChannelSuccess.GroupChannelID`（s1493 でデコード済み・破棄されていた）をセッションループへ返すよう配線し、foreign-channel ガードは「CloseChannel かつ宛先が自分のグループ」のみを通過させて既存の閉塞アームに到達させるよう修正。`TestRunSessionV2_GroupCloseChannelEndsSession`（group id 4 宛で終了すること）を追加。

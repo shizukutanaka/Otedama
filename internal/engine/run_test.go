@@ -2487,6 +2487,10 @@ type responsivePool struct {
 	// channel instead — §5.3.9 closes every member channel, so the
 	// session must end the same way.
 	groupCloseChannel bool
+	// unknownFrame emits an unrecognized SV2 msg_type twice after
+	// activation — the engine must drop it forward-compatibly and
+	// warn once per type, not die or flood the log.
+	unknownFrame bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2666,6 +2670,15 @@ func (fp *responsivePool) serve() {
 		}
 		payload, _ = resp.Encode()
 		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
+
+	if fp.unknownFrame {
+		// 0x40 ChannelEndpointChanged — unimplemented by design (we
+		// never dial pool-provided endpoints). Sent twice to pin the
+		// once-per-type log bound.
+		for range 2 {
+			fp.emit(conn, 0x40, false, []byte{1, 2, 3})
+		}
 	}
 
 	if fp.closeChannel || fp.groupCloseChannel {
@@ -3827,5 +3840,62 @@ func TestRunSessionV2_GroupCloseChannelEndsSession(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "pool closed channel 4") {
 		t.Fatalf("runSession error = %v, want a 'pool closed channel 4' teardown", err)
+	}
+}
+
+// TestRunSessionV2_UnknownMsgTypeWarnedOnce verifies the forward-compat
+// drop path stays honest: an unrecognized msg_type is dropped without
+// killing the session and warned once per type — even when the pool
+// repeats it — so an operator can see which extension directives are
+// being ignored.
+func TestRunSessionV2_UnknownMsgTypeWarnedOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolCloseChannel(t)
+	fp.unknownFrame = true // emits 0x40 twice before the CloseChannel
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var logMu sync.Mutex
+	var logged []string
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logged = append(logged, msg)
+			logMu.Unlock()
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool closed channel") {
+		t.Fatalf("runSession error = %v, want the session to survive the unknown frame and die on CloseChannel", err)
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	count := 0
+	for _, line := range logged {
+		if strings.Contains(line, "unrecognized SV2 msg_type 0x40") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("unknown-type warn count = %d, want exactly 1 (pool sent the type twice)", count)
 	}
 }

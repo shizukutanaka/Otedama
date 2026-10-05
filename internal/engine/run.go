@@ -933,6 +933,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// and reaped alongside submitTimes so the map stays bounded.
 	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
+	// seenUnknown keys the once-per-type warning for unrecognized SV2
+	// msg_types (forward-compat drops). Bounded at 256 by the uint8
+	// msg_type space — a pool cannot grow it past the type space.
+	seenUnknown := make(map[uint8]bool)
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
@@ -1097,6 +1101,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
 					continue
 				}
+			}
+			if pm.msg.Unknown != nil {
+				// Forward-compat drop is deliberate — but log once per
+				// type so an operator can see which extension or
+				// direction-invalid directive the pool is speaking that we
+				// do not implement (e.g. Reconnect, deliberately never
+				// honored since we never dial pool-provided endpoints).
+				if !seenUnknown[pm.msg.Unknown.MsgType] {
+					seenUnknown[pm.msg.Unknown.MsgType] = true
+					opts.log("warn", fmt.Sprintf("engine: ignoring unrecognized SV2 msg_type 0x%02X (%d bytes)", pm.msg.Unknown.MsgType, len(pm.msg.Unknown.Payload)))
+				}
+				continue
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
