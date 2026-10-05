@@ -6237,3 +6237,11 @@ All packages build, vet, and test green.
 | R | Workflow `make` targets | ✓ build / build-all / fmt / test-integration all defined |
 | R | Doc-referenced `make` targets | ✓ the only non-prose reference to a missing target is `make test-e2e`, and every occurrence already carries the correction (skills/tdd.md session-483 note, CHANGELOG history, Makefile comment block) — no action needed |
 
+## Session 1303 update — open-PR mergeability sweep
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Mergeability of all 100 open PRs vs master `bf4f83bc6` (git merge-tree --write-tree, fetched refs/pull/*/head) | ✓ zero conflicts — all 33 non-docs fix/refactor/chore PRs and all 67 docs PRs merge cleanly; the queue is in-order mergeable as-is |
+| R | API `mergeable` field | ⚠️ Noted — GitHub computes it lazily (returns null on first GET); `git merge-tree` against fetched PR refs is the reliable oracle and was used instead |
+| R | Redundant fix pairs re-verified | ✓ the only overlap remains #1321 ⊂ #1329 (recorded s1301); no conflicting semantics among the 33 fix PRs |
+
