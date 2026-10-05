@@ -5955,3 +5955,20 @@ All packages build, vet, and test green.
 | L | `unicode.IsControl` + `strconv.Quote` divergence in `quoteToken` — master carried the strconv modernization while open #809 carried the C1 gap fix; an unmerged-order merge would lose one intent. | ✅ Clean: union-resolved on #809's branch to keep both intents (`unicode.IsControl` + `strconv.Quote`); pushed and mergeable. |
 
 All packages build, vet, and test green.
+
+## Session 1300 update — post-merge-wave master verification (checkpoint)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | build/vet/gofmt on master HEAD | ✓ `go build ./...`, `go vet ./...` green; `gofmt -l` zero across cmd+internal after the #1104–#1115 merge wave |
+| R | test -race (heavy packages) | ✓ `go test -race` arbitration 1.1s / stratum 1.1s / engine 30.0s — all pass at HEAD `2ae99feab`+ |
+| R | Merge-wave composition | ✓ last ~30 merges are docs-only ledger PRs; prior code merges (#677/#704/#714/#957/#1235/#1239/#1241/#1293 etc.) re-verified green together — no interaction defect |
+
+## Session 1301 update — os.IsNotExist sweep completion + open-fix dedupe
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `os.IsNotExist` residual call sites (deprecated since Go 1.16; merged #1239 modernized 4 sites but missed test files) | **S: fixed** — 4 remaining real sites modernized to `errors.Is(err, os.ErrNotExist)`: cmd/otedama logfile_test.go:85, wallet_test.go:136/:172, internal/lightning/wallet_test.go:396. The ×2 in internal/config/config_file_test.go are already covered by open #1333 (not re-fixed); remaining grep hits are prose comments, not call sites |
+| R | Open fix-PR redundancy audit | ⚠️ Noted — #1321 (UsedVersion range) is a strict subset of open #1329 (UsedVersion+Flags+ReqID in both dialer & engine paths); merging #1329 supersedes #1321. No other fix-PR pairs overlap (#1275 ldflags, #1311 install.sh, #1335 maps.Copy, #1339 cmp.Or, #1341 Cf-sanitize, #1344 Go-pins, #1346 govulncheck, #1347 fuzz-job, #1351/#1352 workflow fixes are all disjoint) |
+| R | Test gate after change | ✓ `go test ./cmd/otedama ./internal/lightning` green; `go vet` clean |
+
