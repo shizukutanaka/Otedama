@@ -6423,3 +6423,12 @@ No protocol or implementation change required.
 | race | `go test -race -count=1 ./...` all 25 packages pass, zero flakes/detectors | ✓ Clean |
 
 Measured verification of master after the PR close-out wave — confirms the ledger's recurring "green" claim on the latest tree.
+## Session 1275 update — log-format + signal + httptest lifecycle
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| fmt-in-log | Zero `Sprintf` inside logger calls; all formatted values arrive via slog key-value attrs (fmt.Errorf/Sprintf hits are error/issue strings, not log paths) | ✓ Clean |
+| signal lifecycle | Single `signal.NotifyContext` in run.go — cancel-driven auto-stop; no raw `signal.Notify` channel leaks | ✓ Clean |
+| httptest leak | All 49 `httptest.NewServer` sites across rates/doctor tests paired with `Close()` | ✓ Clean |
+
+All packages build, vet, and test green.
