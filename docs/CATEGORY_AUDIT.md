@@ -7125,3 +7125,12 @@ Ledger only — verification round, no behavior-visible change.
 | S | When `mining.notify` outpaces the consumer (jobsCh cap-8), is queue state still honest? | ✅ Verified: `CleanJobs` purges the entire queue before enqueue (correct per Stratum — prior work is dead on a new block), and a still-full queue drops the *oldest* job to make room for the newest — superseded work can never crowd out live work. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1356 update — first-principles audit of payout-address provenance (Socratic pass 37)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the wallet.dat seed derive the address the pool pays? | ⚠️ Noted (by design, honest boundary): payout addresses are operator-configured (`bitcoin_address` + `bitcoin_addresses` failover list, deduplicated in config order) — the wallet seed custody lives in wallet.dat for Lightning withdrawals, but pool-facing payout identity is a plain config field. This is correct non-custodial separation: keys and payout routing are independently controlled; the address can be the wallet's, a cold address, or an exchange — the engine never invents or switches addresses outside the operator's list (verified s1328). |
+| S | Failover honesty — could failover silently select a non-operator address? | ✅ Verified: `payoutAddresses` only yields the configured list; rotation stays inside it and `addrConnected` freezes the address once a session establishes. |
+
+Ledger only — verification round, no behavior-visible change.
