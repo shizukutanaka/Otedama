@@ -8120,3 +8120,4 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Fixed
 
 - stratum: decode SubmitSharesSuccess `new_shares_sum` as U64 per spec §5.3.13 — the field was read as U32 and the frame bound at 16 bytes, accepting 16–19-byte malformed frames and truncating the difficulty-sum field for any future consumer. Encoder/decoder now use the spec's 20-byte wire layout.
+- stratum: correct `MsgSubmitSharesError` to the spec's 0x1d (was 0x1e, which spec reserves). Real pool reject frames now decode and count instead of landing in the unknown-type warn bucket — the reject-classification and sequence-accounting paths verified in earlier passes were unreachable on the wire.

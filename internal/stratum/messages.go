@@ -24,7 +24,7 @@
 //	0x15  NewMiningJob           (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
-//	0x1e  SubmitSharesError      (server → client, channel_msg)
+//	0x1d  SubmitSharesError      (server → client, channel_msg)
 //
 // # Encoding conventions (from spec chapter 3)
 //
@@ -58,7 +58,7 @@ const (
 	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
-	MsgSubmitSharesError        uint8 = 0x1e
+	MsgSubmitSharesError        uint8 = 0x1d
 	MsgSetNewPrevHash           uint8 = 0x20
 	MsgSetTarget                uint8 = 0x21
 )
@@ -317,7 +317,7 @@ func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
 }
 
 // ------------------------------------------------------------------
-// SubmitSharesError (server → client, msg_type 0x1e, channel_msg)
+// SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
 // SubmitSharesError is returned when the pool rejects a share.
