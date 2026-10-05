@@ -152,28 +152,36 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 
 // OpenMiningChannel requests a new mining channel on an established
 // connection. Each channel corresponds to one "mining device".
-//
-// Note: the SV2 spec's max_target (U256) field is intentionally not
-// implemented — Otedama accepts whatever share target the pool assigns
-// (OpenMiningChannelSuccess.Target, later adjusted via SetTarget), so
-// advertising a preference would be dead configuration. A previous
-// version of this struct carried a MaxTargetNBits field that Encode
-// never serialized; it was removed rather than left silently dropped.
 type OpenMiningChannel struct {
-	ReqID           uint32  // caller-assigned, echoed in response
-	User            string  // STR0_255: worker identifier (usually Bitcoin address)
-	NominalHashrate float32 // H/s, informational
+	ReqID           uint32   // caller-assigned, echoed in response
+	User            string   // STR0_255: worker identifier (usually Bitcoin address)
+	NominalHashrate float32  // H/s, informational
+	MaxTarget       [32]byte // U256 (fixed 32 bytes): bound on the share target the pool may assign
+}
+
+// MaxTargetUnconstrained declares no bound on the pool-assigned share
+// target — the all-ones U256, matching Otedama's policy of accepting
+// whatever difficulty the pool sets. The field itself is wire-required
+// (the spec layout is fixed: a decoder that reads max_target hits a
+// short buffer and fails the whole frame without it), so declaring the
+// widest bound is the honest way to say "no preference".
+var MaxTargetUnconstrained = [32]byte{
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 }
 
 // Encode serializes OpenMiningChannel.
 func (m OpenMiningChannel) Encode() ([]byte, error) {
-	b := appendU32LE(make([]byte, 0, 16), m.ReqID)
+	b := appendU32LE(make([]byte, 0, 48), m.ReqID)
 	b, err := appendStr0_255(b, m.User)
 	if err != nil {
 		return nil, err
 	}
-	// NominalHashrate: IEEE 754 float32 little-endian.
-	return appendU32LE(b, float32bits(m.NominalHashrate)), nil
+	// NominalHashrate: IEEE 754 float32 little-endian; MaxTarget: U256.
+	b = appendU32LE(b, float32bits(m.NominalHashrate))
+	return append(b, m.MaxTarget[:]...), nil
 }
 
 // DecodeOpenMiningChannel parses OpenMiningChannel.
@@ -192,6 +200,9 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 		return m, fmt.Errorf("stratum: OpenMiningChannel.NominalHashrate: %w", err)
 	}
 	m.NominalHashrate = float32frombits(binary.LittleEndian.Uint32(f[:]))
+	if _, err := io.ReadFull(r, m.MaxTarget[:]); err != nil {
+		return m, fmt.Errorf("stratum: OpenMiningChannel.MaxTarget: %w", err)
+	}
 	return m, nil
 }
 
@@ -212,13 +223,17 @@ type OpenMiningChannelSuccess struct {
 	// non-conformant pool sending a 33..255-byte extranonce is still
 	// bounded and allocation-safe, so we accept and use it rather than
 	// dropping an otherwise-working connection over a spec-length nit.
-	Extranonce      []byte
-	ExtraNonce2Size uint16
+	Extranonce []byte
+	// GroupChannelID is the U32 trailing the spec layout (see
+	// SetGroupChannel). Otedama opens a single standard channel and never
+	// consumes it, but the bytes are real wire fields — decoding them
+	// keeps the frame positionally correct.
+	GroupChannelID uint32
 }
 
 // Encode serializes OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
-	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
+	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+4)
 	b = appendU32LE(b, m.ReqID)
 	b = appendU32LE(b, m.ChannelID)
 	b = append(b, m.Target[:]...)
@@ -226,7 +241,7 @@ func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return appendU16LE(b, m.ExtraNonce2Size), nil
+	return appendU32LE(b, m.GroupChannelID), nil
 }
 
 // DecodeOpenMiningChannelSuccess parses OpenMiningChannelSuccess.
@@ -249,8 +264,8 @@ func DecodeOpenMiningChannelSuccess(payload []byte) (OpenMiningChannelSuccess, e
 	if m.Extranonce, err = getB0_255(r); err != nil {
 		return m, err
 	}
-	if m.ExtraNonce2Size, err = getU16LE(r); err != nil {
-		return m, err
+	if m.GroupChannelID, err = getU32LE(r); err != nil {
+		return m, fmt.Errorf("stratum: OpenMiningChannelSuccess.GroupChannelID: %w", err)
 	}
 	return m, nil
 }

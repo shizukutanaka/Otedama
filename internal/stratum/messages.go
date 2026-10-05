@@ -24,7 +24,7 @@
 //	0x15  NewMiningJob           (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
-//	0x1e  SubmitSharesError      (server → client, channel_msg)
+//	0x1d  SubmitSharesError      (server → client, channel_msg)
 //
 // # Encoding conventions (from spec chapter 3)
 //
@@ -55,9 +55,10 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
-	MsgSubmitSharesError        uint8 = 0x1e
+	MsgSubmitSharesError        uint8 = 0x1d
 	MsgSetNewPrevHash           uint8 = 0x20
 	MsgSetTarget                uint8 = 0x21
 )
@@ -287,36 +288,36 @@ type SubmitSharesSuccess struct {
 	ChannelID          uint32
 	LastSequenceNumber uint32
 	NewSubmitsAccepted uint32
-	NewSharesSummed    uint32
+	NewSharesSummed    uint64
 }
 
 // Encode serializes SubmitSharesSuccess. It is the symmetric inverse of
 // DecodeSubmitSharesSuccess, used by the server side (and tests that stand
 // in for a pool) to acknowledge accepted shares.
 func (m SubmitSharesSuccess) Encode() ([]byte, error) {
-	buf := make([]byte, 16)
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
 	binary.LittleEndian.PutUint32(buf[4:8], m.LastSequenceNumber)
 	binary.LittleEndian.PutUint32(buf[8:12], m.NewSubmitsAccepted)
-	binary.LittleEndian.PutUint32(buf[12:16], m.NewSharesSummed)
+	binary.LittleEndian.PutUint64(buf[12:20], m.NewSharesSummed)
 	return buf, nil
 }
 
 // DecodeSubmitSharesSuccess parses a SubmitSharesSuccess payload.
 func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
-	if len(payload) < 16 {
-		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < 16)", len(payload))
+	if len(payload) < 20 {
+		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < 20)", len(payload))
 	}
 	return SubmitSharesSuccess{
 		ChannelID:          binary.LittleEndian.Uint32(payload[0:4]),
 		LastSequenceNumber: binary.LittleEndian.Uint32(payload[4:8]),
 		NewSubmitsAccepted: binary.LittleEndian.Uint32(payload[8:12]),
-		NewSharesSummed:    binary.LittleEndian.Uint32(payload[12:16]),
+		NewSharesSummed:    binary.LittleEndian.Uint64(payload[12:20]),
 	}, nil
 }
 
 // ------------------------------------------------------------------
-// SubmitSharesError (server → client, msg_type 0x1e, channel_msg)
+// SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
 // SubmitSharesError is returned when the pool rejects a share.
@@ -348,6 +349,37 @@ func DecodeSubmitSharesError(payload []byte) (SubmitSharesError, error) {
 		if m.Error, err = getStr0_255(r); err != nil {
 			return m, err
 		}
+	}
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// CloseChannel (server → client AND client → server, msg_type 0x18, channel_msg)
+// ------------------------------------------------------------------
+
+// CloseChannel ends a mining channel (SV2 spec §5.3.9). When the server
+// sends it, the channel is dead: the client must stop using it.
+type CloseChannel struct {
+	ChannelID uint32
+	Reason    string // reason_code, STR0_255
+}
+
+// Encode serializes CloseChannel (includes channel_id prefix).
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 5+len(m.Reason)), m.ChannelID)
+	return appendStr0_255(b, m.Reason)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	var m CloseChannel
+	r := newByteReader(payload)
+	var err error
+	if m.ChannelID, err = getU32LE(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.ChannelID: %w", err)
+	}
+	if m.Reason, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.Reason: %w", err)
 	}
 	return m, nil
 }
@@ -390,6 +422,7 @@ type Message struct {
 	NewMiningJob             *NewMiningJob
 	SetNewPrevHash           *SetNewPrevHash
 	SetTarget                *SetTarget
+	CloseChannel             *CloseChannel
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
@@ -506,6 +539,14 @@ var frameDecoders = map[uint8]func([]byte, *Message) error{
 			return err
 		}
 		m.SubmitSharesError = &v
+		return nil
+	},
+	MsgCloseChannel: func(p []byte, m *Message) error {
+		v, err := DecodeCloseChannel(p)
+		if err != nil {
+			return err
+		}
+		m.CloseChannel = &v
 		return nil
 	},
 }

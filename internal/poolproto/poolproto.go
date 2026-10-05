@@ -166,7 +166,10 @@ type Job struct {
 	// Version is the block-header version field.
 	Version uint32
 
-	// PrevHash is the previous block hash, big-endian.
+	// PrevHash is the previous block hash in the block header's
+	// serialization byte order — the bytes copied verbatim into the
+	// 80-byte header for hashing. The Stratum V1 wire encoding
+	// (each 4-byte word byte-swapped) is normalized at decode.
 	PrevHash [32]byte
 
 	// MerkleRoot is the merkle root constructed by the pool.
@@ -197,6 +200,16 @@ type Job struct {
 	Coinb1       []byte
 	Coinb2       []byte
 	MerkleBranch [][]byte
+
+	// CoinbaseTx is the fully reassembled coinbase transaction
+	// (coinb1 || extranonce1 || ExtraNonce || coinb2), stored by the
+	// session when it folds the parts. It lets the engine inspect the
+	// transaction's outputs positionally — e.g. verifying a declared
+	// direct-payout scheme actually pays the configured address —
+	// which a substring scan of the raw halves cannot do faithfully.
+	// Empty for protocols that never see the coinbase (V2) and for
+	// sessions that negotiated no extranonces.
+	CoinbaseTx []byte
 
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
@@ -287,6 +300,24 @@ type ReconnectWaiter interface {
 	// reconnecting. Zero means no directive was received (or it carried
 	// no wait field).
 	ReconnectWait() time.Duration
+}
+
+// DifficultyWatcher is an optional extension to Session implemented by
+// protocols that deliver mid-session difficulty retargets as discrete
+// events (mining.set_difficulty in Stratum V1). Callers should
+// type-assert a Session to this interface; protocols without the
+// concept are simply absent.
+//
+// The returned channel is closed when the Session ends. A nil channel
+// means no updates will ever be delivered. Values are the session's
+// current SuggestedDifficulty at the moment of the retarget — the
+// caller should treat each delivery as a hint to re-check, not as an
+// authoritative stream (consecutive equal values are possible).
+type DifficultyWatcher interface {
+	// DifficultyUpdates returns a channel on which pool-assigned
+	// difficulty changes are delivered. The channel is buffered and
+	// coalesces: a slow consumer sees at most the most recent value.
+	DifficultyUpdates() <-chan float64
 }
 
 // Dialer establishes a Connection to a pool. Different protocols

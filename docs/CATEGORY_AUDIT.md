@@ -6766,3 +6766,1302 @@ All packages build, vet, and test green.
 | L | Marker debt crept back via merged branches — TODO/FIXME/XXX/HACK landing inside code or as unannotated prose debt. | ✅ Clean: zero markers in `internal/`+`cmd/` (AUDIT_CHECKLIST rule 6 holds post-wave); doc-side hits are the checklist rule itself plus audit-ledger meta-references — all legit. |
 
 All packages build, vet, and test green.
+---
+
+## Session 1318 update — first-principles audit of the non-custodial claim (Socratic pass)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The product's foundational claim is "non-custodial": does the code ever verify that pool-provided work actually pays the configured payout address? | ❌ Real gap, fixed: nothing checked it. V1 `mining.notify` carries raw `coinb1`/`coinb2` (`stratumv1/parse.go`), `completeV1Job` folds them into `Job.MerkleRoot` and retains both halves — the payout script is inspectable but never was. Fix: `btccrypto.ScriptForAddress` (address → standard locking script) + `engine.coinbasePaysTo`; each V1 job's coinbase halves are scanned for the user's script and a once-per-episode warning fires when absent. |
+| S | Does the fix apply to every pool? — fpps/pplns coinbases legitimately pay the *pool's* wallet (miners are paid later via accounting), so a blanket check false-warns on honest pools. | ✅ Gated correctly: check runs only when `pools[].payout_scheme` is `tides` or `solo` — the two schemes that promise the user script inside the coinbase (config validation at `config.go:690-694`); poolUser override (`sessionUser`) makes the payout address opaque, so the check also skips that case. |
+| S | Can V2 jobs get the same verification? | ⚠️ Structural limitation, documented: `NewMiningJob` carries only `{channel_id, job_id, ntime, version, merkle_root}` — coinbase outputs are opaque by protocol design. Verifiable only via JDP template flow (`sv2-spec` #203, tracked in ADR-009); godoc on the check records this honestly. |
+
+All packages build, vet, and test green; lint clean on touched files.
+
+---
+
+## Session 1319 update — re-audit of the s1318 payout-verification patch (same lens, self-applied)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Is the address the check verifies identical to the one in the Stratum user identity? | ✅ Verified: `sessionUser(poolUser, addrs[addrIdx], worker)` embeds `addrs[addrIdx]` into the identity, and `payoutAddr = addrs[addrIdx]` — same element, same index. Failover to the next address re-derives the script on the next session attempt. |
+| S | When `pools[].user` overrides the identity, is skipping correct? | ✅ Verified: the override wins in `sessionUser`, so the address embedded in the identity is unknown to us — the skip matches the trust model (operator asserted custody via the override). |
+| S | If the configured address cannot derive a locking script, was the failure silent? | ❌ Was silent — fixed: `ScriptForAddress` error now logs a once-per-session `cannot verify` warning instead of quietly disabling the check (config validation should normally reject such addresses first, but defense in depth). Test added. |
+| S | Does script presence prove *amount* (a solo coinbase paying 1 sat to the user)? | ⚠️ Noted honestly: presence is the custody invariant; amount is not verifiable without decoding outputs — a pool paying dust would satisfy the check. Out of scope for the warn gate; recorded for the ledger. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 1320 update — first-principles audit of the arbitration-pause claim (Socratic pass 2)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "arbPaused=真 means mining is paused" — does a paused worker actually stop hashing, or just stop receiving new jobs? | ✅ Verified real: `applyAllocation` calls `w.SetWork(nil)` on idle/AI-switched devices; `grind` then sees `localWork == nil` and sleeps at a 10ms poll — true idle, not stale-work grinding. The curtail gate uses the same mechanism. |
+| S | Does the pause survive subsequent pool job updates between Decide ticks? | ✅ Verified: `reconcileArbPauses` rewrites the shared set every tick *before* applyAllocation, and `applyJob`/`updateWork` skip workers still in the set — the #494 invariant holds both directions. |
+| S | Does resume actually re-arm? | ✅ Verified: `Resume` removes the device from the set; the next pool job arms it via the same dispatch path. |
+| S | What happens on a `Decide` error mid-loop? | ✅ Conservative: tick logs a warning and retains `prevAlloc`; the pause set is left untouched (last-known-good allocation), no half-applied state. |
+| S | Would a permanently-paused rig be invisible to liveness? | ✅ Intentional and now honest: `allArbPaused` keeps `otedama_up=1` and skips the stall monitor — justified *because* the pause is a real `SetWork(nil)` idle, not silent work starvation. (This ordering matters: the metric semantics are only correct as long as pause means idle.) |
+
+All packages build, vet, and test green; no code changes required — verification only.
+
+## Session 1321 update — first-principles audit of the "encrypted pool link" claim (Socratic pass 3)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "stratum+tls://" — does the V1 TLS scheme actually establish TLS? | ✅ Verified: registered `Dialer{useTLS:true}` → `dialTLS` → `tls.Dialer` (system roots, TLS 1.2+, ServerName from dial address); never falls back to plaintext (the silent-downgrade defect was fixed in a prior session). |
+| S | `tls_ca_file` — does the configured private-CA bundle reach the verifier without disabling verification? | ✅ Verified: run.go reads it → `creds.TLSRootCAsPEM` → `tlsConfigWithExtraCAs` (system pool + PEM). Unreadable file → warn + system roots (fails cleanly for private-CA pools, never downgrades). |
+| S | "stratum+v2tls://" — same posture? | ✅ Verified: `stratum.DialTLS` with the same secure defaults; plaintext `stratum+v2://` logs an explicit warning at connect. |
+| S | Is the cleartext exposure symmetric between V1 and V2? | 🔧 Fixed: V2 plaintext warned at connect but V1 (`stratum+tcp://`) logged only `connected` — and V1 is the protocol carrying the payout address as its username. Added the identical warn, gated on the TLS scheme. |
+
+All packages build, vet, and test green.
+
+## Session 1322 update — first-principles audit of the wallet↔payout relationship (Socratic pass 4)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the `wallet.dat` seed control the payout address? | ✅ Honestly designed, no: `WalletManager` exposes only `Seed`/`Fingerprint`/`Mnemonic` — it derives no addresses and feeds nothing into payout. Payout addresses come from `bitcoin_address`/`bitcoin_addresses` config (`payoutAddresses`, setup.go:397). |
+| S | Is that consistent with the "non-custodial" product claim? | ✅ Yes — non-custodial means the *pool* pays the operator's configured address directly; no Otedama-held key needs to mediate funds. The wallet is a separate sovereign-seed vault for the operator's own Lightning needs (encrypted at rest, BIP-39 recoverable). |
+| S | Do the docs overclaim wallet↔payout linkage? | ✅ No: README states plainly the wallet "only encrypts and stores a BIP-39 seed at rest; it does not process payments," and that the Bitcoin address must be supplied separately "inherent to the non-custodial design." |
+| S | Residual gap for operators? | ⚠️ Noted: nothing verifies the configured payout address is one the *operator* controls (e.g. by deriving it from wallet.dat). Deliberate — addresses are free-form so any external wallet/exchange address works — but a mistyped address routes payouts to a stranger; the s1318 coinbase check only verifies pool→configured-address, not configured-address→operator-ownership. |
+
+No code changes required; verification only.
+
+## Session 1323 update — first-principles audit of the "valid share submission" claim (Socratic pass 5)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Are shares only submitted when they meet the pool target? | ✅ Verified: the worker emits a Share only when `hash.LessOrEqual(localWork.Target)` — no below-target wire waste. |
+| S | Does a pool SetTarget actually reach the workers? | ✅ Verified: SetTarget → `shareTarget` updated + `startJob` re-issues work immediately (and the superseded-target reject is already classified as benign, ESP-Miner #212). |
+| S | Is a share bound to the job it was ground under? | ✅ Verified: `Share.JobID` comes from the captured `localWork.JobID`, carried into `SubmitSharesStandard.JobID` — the pool recomputes against that job. |
+| S | Are shares for superseded jobs still submitted? | 🔧 Fixed: no freshness gate existed — shares found before a SetNewPrevHash/new notify but submitted after it are guaranteed stale rejects (SV2 invalidates all unnamed jobs; V1 replaces work each notify). Both paths now drop `share.JobID != active job` before submission, counted in `sharesSubmitDropped` with a debug log. |
+
+All packages build, vet, and test green.
+
+## Session 1324 update — first-principles audit of the "no duplicated hashing work" claim (Socratic pass 6)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can two workers produce an identical header? | ✅ Verified: `setup.go` assigns worker `i` `NonceOffset=i*Threads`, `NonceStep=next-pow2(Threads×workers)` — every (worker,thread) owns a disjoint residue class mod the stride, covering all residues (partition math verified: stride pow2 ≥ total, offsets < stride). Nonce wrap rolls `ntime` forward, so (nonce,ntime) is unique per thread too. |
+| S | Is the hashed header well-formed? | ✅ Verified: `updateWork` populates all five inputs (version, prev-hash, merkle, time, bits); `SetNewPrevHash.PrevHash` is documented LE/header-wire order matching `Header.Bytes` offsets; serialization is canonical 80-byte. |
+| S | Can a share cross session/pool boundaries? | ✅ Verified + strengthened: exactly one session drains `merged` at a time (sessions run sequentially in the reconnect loop); shares arriving from a superseded session are now dropped by the session-1323 JobID gate instead of being submitted under the new session's channel. |
+| S | V1 `set_extranonce` rotation mid-session | ⚠️ Noted: shares ground under the previous extranonce carry the old extranonce2 — JobID gate doesn't cover extranonce rotation (JobID may be unchanged). Rare; recorded as residual. |
+| S | V1 non-clean_jobs pools tolerating brief stale shares | ⚠️ Noted: the JobID gate drops marginal shares a lenient pool might have credited — accepted trade-off for guaranteed-reject elimination. |
+
+All packages build, vet, and test green (engine tests incl. existing V1/V2 share-path matrix pass).
+
+## Session 1325 update — first-principles audit of the "submit/accept accounting is honest" claim (Socratic pass 7)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the pool credit a share we never sent? | ✅ Verified: SubmitSharesSuccess with `LastSequenceNumber > seqNum` is dropped; `NewSubmitsAccepted` is clamped to the locally-settled count (floor and ceiling). |
+| S | Can the pool inflate rejects for unsent submits? | ✅ Verified: SubmitSharesError with seq > seqNum dropped; settlement only for tracked sends; both response types carry ChannelID and are filtered by `channelIDOf` (upstream foreign-channel drop). |
+| S | Can a share arrive after total job invalidation? | 🔧 Fixed: when `SetNewPrevHash` names an unknown job, `active` resets to nil — the session-1323 gate then skipped stale detection for in-flight shares. A `jobArmed` latch now drops every drained share once no job is armed mid-session. |
+| S | Do dropped shares corrupt sequence numbering? | ✅ Verified: drops happen after `seqNum++`, matching the rate-cap path — gaps in the sequence are already the model (pool sees dense submits only by design of the counter being per-channel). |
+
+All packages build, vet, and test green.
+
+## Session 1326 update — first-principles audit of the "device attribution is correct" claim (Socratic pass 8)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does Share.DeviceID identify the device that found it? | ✅ Verified: one worker per SHA256d-capable device, `cfg.DeviceID = dev.Identity().ID`; share carries it verbatim to `otedama_device_shares_found_total{device}` (empty ID guarded, no empty-label series). |
+| S | Can arbitration pause the wrong device? | ✅ Verified: single namespace end-to-end — `devRefs` built from the same `devices` slice as workers; `reconcileArbPauses`/`pauseDevice`/`allArbPaused`/`HashrateFunc` all compare `w.DeviceID()` to `Assignment.DeviceID` (= `dev.Identity.ID`). Non-SHA256d devices correctly find no worker (no-op). |
+| S | Can a device's quote/yield be attributed to another? | ✅ Verified: providers emit `DeviceID = dev.Identity().ID`; `YieldPerDevice` keyed by the same ID and looked up via `YieldFor(dev.Identity.ID)` with DefaultYield fallback. |
+| S | What if two devices share an ID? | ⚠️ Noted: hal IDs unique by construction ("cpu-0", "gpu-renderD*"); `Decide` rejects duplicates fail-closed (arbitration freezes rather than misroutes — correct bias). `SetupConnection.DeviceID="cpu"` is a wire field in a different namespace, benign naming collision. |
+
+No code change required this round.
+
+## Session 1327 update — first-principles audit of the "measured hashrate is honest" claim (Socratic pass 9)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Is the reported hashrate derived from real attempted hashes? | ✅ Verified: `hashCount.Add(1)` per nonce attempt in grind's inner loop; `Stats().HashRate` is the documented lifetime average (hashes/uptime) — not luck-derived from found shares. Nominal SV2 declaration is capability-derived with the live rate winning on reconnect; fresh-session 0 correctly falls back so vardiff is seeded honestly. |
+| S | Does the average distort after arbitration pauses? | ⚠️ Noted: uptime accrues while paused (no hashing), so the lifetime average sags after idle episodes and the mining quote understates the device's capability on resume — a self-reinforcing bias toward staying off mining. Latent today (a single CPU mining device); flagged as a semantic wrinkle, not a correctness defect. |
+| S | Can shares "meet" the wrong target? | ✅ Verified: share is emitted only when `hash <= localWork.Target`, which carries the pool-assigned share target (not the block target) end-to-end from the handshake. |
+
+No code change required this round.
+
+## Session 1328 update — first-principles audit of the "the pool is told to pay the configured address" claim (Socratic pass 10)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the payout address be mangled on the wire? | ✅ Verified: `sessionUser` is pure concatenation — `addr` verbatim, `addr + "." + worker` convention, or the explicit `pools[].user` override; both the V1 `mining.authorize` call and the V2 `OpenMiningChannel.User` field transmit it unchanged (no truncation/case folding). |
+| S | Can earnings be silently redirected to another address? | ✅ Verified: `addrConnected` gates failover — a backup payout address is tried only when the active one never established a session; once connected, only pool failover and backoff run, so an outage can never redirect earnings. Config validation requires ≥1 valid address (empty set unreachable post-Validate); `payoutAddr` for coinbase verification is tracked only in the address-derived mode, matching the s1319 scope. |
+
+No code change required this round.
+
+## Session 1329 update — first-principles audit of the "a V1 share validates pool-side" claim (Socratic pass 11)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a share ever bind a merkle root the pool didn't intend? | ✅ Verified: `completeV1Job` folds en1 + a fresh big-endian en2 counter into `coinb1\|\|en1\|\|en2\|\|coinb2`, hashes the merkle branch, and carries the en2 verbatim `Job.ExtraNonce → Work → Share → ShareSubmission`, so the pool rebuilds the identical coinbase — the share is verifiable end-to-end (the historical zero-merkle defect is unreachable: subscribe requires valid en1/en2size, notify requires non-empty coinb1/2, en2size is bounded at negotiation). |
+| S | Is per-job en2 reuse across shares a validity defect? | ✅ Verified: en2 rolls per job, not per share — shares sharing en2 differ in nonce and remain distinct, valid work (difficulty is what the pool credits). Not a defect; recorded honestly as a deliberate simplification. |
+
+No code change required this round.
+
+## Session 1330 update — first-principles audit of the "workers track pool retargets" claim (Socratic pass 12)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does a mid-job difficulty change reach in-flight workers, or do they grind the superseded target until the next notify? | 🔧 Fixed: V2 already re-issued the active job on `SetTarget` (`startJob(active, activeNTime)`); V1 stored `set_difficulty` but only applied it on the next job, so every find in between was a guaranteed stale-target reject (accounting stayed honest via `transitionReject`, but hashrate burned). New `poolproto.DifficultyWatcher` — stratumv1 pushes each parsed retarget on a buffered, coalescing `diffCh`; the engine re-issues `lastJob` through `applyJob` immediately, matching V2 semantics. Paused/curtailed workers still skipped; superseded-window rejects remain classified `difficulty-transition`. |
+| S | Can a burst of retargets wedge or mislead the consumer? | ✅ Verified: `diffCh` is buffered(1) and replaces any undelivered value — the read loop never blocks and the consumer always sees the newest target, never a stale one; channel closes with the session (nil'd in the engine's select). Malformed/non-positive values are dropped by `parseDifficulty` before the push. |
+
+Code change: `poolproto.DifficultyWatcher` + stratumv1 `diffCh`/`DifficultyUpdates()` + engine re-issue path (V1 parity with V2 `SetTarget` handling) + unit test.
+
+## Session 1331 update — first-principles audit of the "paused devices resume onto the right job" claim (Socratic pass 13)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does an arbitration-paused worker resume onto stale work — or can any path re-arm it while paused? | ✅ Verified: pausing sets `SetWork(nil)` (the worker holds no work at all, not a stale job); un-pausing only deletes the pause-set entry, so the device re-arms with the *current* job on the next `applyJob`/`updateWork` — identical semantics to `curtailGate` ("hashing resumes on next job", documented). Every re-issue path — job notify, retarget push (s1330 `diffCh`), V2 `SetTarget`, V1 `set_difficulty` — routes through `applyJob`/`updateWork`, which skip `paused.Paused(deviceID)`, so a pause can never be silently re-armed (#494 invariant holds across all arms). |
+| S | What does a resumed device lose between un-pause and the next job? | ⚠️ Noted: up to one job interval (~seconds to ~a minute) of hashing latency — the worker idles on nil work rather than a stale job, so it loses throughput, never validity. Mirrors the curtail path's documented semantics; the job-starvation warn (`jobStallWarnAfter`) covers the pathological case of a pool that stops sending jobs entirely. Benign; re-issuing on resume would need the session's current job plumbed into the arbitration loop for no additional safety. |
+
+No code change required this round.
+
+## Session 1332 update — first-principles audit of the "the submit rate cap protects without starving legitimate shares" claim (Socratic pass 14)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the 8/s + burst-32 cap drop a share the user actually needed? | ✅ Verified (with an honest edge): the cap is consumed only *after* the superseded-job gate, so no flood path burns tokens on dead work; a queued-instead-of-dropped design would make shares *more* stale by send time (the comment's stated reason for dropping). A legit device hits 8/s only at ~34 GH/s on a difficulty-1 pool — a configuration where each share credits ≈0 work anyway, so the revenue loss is negligible while the DoS bound is real. |
+| S | Is the accounting honest about what was lost? | ⚠️ Noted: `shares_submit_dropped` counts both superseded-job drops (s1323) and rate-cap drops — two distinct causes folded into one counter (each has a distinct debug log line; the metric itself can't tell them apart). Deliberate drop accounting is otherwise honest — capped shares are never counted as submitted or accepted. |
+
+No code change required this round.
+
+## Session 1333 update — first-principles audit of the "share accept/reject accounting is honest in both directions" claim (Socratic pass 15)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the pool inflate accepts or inject rejects for shares never sent? | ✅ Verified: future-sequence accepts and rejects are both dropped as bogus (V2); batch `NewSubmitsAccepted` is clamped to locally observed settlements — never credited beyond what we sent. V1 responses bind by RPC id (late/bogus handled per earlier audits). Superseded-target rejects classify into `difficulty-transition` symmetrically on both paths — excluded from reject rate, kept in the per-reason breakdown. |
+| S | Can a contradictory pool double-respond (accept then re-reject a settled seq) to inflate rejects? | ⚠️ Noted: a `SubmitSharesError` for an already-settled sequence misses the `tracked` gate and counts as a real reject — bounded by sends and ambiguous by spec (SV2 assigns one response per seq, so the frame is genuinely contradictory). Failing toward flagging bad-pool behavior via the warn log is defensible; suppressing it would hide real contradictions. Recorded honestly rather than changed. |
+
+No code change required this round.
+
+## Session 1334 update — first-principles audit of the "coinbase payout check can't be evaded" claim (Socratic pass 16)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Could a hostile pool embed the payout script's bytes outside the output layer to fool the verification while paying nothing? | 🔧 Fixed: the s1318 check scanned the raw coinbase halves by substring — a script embedded in an OP_RETURN push, scriptSig, or witness data would false-positive "pays". `Job.CoinbaseTx` (the already-assembled transaction, now retained by `completeV1Job`) is parsed positionally: each vout's scriptPubKey must equal the payout script exactly (`btccrypto.CoinbasePaysScript`). Malformed coinbases warn "cannot verify" once per episode rather than silently passing. Evasion regression test added (OP_RETURN decoy). |
+| S | Does the stricter check still miss anything? | ⚠️ Noted: as recorded in s1319, presence of a paying output still cannot verify the *amount* (a dust-value output passes) — inherent without output-value policy; also the check remains gated to `payout_scheme: tides`/`solo` where pool-paid coinbases are legitimate by design elsewhere. |
+
+CHANGELOG entry added under Fixed (session 1334).
+
+## Session 1335 update — first-principles audit of "workers can't hash guaranteed-dead work" (Socratic pass 17)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When a session ends, do workers keep grinding its last job through the reconnect backoff — producing shares the next session's superseded gate must always drop? | 🔧 Fixed: teardown updated metrics/dashboard/OnReady but left workers armed. The next session renegotiates extranonces (V1) or a channel (V2), so every hash on the dead job was guaranteed waste for up to 64s per cycle. `runReconnectLoop` now `SetWork(nil)`s all workers alongside the existing `poolConnectionState.Set(0)` — same idempotent idle used by pause/unknown-prevhash, re-armed by pause-aware `applyJob` on the next session (#494 invariant preserved). |
+| S | Could a share found in the gap still reach a valid destination? | ✅ Verified: merged shares produced between sessions block on the unbuffered channel until the next session drains them, then drop at the superseded check — accounting was already honest; only the wasted hashpower was the defect. |
+
+CHANGELOG entry added under Fixed (session 1335).
+
+## Session 1336 update — first-principles audit of "jobs only arm an authenticated session" (Socratic pass 18)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a pool make workers mine on an *unauthenticated* session? | 🔧 Fixed: `sess.start` launches `readLoop` before `mining.subscribe`/`mining.authorize`, so `handleNotify` armed any notify received during the handshake window. A hostile pool holding the authorize call pending while streaming `mining.notify` could harvest up to `handshakeTimeout` of hashpower that can never be credited — repeatable on every reconnect. `session.authorized` now gates delivery; pre-auth notifies are stashed (newest only) and replayed in order once the authorize result lands (`flushPreAuthJob`, `preAuthMu`-serialized so a stashed job can never re-arm behind a newer one). |
+| S | Do legitimate pools lose work under the gate? | ✅ Verified: notify-before-authorize is outside normal Stratum ordering, but rather than dropping it outright the stash/replay preserves the job — `TestSession_NotifyBeforeAuthorize_IsStashedNotArmed` and `TestSession_PreAuthStashPreservesOrder` pin the behavior. |
+| S | Same gap on the V2 path? | ✅ Verified: SV2 cannot deliver mining jobs before `OpenMiningChannelSuccess`, which is itself the authorization point — the protocol's message ordering enforces the gate structurally. |
+
+CHANGELOG entry added under Fixed (session 1336).
+
+## Session 1337 update — first-principles audit of "submitted shares are creditable" (Socratic pass 19)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The share is valid — but is it *creditable*? Does the pool attribute it to the authorized worker? | 🔧 Fixed: `mining.submit` sent a hardcoded `"otedama"` as worker_name while `mining.authorize` used the configured pool user. ckpool-derived pools (public-pool.io, DATUM-style solo stacks) resolve the share's worker by name and reject names that were never authorized — 100% of shares silently rejected pool-side while the coinbase payout check (s1318) still passed, since the work itself was valid. `session.authorizedUser` now stores the username authorize succeeded with and Submit echoes it; `TestSession_Submit_EchoesAuthorizedWorkerName` pins the wire value. |
+| S | Can the share's wire encoding itself desync from what the pool re-validates? | ✅ Verified: nonce/ntime are `%08x` of the uint32 values (the Stratum convention — pool serializes back to header little-endian, matching `marshal`'s LE layout); `Share.NTime` is the post-roll header time (`h.Time` after ntimeRoll), not the job's original ntime, so a rolled share verifies against the header that was actually hashed; extranonce2 echoes the same hex bytes the pool issued. V1 submits carry no version field, so the notify's version is implicitly the share's version — consistent. |
+
+CHANGELOG entry added under Fixed (session 1337).
+
+## Session 1338 update — first-principles audit of "share stays creditable across set_extranonce" (Socratic pass 20)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When the pool rotates extranonce mid-session (`mining.set_extranonce`), do in-flight jobs keep a coherent coinbase — or does the share's en2/en1 silently desync? | ✅ Verified: `completeV1Job` captures `en1`/`en2Size` at job-completion time — `j.ExtraNonce` and `j.CoinbaseTx` are frozen into the job, so the share echoes exactly what the job's template contains. In Stratum V1 extranonce2 is the *worker's* field (any bytes of the negotiated size are valid — the pool substitutes it into the job's recorded template), so a later rotation cannot retroactively invalidate an old job's en2. |
+| S | Could a *shrinking* en2 size make two jobs' en2 collide and produce duplicate coinbases? | ✅ Verified benign: with `sz < 8` only the counter's low `sz` bytes differ — collisions possible after 256^sz jobs — but a duplicate en2 across *different* jobs is harmless (different prevhash → different header and different pool-side template). Uniqueness exists only for our own job dedup/merkle consistency, not a wire requirement. |
+| S | Residual edge? | ⚠️ Noted: pools that reject straggler old-en1 shares after rotation are free to do so — mitigated in practice because extranonce rotation is conventionally paired with a clean_jobs notify that kills in-flight jobs. Also the Submit-time zero-padding fallback uses the *current* en2Size, which can desync after a rotation — but it is only reachable for jobs whose coinbase never completed (no parts), and those shares are already unverifiable pool-side. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1339 update — first-principles audit of "pre-auth pool messages can't mutate session state" (Socratic pass 21)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The s1336 gate covered `mining.notify` — but could a hostile pool holding authorize open still rewrite *negotiated state* before authentication? | 🔧 Fixed: `mining.set_difficulty` and `mining.set_extranonce` applied instantly on dispatch, so a pool could set a starvation difficulty or poison extranonce1/en2size while keeping the session unauthenticated — shares then mined against state the pool never authorized (never creditable). The gate now covers **every** pool-initiated method (`mining.notify`, `set_difficulty`, `set_extranonce`, `client.show_message`, `client.reconnect`, `mining.reconnect`): pre-auth messages stash in a wire-ordered queue (cap 16, drop-oldest — newest always wins semantically) and replay via `flushPreAuth` once authorize succeeds. `TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed` pins both halves. |
+| S | Could the stash itself be a memory DoS? | ✅ Verified: capped at 16 params blobs (each already bounded by the 1 MiB read-line ceiling) → ≤16 MiB worst case, freed on flush/close; drop-oldest keeps the semantically-dominant newest message per method. |
+
+CHANGELOG entry added under Fixed (session 1339).
+
+## Session 1340 update — first-principles audit of "client.reconnect can't redirect the worker" (Socratic pass 22)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When a pool sends `client.reconnect`, can it steer our hashpower to an arbitrary host? | ✅ Verified no: `handleReconnect` deliberately does **not** follow the pool-supplied Host:Port (`parse.go` documents the redirection-vector rationale); it records the directive and closes the session, and the reconnect loop re-dials only the operator-configured pool list. Only `wait_seconds` is honored, clamped to [0, 300s] by `ReconnectWait` (s276/#388). A malicious or compromised pool can therefore end the session early and request a bounded pause — never redirect it. |
+| S | Residual edge? | ⚠️ Noted: `client.reconnect` *with no host* still always closes the session — a pool can force a reconnect loop (bounded by the existing backoff). This is the protocol's intended load-balance behavior; treating it as advisory-only would break legitimate pool migrations. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1341 update — first-principles audit of "an unauthenticated session can never run" (Socratic pass 23)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can `mining.authorize` be treated as accepted on a non-true result — and could a failed handshake leave a live session? | ✅ Verified strict: `resp.result.(bool)` must be exactly `true` — `false`, `null`, a string, or any other shape fails with `ErrHandshakeFailed` and `sess.Close()`. Every handshake failure path (call error, errResult, subscribe parse failure, non-true authorize) closes the session before returning, so a rejected/crippled handshake can never hand a live session to the engine. The `authorized` flag that gates all pool-initiated methods (s1336/s1339) is therefore only reachable on genuine `true`. |
+| S | Is the optional `extranonce.subscribe` failure path a correctness risk? | ✅ Verified deliberate: step 3 errors are ignored by design — unsupported pools answer "Method not found" and a torn connection surfaces through the normal Jobs-channel lifecycle. Skipping it never marks the session un-authenticated or un-authorized. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1342 update — first-principles audit of "a stalled consumer can't wedge the session" (Socratic pass 24)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If the engine stops draining `Jobs()` (jobsCh cap 8), does `sendJob` block the read loop — freezing submit responses and every other pool message? | ✅ Verified non-blocking: `sendJob` drains the channel for `clean_jobs`, then always sends under `select{...default}` with a drop-oldest fallback, so it can never block the read goroutine. The read loop therefore keeps dispatching submit responses, difficulty updates and notices regardless of consumer health — a wedged engine degrades to "newest job wins", not a session freeze. Drop-oldest is the semantically right choice for mining (older queued jobs are superseded by newer ones anyway). |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1343 update — first-principles audit of "senders never race channel close" (Socratic pass 25)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `flushPreAuth` replays stashed messages on the Negotiate goroutine — can it race the read loop's deferred `close(jobsCh/diffCh/noticeCh)` and panic the process (send on closed channel)? | 🔧 Fixed: the race was real (connection drop mid-handshake: read loop exits and closes channels while the post-authorize replay sends on them). All outbound sends (`sendJob`, `handleSetDifficulty`, `handleShowMessage`) are now serialized with the closes under `sendMu` + `closed` flag — a send either lands before the close or is skipped. `TestSession_SendsAfterChannelClose_DoNotPanic` pins it; package still green under `-race`. |
+
+CHANGELOG entry added under Fixed (session 1343).
+
+## Session 1344 update — first-principles audit of "the V2 side can't hit the s1343 send-on-close race" (Socratic pass 26)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the V2 session have the same producer/close race on its jobs channel? | ✅ Verified structurally impossible: `jobsCh` is written by exactly one site — the `emit` closure inside `readLoop` — and closed by that same goroutine's defer. No other goroutine ever sends on it, so no send-on-closed window exists. The session also has no stash/replay path (SV2 structurally cannot deliver jobs before `OpenMiningChannelSuccess`), so there is no cross-goroutine sender to begin with. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1345 update — first-principles audit of "a stale pool response can't wedge the read loop" (Socratic pass 27)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `handleResponse` sends on the pending call's channel — if the caller already timed out (callTimeout) or its ctx died, does the send block the read goroutine? | ✅ Verified non-blocking: `respCh` is created with capacity 1 and the pending entry is deleted atomically under `pendingMu` before send/close, so at most one buffered send ever happens and it never waits for a receiver. A response that lands after the caller gave up is dropped (`ok=false`), and `cancelPending` closes — never sends — so no send-on-closed panic either (the de-queuer is the only sender). |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1346 update — first-principles audit of "a share only counts accepted when the pool actually said so" (Socratic pass 28)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does `Submit` treat anything other than literal `result: true` as acceptance? | ✅ Verified strict: `Accepted` requires `resp.result.(bool) == true` — `false`, `null`, strings, objects, or a missing result all return `Accepted:false`, and `errResult` surfaces as `Reason`. A pool can never inflate our accepted-shares accounting with a non-bool truthy value. `call` transport errors propagate as errors rather than phantom rejects. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1347 update — first-principles audit of "workers don't grind a dead session's job" (Socratic pass 29)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When `runSessionV1`/V2 returns on `Jobs()` close, do workers keep hashing the last armed job through the backoff window? | ✅ Verified handled: the reconnect loop sets `w.SetWork(nil)` on every worker the moment a session ends — before dashboard update and backoff sleep — so nothing hashes a dead session's superseded job (V1 renegotiates fresh extranonces, V2 a fresh channel, so the old job could never pay anyway). Session-end liveness (`poolConnectionState=0`, `OnReady(false)`) is updated in the same block. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1348 update — first-principles audit of the "four revenue streams" claim (Socratic pass 30)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The product definition promises arbitration across four streams (mining, AI inference, rendering, scientific compute) — does the code implement all four? | ✅ Verified honest: `internal/provider/` ships only `MiningProvider` (real Stratum V2/V1) and `AkashProvider` (simulated price feed — name rendered "(simulated)" everywhere, no live bids). README opens by disclosing exactly this boundary ("only two streams are actually implemented ... rendering and scientific computing are planned v4.0-scope"), KNOWN_LIMITATIONS §1 documents the simulation gap with a verifiability recipe, and CLAUDE.md prohibits speculative pre-v4.0 implementations. The claim's honesty rests on prominent disclosure, which holds. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1349 update — first-principles audit of the V1 version-rolling gap (Socratic pass 31)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `mining.set_version_mask` was silently ignored — is that honest? | 🔧 Fixed: ignoring it is *safe* (no state mutation) but silently dropping it is *dishonest* — on a mandate-rolling ASICBoost pool (e.g. a DATUM endpoint, KNOWN_LIMITATIONS §14) the operator sees an unexplained 100% reject rate with no hint why. `set_version_mask` now joins the gated methods and delivers a one-time-per-session diagnostic notice over `noticeCh` (which the engine surfaces as `engine: pool notice`), telling the operator we do not roll versions. The pre-existing "unknown notification ignored" test was re-pointed at `mining.suggest_difficulty`. |
+
+CHANGELOG entry added under Fixed (session 1349).
+
+## Session 1350 update — first-principles audit of "a payout_scheme typo can't silently disable coinbase verification" (Socratic pass 32)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If the user mistypes `payout_scheme` (e.g. `tiddes`), does the config silently accept it and leave the s1318 coinbase verification off? | ✅ Verified fail-loud: `appendPoolIssues` in `internal/config/config.go` restricts the field to exactly `""`, `fpps`, `pplns`, `tides`, `solo` and rejects anything else at `Validate()` — the binary refuses to run with the typo rather than running unverified. Only `tides`/`solo` opt into the pays-the-user check; `fpps`/`pplns` correctly do not (their coinbases are legitimately pool-owned). |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1351 update — ADR-009 ecosystem recheck
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | sv2-spec normative open set | ⚠️ Noted: #203/#236/#234/#198 all still open, unmerged — quiet window; JDP non-custodial payout extension remains the tracked gating item for full V2 non-custody. |
+| S | SRI / sv2-apps latest versions | ⚠️ Noted: earlier ledger rows claiming "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — official release lists show v1.11.1 (SRI) and v0.7.0 (sv2-apps) as latest. Corrected anchor recorded in ADR-009. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1352 update — re-verification of the session-1323/1325 stale-share latch (Socratic pass 33)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | After a SetNewPrevHash invalidated every job (`active=nil`), can a subsequently activated job ever re-arm workers — or does `jobArmed` permanently poison the session? | ✅ Verified: `jobArmed` is a one-way latch set inside `startJob` on every activation — it does not gate arming, only the stale-share drop. A future `NewMiningJob` named by a later `SetNewPrevHash` (or an immediate-activation job) calls `startJob` again, restoring `active` and re-arming workers. The stale-superseded-share drop stays correct across any number of tip advances. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1353 update — first-principles audit of "the displayed pool difficulty is the target workers actually grind against" (Socratic pass 34)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | On mid-session `mining.set_difficulty`, do workers keep grinding the superseded target until the next job (silent wasted hashrate, misleading dashboard)? | ✅ Verified honest: the `diffCh` consumer re-issues `applyJob` against the new difficulty immediately (run.go:1577-1592), deduplicated by `appliedDifficulty`; paused/curtailed workers are skipped by `applyJob` as usual. `v1JobTarget` falls back to the block target only when no pool difficulty was assigned — the same displayed value is the grind value. |
+| S | Pool difficulty harder than block difficulty — wasted work? | ⚠️ Noted: an above-block pool target makes every accepted share a block candidate — valid per the protocol, still honest accounting (transitionReject handles rejects); the too-low-direction is bounded by the per-session submit cap (#419). |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1354 update — first-principles audit of "a mid-session set_extranonce can't manufacture unverifiable jobs" (Socratic pass 35)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A hostile/misbehaving pool sends `mining.set_extranonce` with `extranonce2_size=0`, negative, or non-hex extranonce1 — does the session start producing jobs whose shares can never validate (silent hash waste)? | ✅ Verified bounded: `parseSetExtranonce` enforces `extranonce1OK` (non-empty valid hex) and `extranonce2SizeOK` (0 < sz ≤ 64) at the parse boundary; an invalid rotation is dropped and the prior negotiated values stay in force. The same bounds gate the subscribe-response parse (parse.go:323), so the session can never enter the sz≤0 state that makes completeV1Job skip coinbase folding. |
+| S | Malformed set_extranonce is dropped silently — consistent? | ⚠️ Noted: unlike `set_version_mask` (a well-formed request we cannot serve → diagnostic notice), a *malformed* set_extranonce is ignored per the protocol's Postel convention for bad params — consistent with every other malformed notification in the file, so no notice is warranted. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1355 update — first-principles audit of channel coalescing semantics (Socratic pass 36)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When `mining.set_difficulty` outpaces the consumer (diffCh cap-1), do workers keep a stale target? | ✅ Verified: `handleSetDifficulty` replaces any undelivered value — the consumer always sees the *newest* retarget, never an overwritten-stale one; the `difficulty` atomic tracks the latest regardless of delivery. |
+| S | When `mining.notify` outpaces the consumer (jobsCh cap-8), is queue state still honest? | ✅ Verified: `CleanJobs` purges the entire queue before enqueue (correct per Stratum — prior work is dead on a new block), and a still-full queue drops the *oldest* job to make room for the newest — superseded work can never crowd out live work. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1356 update — first-principles audit of payout-address provenance (Socratic pass 37)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the wallet.dat seed derive the address the pool pays? | ⚠️ Noted (by design, honest boundary): payout addresses are operator-configured (`bitcoin_address` + `bitcoin_addresses` failover list, deduplicated in config order) — the wallet seed custody lives in wallet.dat for Lightning withdrawals, but pool-facing payout identity is a plain config field. This is correct non-custodial separation: keys and payout routing are independently controlled; the address can be the wallet's, a cold address, or an exchange — the engine never invents or switches addresses outside the operator's list (verified s1328). |
+| S | Failover honesty — could failover silently select a non-operator address? | ✅ Verified: `payoutAddresses` only yields the configured list; rotation stays inside it and `addrConnected` freezes the address once a session establishes. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1357 update — first-principles audit of Prometheus counter monotonicity (Socratic pass 38)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can any code path decrement a counter (breaking PromQL `rate()`/scrapes)? | ✅ Verified: the `Counter` API exposes only `Inc()` and `Add(delta uint64)` — unsigned-only deltas by type design; no Dec/Sub surface exists anywhere. Monotonicity is enforced structurally, not by convention. The counter/gauge name-collision panic prevents a dual-TYPE scrape corruption as well. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1358 update — first-principles audit of extranonce2 uniqueness (Socratic pass 39)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can two jobs share an en2 (pool can't distinguish their shares)? | ✅ Verified: `en2Counter` (atomic.Uint64) increments once per `completeV1Job`, placed big-endian at the en2 tail — every job's coinbase (and merkle root) is unique even when the nonce space wraps; the same en2 echoes back verbatim so the pool rebuilds the identical coinbase. Wrap-around needs 2^64 jobs — unreachable. |
+
+## Session 1359 update — Socratic-pass coverage checkpoint (passes 21–39, sessions 1318–1358)
+
+The first-principles lens ("does the implementation actually do what the product claims?") has now covered: non-custodial payout routing (wire, coinbase verify, scheme gate, address stickiness, provenance), arbitration honesty (pause persist, fail-closed dup IDs, net yield, counters), share truthfulness (valid-only submission, seq/batch accounting, en2 uniqueness, job binding), pool-transport honesty (TLS surface, plaintext warning, bounds), target/difficulty honesty (display=grind, retarget propagation, coalescing), session lifecycle (end→idle, reconnect→fresh, backoff), and metrics monotonicity. Real fixes landed: coinbase-payout verification + cannot-verify warning, version-mask diagnostics, stale-share drops + jobArmed latch, plaintext-V1 warn parity, en2 bounds (already shipped earlier). Residual honest edges recorded as ⚠️ Noted: dust-amount blind spot, V1 non-clean_jobs acceptance window, set_extranonce pre-rotation job ambiguity, pause-window hashrate underestimation bias, silent malformed-notification drops (Postel-consistent).
+
+## Session 1360 update — re-verification of the "pause-window hashrate bias" residual edge (Socratic pass 40)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does a pause episode dilute the hashrate arbitration sees (self-reinforcing under-valuation)? | ✅ Verified stronger than the earlier ⚠️ note: the operational path is immune — `hashrateWindow` differentiates cumulative counters into a *windowed* rate (0 during a pause, true rate immediately on resume), feeds metrics/TUI/stall monitor, and `uptimeAccountant` separately counts only productive seconds into `otedama_productive_seconds`. The lifetime average (`Worker.Stats().HashRate = HashesTotal/Uptime`) is consumed only by diagnostic display (logStats/HashRateString) — documented semantics, no arbitration input. No code change needed; the ⚠️ edge narrows to "lifetime-average display drifts low across pauses" — honest, cosmetic. |
+
+Ledger only — verification round, no behavior-visible change.
+
+## Session 1362 update — first-principles audit of worker-channel share-drop observability (Socratic pass 41)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Do channel-full share drops surface in metrics, or only in the warn log? | 🔧 Fixed: drops were warn-logged but had no dedicated counter — `otedama_shares_worker_dropped_total` added (distinct from `otedama_shares_submit_dropped_total`, the submit *rate-cap* drop on the engine side); both stats ticks (V2 run.go ~958 / V1 ~1433) now Add the per-tick delta and handle the worker-recreation counter reset by re-baselining (a stale `lastDropped` previously suppressed warns until the new cumulative total exceeded the old — `lastDropped` is now updated unconditionally). Metrics table updated in SPECIFICATION.md §3.2 + API.md. |
+
+## Session 1363 update — first-principles audit of submit-latency honesty (Socratic pass 42)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Do p50/p95/p99 submit latencies reflect only real measured round-trips? | ✅ Mostly verified + 🔧 one fix: V2 batch-acks settle every seq ≤ LastSequenceNumber with `now−sent` (never-acked entries stay out of the ring until the 1024 cap drops them unrecorded — honest, documented); future-seq bogus accepts/rejects are ignored before settling; `SubmitSharesError` settles latency as a final response. V1 records latency on submit error (disconnect p99 is surfaced signal, deliberate) and on accept — but the *pool-reported reject* path returned without recording: a slow pool answering mostly with rejects would flatter the percentiles. Fixed by hoisting `latency.Record(elapsed)` above the accept/reject branch (covers the retarget-artifact early return too — it is also a final response). |
+
+## Session 1364 update — first-principles audit of dead-pool failover (Socratic pass 43)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the engine actually fail over when the pool dies — including a zombie connection that stays open but goes silent? | 🔧 Fixed: the reconnect loop's failover is correct (round-robin pools immediately, backoff only after all fail, payout-address rotation only when an address never established a session, backoff reset on established session, workers idled between sessions) — but it only runs when the session *ends*. V1 detects silence via its 5-min per-line read deadline (stratumv1.go:213); the V2 read loop had **no read deadline at all** — a half-open connection that never sends another frame pinned the engine to a dead pool indefinitely: the `jobStallWarnAfter` warn fires but the session never ends, so failover could never happen. Fixed: `poolSilenceTimeout = 30 min` per-frame read deadline in the V2 reader — beyond inter-block silence, bounding a wedged connection so the reconnect/failover path can actually run. |
+
+## Session 1365 update — first-principles audit of cross-session share isolation (Socratic pass 44)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a share ground under the previous session's job leak into the new session's submit path? | 🔧 Fixed: yes — `opts.merged` outlives sessions (created once in Run, shared by every session). The V2 drop rule `jobArmed && (active==nil || mismatch)` and the V1 rule `haveJob && mismatch` both skipped enforcement before the first job — exactly the window where any share in the channel is necessarily a dead-session leftover (workers are idled between sessions, so nothing current can exist yet). Such leftovers were submitted under the new session's channel/job IDs → pure reject noise, and if a V1 pool reused the same numeric job id, a stale share could even be miscounted as live. Fixed: drop whenever `active == nil || share.JobID != active.JobID` (V2) and `!haveJob || share.JobID != currentJobID` (V1) — the `jobArmed` latch is no longer needed and was removed. V1 non-numeric job IDs are unaffected: `applyJob` already rejects them, so a share can only exist with a parseable numeric id. Five V1 fake-pool tests were updated to declare job 1 before injecting their share — the pre-job injection they used is precisely the stale case the guard now drops. |
+
+## Session 1366 update — first-principles audit of difficulty propagation and resume latency (Socratic pass 45)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When the pool retargets mid-job, do workers actually compare against the new target — or keep grinding the old epoch? | ✅ Verified: V2 `SetTarget` updates `shareTarget` and re-issues the active job via `startJob` in the same dispatch (run.go ~1144-1151) — no next-job wait. V1 mirrors it through the `DifficultyWatcher` push channel: `mining.set_difficulty` re-issues current work immediately (s1353). Mid-epoch shares are compared against the latest pool-assigned target; a share issued pre-retarget and rejected post-retarget lands in `difficulty-transition` (transitionReject), never in the reject-rate counters. |
+| S | When arbitration unpauses a device (idle→viable or AI→mining), does it resume hashing at once? | ⚠️ Noted: no — `applyAllocation` only logs resume cases; the worker stays `SetWork(nil)`-idle until the next pool job arrives and `updateWork`/`applyJob` re-arms it (the `arbPaused.Paused` check passes by then). Delay is bounded by job cadence (~30–60 s V1 notify, new-template V2) and matches the curtail path's documented "hashing resumes on next job". Immediate re-arm would need the session's last-issued `*miner.Work` plumbed to the arbitration loop — the bookkeeping outgrows the saving for a rare switch event, so the wait-for-next-job design stands. |
+
+## Session 1367 update — first-principles audit of provider-activity stats honesty (Socratic pass 46)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the reported provider activity (Active/SatsPerSecond in stats/TUI) reflect the actual arbitration outcome, not a hardcoded "active"? | ✅ Verified: `arbitrationLoopOpts.activity` is a shared map the Decide loop rebuilds each tick — `clear(opts.activity)` then only non-idle assignments contribute `ExpectedYield`, keyed by `string(a.Stream)`. The key namespace is one chain: `p.id` ("mining.stratum", "ai.akash") → `Quote.ProviderID` → `Stream.ID` → `a.Stream`, and `buildStats` looks up `opts.activity[p.ID()]` under the same mutex. A provider no device is assigned to renders inactive; SatsPerSecond is the *expected* yield decided at the tick (an estimate by design, labeled as such). Reads are under `activityMu` lock; a nil pair (no arbitration loop, e.g. tests) honestly renders every provider inactive rather than fabricating active. |
+
+## Session 1368 update — first-principles audit of the up-gauge liveness semantics (Socratic pass 47)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does `otedama_up` report 1 iff the miner is actually hashing or deliberately idle — and 0 only for real faults? | ✅ Verified: `updateLiveness` short-circuits to up=1 (and skips the monitor) when curtailed or when every worker is arbitration-paused, so a deliberate idle never ages the stall counter. Otherwise each stats tick feeds `currentHashRate` into a per-session `HashrateMonitor` (floor 0, 3 consecutive samples) — zero-hashrate for three ticks flips up=0 and warns; recovery logs and resets. Correctness details: (1) the monitor is constructed inside each session, so reconnect-backoff idle time cannot accumulate against the next session's counter; (2) a connected-but-silent pool (no jobs) reads as zero hashrate — an honest real stall, matching the poolSilenceTimeout/jobStallWarnAfter fault model; (3) the pre-first-job window transiently reports up=0, which is the semantically correct "not yet hashing" for readiness use. |
+
+## Session 1369 update — first-principles audit of mining-quote honesty (Socratic pass 48)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the mining provider's arbitration quote reflect real expected yield — and can a dead pool keep winning arbitration? | ✅ Verified: the quote is the EV of solo-mining work — `deviceHashrate/networkHashrate` × blockReward/600s × 0.99 pool-fee discount — which equals the expected payout of a share-paying pool. Live measured hashrate (worker window via `HashrateFunc`) is preferred over the static family estimates (S21/RTX4090/CPU), so the quote tracks real silicon, not marketing numbers. A dead pool is *not* the arbitrator's concern — stream staleness pruning (`streamStaleTimeout` = 3 min) removes unquoted streams, and the session layer fails over across the configured pool list; if every pool is dead the workers honestly stall (`up=0`) rather than arbitration inventing another stream. |
+
+## Session 1370 update — first-principles audit of arbitration hysteresis (Socratic pass 49)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does hysteresis actually stop a device from flip-flopping streams on marginal yield wiggles — without trapping it on a dead stream? | ✅ Verified: `incumbentHold` keeps the previous stream unless the best candidate exceeds `incScore × (1 + HysteresisMargin)` — the comparison runs in the policy-adjusted score space, the same metric that drove selection, so "meaningful improvement" means the same thing on both sides. Margin input is validated (negative/NaN/Inf rejected at input). No trap cases: (1) an incumbent absent from `candidates` (stream gone stale/below floor) can't be held — the loop finds no match and the device moves on; (2) `Held` is only set when a *different* higher-scoring stream was suppressed, so an incumbent that is itself best reports "incumbent is best; stayed" rather than inflating the hold counter; (3) `arbitrationHolds` + `foregoneSatsPerSec` keep suppressed gains observable. |
+
+## Session 1371 update — first-principles audit of the reconnect loop (Socratic pass 50)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the reconnect loop respect backoff and terminate — no busy-spin, no permanent stall, no power burned on dead jobs? | ✅ Verified: exponential backoff 1 s → 64 s cap, reset to initial after any session that actually established (a healthy multi-hour drop reconnects promptly; only repeated failures lengthen the wait). Pool failover walks the configured list before touching the payout address, and address rotation is restricted to an address that has *never* established a session — a working address can never be abandoned silently, so a transient outage cannot redirect earnings. ctx-cancel releases the sleep timer immediately (`NewTimer`+`Stop`, the documented pre-1.23 `time.After` pitfall avoided); `fatalError` exits the loop outright; workers are `SetWork(nil)`-idled between sessions so the merged-channel leftovers can't burn power on shares the drop gate would reject anyway; the dashboard gets an explicit disconnected frame. ⚠️ Noted: the backoff is deterministic — no jitter — so a fleet of clients sharing one pool reconnect on correlated schedules after an outage (harmless for a single client, standard jitter would decorrelate the fleet). |
+
+## Session 1372 update — first-principles re-verification of the coinbase payout check (Socratic pass 51)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a hostile pool defeat the s1318 coinbase check — smuggle the script bytes somewhere that pays nothing, or pay dust while pocketing the block? | ✅ Verified (with the already-disclosed bound): `CoinbasePaysScript` parses the serialized transaction's vout list and compares each output's scriptPubKey — legacy *and* segwit serialization — so bytes planted in an OP_RETURN push, scriptSig, or witness data cannot pass (the parser comment documents this evasion was the design target). Malformed/truncated input returns an error that surfaces as a distinct "cannot verify" warning, not a false pass or false alarm; the check warns once per episode and resets when a job pays again, and is skipped while curtailed (no hashing anyway). The residual limit stands as disclosed in s1319: presence of the script does not prove the satoshi amount — a pool paying dust to the user's address while keeping the rest would pass, and verifying the amount is impossible without the pool's internal TIDES accounting (beyond anything observable on the wire; the JDP extension remains the protocol answer). |
+
+## Session 1373 update — first-principles audit of V1 submit-goroutine lifecycle (Socratic pass 52)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a V1 submit goroutine leak past its session — block forever on a dead pool, or pile up unbounded when shares arrive fast? | ✅ Verified: every dispatch passes the `submits` token bucket (8/s refill, 32 burst) before a goroutine exists — capacity exhaustion drops the share *and counts it* (`sharesSubmitDropped`), so goroutine count is bounded regardless of find rate. Each goroutine calls `capturedSess.Submit(ctx, …)` with the *session-scoped* ctx — session teardown cancels it, the V1 RPC layer's bounded wait (60 s, session-355) returns, and the goroutine exits; a pooled-side hang cannot outlive the connection. Both the session's `sess` and the share value are captured as locals (`capturedSess`, `capturedShare`), so a session swap can't make a goroutine submit under the next session's IDs. Metrics stay honest at the boundary: `sharesSubmitted` counts at send attempt (transmission, matching V2 semantics), latency records on accept *and* reject *and* transport error — a slow-reject pool can't skew the percentiles flattering. |
+
+## Session 1374 update — first-principles audit of estimated-earnings accounting (Socratic pass 53)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the displayed earnings estimate (estSats) inflate — accruing sats while idle, stalled, curtailed, or running backwards on a clock step? | ✅ Verified: `satsAccountant.observe` integrates the arbitration expected-yield rate over *productive* seconds only, gated on the same flag as `uptimeAccountant` (hashing && !stalled && !curtailed) — downtime accrues nothing, so a dead or throttled session cannot silently accumulate phantom earnings. Non-positive elapsed (clock step backwards) contributes zero; non-positive rate contributes zero; the accumulator is session-scoped so a reconnect can't carry a stale total forward. The number is presented as an ESTIMATE by construction — it integrates the forecast rate, not pool credits (a share carries no sat value on the wire; the pool's own accounting is authoritative, KNOWN_LIMITATIONS §9). It replaces the former "+1 per accepted share" placeholder, which bore no relation to real income. |
+
+## Session 1375 update — first-principles audit of V1 extranonce ordering (Socratic pass 54)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a V1 session start hashing a job before extranonces are negotiated — producing shares on an unrecoverable coinbase the pool can never verify? | ✅ Verified: `completeV1Job` runs inside the session at notify-handling time and reads `extranonce1`/`extranonce2Size` that are populated only by the subscribe result during `Negotiate` — a session object cannot exist before subscribe+authorize completes, so a pre-negotiation notify is unreachable by construction (the pool hasn't issued en1 yet either). When extranonces are valid the function folds `coinb1 ‖ en1 ‖ en2 ‖ coinb2` into a per-job-unique coinbase (en2 is a BE counter at the tail) and installs the merkle root the pool itself would compute — shares echo that same en2, so pool-side verification reconstructs the identical coinbase. Every invalid-extranonce path is guarded at the parse boundary (`extranonce1OK`, `extranonce2SizeOK` ≤ 64) on both subscribe and `set_extranonce`, so the defensive skip in `completeV1Job` is unreachable in a valid session; if it ever fired, the job would carry a zero merkle root and the pool's rejects would make the failure visible rather than silently corrupt earnings. |
+
+## Session 1376 update — first-principles audit of worker/Work memory discipline (Socratic pass 55)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a grinding thread observe a torn job — half-written header fields — while SetWork swaps mid-hash? | ✅ Verified: `SetWork` swaps the `*Work` pointer under `w.mu` and bumps `workVer`; the grind loop takes the same lock, compares pointer and version, then mines against a captured `localWork`. Because `updateWork`/`applyJob` always construct a *new* `miner.Work` (fields are set only at construction — `ntimeRoll` lives per-thread, never on Work), a published Work is immutable: a thread always hashes a whole old job or a whole new one, never a blend. The pause path (`SetWork(nil)`) lands on the same mechanism, so an idled worker can't keep grinding a stale pointer. Lifecycle is bounded: the buffered share channel (`Threads*4`) closes when the waitgroup empties on ctx-cancel, `Stop` waits on `done`, and a second `Start` panics rather than corrupting the channel. Shares that can't queue increment `dropCount` — saturation is counted, not silently lost. |
+
+## Session 1377 update — first-principles audit of stream candidacy + min-yield floor (Socratic pass 56)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can arbitration assign a device to a stream that won't accept it — and does the min-yield floor leave an operator guessing why the device idles? | ✅ Verified: `candidateStreams` triple-filters before any assignment — `Accepts(device family)` rejects incompatible streams, `Effective() ≤ 0` drops zero/negative-net offers, `y < minYield` drops below-floor work but marks `belowFloor` so the reason stays honest. The idle assignment distinguishes the two failure modes — "no compatible stream accepting non-zero work" vs "all compatible streams below minimum yield floor %.4g sats/s" — so an operator sees *which knob* to turn rather than a silent stall. Yield decisions use `Effective()` (net of declared stream cost), not gross, so a stream can't win by inflating its headline number. Idle (`Stream == ""`) feeds `reconcileArbPauses`, which idles the device until a real stream earns the slot back. |
+
+## Session 1378 update — first-principles audit of plaintext Stratum V2 transport (Socratic pass 57)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can `stratum+v2://` silently run plaintext despite SV2 mandating Noise encryption? | ⚠️ Noted: `stratum+v2://` does run plaintext — the Noise NX handshake exists in `internal/stratum` but the live connect path never invokes it (blocked on the ADR-011 secp256k1 dependency decision). But it is never *silent*: the connect path emits a session-level warn naming the gap, the reason, and both encrypted alternatives (`stratum+v2tls://`, or V1 `stratum+tls://`/`stratum+tcp://`). The warning is structurally unavoidable — issued before the first frame is exchanged, not buried in a per-job log. This is a spec-nonconformance the code declares honestly rather than a hidden downgrade; the V1 plaintext case now warns identically, so the two schemes fail openly and symmetrically. |
+
+## Session 1379 update — first-principles audit of wallet corruption → payout reroute (Socratic pass 58)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a corrupted wallet.dat silently mint a fresh seed — rerouting every future payout to an address the operator never chose? | ✅ Verified: `loadExisting` errors on unreadable file, unparseable blob, or failed decrypt, and `NewWalletManager` propagates the error instead of falling through to seed generation — a broken wallet stops the process rather than silently swapping identity. Wrong passphrase and corrupted file share one opaque `ErrWrongPassphrase` so the decrypt boundary can't serve as a validity oracle. The fingerprint sidecar is recreated only when absent and never overwrites a disagreeing file — a fingerprint/wallet mismatch persists as a detectable signal instead of being masked. Atomic temp+rename saves plus an age-bounded (>60s) stale-temp sweep mean a killed write can't half-corrupt the file, and the sweep can't unlink a live concurrent save's temp file. |
+
+## Session 1380 update — first-principles audit of missing V2 share target (Socratic pass 59)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a pool that omits/zeros the share target leave the engine hashing to a target that either floods shares or silently produces none? | ✅ Verified: `updateWork` treats a zero `shareTarget` as "pool assigned none" and falls back to the nBits-derived *block* target — the strictest possible bound, so the degenerate case errs toward producing only real block solutions rather than an easy-target share flood. A malformed nBits fails closed (`return` before any `SetWork`), so workers keep their prior job instead of adopting a corrupt one. Adversarial non-zero targets are already bounded: the starvation warn fires when the assigned difficulty makes revenue unreachable, and the per-session submit rate cap plus in-flight sequence bound contain an easy-target flood. SetTarget retargets mid-session on the same code path, so a pool that "fixes" a bad target takes effect immediately rather than on reconnect. |
+
+## Session 1381 update — first-principles audit of provider quote delivery (Socratic pass 60)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a slow or stuck provider deadlock the arbitration loop by withholding a quote? | ✅ Verified: providers push quotes asynchronously on a buffered channel (mining 16, AI 32) — `Decide` only reads `quoteCh`, so a provider that stops polling simply stops producing; the 3-minute staleness pruner retires the stream and devices move on rather than blocking. `sendQuote` is ctx-guarded on both the fast and the drop-oldest path, and when the buffer is full it evicts the *oldest* buffered quote so Decide always sees the freshest estimate — no unbounded queue, no stale-flood. Double-Start is rejected (`already started`), the loop goroutine is ctx-scoped, and `close(quoteCh)` on exit makes provider shutdown visible to the reader rather than an invisible hang. |
+
+## Session 1382 update — ecosystem recheck (Socratic pass 61)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ADR-009 ecosystem recheck | ✅ Verified: sv2-spec normative open set unchanged (#203/#236/#234/#198 still open; #203's author himself concedes payout verification is at best a custodial/non-custodial hybrid — confirming the disclosed limit of our V1-only coinbase check); SRI latest = v1.11.1; sv2-apps latest = v0.7.0 with only maintenance/hardening PRs open. No Otedama action required. Recorded in ADR-009. |
+
+## Session 1383 update — first-principles audit of V2 channel attribution (Socratic pass 62)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a share be submitted under the wrong channel — a stale channel ID from a dead session or a frame belonging to a different channel? | ✅ Verified: outbound `SubmitSharesStandard` always stamps `chanID` — the session-local variable set once at OpenMiningChannelSuccess — so an emitted share can never carry a superseded channel; the `active == nil || share.JobID != active.JobID` guard drops every share that predates the current job, which transitively covers the channel switch (a new session = new channel = new active job). Inbound, frames whose `channel_id` doesn't match the session's channel are dropped with an explicit "foreign channel ignored" warn — the pool can't smuggle another channel's jobs, targets, or acks into this session. The only channel set is the one this session opened, and only the session's own sequence numbers map into `submitTimes`/`submitTargets`, so last-sequence accounting can't be poisoned cross-channel either. |
+
+## Session 1384 update — first-principles audit of V1 pending-job bound (Socratic pass 63)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a long-lived V1 session with `clean_jobs=false` accumulate unbounded pending jobs? | ✅ Verified: pending jobs live in a bounded channel (capacity 8), not an unbounded map — backlog is structurally impossible regardless of the flag. `clean_jobs=true` purges the whole queue before enqueueing (stale shares against a superseded block are the #1 reject cause), and `clean_jobs=false` drops the *oldest* queued job when the buffer is full so the newest always wins — an adversarial pool spamming notifies can at most churn the buffer, never grow memory. `sendJob` checks `closed` under `sendMu`, the same lock `closeChannels` holds while closing the channel, so a send racing session teardown lands before close or is skipped — no send-on-closed panic. |
+
+## Session 1385 update — first-principles audit of quote namespacing (Socratic pass 64)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can two providers' quotes cross-contaminate — one provider overwriting another's yield, or per-device yields being dropped when a provider serves N devices? | ✅ Verified: the streams map is keyed `"providerID:deviceID"`, so a quote can only ever overwrite its own provider's cells — cross-provider collision is structurally impossible, and `IsBitcoinMining`/`AcceptsFamilies` can't leak across providers since `ID` is namespaced by ProviderID. `streamsSlice` merges same-StreamID entries by unioning every device's `YieldPerDevice` into a deep-copied representative — no per-device yield is lost (a first-seen pick would have silently discarded N-1 devices' yields) and the copy severs aliasing so `Decide` can never mutate live stream state. Representative choice is nondeterministic only across entries that share the same ProviderID, hence equivalent — determinism preserved. |
+
+## Session 1386 update — first-principles audit of curtail inputs (Socratic pass 65)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a bad power reading or a hostile/stale price feed wrongly engage (or wrongly hold) curtailment? | ✅ Verified (with a premise correction): there is no sensor path to corrupt — `power_watts` is a validated user constant (`>= 0`, non-finite rejected), not a measured value, so anomalous readings cannot exist. The only live curtail input is the BTC/USD rate, fed through `curtailDecision` — a pure function with directional hysteresis (engage only on `rate < threshold` while off, release only on `rate >= threshold` while on). A stale, failed, or non-positive rate yields `fresh=false`/`rate <= 0` and **preserves the current state** — a dead feed can neither engage a false curtailment nor freeze a real one past its honesty bound, and it cannot flap the state by hovering. `threshold <= 0` disables the feature as documented; transitions fire only on state change so `SetWork(nil)` isn't re-issued every tick. |
+
+## Session 1387 update — first-principles audit of reject classification (Socratic pass 66)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the reject-reason taxonomy hide a systemic reject behind a benign label — e.g. mislabeling "invalid-job-id" as hardware, or masking a genuine reject as a retarget artifact? | ✅ Verified: `rejectClass` checks canonical SV2 error codes *before* substring heuristics, so "invalid-job-id" (contains "invalid") correctly lands in stale, not hardware; anything unrecognized falls to "other"/"unclassified — check pool documentation" — a reason can never be silently absorbed into a friendlier bucket. The retarget-artifact exemption (ESP-Miner #212) is trip-guarded: it requires *all of* category=="difficulty", a non-zero issued target, and issued ≠ current — so a genuine reject during a stable difficulty epoch can never be labeled "difficulty-transition". Even then the exemption only suppresses the aggregate reject-rate counter: the event is still logged ("excluded from reject rate") and counted under its own "difficulty-transition" reason — visible, not erased. Rejects also settle submit latency symmetric to accepts, so a reject-only pool can't skew percentiles flattering. |
+
+## Session 1388 update — first-principles audit of V1 RPC attribution (Socratic pass 67)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can concurrent V1 submits get each other's verdict — a response delivered to the wrong share, or a leaked pending entry from a pool that stops answering? | ✅ Verified: `id := nextID.Add(1)` is an atomic rising counter, so no two in-flight RPC calls can share an id — cross-attribution is structurally impossible; the response router does an exact `pending[id]` match under `pendingMu` and delivers to a buffered(1) channel that can never block a stale waiter. A pool echoing a malformed id coerces to an unmatched key and is dropped — it cannot forge attribution to an unrelated pending call. Every exit path deletes the pending entry (write error, ctx cancel, 60s bound), so a pool that stays connected but never answers leaks neither the map slot nor the submit goroutine. The worker name is read from the session's single authorized user, so worker identity can't cross-attribute either. |
+
+## Session 1389 update — first-principles audit of metric label cardinality (Socratic pass 68)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a hostile pool inflate Prometheus label cardinality (memory) by spraying novel reject reasons or IDs that become labels? | ✅ Verified: no pool-controlled string ever reaches a label position. The `reason` label is fed exclusively by `rejectClass`'s fixed six-class output (stale/duplicate/difficulty/hardware/other/difficulty-transition) — the raw pool reason is only logged; any novel reason collapses into "other". `device` labels derive from local `hal.Identity.ID`, the payout label from the operator's own masked address, and build-info labels are compile-time constants. Series are created lazily behind a mutex (no duplicate series) so total cardinality is structurally bounded by the fixed category set plus the local device count — a hostile peer cannot expand it at all. |
+
+## Session 1390 update — first-principles audit of Decide failure modes (Socratic pass 69)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If Decide fails or panics, can the engine keep running on a corrupt allocation? | ✅ Verified: every *error* path of Decide is fail-closed — `alloc, err` checked at the call site and a failure keeps `prevAlloc` plus a warn log, so a degraded tick degrades to the last-known-good plan, never to a partial/corrupt one. For *panic*: there is deliberately no recover around Decide — it is a pure function whose input space is prevalidated (non-finite yields collapsed upstream, guardrails on input fields verified in earlier passes), so a panic can only signify an internal bug, where crash-on-bug (fail-stop, mining halts, supervisor restarts) is the honest failure mode rather than continuing arbitration on an unknown state. The distinction is correct: errors degrade gracefully, impossible conditions stop loudly. |
+
+## Session 1391 update — first-principles audit of V2 error-seq dedup (Socratic pass 70)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a hostile pool inflate the reject count by replaying one SubmitSharesError — or fabricating a mid-range seq that was never sent? | 🔧 Fixed — real gap: SubmitSharesError only guarded `seq > seqNum` (future seqs); a replayed error for an already-settled seq (consumed by a Success batch-ack or an earlier Error) or a fabricated in-range seq was counted as a *new* reject each time, letting a hostile/buggy pool inflate `otedama_shares_rejected_total`, skew the acceptance rate, and trip the acceptance warning at will. The accept side was already clamped to locally-observed settlements (`n = settled`); the reject side had no equivalent dedup. Now the handler requires the seq to be *outstanding* in `submitTimes` — SV2 assigns exactly one response per seq, so an untracked seq is replay/fabrication/cap-evicted and is dropped at debug level. (Trade-off honestly noted: a legitimate late error for a cap-evicted seq — requires >1024 in-flight submits — is also dropped; bounded undercount beats unbounded inflation.) Test `TestRunSessionV2_DuplicateRejectIgnored` pins it: pool replays share-2's error, `sharesRejected == 1` and the drop is logged. |
+
+## Session 1392 update — first-principles audit of the network-hashrate feed's integrity (Socratic pass 71)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can one manipulated or malfunctioning hashrate endpoint silently distort the mining EV the arbitrator divides by? | 🔧 Fixed — real gap: the feed's two sources were "medianed", but a 2-source median is an *average* with zero outlier rejection — a single endpoint returning an in-band (1e18..1e23) reading moved the cached value arbitrarily far (e.g. real 9.3e20 + 1e23 → 5e22, a ~54x EV distortion that would idle miners). The plausibility band bounded each reading but not their *agreement*. Now, when exactly two readings disagree by >4x — more than two estimates of the same 1d network metric can legitimately differ — Fetch errors and leaves the cache (and its honest staleness→fallback path) untouched; the provider then uses the compile-time ~1000 EH/s anchor. Other verified links, unchanged: per-source band + 64 KiB body cap + 10s timeout, 30min freshness → `networkHashrate` falls back to the constant when cold/stale, start-immediately background poll, per-source error logging. Residual honestly noted: with exactly 2 sources there is no voting possible — a *pair* of correlated bad sources would still pass (unmitigated, would need a 3rd independent endpoint); the guard only bounds the single-source case to gross divergence. |
+
+## Session 1393 update — first-principles audit of the price feed's two-source degradation (Socratic pass 72)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the 3-source median actually resist one manipulated endpoint when a second source is merely down? | 🔧 Fixed — same gap family as s1392: with 3 sources the median discards one outlier, but a routine single-source failure degrades the set to exactly 2 — and a 2-source "median" is an average with no outlier rejection. One manipulated endpoint returning an in-band reading ($100..$100M band) then moved the cached BTC/USD rate arbitrarily far (e.g. $90k + $50M → $25M, a ~275x distortion of every mining-vs-inference comparison). The band comment already named this "the vulnerable two-source case" but only SourceHealth *observed* it — nothing stopped it. Now, two surviving sources diverging by >4x — beyond what two quotes for the same market can legitimately differ — make Fetch error and leave the cache untouched (honest staleness→fallback path already existed). Residual honestly noted, same shape as the hashrate feed: a *pair* of correlated bad sources still passes (no voting possible at n=2); and a single surviving source is taken on faith (SourceHealth surfaces the erosion — mitigation is alerting, not prevention). |
+
+## Session 1394 update — first-principles audit of the AI-inference quote's honesty (Socratic pass 73)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the AI-inference provider's quote masquerade as real revenue, or a dead/lieing market feed distort arbitration? | ✅ Verified — the honesty chain is complete end-to-end. (1) The provider is explicitly a simulation and says so everywhere: `Name()` carries a load-bearing "(simulated)" suffix that surfaces through stats→TUI/logs/`config show` — real Akash REST integration is roadmap v3.1.0 and the quote is a fixed market-midpoint by design. (2) No GPU devices → a zero-yield quote with Confidence 0, not silence (explicitly to let arbitration exclude it). (3) Confidence is structural, not advisory: arbitration `Effective()` multiplies yield by confidence and collapses non-finite/zero-confidence to zero, so the simulated quote enters comparisons pre-discounted (0.6 vs mining's 0.7/0.95). (4) Provider death/staleness → 3-minute freshness pruning in the engine removes its stream (s1369). (5) BTC/USD non-positive → a fixed $95k conversion anchor; NaN/±Inf rates → `Effective()` collapses to zero. ⚠️ Noted (honest residual): the $95k cold-feed anchor is an arbitrary constant — if the price feed stays cold while the real price diverges far, the *simulated* quote's sats conversion is mispriced; bounded by the simulation disclosure + 0.6 confidence discount + it cannot masquerade as real revenue. No change warranted. |
+
+## Session 1396 update — first-principles audit of what an AI-assigned device actually does (Socratic pass 75)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When arbitration routes a device to an `ai.*` stream, is real mining revenue silently sacrificed for a fictional stream — and does the mechanism actually hold? | 🔧 Fixed — real gap found in the quote→stream merge, plus mechanism verified end-to-end. **Mechanism (verified):** `applyAllocation` pauses the assigned device's SHA256d worker (SetWork(nil)) on a mining→AI switch and `reconcileArbPauses` rewrites the shared `pauseSet` every Decide tick so pool job dispatch cannot re-arm it — per-device counterpart of curtailGate. Production reality check bounds the stakes: GPU reports `SHA256d:false` (no CUDA/ROCm/Vulkan path), so `startMinerWorkers` spawns no GPU worker and `MiningProvider.publish` skips it via `continue` — a GPU's only choices are idle or the simulated AI stream, and pausing targets a worker that does not exist (no displaced revenue today; a future SHA256d-capable GPU/ASIC driver hits the correct path unchanged). **The gap:** `updateStream` wrote `DefaultYield = q.Yield` from *every* quote — so the merged stream's fallback was a *sibling device's price*, chosen nondeterministically by Go map iteration order (rep pick in `streamsSlice` is unordered). Then `candidateStreams` evaluated an unquoted GPU against `mining.stratum` at the CPU's yield via `YieldFor → DefaultYield` → the GPU became a mining *candidate* it cannot execute: assigned to a stream whose provider explicitly skipped it, both a misattributed assignment and a crack in Decide's documented byte-determinism (rep-dependent DefaultYield). Fix: `DefaultYield` is now written only by device-agnostic quotes (`DeviceID == ""`, the field's designed purpose — provider-wide pricing); per-device quotes write only `YieldPerDevice`. The merge also carries a nonzero agnostic DefaultYield across representative choice. Tests: `TestUpdateStream_PerDeviceQuoteDoesNotSetDefaultYield`, `TestUpdateStream_DeviceAgnosticQuoteSetsDefaultYield`, `TestStreamsSlice_MergeCarriesAgnosticDefaultYield`. ⚠️ Noted (honest residual): the mining→AI switch log prints `→ AI inference (N sat/s)` without the "(simulated)" qualifier the provider name carries — mild, bounded by the disclosure surfacing through stats/TUI/`config show`; and a GPU on the simulated stream executes no real AI work by design (alpha-stage simulation, roadmap v3.1.0). |
+
+## Session 1397 update — first-principles re-audit of the s1396 DefaultYield fix (Socratic pass 76)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Did scoping DefaultYield to device-agnostic quotes actually close the leak — and did it break the paths it was meant to preserve? | ✅ Verified — self-audit of the s1396 change under the same lens, all clean. (1) `DefaultYield` has exactly one writer left: `updateStream`'s `else` branch for `DeviceID == ""` quotes; the only other touch is the merge's zero-check carry. In production no provider emits a device-agnostic quote with nonzero yield, so the field is deterministically zero — semantics preserved for the designed purpose (provider-wide pricing) with the leak gone. (2) Representative nondeterminism fully bounded: `AcceptsFamilies` is uniform across a provider's quotes, `PrivacyRating`/`EnvironmentalRating` are never set by updateStream (always 0), `IsBitcoinMining` is providerID-derived (constant per StreamID) — `DefaultYield` was the only field that varied by rep choice, and now at most one entry per StreamID ("providerID:") can hold a nonzero value, so the merge carry is deterministic. (3) Akash's zero-yield no-GPU quote (`DeviceID == ""`, `Confidence: 0`) now writes `DefaultYield = {0,0}` — identical effect: `Effective() = 0` either way and the family gate is unchanged. (4) Staleness path intact: a device that stops being quoted loses its `providerID:deviceID` key to the 3-minute prune, its `YieldPerDevice` entry drops from the merged rep, and it falls back to a zero DefaultYield → excluded, exactly the provider's exclusion intent. (5) A provider mixing agnostic + per-device quotes merges deterministically (single "providerID:" key is the only possible nonzero-DefaultYield entry). No further change warranted. |
+
+## Session 1398 update — first-principles audit of the non-mining pause predicate (Socratic pass 77)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does pausing a device on a non-mining assignment depend on the specific name "ai." — and would the mechanism still hold for any other non-mining stream, or any other mining provider? | 🔧 Fixed — real (latent) gap: three sites hard-coded the current provider names instead of the stream category. `reconcileArbPauses` paused on `HasPrefix(stream, "ai.")`, so a device routed to any future non-mining stream ("render.rendernet", "science.*" — both named in the product definition) would keep grinding SHA256d while the engine believed it assigned elsewhere — shares still submitted to the pool while the allocation says otherwise (double-booking). Symmetric narrowing in the other direction: `updateStream` set `IsBitcoinMining = (ProviderID == "mining.stratum")`, so a second mining provider variant ("mining.datum", named in the Provider contract docstring) would be marked non-BTC and its assigned devices paused. Both predicates now test the "mining." category prefix — the same convention the Provider contract documents — via a shared `miningStreamPrefix` const used by `reconcileArbPauses`, `applyAllocation` and `updateStream` (IsBitcoinMining, which the doc defines as "pays out as BTC natively" = the mining category). Zero behaviour change today (only two providers exist); removes a name-hiding assumption for every future stream class. `applyAllocation`'s immediate pause is likewise generalized to "leaving a mining stream → pause" and the log now prints the actual stream id. Test extended: `TestReconcileArbPauses` now pins render.* paused and mining.*-variant unpaused. Honest residual: StreamID → category still lives in the Provider ID string — a provider violating the "category.name" convention would misclassify, but the contract is enforced at Provider.ID(), the documented interface. |
+
+## Session 1399 update — first-principles audit of quote↔Decide concurrency and the activity map (Socratic pass 78)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a quote arriving mid-tick tear the stream map Decide reads — and do dead streams linger in the operator-facing activity map or metrics? | ✅ Verified — the concurrency contract is correct end-to-end. (1) Snapshot semantics: `arbitrationTick` takes `streamsMu`, prunes stale keys, copies the merged slice, unlocks, then runs `Decide` on the immutable snapshot — a quote arriving between snapshot and decision lands in the next tick, never torn mid-tick. (2) Operator surfaces rebuild atomically per tick: `activity` is cleared and repopulated from the fresh allocation under `activityMu` — a dead/expired stream cannot linger as "active"; gauges (`activeStreams` before Decide, yields/idles on success) lag a failed tick by ≤30s, the honest bounded staleness. (3) Staleness bookkeeping is per-key arrival-stamped (`lastQuoteAt` on the updateStream key, `q.At` with `time.Now()` fallback) so a provider revived after expiry gets a fresh entry rather than inheriting a dead timestamp. (4) Hysteresis baseline survives Decide failure: `arbitrationTick` returns `prevAlloc` so a transient error cannot reset the margin (complements s1390). ⚠️ Noted (honest residual): quote timestamps trust the in-process provider's `At` (same-machine clock — a future mis-dating provider could keep a stream fresh indefinitely; bounded by the interface contract); and the all-dead edge — every stream pruned → every device idle → `otedama_up=1` remains "healthy" by the idle-by-design semantics (s1368), but the yield gauges drop to zero, so the signal surfaces truthfully in metrics even while the liveness flag stays up. No change warranted. |
+
+## Session 1400 update — first-principles audit of curtail gate vs arbitration pause interplay (Socratic pass 79)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Do the two independent stop-writers — the price-curtail gate (`curtailGate`, all-devices) and the arbitration pause set (`arbPaused`, per-device) — ever fight: curtail lifting re-arming a device arbitration paused, or one gate stomping the other's state? And is `SwitchedFromID` honest about which transitions count as switches? | ✅ Verified — the mechanisms compose by AND, never conflict. `curtailGate` and `arbPaused` are both gates *read by job dispatch* (updateWork/applyJob), not competing writers of worker state: curtail does one-shot `SetWork(nil)` on transition then relies on the gate to block re-arming; arbitration pauses per device the same way. Uncurtail only lowers the global gate — an arb-paused device stays paused under the per-device set, and a non-mining-assigned worker holds nil work so curtail's `SetWork(nil)` is a no-op there. Freshness gating (`curtailDecision` ignores stale/fallback rates, s1386) prevents a dead price feed from cycling the gate. `SwitchedFromID` is honest: set only on stream→different-stream transitions (arbitration/engine.go:429) — first assignment and idle→stream have no prior stream to switch *from*, so no spurious "switched" event; the aggregate SkippedDevice transition log covers the resume case. `ForegoneSatsPerSec` measures in consistent units (max effective yield − chosen effective yield), honestly pricing non-yield policy preferences. ⚠️ Noted (cosmetic): an idle→stream resume produces no per-device log line — only the aggregate "all devices now have a viable stream" / "N device(s) now idle" transitions; bounded by design. No change warranted. |
+
+## Session 1401 update — self-audit of the session-1398 stream-category generalization (Socratic pass 80)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Re-verify the s1398 fix under the same lens: do all pause/mining predicates now single-source `miningStreamPrefix`, is `Assignment.Stream` actually the same string space as `ProviderID`, and did any `ai.`-style literal survive elsewhere? | ✅ Verified — the fix is complete and internally consistent. (1) All three predicates consume the shared `miningStreamPrefix` const — `reconcileArbPauses` (:104), `IsBitcoinMining` (:311), `applyAllocation` wasMining/nowMining (:391-392); no `ai.`/`mining.stratum` literal remains in engine non-test code. (2) String-space equivalence confirmed: `updateStream` sets `Stream.ID = StreamID(q.ProviderID)` (:290) verbatim, and `Assignment.Stream`/`SwitchedFromID` carry that ID end-to-end — the `mining.` category test is applied to the same convention the Provider contract documents. (3) `IsBitcoinMining` semantics ("pays out as BTC natively") match the mining.* category exactly; today's sole provider `mining.stratum` is unaffected — zero behavior delta, as designed. (4) Edge coherence: `a.Idle()` (Stream=="") fails the prefix and pauses via the Idle() branch anyway — no double-path ambiguity. (5) Log honesty preserved: the non-mining branch now prints the actual stream id rather than a hardcoded "AI inference", and `TestApplyAllocation_LogsOnStreamChange` accepts it. No residual. |
+
+## Session 1403 update — first-principles audit of non-mining (Akash) quote honesty (Socratic pass 81)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "Arbitration is yield-informed" — where does the non-mining stream's number actually come from? If ai.akash's yield is fabricated, does the system pretend it's a real market quote? | ✅ Verified — the yield is a *disclosed simulation* and honesty is enforced structurally at every layer. The number is the static midpoint of a configurable [$0.30, $0.60]/hr range (ai_inference.go publish()), and the simulation is disclosed at every surface a user could encounter: `Name()` returns "AI Inference (Akash Network, simulated)" — the "(simulated)" suffix is documented as "deliberate and load-bearing" — plus README (EN+JA), SPECIFICATION §G5, KNOWN_LIMITATIONS §1, and the provider doc comment all say the same. No operator can mistake simulated yield for real income. The mechanism itself is honest: per-device quotes scoped to GPU+GeneralCompute devices, 20% platform fee applied to NetSatsPerSecond, USD→sats conversion via the real BTC rate, confidence 0.6→0.85 keyed honestly to *rate* freshness (the conversion leg, not the simulated price), fallback rate 95000 gets the lower confidence, and zero devices → zero-yield quote so arbitration excludes the stream cleanly (s1397 path). What is real: the arbitration/pause machinery; what is simulated: the price input — and it says so everywhere. |
+
+## Session 1404 update — first-principles audit of fee-awareness in stream comparison (Socratic pass 82)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "Arbitration picks the best yield" — does the comparison see provider fees, or are Akash's 20% platform fee and the pool's 1% fee invisible to the decision? | 🔧 Fixed — the fee was invisible and is now charged. Provider quotes carry both `SatsPerSecond` (gross) and `NetSatsPerSecond` (post-fee), and provider.go documents the net field as "what the arbitration engine uses for comparison" — but `updateStream` copied only the gross figure into the stream, so `Decide` compared gross yield across streams: Akash's 20% and the pool's 1% fee were both dropped at the boundary, distorting the mining-vs-AI trade by ~21% relative. Fixed: `updateStream` now writes `netSats = NetSatsPerSecond` (falling back to gross when a provider sets no explicit fee, preserving the documented "no fee ⇒ net = gross" contract and every existing zero-fee quote path). `TestUpdateStream_InsertsNewStream` updated to pin the net contract (0.099 vs 0.1). ✅ Verified residual semantics: `ExpectedYield`/`ForegoneSatsPerSec` now report net yield — consistent with "what the device would actually keep"; `SatsPerSecond` remains in the provider contract for gross reporting (TUI shows gross est. with provider name disclosed). |
+
+## Session 1405 update — self-audit of the net-yield fix (Socratic pass 83)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does every consumer of the stream yield now see a consistent net figure, or does some surface still read gross and disagree with the decision? | ✅ Verified — all consumers read the same field, now net. `Decide` compares `YieldFor(id).Effective()` (net×confidence); `opts.activity` accumulates `Assignment.ExpectedYield` (the same net yield) so `buildStats`→TUI `ProviderStats.SatsPerSecond` and the `otedama_arbitration_expected_yield_sats_per_sec` gauge show the number the engine actually routed on — display and decision cannot disagree. `EstSatsEarned` accrues the same net rate (its honesty gate, s1374, unchanged). The `powerFloor` at arbitrate.go:145 converts an electricity cost to sats/s via the `provider.SatsPerSecond(usdPerHour, rate)` helper — a cost threshold, not a yield, so gross/net does not apply. Fallback path verified: a quote with `NetSatsPerSecond <= 0` lands gross, preserving the documented "no explicit fee ⇒ net = gross" contract for any provider that skips the fee field. No code change. |
+
+## Session 1406 update — first-principles audit of payout-scheme awareness in the mining quote (Socratic pass 84)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "The mining quote models a 1% typical pool fee" — but does the fee exist under every configured scheme? | 🔧 Fixed — under `payout_scheme: solo` the asserted fee does not exist: the coinbase pays the user's address directly (all-or-nothing; session 1318 verified that contract at the wire level), so the ×0.99 haircut understated solo yield by 1% for no real fee. `MiningProvider.PayoutScheme` added as a settable field (same pattern as `HashrateFunc`/`NetworkHashrateFunc`); `setup.go` wires `cfg.Pools[0].PayoutScheme` — the pool `defaultPoolURL` selects. publish() now sets net=gross under solo, keeps ×0.99 for fpps/pplns/tides/unset (a typical-fee approximation remains honest for pool-side schemes — under tides the pool's cut funds its own share-window outputs, not the user's, so a haircut is still defensible). `TestMiningProvider_SoloSchemeCarriesNoFeeHaircut` pins solo=1.0× and the four non-solo cases at 0.99×. ⚠️ Honest residuals: failover pools beyond pools[0] inherit the default pool's factor (the provider quotes mining EV generically — a failover to a differently-schemed pool keeps the default's factor until restart); off-coinbase service fees some solo pools charge are outside what any quote can model; scheme-level variance (solo's all-or-nothing vs fpps smooth payout) is not captured in Confidence. |
+
+## Session 1407 update — first-principles audit of ExpectedYield provenance (Socratic pass 85)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "The yield the engine reports (ExpectedYield → activity → TUI/gauges/EstSatsEarned) could be optimistic if it were the unconfidence-weighted raw value while Decide compares the confidence-weighted Effective()" | ✅ Verified — no optimism bias anywhere in the chain. `candidateStreams` (engine.go:448) builds every candidate with `y := s.YieldFor(id).Effective()` (net × confidence). `Assignment.ExpectedYield = best.yield` is that same confidence-weighted net figure, `maxRaw`/`ForegoneSatsPerSec`/`policyScore`/`incumbentHold` all operate in the same effective-yield space — the number compared for the decision is the number displayed and accrued. If a provider's confidence falls (stale rates), the reported estimate falls with it; a dropped-fee or dropped-confidence quote cannot masquerade as more attractive than it is. Combined with session 1404's net-yield fix, the full pipeline — comparison, hysteresis margin, foregone accounting, display, accrual — now reads one field with one semantics. |
+
+## Session 1408 update — self-audit of the solo-scheme fix (Socratic pass 86)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the session-1406 PayoutScheme wiring hold under every reachable configuration? | ✅ Verified — `NewMiningProvider` has exactly one production call site (setup.go:134) and the `PayoutScheme` field is injected there before `Start`, matching the field's documented set-before-Start contract and the `HashrateFunc`/`NetworkHashrateFunc` pattern. The value read is `cfg.Pools[0].PayoutScheme`, the same pool `defaultPoolURL` selects — so quote factor and priced pool are aligned. `config.Validate` constrains `pools[].payout_scheme` to {"", fpps, pplns, tides, solo} per pool (config.go:690), so the provider can never see a garbage value — and even if it could, every value other than "solo" takes the conservative 0.99 factor (error direction understates, never overstates). Failover sessions read their own pool's scheme for coinbase verification at run.go:494; the quote retains pools[0]'s factor during failover (bounded ~1% skew, disclosed at session 1406). Regression test pins all five cases. |
+
+## Session 1410 update — first-principles audit of the power-breakeven floor and its gauge (Socratic pass 87)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "A device is not assigned work below its electricity breakeven — and the reported floor is the floor in force" | 🔧 Fixed (gauge) + ✅ Verified (mechanism). The floor mechanism itself is sound: `powerFloor()` converts `power_watts/1000 × electricity_price_per_kwh` to sats/s via `provider.SatsPerSecond` (returns 0 on rate ≤ 0), splits evenly across managed devices — exact for the dominant single-ASIC deployment, documented as approximation for heterogeneous rigs — and is folded via `max(minYield, pf)` into `MinYieldSatsPerSec`, where `candidateStreams` rejects below-floor candidates and `belowFloor` gives the operator the actionable idle reason (session 1377). Rate-feed death collapses the floor to 0 (fail-open — keeps mining at unknown price rather than letting a feed hiccup idle the rig; the conservative-uptime choice, price-fetch failures already plausibility-gated in rates/). The real defect: the `otedama_power_breakeven_floor_sats_per_second` gauge was only Set on the positive path, so a collapsed floor left a stale positive value on display — "recomputed each round" was false exactly when the floor stopped applying. Restructured so the gauge mirrors the floor actually applied every round (0 included). Test pins gauge=0 for every disabled input and the positive→0 transition on rate death. |
+
+## Session 1411 update — first-principles audit of TotalYield / held-yield consistency (Socratic pass 88)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "The yield totals the operator sees (`otedama_expected_yield_sats_per_second`, `alloc.TotalYield`) could diverge from the allocation actually in force — e.g. a held incumbent reporting a stale quote, or an error path leaving the gauge describing an allocation that was never applied" | ✅ Verified — no divergence on any path. `Decide` builds `alloc.TotalYield` by summing every emitted `Assignment.ExpectedYield` (arbitration/engine.go:347), and held assignments are constructed by `incumbentHold` with `ExpectedYield: c.yield` — the incumbent's *current* quote yield, recomputed this tick, never a cached allocation-time value. The `maxRaw`/`ForegoneSatsPerSec` figure is computed from candidate yields *before* the policy sort, so foregone accounting reflects the real maximum alternative, and `held` is only flagged when a different higher-scoring stream was actually suppressed (:484-487). On a Decide error the tick returns `prevAlloc` and skips the metrics block entirely (arbitrate.go:210-212), so the gauge continues to describe the allocation still in force rather than a phantom one. An idle device's ExpectedYield is 0 by construction — the sum can never count a device that isn't producing. |
+
+## Session 1412 update — failover payout-scheme tracking (Socratic pass 89)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Session 1406's residual: the mining quote's net-fee factor is wired once from `pools[0]` — but the pool actually being mined rotates on failover, so the quote can price a scheme the current session isn't using (~1% skew, direction unfavorable exactly when solo pricing matters most) | 🔧 Fixed — `MiningProvider.PayoutScheme` (exported field, documented unsafe-after-Start) replaced by an unexported `atomic.Pointer[string]` with `SetPayoutScheme`/`PayoutScheme()`. This closes both defects at once: the semantic drift (quote priced pools[0] forever) and a latent data race (the session loop now legitimately writes while publish() reads — the old field would have raced). `runReconnectLoop` calls `SetPayoutScheme(payoutScheme)` at the top of every attempt, so the quote's fee factor always prices the pool being dialed — failover fpps→solo reprices the next quote within one publish interval. `TestRunReconnectLoop_MultiPool_Failover` now asserts the provider's scheme equals the last dialed pool's (fpps→solo→fpps→solo ⇒ "solo"); the three direct reconnectOpts test sites supply a real MiningProvider (the field is required, mirroring `metrics`). setup.go's initial SetPayoutScheme keeps the pre-first-session value aligned with `defaultPoolURL`. |
+
+## Session 1413 update — self-audit of the failover payout-scheme fix (Socratic pass 90)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the session-1412 SetPayoutScheme wiring hold under every reachable path — attempt exhaustion, legacy single-URL config (len(Pools)==0), opaque poolUser override, and concurrent publish()? | ✅ Verified — `SetPayoutScheme` runs at run.go:507, strictly after the `MaxReconnectAttempts` check (:483), so no spurious update is published for an attempt that never dials. When `len(r.opts.Config.Pools)==0` (synthesized poolURL list with no scheme field), `payoutScheme` stays "" and `SetPayoutScheme("")` restores the default 0.99 factor — the unset-config semantics are preserved rather than leaving a stale scheme behind. With `poolUser != ""` the scheme still tracks `Pools[poolIdx].PayoutScheme` (the fee factor depends only on the scheme string, not on the user identity — correct). No references to the old exported field remain: all reads go through `PayoutScheme()` (nil-safe Load ⇒ "" ⇒ conservative factor), all writes through `SetPayoutScheme`; `config.PoolConfig.PayoutScheme`, `doctor.checkPayoutScheme`, and `sessionOpts.payoutScheme` are the separate, already-verified config/session surfaces. Race-detector engine suite green. ⚠️ Honest residual: between `SetPayoutScheme` and the session establishing (or failing fast into the next attempt), the quote briefly prices the *attempted* pool — bounded by the 30s publish interval and self-correcting on the next attempt; a transient EV skew, not a stuck one. |
+
+## Session 1414 update — first-principles audit of quote Confidence honesty (Socratic pass 91)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "Confidence reflects how trustworthy the quote is" — but is it honest when the only degraded-input signal it reads is the BTC price feed, while the dominant EV input (network hashrate) can be wired-and-stale without any confidence penalty? | 🔧 Fixed — `Confidence` scales `Effective()` directly (net × confidence feeds every Decide comparison), so an overstated tier is a real arbitration skew, not a display nit. The defect: with `NetworkHashrateFunc` wired but reporting stale/never-fetched, publish() silently fell back to the 1e21 constant while keeping the rate-derived 0.95 — the operator had configured a better input that degraded, and the quote claimed full confidence anyway (network hashrate drifts with fortnightly retargets; a stale-hours reading's constant could be materially wrong). Now a wired-but-degraded feed clamps confidence to the 0.7 degraded-input tier — same treatment a stale price feed already got. Unwired keeps 0.95: the constant is the documented baseline input then, and identical input gets identical confidence. `TestMiningProvider_LiveNetworkHashrate` extended to pin all three tiers (unwired 0.95 / wired-stale 0.7 / wired-fresh 0.95). ⚠️ Honest residual: deviceHashrate staleness (static family estimate vs live measurement) remains unmodeled in confidence — by design, since the estimate is declared, not fetched; and `NetworkHashrateFunc` staleness only warns at the fetcher layer, not per-quote — acceptable, the clamp is the honest signal. |
+
+## Session 1415 update — self-audit of the stale-hashrate confidence clamp (Socratic pass 92)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the session-1414 clamp hold under every input combination — and do other providers (Akash/ai_inference) apply the same degraded-input honesty? | ✅ Verified — the clamp covers all four input states correctly: wired+fresh+positive uses the live reading unclamped; wired+stale or wired+fresh-but-nonpositive clamps to 0.7 (a custom func returning fresh garbage is honestly degraded, and `HashrateFetcher.fetchOne` rejects non-positive readings anyway so production can't hit that branch with fresh=true); wired+stale-rate combines to min(0.7,0.7) — the `confidence > 0.7` guard never raises an already-degraded tier; unwired keeps the constant at 0.95 (documented baseline). Provider suite green. AkashProvider applies the same model correctly for its different input profile: its yield is USD-native (USD/hr → sats/sec *needs* the rate), so rate freshness 0.6/0.85 IS the dominant-input tier — coherent with the mining fix, which treats hashrate as the dominant input on the BTC-native path. No code change needed. ⚠️ Honest residual: neither provider models "the simulated/constant input is structurally approximate" in confidence — both reserve the top tier for "declared inputs fresh"; tightening that constant is a design judgment, not a bug. |
+
+## Session 1417 update — self-audit of the miningProvider identity invariant (Socratic pass 93)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | s1412 relies on `r.miningProvider` being the same object as `providers[0]` — is that identity enforced structurally, or could a future reordering re-point scheme tracking at the Akash provider while the quote drifts? And do any other readers inside runReconnectLoop treat providers[0] as mining? | ✅ Verified — the identity is enforced by construction: the only `providers` slice in production is built at run.go:417 as `[]provider.Provider{miningProvider, akashProvider}`, a single literal where the mining provider is positionally first by the same variable later passed to `reconnectOpts{miningProvider: miningProvider}` (:418). There is no second construction site (tests build their own real `NewMiningProvider`). Inside `runReconnectLoop`, `r.providers` has exactly one use — passed through to `sessionOpts.providers` (:537) for the arbitration loop; no code in the reconnect path type-asserts or otherwise treats providers[0] as mining, so `SetPayoutScheme` cannot diverge from what the session actually uses. The remaining structural assumption ("providers[0] is mining") lives only in the doc comment — acceptable, since compile-time wiring, not a convention, carries the invariant. ✅ No code change needed. |
+
+## Session 1418 update — foregone-yield accounting honesty (Socratic pass 94)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question for `ForegoneSatsPerSec`: does the opportunity-cost metric stay honest across all three outcomes — switch-to-best, incumbent-held, and incumbent-is-best? (a) Can it go negative when policy score ≠ raw yield? (b) Does it correctly quantify a *cost* when PolicyStackBTC/privacy/environment prefers a lower-raw-yield stream, rather than pretending the preferred stream earns more? | ✅ Verified honest on all paths. `maxRaw` is the max raw effective yield over all compatible candidates (engine.go:386), computed *before* the policy sort, so `maxRaw - chosen.yield ≥ 0` structurally — the chosen stream is itself a candidate and cannot exceed the max. In the held path, foregone = maxRaw - incumbent.yield is exactly what the device surrenders by staying; `Held` is set only when a *different* challenger was suppressed (best.stream.ID != incumbent ID), so held never fires when the incumbent is itself best — no double-counting. Critically, under PolicyStackBTC (1.05× BTC bonus) or rating policies (≤1.10×), a lower-raw-yield preferred stream produces a *positive* foregone value — the metric honestly reports the real sats sacrificed to satisfy the policy preference instead of hiding the cost. Under PolicyMaximizeEarnings score=yield, so best always has foregone 0 when it is also the raw max. The one naming caveat — ForegoneSatsPerSec measures "cost vs raw-yield-max routing", not "cost vs previous assignment" (a switch can still report positive foregone if the new stream isn't the raw max) — matches the gauge's documented meaning. ✅ No code change needed. |
+
+## Session 1419 update — mining-provider confidence provenance (Socratic pass 95)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: is MiningProvider's `Confidence` field honest — does it reflect real input quality, and does it share the Akash freshness-tier semantics so `Effective()` discounts like-for-like across streams? Specifically: what drives the 0.7↔0.95 tiers, and does a degraded network-hashrate feed still claim full confidence? | ✅ Verified honest. Confidence is a freshness tier, not a fixed constant: base 0.7, raised to 0.95 only when the BTC/USD rate is fresh (mining.go:111-115). A *wired* `NetworkHashrateFunc` that reports stale clamps confidence back to 0.7 (mining.go:127-129) — a degraded better-input is honestly discounted rather than silently trusting the 1e21 constant fallback. An *unwired* feed keeps the price tier — defensible: the compile-time constant is the documented KNOWN_LIMITATIONS §7 fallback, and there is no degraded input to disclose beyond what the docs already declare. Semantics match Akash exactly (fresh-tier / degraded-tier), so `Effective()` = net×confidence applies the same discount shape on both sides of a mining-vs-AI comparison — a stale-hashrate mining quote is penalized the same way a stale-rate AI quote is. Solo-vs-pool net already lands before the confidence multiply, so the two adjustments compose correctly. ✅ No code change needed. |
+
+## Session 1420 update — Quote→Stream family translation (Socratic pass 96)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does `updateStream`'s verbatim copy of `q.AcceptedFamilies` into `Stream.AcceptsFamilies` preserve the `provider.Quote` contract — "a nil slice means all families are accepted" — or does the meaning invert at the boundary? | 🔧 Real latent defect fixed. `Stream.Accepts()` is `slices.Contains(s.AcceptsFamilies, f)` — a nil slice contains nothing, so a provider emitting nil (documented as "accept everything") produced a stream that accepted *no* family and was silently excluded from candidacy. Unreachable today (both providers emit explicit slices) but a contract inversion at the boundary — a degraded/future provider emitting nil would be silently dropped rather than accepted-everywhere. Fixed by translating nil → `allDeviceFamilies` at the updateStream boundary; regression test pins all three families accepted on a nil quote. The neighboring dead-capability surface (`PrivacyRating`/`EnvironmentalRating` on Stream, consumed only by the two non-earnings policies) was also re-verified: policy is hardcoded `PolicyMaximizeEarnings` (arbitrate.go:208), so the missing rating plumbing is unreachable — an extension point pinned by tests, not a live defect. ✅ |
+
+## Session 1421 update — streamsSlice merge fidelity (Socratic pass 97)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: when N "providerID:deviceID" map entries dedupe into one Stream, does `streamsSlice` preserve every device's yield — and does the representative pick carry the right AcceptsFamilies/IsBitcoinMining regardless of map iteration order? | ✅ Verified. Merge is union-correct: the rep is deep-copied (new YieldPerDevice map when non-empty), then `maps.Copy` folds each sibling's device yields in — every device's own yield reaches `YieldFor`. Representative pick is outcome-deterministic: AcceptsFamilies/IsBitcoinMining are uniform across a provider's entries (same ProviderID → same StreamID → same prefix check; post-s1420 nil is normalized identically), so iteration order only chooses among identical values. Decide then sorts candidates by policyScore — slice order never reaches the decision. ⚠️ Cosmetic residual (recorded, not fixed): when the rep's own YieldPerDevice is empty the shallow copy aliases m's map, and sibling `maps.Copy` writes back into the live streams map — semantically identical self-keyed data, overwritten by the next quote, harmless but noted honestly. ✅ No code change needed. |
+
+## Session 1422 update — quote-channel lifecycle (Socratic pass 98)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does one dead provider's closed quote channel kill arbitration for the survivors — or does the fan-in only close when ALL inputs close, letting the loop keep deciding for live providers while the dead one's streams expire? | ✅ Verified honest. `fanIn` closes `out` only after `wg.Wait()` — every input drained (fanin.go:56) — so a single provider's channel close ends only its own goroutine; `runArbitrationLoop` keeps ticking for the survivor and the dead provider's streams expire via the 3-minute staleness pruner (fail-safe: a dead provider can be routed to for at most the freshness window, then its candidates vanish). The loop itself exits cleanly on `!ok` from the merged channel (all providers dead) or ctx.Done. Stuck-input goroutines are also unpinnable: both the recv and the send select on ctx, so a never-closing input cannot wedge `wg.Wait()` after cancellation. ✅ No code change needed. |
+
+## Session 1424 update — arbitration knob plumbing (Socratic pass 99)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: do the user-facing arbitration knobs (`arbitration_hysteresis_pct`, `min_yield_sats_per_sec`) actually reach the Decide call — or are they dead config fields the user can set but that never take effect? | ✅ Verified fully wired. `ArbitrationHysteresisPct` (4-layer origins: default 0.05 → file → `OTEDAMA_` env, with ValueOrigin tracking) → run.go:380 → `cmp.Or(hysteresisPct, 0.05)` → `Decide.HysteresisMargin`. `MinYieldSatsPerSec` → run.go:381 → `max(minYield, powerFloor)` → `Decide.MinYield`. Neither is a dead field; each is threaded exactly once, and the power-breakeven floor correctly folds in via max rather than replacing the user floor. ⚠️ Documented caveat stands (not a defect): an explicit 0 is indistinguishable from unset — config.go:473+ records the zero-value limitation, and `cmp.Or` collapses explicit-0 back to the default, which is the same outcome in either layer. ✅ No code change needed. |
+
+## Session 1425 update — freshness-ledger bounding (Socratic pass 100)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does `lastQuoteAt` (the freshness ledger) grow unboundedly with churned stream keys — a slow leak where every ever-seen provider:device key persists forever? | ✅ Verified bounded and honest. `pruneStaleStreams` iterates `seen` and deletes expired keys from BOTH `streamMap` and `seen` itself (arbitrate.go:281-282), so the ledger cannot outlive the streams it tracks — a provider that stops quoting has all its keys expire together within the freshness window. Keys are the same `providerID:deviceID` space in both maps, so no orphan entry can exist. Pre-seeded streams (present in `m` without a `seen` entry) are never pruned — the documented intent for injected streams, and they do not enter the ledger. ✅ No code change needed. |
+
+## Session 1426 update — mining classification + key single-sourcing (Socratic pass 101)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does the `mining.` category prefix actually classify the real providers correctly — and can the freshness-ledger key diverge from the stream-map key so a live stream is pruned while stale (or vice versa)? | ✅ Verified on both halves. `MiningProvider.id = "mining.stratum"` matches `strings.HasPrefix(id, miningStreamPrefix)`; `AkashProvider.id = "ai.akash"` does not — the two wired providers classify exactly right, and the "category.name" convention (provider.go:139) makes every future variant's classification predictable. Key single-sourcing: `updateStream` builds `key := ProviderID + ":" + DeviceID` once and returns it; the loop feeds the SAME returned key into `lastQuoteAt` — the ledger and the stream map cannot diverge on key format, so a live stream is never pruned by a malformed key nor a stale one preserved by a mismatched lookup. ✅ No code change needed. |
+
+## Session 1427 update — power-floor input guards (Socratic pass 102)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can the power-breakeven floor divide by zero or go negative — `powerFloor` splits cost across `len(devRefs)` devices, so an empty device list or a non-positive input could crash or invert the floor into a subsidy? | ✅ Verified guarded. `len(o.devRefs) > 0` precedes the division (arbitrate.go:141 vs :147) so the divisor is ≥1 by construction. Non-positive `power_watts`, `power_price_per_kwh`, or rate → floor stays 0 (fail-open: power accounting off means no floor, not a wrong floor — consistent with the s1410 contract). `rateSource == nil` also yields 0 rather than reading a default. Gauge mirrors the applied value including 0. ✅ No code change needed. |
+
+## Session 1428 update — pause-set symmetry (Socratic pass 103)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can a device be left paused forever — the pause set is only mutated per-assignment, so a device that vanishes from the allocation or whose stream dies could keep a stale pause entry and never resume mining? | ✅ Verified symmetric and self-healing. `reconcileArbPauses` runs every tick before applyAllocation and rewrites the set to exactly mirror the latest Decide: idle or non-`mining.` → Pause, mining assignment → Resume (arbitrate.go:109-115). A device whose non-mining stream dies lands in Idle on the next Decide and stays paused — correct, since mining was already stopped — and a later mining stream Resume's it. A device absent from the allocation keeps a stale entry only cosmetically: `Paused()` is consulted per live worker and the worker list is fixed at startup, so the entry gates nothing. `applyAllocation`'s held-assignment `default:` branch deliberately does not re-pause: the pause set (maintained every tick) is the authoritative dispatch gate; `SetWork(nil)` is only the immediate halt on a fresh transition. Resume-latency edge (idle→mining re-arm waits for the next pool job, ~60s) already honestly recorded at s1366. ✅ No code change needed. |
+
+## Session 1429 update — device-set single-sourcing (Socratic pass 104)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can the power-floor divisor and the Decide device set diverge from the real devices — `devRefs` feeds both `len(devRefs)` (the floor divisor) and `Decide.Devices`, so a stale or partial ref list would silently mis-split the floor or mis-assign? | ✅ Verified single-sourced. `devRefs` is built once at run.go:351-357 directly from the same `devices` slice that feeds `startMinerWorkers` and hal enumeration — `len(devRefs) == len(devices)`, so the system power cost splits evenly across exactly the detected devices and `Decide.Devices` sees the identical set. Workers ⊆ devices (only SHA256d-capable devices get workers) — the floor splits across ALL detected devices, matching the documented "system cost split per device" semantics and the comment's "dominant device's draw" caveat. Startup-time snapshot is consistent with the rest of the pipeline (devices are enumerated once; no hot-plug path exists, so nothing can go stale alone). ✅ No code change needed. |
+
+## Session 1430 update — policy-score honesty (Socratic pass 105)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does `policyScore` secretly distort the "maximize earnings" claim — if the BTC-stack or rating bonuses leaked into `PolicyMaximizeEarnings`, the picker would deviate from pure net yield while claiming otherwise? | ✅ Verified honest. `PolicyMaximizeEarnings` returns `yield` untouched (engine.go:537-538) — `btcStackBonus` (1.05) applies only under `PolicyStackBTC`, `ratingBonusPerPoint` only under the rating policies. Since production hardcodes `PolicyMaximizeEarnings` (arbitrate.go:208), score ≡ net yield, so comparisons, the 5% hysteresis margin, and tie-breaks all operate in honest yield units — the documented "score equals raw yield" invariant holds exactly. `default:` degrades unknown policies to earnings semantics (fail-safe), and `Valid()` constrains callers to the four declared policies anyway. ✅ No code change needed. |
+
+## Session 1431 update — per-device yield accumulation (Socratic pass 106)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does a quote for device A silently overwrite or drop the accumulated yields of other devices on the same stream — and can a provider switching quote granularity leave stale yields behind? | ✅ Verified clean accumulation. `updateStream` mutates `existing` in place: a `DeviceID != ""` quote writes only its own `YieldPerDevice[deviceID]` slot (:322), preserving siblings' earlier quotes; a `DeviceID == ""` quote sets only `DefaultYield` (:332) — post-s1396 contract: a per-device quote never leaks its price to unquoted devices, and repeated quotes overwrite only their own slot (latest wins). Keys are per `provider:device` with independent `lastQuoteAt` freshness, so a provider that stops quoting one device has that device's stream key expire independently within 3 minutes — stale yields cannot linger past the freshness window. ✅ No code change needed. |
+
+## Session 1432 update — yield resolution order (Socratic pass 107)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does `YieldFor` hand a device the wrong yield — or let an unquoted device invent work it cannot do by falling back to an arbitrary default? | ✅ Verified correct resolution and fail-safe. Per-device slot wins, else `DefaultYield` (engine.go:129-133) — matching the docstring. Critical interaction verified end-to-end: post-s1396, `DefaultYield` is set ONLY by device-agnostic quotes, so a device the provider declined to quote resolves to the zero `Yield{}` → `Effective()==0` → filtered by the positive-yield candidate gate rather than assigned impossible work. Mixed mode is contract-correct: agnostic default + per-device overrides means unquoted devices get the stream-wide rate ("any device may work"), while a provider quoting only per-device leaves DefaultYield zero so no phantom capacity appears. Negative/non-finite yields collapse to zero upstream (#437). ✅ No code change needed. |
+
+## Session 1433 update — candidate gate ordering (Socratic pass 108)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can a stream bypass the candidate gate — an incompatible family, zero/negative yield, or a below-floor offer reaching an assignment — and does the floor measure the promised metric? | ✅ Verified ordered and honest. `candidateStreams` applies the triple filter in one pipeline: `s.Accepts(family)` → `YieldFor(id).Effective()` must be `> 0` → must clear `minYield` (engine.go:442-458). The floor is applied to the confidence-adjusted (effective) yield exactly as the field documents ("confidence-adjusted yield is at least this many"), not the raw figure — a low-confidence quote cannot inflate past the floor on gross numbers. `belowFloor` is set only when a stream accepted the device with positive yield that failed the floor, so the idle reason correctly distinguishes "nothing wants this device" from "the work wasn't worth running". `incumbentHold` detaches when the incumbent leaves the candidate set and uses the CURRENT effective yield, not a stale `ExpectedYield`. ✅ No code change needed. |
+
+## Session 1435 update — pause gate authority (Socratic pass 109)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: is the arbitration pause set merely advisory — could a paused device still receive pool work, so "paused" leaks hash into a stream the allocator refused? | ✅ Verified authoritative. `updateWork` (V2, run.go:1935) and the V1 `applyJob` path (:2023) both gate `SetWork` on `paused.Paused(wr.DeviceID())` — a paused worker is skipped on every job delivery, so pausing is a real dispatch gate, not a hint. The worker also keeps no stale work: the transition-time `SetWork(nil)` in applyAllocation already cleared it, and the skip prevents re-arming. `allArbPaused` (:723) correctly reports "intentionally idle" only when EVERY worker is paused, feeding `updateLiveness`'s healthy-idle semantics (s1368). Pauses persist across job updates (#494). ✅ No code change needed. |
+
+## Session 1436 update — confidence-weighting honesty (Socratic pass 110)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can `Effective()` return a bogus yield — NaN/Inf sneaking through, or a Confidence > 1 inflating a quote above what the provider earned? | ✅ Verified honest with one latent boundary. Both `Effective()`s gate on `!(x > 0)`, which rejects ≤0 AND NaN in one comparison (NaN > 0 is false), and the arbitration variant additionally collapses an infinite product to 0 — a garbage quote can never win the sort or poison TotalYield. The provider→arbitration boundary is consistent: updateStream copies net sats + confidence into `arbitration.Yield`, so `Effective()` computes net×confidence on both layers. ⚠️→✅ Fixed latent boundary: Confidence was documented [0,1] but never clamped, so a provider returning Confidence > 1 would inflate its effective yield above its own net. `Effective()` now applies `min(confidence,1)` while preserving the pinned non-finite→0 behavior (a +Inf confidence still collapses to 0, not to "fully confident"), with regression rows for 1.5/2.0/+Inf. No live defect existed — both providers bound confidence internally (mining 0.7–0.95, Akash freshness-scaled) — the clamp hardens the extension point for any future third provider. |
+
+## Session 1437 update — allocation accounting honesty (Socratic pass 111)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can the reported `TotalYield` overstate what the miner will actually earn — e.g. counting theoretical-best yields under hysteresis, or including unassigned devices' phantom yield? | ✅ Verified honest. `TotalYield` sums `ExpectedYield`, which is the confidence-discounted net yield of the stream the device will ACTUALLY run (s1407): a held assignment contributes the incumbent's yield, not the suppressed best candidate's — deliberate deviations are separately quantified by ForegoneSatsPerSec rather than hidden in the total. Idle devices contribute a zero-value ExpectedYield (their lost potential is never mixed in). Non-finite yields collapse to 0 at `Effective()` before summation, so TotalYield cannot be poisoned. `SkippedDevice` counts exactly `a.Idle()` — "no assignment" semantics, matching the `otedama_devices_idle` gauge: a device routed to an AI stream is correctly NOT counted as idle (it is assigned, just not mining). ✅ No code change needed. |
+
+## Session 1438 update — arbitration cadence (Socratic pass 112)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does arbitration re-decide when the inputs actually change (a fresh quote), or can it sit on stale allocations — and does the loop's doc match the code? | ✅ Verified correct design + fixed stale comment. `runArbitrationLoop` runs Decide on a fixed 30s ticker (`arbitrationInterval`, run.go:73); a fresh quote only mutates the shared stream map + freshness ledger, and the next tick picks it up. The function's comment claimed re-evaluation "whenever a fresh quote arrives" — overclaiming responsiveness (the quote branch only calls updateStream). Corrected the comment and documented why tick-only is deliberate: per-quote Decide would let a fast-quoting provider drive re-allocation churn; the 30s cadence matches provider quote cadence (30s mining / 60s AI), and hysteresis already suppresses marginal switches. Startup semantics are honest too: before the first tick workers mine unpaused (empty arbPaused = not paused); an empty streamMap yields all-idle and pauses everything, resuming on the first tick after quotes land. ✅ Comment corrected; behavior unchanged. |
+
+## Session 1439 update — quote freshness ledger (Socratic pass 113)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can a provider-supplied quote timestamp corrupt the freshness ledger that retires dead providers' streams? | ⚠️ Found and fixed a latent boundary. `q.At` was written verbatim to `lastQuoteAt`; a zero value was already handled, but a FUTURE-dated `At` made `now.Sub(ts)` negative forever — the stream could never age past `streamStaleTimeout`, so a dead/misbehaving provider's quote would keep routing devices indefinitely (immortal stream). Both internal providers stamp `time.Now()`, so this is an extension-point hardening (same class as the Confidence>1 clamp in session 1436), not a live defect. Fixed via `quoteFreshness(at, now)`: zero or future → now, otherwise the past timestamp is kept. Extracted as a pure function (same testable-seam pattern as `v1JobTarget`) and pinned with a unit test covering zero/future/far-future/past/exact-now. ✅ |
+
+## Session 1440 update — freshness clamp completeness (Socratic pass 114)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Same-lens re-verification of the session-1439 fix: does any other consumer read `Quote.At`, and could an un-clamped path remain? | ✅ Complete at the single source. `Quote.At` has exactly one consumer in the codebase — the `lastQuoteAt` freshness ledger written in the `runArbitrationLoop` quote branch (arbitrate.go:179), now clamped via `quoteFreshness`. `updateStream` stores no timestamp field, and no last-quote gauge or other reader exists. Both shipped providers stamp `time.Now()` themselves, so the clamp is extension-point hardening for future providers, consistent with the Confidence>1 clamp (session 1436). The unit test pins zero/future/far-future/past/exact-now. ✅ |
+
+## Session 1442 update (Socratic pass 115)
+
+**Claim verified:** "An idle assignment reports the state line to the operator appropriately" — partially. **Defect found and fixed:** applyAllocation emitted the "arbitration: %s idle" info line unconditionally on every Decide tick, so a permanently idle device re-logged an identical line every ~30s (~2,880/day) — the only assignment state that re-logged steady-state (stream switches log only via SwitchedFromID transitions). Added `Assignment.HeldIdle`, set by Decide when the device was idle in the previous decision (`prev` map), and gated the log line on it; the pause side (`pauseDevice` → `SetWork(nil)`) stays unconditional so the worker remains drained. First-ever idle (no Previous) still logs; mining→idle transitions still log once. Regression pins: `TestDecide_HeldIdle` (three cases: fresh idle logs, persistent held, mining→idle logs) + `TestApplyAllocation_HeldIdle` (silent log, worker still paused). engine/arbitration green.
+
+## Session 1443 update (Socratic pass 116)
+
+**Claim verified:** "Idle-state logging is transition-gated consistently" — now true end to end. The aggregate line (`SkippedDevice != prevSkipped`, arbitrate.go) was already transition-gated before s1442; the per-device line was the only re-logger and is now HeldIdle-gated to match — the s1442 fix aligns with the codebase's own pre-existing convention rather than inventing one. ⚠️ Honest residual: the aggregate compares idle *counts*, not device sets — a swap (device A exits idle while B enters, count unchanged 1→1) emits no aggregate line; the newly idle device still logs via the per-device line, and the resuming device is silent by design (resume = next-pool-job arm, disclosed s1366/s1400). devices_idle gauge and activity map reflect truth regardless. Cosmetic observability edge only.
+
+## Session 1444 update (Socratic pass 117)
+
+**Claim verified:** "A device-agnostic quote (DeviceID == \"\") occupies a well-formed map slot" — true. updateStream keys it `providerID:` (e.g. `ai.akash:`): distinct from any real device key (hardware IDs cannot contain `:`), pruned by the same freshness ledger, and merged into the shared StreamID by streamsSlice like per-device entries. The DefaultYield it writes stays the only device-agnostic yield (per-device quotes write only their own slot since s1396). No collision, no orphaning. Code unchanged.
+
+## Session 1445 update (Socratic pass 118)
+
+**Claim verified:** "The all-paused liveness exemption hides only stall signals, not connection death" — true. updateLiveness short-circuits before hashMon.Observe when isCurtailed()||allArbPaused(), suppressing only the *stall* signal (zero-hashrate warning + otedama_up=0); it cannot hide a dead pool because connection failure propagates via a different path entirely (runSession error → failover/reconnect → silence warnings), never through the stall monitor. allArbPaused correctly requires every worker paused (a single unpaused worker keeps the stall monitor fed), and arbPaused persists across reconnects since the set is shared and rewritten by every arbitration tick. Code unchanged.
+
+## Session 1446 update (Socratic pass 119)
+
+**Claim verified:** "The shared pause set is concurrency-safe across the arbitration writer and session readers" — true. pauseSet is a sync.Map: every mutation (reconcileArbPauses Pause/Resume) and every read (applyJob/updateWork dispatch gate, allArbPaused) is an atomic per-key op with no torn state. reconcileArbPauses covers every device in the allocation, so the set always mirrors the latest Decide output; devices cannot drift because devRefs is fixed at startup (no hot-plug path). The brief window between reconcile and the next job dispatch can show a stale flag for ≤ one job — a stale "paused" delays a resume to the next job (the disclosed resume-latency edge), and a stale "unpaused" only feeds the worker ordinary mining work; neither direction produces an incorrect assignment. Code unchanged.
+
+## Session 1447 update (Socratic pass 120)
+
+**Claim verified:** "TUI provider stats read a consistent activity snapshot" — true. The reader (stats.go) holds the same `activityMu` the writer holds through the entire clear()+repopulate sequence, so it observes either the complete previous map or the complete new one — never a torn mid-rewrite state (an entry missing or zeroed because it landed between clear and re-add). Key space also matches: the reader looks up `p.ID()` and the writer stores `string(a.Stream)` where Stream.ID = ProviderID, same string space. Nil-mutex (no arbitration loop) degrades to all-inactive — an honest pessimistic default rather than a stale true. Code unchanged.
+
+## Session 1448 update (Socratic pass 121)
+
+**Claim verified:** "The stream map and freshness ledger cannot diverge" — true. Both are written exclusively by the single arbitration goroutine: every updateStream write is immediately followed by its lastQuoteAt entry (same key space "providerID:deviceID"), and pruneStaleStreams deletes from both maps together — a streamMap entry without a ledger entry, or a ledger orphan, is unreachable. The prune boundary `now.Sub(ts) > streamStaleTimeout` is strictly-greater, so a quote exactly at the deadline survives up to one extra tick — the conservative direction (keeps a borderline stream rather than dropping a live one). streamsMu is belt-and-suspenders today (all access is the one goroutine) but correctly wraps every access for any future reader. Code unchanged.
+
+## Session 1449 update (Socratic pass 122)
+
+**Claim verified:** "A stalled arbitration consumer cannot deadlock providers or lose quote recency" — true. Each provider publishes from a single poller goroutine into a bounded channel (16 mining / 32 AI); sendQuote first tries a non-blocking send, and on a full buffer drops exactly one oldest quote then sends the newest with a ctx escape — newest-wins semantics, never blocking the producer. The arbitration loop's own quote branch (updateStream + ledger write) is O(1) mutex work per quote and structurally cannot stall: its other branches are the ticker and ctx.Done(). If the whole loop exits via ctx cancel, mergeQuotes drains its inputs and the providers' sendQuote returns false on the same ctx — no publisher outlives the consumer. Code unchanged.
+
+## Session 1450 update (Socratic pass 123)
+
+**Ecosystem recheck (ADR-009):** sv2-spec normative open set unchanged — #203 payouts extension (hybrid-consensus stands), #236 SetTarget ≤ max_target (new Oct-2 clarification: in-flight SetTarget racing UpdateChannel bound to replaced max_target), #234 authority key mgmt, #198 coinbase_witness. SRI latest v1.12.0, sv2-apps latest v0.8.0 — both confirmed via authoritative tags/releases APIs. No action required.
+
+## Session 1451 update (Socratic pass 124)
+
+**Claim verified:** "applyAllocation's three-way switch covers every transition class correctly" — mostly true, with one latent gap now disclosed. Mining→non-mining drains via pauseDevice + the pause set (both already synced by reconcileArbPauses); non-mining→mining relies on the next pool job re-feeding the worker (the disclosed resume-latency edge); mining→mining logs "switched" but takes no drain/resume action — correct *today* because exactly one `mining.*` provider exists, so two distinct mining streams per device are unreachable (updateStream keys collide on the same providerID). ⚠️ Latent: the moment a second mining provider ships (e.g. a DATUM backend alongside stratum), a mining→mining switch would leave the worker grinding the *old* stream's work until that stream's own session supplies a job — a silent cross-provider assignment bug. A future fix should drain on any SwitchedFromID where the stream identity changed, not just prefix transitions. Code unchanged.
+
+## Session 1452 update (Socratic pass 126)
+
+**Claim verified:** "The worker set arbitration pauses is exactly the worker set job dispatch gates" — true. `workers` is built once by startMinerWorkers(devices) at run.go:250 and the same slice flows unchanged into both arbitrationLoopOpts.workers (applyAllocation's pauseDevice iterates it) and sessionOpts.workers (updateWork/applyJob gate + allArbPaused). Membership is also coherent both ways: every worker's DeviceID appears in devRefs (workers derive from devices), so reconcileArbPauses covers them; and every non-SHA256d device in devRefs has no worker for pauseDevice to find — a clean no-op, not a miss. allArbPaused iterating o.workers (SHA256d subset) is therefore the right denominator: arbitration idling every mining-capable device exempts liveness exactly when no pool work is expected. Code unchanged.
+
+## Session 1453 update (Socratic pass 127)
+
+**Claim verified:** "otedama_arbitration_expected_yield reports only what devices are actually assigned to earn" — true. TotalYield sums ExpectedYield across all assignments, and the early-idle return produces an Assignment with ExpectedYield=0 — so idle devices contribute exactly zero. ExpectedYield itself is the raw effective yield (`best.yield` = YieldFor().Effective() — confidence-weighted net), NOT the policy score: a policy bonus (e.g. a hypothetical BTC-preference multiplier under a non-earnings policy) could swing the selection but can never inflate the reported sats/s — the gauge stays in honest yield units while selection stays in score units, and they diverge only where the policy intends it (disclosed via ForegoneSatsPerSec). Code unchanged.
+
+## Session 1454 update (Socratic pass 128)
+
+**Claim verified:** "A malformed provider quote can never poison the sort or the yield gauges" — true. Effective() rejects every non-finite/negative input combination (NaN or ±Inf yield → `!(y>0)` or the explicit IsInf check → 0; NaN/±Inf/non-positive confidence → 0), so every candidate reaching the sort is finite — maxRaw, ForegoneSatsPerSec, and TotalYield inherit that bound and cannot emit NaN into a gauge. The rating-bonus paths in policyScore take `int` ratings (no NaN representable) and those fields have no writer anywhere — ratings are all zero today, so the bonus multipliers are dormant; also latent only, since production policy is hardcoded PolicyMaximizeEarnings. ⚠️ Disclosed: when a future provider does populate ratings, the documented 0..10 range is not enforced at ingest — a 255 would grant a 355% score bonus. A clamp belongs wherever the first rating writer lands. Code unchanged.
+
+## Session 1455 update (Socratic pass 129)
+
+**Claim verified:** "The fan-in never reorders or duplicates a provider's own quotes" — true. Each input channel is read by exactly one dedicated goroutine in a sequential loop, so per-input order is preserved — and since order is what makes "newest quote wins" meaningful downstream (updateStream and lastQuoteAt overwrite per key in arrival order), a slower provider's quote can never overwrite a newer one for the same key. Duplication is impossible (each value is received once, sent once); reordering across inputs is harmless (different keys). Backpressure semantics chain correctly: when out is full the fan-in goroutine parks on send, stops reading its input, and the provider's own bounded newest-wins buffer absorbs overflow — the same drop policy at every hop. Lifecycle: input goroutines exit on input-close or ctx (send also observes ctx), the closer goroutine closes out only after all exits, and the arbitration loop treats closed quoteCh as its exit signal — the whole cascade unwinds on one ctx. Code unchanged.
+
+## Session 1456 update (Socratic pass 130)
+
+**Claim verified:** "A transient Decide error cannot corrupt hysteresis state or worker state" — true. On error the tick returns prevAlloc unchanged: the pause set keeps the last reconciled state (workers keep doing what the last good decision said — fail-static, not fail-random), and the same object becomes next tick's hysteresis baseline, so a bad tick doesn't reset the stickiness window. prevAlloc is only ever *read* by Decide (new Assignments are fresh structs), so feeding it back every tick introduces no aliasing. Verified accounting boundary: arbitrationSwitches counts only stream→stream transitions — idle↔stream transitions carry no SwitchedFromID by construction (previous.Stream=="" produces none on resume; the early-idle return produces none on pause), and they're already covered by devicesIdle + the transition logs, so nothing is silently uncounted. Code unchanged.
+
+## Session 1457 update (Socratic pass 131)
+
+**Claim verified:** "Pause/actuation effects can never fail silently or target the wrong worker" — true. pauseSet's Pause/Resume are sync.Map stores (infallible, race-free) and reconcileArbPauses rewires the whole set to the new decision each tick, so a stale entry can never survive a tick. pauseDevice walks the worker list by exact DeviceID match (the s1384 latent-broadcast fix stays honored — no worker matching means no-op, not a broadcast). Verified all transition classes: held mining→mining stays grinding (correct — same stream family, the pool keeps feeding jobs); mining→non-mining pauses exactly the named worker; idle assignment pauses unconditionally each tick (reentrant and cheap) while the log line is transition-gated by HeldIdle. ⚠️ Latent edge disclosed: a mining.*→mining.* stream switch (wasMining&&nowMining → default branch) leaves the worker grinding the OLD pool's template while revenue attribution moves — the worker is never paused and nothing reconnects it. Unreachable today (exactly one mining provider/stream, "mining.stratum"), but a second mining provider would need the switch path to re-handshake the new endpoint or pause-then-resume the worker.
+
+## Session 1458 update (ADR-009 ecosystem recheck)
+
+Verified against live GitHub API (authenticated): sv2-spec open PR set unchanged in the normative window — #236 (`SetTarget.target` MUST NOT exceed `max_target`, updated 10-02, still under review — aligns with Otedama's client-side share-target clamp shipped in #368), #234 (authority key mgmt/rotation), #203 (coinbase-payout extension, output-bounding debate), #198 (coinbase_witness field), plus style/WIP entries (#232/#186/#103). No merges landed that change our normative picture. SRI tags: latest remains v1.12.0 (v1.11.1 previously over-reported as latest — corrected in s1409). sv2-apps tags: latest remains v0.8.0. No action required.
+
+## Session 1459 update (Socratic pass 132 — real fix)
+
+**Claim falsified (comment):** run.go's `// Arbitration loop: re-run Decide whenever quotes change.` repeated the exact wrong claim s1438 fixed in the arbitration loop itself — the loop's select wakes on the ticker only; quote arrivals just refresh the streams map. Corrected the comment to name the tick-only design and the boundary (quotes refresh, not trigger). Second instance of this false claim removed from the codebase. engine package builds clean.
+
+## Session 1460 update (Socratic pass 133)
+
+**Claim verified:** "The idle-transition latch re-arms correctly across every cycle" — true. HeldIdle is set only when the previous map has an entry for the device AND that entry is itself idle (Stream==""). The re-arm paths all behave: first-ever tick (no prev) logs once; consecutive idle suppresses; idle→stream→idle flips prev.Stream non-empty so the new idle transition logs again; Decide-error fallback preserves the old alloc so an error can't spuriously re-arm or re-log; activity map rebuild skips idle assignments so a device held-idle for days never reappears in provider lines. The one bounded case — a brand-new device appearing with no prev entry — would log on its first idle decision, which is the correct disclosure. Code unchanged.
+
+## Session 1461 update (Socratic pass 134)
+
+**Claim verified:** "Stream identity is single-sourced at emission — no two providers can collide, and per-device quotes can't leak across devices" — true. Stream.ID is set verbatim from Quote.ProviderID (line 309), which is a per-provider compile-time constant ("mining.stratum", "ai.akash"), so cross-provider ID collision is structurally impossible. The map key carries device scope (providerID:deviceID) while the stream ID carries provider scope — streamsSlice then merges same-ID entries' YieldPerDevice maps, so a device-scoped quote can only ever affect its own device's yield entry (a D2 quote expiring removes exactly D2's entry; it cannot touch D1's). Write-back is by value (m[key] = existing) with the YieldPerDevice map shared by reference — no torn state, mutex-held throughout. Bounded edge: a provider emitting ProviderID="" would collapse to the blank stream ID, but both providers use constants, so unreachable by construction.
+
+## Session 1462 update (Socratic pass 135)
+
+**Claim verified:** "Akash's simulated quotes stay honest at every boundary" — true. Family gate is double-consistent: Start filters devices to GPU+GeneralCompute AND the quote itself declares AcceptedFamilies={GPU}, so a non-GPU device is excluded both by absence (no quote) and by family rejection — the s1396 DefaultYield fix makes the first airtight. Confidence honestly degrades on stale feeds (0.6 stale / 0.85 fresh — same convention as mining provider). The 20% Akash fee is baked into NetSatsPerSecond, which post-s1404 is the figure arbitration actually compares. The hardcoded rate fallback (95000 USD) errors toward UNDERstating sats if BTC trades higher — conservative direction, can't inflate AI revenue into a false win. SatsPerSecond() guards non-positive inputs and any NaN/Inf escape collapses to 0 at Effective(). Code unchanged.
+
+## Session 1463 update (Socratic pass 136)
+
+**Claim verified:** "Mining quote construction can never overstate what a device earns" — true across every input class. Confidence honestly degrades: 0.7 base, 0.95 only on a fresh price feed, and a wired-but-stale network-hashrate feed clamps back to 0.7 (the operator's better input degraded — it doesn't claim full trust). deviceHashrate prefers live measured stats and falls back per family; networkHashrate guards `hashFresh && h > 0` before use. The solo-EV math is dimensionally exact ((devHR/netHR) × 3.125 BTC / 600s × 1e8). Net = 0.99× for pool schemes, =gross for solo — the s1406 contract. Non-SHA256d devices are skipped before quoting AND the AcceptedFamilies gate would reject them anyway (double-consistent, same pattern as Akash). Pathological inputs (NaN hashrate, +Inf) produce NaN/Inf sats which Effective() collapses to 0 — excluded, never a win. Code unchanged.
+
+## Session 1464 update (Socratic pass 137 — real fix)
+
+**Claim falsified then fixed:** "There is one Effective() contract and it is the clamped one" — false. s1436 clamped arbitration.Yield.Effective (min(confidence,1), non-finite→0) but left provider.Yield.Effective multiplying Confidence uncapped — the two documented "same" semantics diverged, and the comment at the boundary claimed arbitration used the provider version. A future caller of provider.Effective() would have silently resurrected the >1-confidence inflation bug at a different layer. Fixed: provider.Yield.Effective now mirrors the arbitration semantics exactly (reject non-positive or NaN, clamp confidence at 1.0, collapse non-finite to 0), documented as such. provider.Yield.Effective has no production callers today — the fix is contract repair, not behavior change — with three regression cases (confidence>1, NaN, +Inf) pinned in provider_test.go. go build + provider/arbitration tests green.
+
+## Session 1465 update (Socratic pass 138)
+
+**Claim verified:** "The provider quote channel can never be closed twice or swapped under a live writer" — true on two layers. `defer close(p.quoteCh)` evaluates the channel operand when the defer statement executes at goroutine start, so the loop goroutine closes exactly the channel it was launched on — Stop()'s later `p.quoteCh = make(...)` recreation cannot make it close the wrong (new) channel. Stop serializes on the same mutex as launch, waits on wg (which counts only the loop goroutine — publish() runs inside it, so no orphan writers), and a double-Stop is idempotent. sendQuote's drop-oldest-send-newest policy never blocks the loop; a quote in flight when Stop cancels still lands in the drained old channel. Honest residual: a restarted provider's NEW quoteCh is never wired into the engine's mergeQuotes inputs (the fan-in captured the old channel at startup) — but restart is structurally unreachable today: Start is called exactly once at setup.go:160-163 and Stop only via deferred shutdown at run.go:341-342. Recorded as a latent caveat, not a defect.
+
+## Session 1466 update (Socratic pass 139 — real fix)
+
+**Claim falsified then fixed:** "An arbitration idle/AI assignment silences every worker bound to that device" — false at the margin. `pauseDevice` early-returned after the first `DeviceID()` match, so a second worker sharing the ID (reachable if a HAL driver ever emits two devices with the same Identity.ID — no dedup guard exists anywhere in enumeration or startMinerWorkers) would keep grinding under an arbitration pause. Fixed: the loop now pauses every matching worker, matching the stated intent "stop the SHA256d work on the device that was idled or switched". Behavior is unchanged in production (all emitted IDs are unique constants today: cpu-0, gpu-<renderNode>), but the enforcement now matches the semantic rather than assuming 1:1. go build + engine tests green.
+
+## Session 1467 update (Socratic pass 140)
+
+**Claim verified:** "A share can't be attributed to the wrong device or a mutated extranonce" — true. Share is emitted as a self-contained snapshot: ChannelID/JobID/Nonce/Target copied from the immutable Work at issue time, DeviceID from the worker's own config, Hash from the actual grind — nothing downstream can misattribute it to another device or job. The one slice field, ExtraNonce, aliases localWork.ExtraNonce, and aliasing is safe because Work is immutable post-construction (s1376): no writer exists to mutate the backing array under a buffered share. The fanIn consumer-side can't amplify either — per-input goroutine forward-or-ctx-exit, one stuck producer pins only its own goroutine, out closes when ALL inputs close. Worker-side backpressure is honest too: a full consumer drops the share and counts dropCount rather than silently. NTime honestly reports the rolled timestamp (h.Time includes ntimeRoll), so a post-wrap share presents the ntime it was actually hashed under.
+
+## Session 1468 update (ADR-009 ecosystem recheck)
+
+Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, active review), #234 (authority key management), #203 (coinbase-payout extension), #198 (coinbase_witness). Reference implementation anchors re-verified via the tags API: SRI latest tag remains v1.12.0; sv2-apps latest remains v0.8.0 — no new normative movement since s1458. No action required; Otedama's V1-limited payout verification disclosure stays aligned with the still-open upstream #203 debate.
+
+## Session 1469 update (Socratic pass 141)
+
+**Claim verified:** "A paused worker stops hashing" — true with a bounded, honest drain. SetWork(nil) is a mutex-guarded store plus version bump, so grind threads observe the nil at the top of their next loop iteration and drop to a 10ms sleep-retry (no busy spin). The only in-flight work is the current 1024-hash batch per thread — a pause can never take more than one batch to take effect, and the worker's own hashRate window decays to zero on the next sample so the stalled worker can't keep reporting stale throughput. Version-bump-on-every-SetWork also means a same-pointer re-issue is impossible to miss. Honest residual already on the ledger (s1360): lifetime-average hashrate continues to count the paused interval — cosmetic only, since the windowed rate used by arbitration and metrics reports truth.
+
+## Session 1470 update (Socratic pass 142 — real fix)
+
+**Claim falsified then fixed:** "Every change of assignment is logged" — false at the boundary the convention itself defines. applyAllocation's own comment promises "logging every change of assignment", but an initial device→stream routing (prevAlloc==nil → SwitchedFromID stays "") fell through to the no-log `default:` branch — the single largest transition (nothing→something) was the only silent one. Operators watching logs had zero record of the first routing decision. Fixed: arbitrationTick passes `firstDecide = prevAlloc == nil` into applyAllocation, and the default branch logs `device → stream (yield)` once when the first Decide assigns a stream. Held-idle and idle-first-tick paths already log via their own gates, so no double-logging. Two regression tests pin both cases; all pre-existing steady-state tests keep the no-log invariant by passing firstDecide=false. go build + engine tests green.
+
+## Session 1471 update (Socratic pass 143)
+
+**Claim held:** the SV2 `OpenMiningChannel.nominal_hashrate` declaration is finite and honest. Searched for a NaN/Inf route: Stats().HashRate divides hashCount by uptime.Seconds(), and since uptime is guarded `> 0` at nanosecond granularity, Seconds() is ≥ ~1e-9 — never a literal zero divisor — so rate is always finite (0 early, bounded ~1e28 worst case, within float32 range). NaN and +Inf are structurally unreachable, so the `hashRate <= 0 → nominal fallback` guard is sufficient. On reconnect the live (possibly throttled) rate wins; on a fresh session the capability-derived nominal seeds vardiff — both documented and correct. No code change.
+
+## Session 1472 update (Socratic pass 144)
+
+**Claim held:** OpenMiningChannelSuccess's extranonce_prefix being decoded-but-unused is consistent with the standard-channel wire contract — SubmitSharesStandard carries no extranonce field (channel_id, sequence_number, job_id, nonce, ntime, version only), so for a direct standard channel the pool fixes the extranonce inside the precomputed merkle_root it serves. Honest residual: the field exists for proxy/aggregation semantics the engine doesn't exercise; discarding it is spec-consistent, not a bug. omcs.Target flows to share-target (with zero-target → block-target fallback, s1380) and omcs.ChannelID stamps every outbound frame (s1383). No code change.
+
+## Session 1473 update (Socratic pass 145)
+
+**Claim held (3 surfaces):**
+
+1. V2 `SetTarget` is symmetric with the V1 path verified in s1353: the new share target is applied immediately and the active job is re-issued to workers (no next-job wait), logged once. `active == nil` guards the re-issue correctly — nothing to retarget before the first job.
+2. The one-response-per-sequence invariant is enforced on BOTH settlement paths: SubmitSharesError drops future seqs AND already-settled/reaped seqs before any rejection is counted — a hostile pool cannot inflate the reject rate by replaying or fabricating error frames. submitTimes and submitTargets are deleted pairwise on every settlement path (success, error, cap-reaper) — no unbounded growth.
+3. `seqNum++` consuming a sequence for a share then dropped by the stale-job gate (active==nil or wrong JobID) leaves a gap the pool can never ack — harmless by construction: settlement only iterates outstanding entries, and a fabricated mid-gap seq lands in the `!outstanding` drop. Honest accounting.
+
+## Session 1474 update (ADR-009 ecosystem recheck)
+
+sv2-spec normative open set unchanged: #236 (SetTarget ≤ max_target), #234 (authority key management), #203 (coinbase-payout ext — output-cap debate continuing), #198 (coinbase_witness). Non-normative churn only: #232/#186 table formatting, #103 Proxy Annex WIP. SRI latest tag v1.12.0; sv2-apps latest v0.8.0 — both re-confirmed. No action needed; anchors stay as recorded.
+
+## Session 1475 update (Socratic pass 146)
+
+**Claim held:** SetNewPrevHash handling is honest on every branch. The new tip evicts every pending job except the one it names (spec-invalidates the rest); the named job's ntime is max(tip's NtimeStart, job's own ntime_start when flagged) so it never regresses; an unknown named job pauses ALL workers rather than hashing a wrong prev-hash — fail-safe, and `active = nil` makes the stale-share gate drop in-flight work too. A held job (HasNtimeStart but no prev-hash yet) is correctly armed once named — the `named.HasNtimeStart` guard prevents reading an unset NtimeStart. Non-future jobs arriving before the first SetNewPrevHash are held, not hashed (garbage prev_hash otherwise). prevNBits flows through TargetFromNBits fail-closed validation at dispatch.
+
+## Session 1476 update (Socratic pass 147 — real fix)
+
+**Claim falsified then fixed:** "The V1 engine honors the wire contract that mining.submit echoes the pool's job_id verbatim" — false in two compounding ways. V1 `job_id` is an opaque string per Stratum V1 (arbitrary pool-chosen identifier; hex, UUIDs, and mixed forms like "1a" all appear in the wild), but the engine collapsed it to uint32 at applyJob via `fmt.Sscanf(job.JobID, "%d")`: a non-decimal ID either errored out (job dropped entirely — silent mining halt for any pool not using bare decimals) or silently truncated ("1a" → 1, colliding with a genuine job "1"). Then the submit path reconstructed the echo with `strconv.FormatUint(share.JobID, 10)` — the pool received a REFORMATTED decimal it never issued, producing wrong-ID rejects on every share for non-decimal pools. Fixed: new `v1JobWireID` helper derives the internal uint32 — ParseUint keeps decimal values verbatim, everything else falls to an FNV-1a hash — used only for the stale-share equality gate, which needs ordering-free equality, not the literal string. The session now also retains the original string (`currentJobIDStr`) and the submit goroutine echoes it verbatim. Regression coverage at both layers: TestV1JobWireID pins decimal preservation, no-truncation ("1a" ≠ 1), determinism, and collision-freedom; TestRunSessionV1_OpaqueJobID (renamed from the old error-path test) drives a live session with job_id "opaque-xyz" and asserts the wire carries params[1]=="opaque-xyz" — previously a "can't happen" input. The stale-comment docstring claiming unparseable IDs "yield job 0" is corrected. go build + full engine package green.
+
+## Session 1477 update (Socratic pass 148 — recheck of pass 147)
+
+**Claim held:** "After the s1476 fix, every reader/writer of the V1 job identifier treats it consistently" — verified end to end. Producers: `poolproto.Job.JobID` keeps the pool's raw string (parse.go:71); the notify arm sets `currentJobID` (v1JobWireID-derived gate value) and `currentJobIDStr` (echo value) in the same branch — no partial update possible; `applyJob` stamps `Work.JobID` through the same `v1JobWireID` so `share.JobID == currentJobID` iff the share was mined under this job; the diffCh retarget re-issues `lastJob` without touching either variable (same job, same echo). Consumers: the stale gate compares only the derived uint32s (run.go:1663); the submit goroutine echoes `currentJobIDStr` verbatim to `stratumv1.session.Submit` which places it in params[1] untouched (stratumv1.go:614); debug logs print the internal IDs, never the string — by design. V2 path untouched: `startJob` passes `stratum.NewMiningJob.JobID` (U32 numeric per spec) straight through, and `Share.JobID` is stamped from `Work.JobID` (worker.go:288) — internal-only.
+
+**Residual found and normalized:** the V2 adapter's `parseJobID` (dialer.go:429) still used `fmt.Sscanf(%d)` — the same silent-truncate class ("1a" → 1). The engine never calls `stratumv2.session.Submit` (it emits SubmitSharesStandard inline, run.go:1304 — verified at s1383/s1473), so production behavior was unaffected; normalized to strict `strconv.ParseUint` anyway so a future caller can't inherit the truncation channel. V2 ids are numeric per spec, so decimal-parse is the correct interpretation; garbage → 0 preserves the prior contract. stratumv2 tests green.
+
+## Session 1478 update (Socratic pass 149)
+
+**Claim verified:** "A SetNewPrevHash naming an unknown job pauses every worker — a hostile or desynchronized pool cannot keep the engine mining under a stale prev-hash." All four guards hold: (1) `named == nil` → `active = nil` plus `SetWork(nil)` on every worker (run.go:1149-1153), with a warn log making the episode visible; (2) no stale path can re-issue — the SetTarget arm requires `active != nil` (:1158), and the stale-share gate drops shares for the cleared job (`active == nil || share.JobID != active.JobID`, :1281) rather than submitting them; (3) `prevHash`/`prevNBits` are updated before the named-job check, so the next NewMiningJob with `HasNtimeStart` arms immediately against the NEW tip — `havePrev` stays true because the tip just refreshed; (4) discarding a held future job at each tip is spec-correct — every SetNewPrevHash invalidates all jobs but the named one, and a later frame naming an already-invalidated job hits the same fail-closed pause. `ntime = max(p.NtimeStart, named.NtimeStart)` correctly implements the spec's "roll forward to at least min_ntime" rule, and rollNTime additionally rolls stale values to wall clock (s314). ⚠️ Honest residual: a pool may push an absurd future `NtimeStart`; rollNTime only rolls *forward* stale values and does not clamp future ones, so the engine would grind headers a sane pool rejects — self-inflicted only, bounded by the per-session submit rate cap (s290), and reject accounting stays honest.
+
+## Session 1479 update (Socratic pass 150 — real fix)
+
+**Claim verified (with one small fix):** "Pool-supplied SubmitSharesSuccess/Error sequence numbers cannot corrupt local accept/reject accounting." The defenses are complete: `seqNum` is a local monotonic counter incremented once per wire submit (:1269), so any frame referencing a seq > sent is dropped as bogus (Success :1167, Error :1209); the settle loop only credits `seq <= last` entries that actually exist locally, and `NewSubmitsAccepted` is clamped to `settled` — a pool claiming more accepts than it settled cannot inflate `sharesAccepted`; Error frames for non-outstanding seqs (replays, fabricated mid-range, cap-evicted) are dropped so one error frame cannot be replayed to inflate the reject rate; both `submitTimes` and `submitTargets` are reaped together past 1024 entries so a silent pool cannot grow them unboundedly (evicted seqs then fail `!outstanding`, keeping accounting honest); and the retarget-reject exclusion remains a 3-condition gate with its own label.
+
+**Small fix applied:** the `otedama_shares_submit_in_flight` gauge (introduced at s315 to surface submit backpressure) was refreshed only at send time (:1333), so after a batch acknowledge it kept showing the pre-settle depth until the next submit — a false-backpressure reading persisting arbitrarily long when the pool acks late and no new shares follow. Now re-synced to `len(submitTimes)` after both the Success settle loop and the Error delete. go build + engine tests green.
+
+## Session 1480 update (Socratic pass 151)
+
+**Claim verified:** "The bounded V2 pending-job map cannot orphan the job the workers are currently hashing." `active` is an independent `*stratum.NewMiningJob` — eviction from `jobs`/`jobOrder` removes only the *naming* entry used by the next SetNewPrevHash lookup; the workers' `Work` was already constructed at startJob time (:967) and never read back from the map, so evicting the armed job's ID leaves hashing undisturbed. The only reachable consequence of a >64-job flood is the s1478 fail-closed path: if the pool later names an already-evicted ID, `named == nil` → full pause with warn log — honest, never garbage hashing. Three supporting details hold too: re-sending an existing JobID does not refresh its FIFO position (a hostile pool cannot pin a stale job by resending — eviction policy stays honest); `jobOrder = order[1:]` is bounded so the slice cannot grow; and `active`/`jobs` share the same immutable message pointer — no post-store mutation path exists. ⚠️ Honest residual: a legitimate pool emitting >64 outstanding job IDs without rotating the tip and then naming an old one gets a pause-until-next-job — 64 is far above observed pool behavior, and the pause is loud, not silent.
+
+## Session 1481 update (Socratic pass 152)
+
+**Claim verified:** "Arbitration pause-set updates cannot race with job-dispatch reads." `pauseSet` is a `sync.Map` (arbitrate.go:87): the arbitration loop is the sole writer (`reconcileArbPauses` → Pause/Resume → Store/Delete), and the session goroutines only read (`Paused` → Load) in `updateWork`, `applyJob`, and `allArbPaused` — concurrent-safe by construction. The ordering contract holds too: reconcile runs after every successful Decide and rewrites the set to exactly mirror the latest allocation, so a paused device never receives `SetWork` on subsequent job updates (the s382 persistence property — the set lives on `sessionOpts`, independent of job swaps). The one transient — a Pause landing between `Paused()` and `SetWork(w)` — issues at most one work item on a transitioning device and self-heals at the next job; this is the same disclosed 1-tick resume delay from s1366, not a leak. `allArbPaused` evaluates per-device Loads independently, so a mixed snapshot across devices is semantically correct (devices pause independently). Devices absent from an Allocation keep their prior pause state — unreachable in production since `devRefs`/`workers` are fixed at startup (s1429). A nil pauseSet is tolerated for tests on every read path.
+
+## Session 1482 update (ADR-009 ecosystem recheck)
+
+sv2-spec normative open set unchanged (verified via authenticated tags/pulls API): #236 (`SetTarget.target` MUST NOT exceed the channel's `max_target` — updated Oct 2, still open; aligns with Otedama's client-side share-target clamp shipped in #368), #234 (authority key management), #203 (coinbase-payout extension — the output-cap debate), #198 (`coinbase_witness` field). Non-normative churn only: #232/#186 table formatting, #103 Proxy Annex WIP. Reference anchors re-confirmed: SRI latest tag v1.12.0, sv2-apps latest v0.8.0. No action required — Otedama's V1-limited payout-verification disclosure stays aligned with the still-open upstream #203 debate.
+
+## Session 1483 update (Socratic pass 153)
+
+**Claim verified:** "A set_difficulty arriving before any mining.notify cannot produce phantom or desynced work." Three layers hold: the `diffCh` arm is gated on `!haveJob` (:1650) so a pre-job retarget can never reach `applyJob` on an empty `lastJob`; the difficulty value itself is stored once in the session's atomic (`stratumv1.go:102`, float64 bits) at parse time, so `sess.SuggestedDifficulty()` (:640) already reflects it when the first notify lands — the notify arm's `applied` (:1623) picks it up with zero state duplication; and the `d == appliedDifficulty` latch (:1650) suppresses re-issue when a retarget repeats the current value. Source-of-truth is single (the atomic), the latch is only a dispatch-time dedup — the two cannot diverge. A pre-job difficulty of exactly 0 is doubly safe: the latch skips it AND `v1JobTarget` falls back to nBits only via the `difficulty > 0` gate (:1973).
+
+## Session 1484 update (Socratic pass 154 — real fix)
+
+**Claim falsified then fixed:** "An unconvertible set_difficulty cannot make workers grind a target the pool didn't ask for." `v1JobTarget` gated the pool difficulty behind `difficulty > 0` but silently swallowed `TargetFromDifficulty` errors — a positive-but-unconvertible value fell back to the nBits block target in BOTH directions: astronomical difficulty underflows the target to zero (pool gets easy-target shares it rejects) and sub-~1e-77 difficulty overflows 256 bits (workers grind near-impossible shares — silent starvation). In both cases the recorded difficulty and the actual grind target diverged with no metric showing why. Now propagates `fmt.Errorf` so `applyJob` drops the job with a warn — fail-closed and loud, symmetric with `v1ShareTarget` which already returns `ok=false` on the same conversion failure. Regression test pins both directions (1e300, 1e-300) plus the ordinary-difficulty boundary. go build + vet + engine tests green.
+
+## Session 1485 update (Socratic pass 155 — recheck of pass 154)
+
+Same-lens recheck of the s1484 unconvertible-difficulty fix, all paths clean: `v1JobTarget`'s only caller is `applyJob` (:2014), reached from the notify arm (:1624) and the diffCh arm (:1654) — both log the error as warn and `continue`, so a bad difficulty is loud per-job rather than a silent grind. The `d == appliedDifficulty` latch cannot wedge: `appliedDifficulty` is assigned before apply in the diffCh arm, so a failed apply still records the bad value — a subsequent identical delivery is deduped (correct: no work was issued anyway), while a *new* good difficulty differs, passes the latch, applies cleanly, and workers resume — recovery path intact. The difficulty=0 pre-set_difficulty fallback is untouched (the `> 0` gate still routes it to nBits by design). `v1ShareTarget` (transitionReject's "current" side) is unchanged and stays symmetric: unconvertible → `ok=false` → ordinary reject accounting. The metrics surface stays honest too: the difficulty gauge reports what the pool *declared*, and the warn log now reports that grinding refused it — a monitor sees both the claim and the refusal. No further code change needed.
+
+## Session 1486 update (Socratic pass 156)
+
+**Claim verified:** "The per-session submit rate cap actually bounds wire traffic, spends tokens only on eligible shares, and drops honestly." `submitLimiter` is a buffered-channel token bucket: capacity `submitBurst`=32 prefilled at construction (a normal trickle never waits), refilled 1 token per 125ms (=8/s sustained) by a ticker goroutine that dies with `limiterCtx` — per-session scope, no leak, no send-on-closed (the channel is never closed). `take()` is a non-blocking receive so the share hot path never stalls. On the V1 (:1683) and V2 (:1303) paths, a drop increments `sharesSubmitDropped` and emits a debug log — counted, not silent. Ordering is the non-obvious piece: the stale/superseded-job gate runs BEFORE `take()` (V1 :1671-1679, V2 :1295-1301), so a flood of stale shares can't consume tokens a valid share would need — tokens are spent only on submissions eligible to send. The cap is on attempts reaching the wire, not on successes (a token consumed by a share that then fails mid-write isn't refunded — consistent with "bound the wire"). Honest residual: a cap-drop is debug-logged, not warned — by design it's load shedding, not failure, and the metric keeps it observable.
+
+## Session 1487 update (Socratic pass 157)
+
+**Claim verified:** "A share found faster than the engine drains it can't stall the grind hot path, and a drop is never silent." Each worker's share channel is buffered at `Threads*4`; the grind send is a non-blocking select whose `default:` drops the share and increments `dropCount` (worker.go:302-306) — a slow consumer never blocks a miner thread. Accounting stays honest at two levels: `SharesFound` counts discoveries while `SharesDropped` counts buffer-full discards, so delivered = found − dropped is derivable rather than conflated. The engine diffs `totalDropped(workers)` once per stats tick (:979-992): new drops produce a warn log *and* an increment of `sharesWorkerDropped` — observable on two surfaces. The worker-recreation edge is also handled: when the summed total goes down (counters reset for a new session), the code adds the new total rather than a negative delta, keeping the metric monotone across reconnects. Shutdown order prevents send-on-closed: `close(shares)` happens only after `wg.Wait()` returns (all senders exited), and the engine's `case share, ok := <-opts.merged` handles the channel close. Honest residual: a drop surfaces at the next stats tick (≤ tick interval lag), not instantaneously — cosmetic only.
+
+## Session 1488 update (Socratic pass 158)
+
+**Claim verified (premise corrected):** there is no `Session.Errors()` channel — the poolproto contract propagates session death by *closing* `Jobs()` (and sibling channels), so "every session error reaches the failover decision" is verified on the close path instead. V1: `readLoop` runs `defer s.closeChannels()` (stratumv1.go:196, :550-557) — any exit (read error, ctx done, `Close()`) closes `jobsCh`/`diffCh`/`noticeCh` together under `sendMu`, the single close site, so sends race-safe (a send either lands before close or is skipped). The engine sees `ok=false` on `sess.Jobs()` (:1578), honors any `client.reconnect` wait (clamped, ctx-cancellable), then returns "pool closed connection" → `sessionDone` → failover. V2: `inCh` close or `pm.err` returns the error the same way (:1080-1086), and `dialer.go:245`'s `defer close(s.jobsCh)` is the symmetric single close site. Because death is a channel close rather than a separate error channel, a session cannot die silently: the consumer's receive arm always observes it. Honest residual: a read-loop panic would propagate as a panic (no recover) rather than a clean close — consistent with the codebase's fail-stop convention (s1390), and read-loop input is already bounded/validated upstream.
+
+## Session 1489 update (Socratic pass 159)
+
+**Claim verified:** "Pool operator notices always reach the operator bounded — a full buffer drops the oldest, never blocks the read loop, never panics on close." `noticeCh` (cap 8) producer side: `handleShowMessage` (:405-430) sends non-blocking under `sendMu`; on full it evicts the OLDEST queued notice then retries once — freshest always wins, FIFO-loss bounded to the buffer depth, read loop never stalls. The `s.closed` check under the same mutex makes send-on-closed impossible. `handleVersionMask` sends once per session (CompareAndSwap) with the same non-blocking pattern. Consumer side (:1479-1484): `notices` is nil for sessions without `PoolNoticeReceiver` (nil case never ready); on channel close the case is nil'd so the select doesn't busy-spin; each surviving notice logs at info with the text already sanitized upstream (s1460). Honest residual: buffer-full drops are silent at the protocol layer — that IS the documented PoolNoticeReceiver contract, and the loss is cosmetic operator messaging, never share/job state.
+
+## Session 1490 update (Socratic pass 160)
+
+**Claim verified:** "A pool cannot arm jobs or mutate session state before the worker is authorized." `dispatch` (:276-288) gates all 7 pool-initiated methods on `authorized`: pre-auth messages go to `stashPreAuth` — a `preAuthCap=16` queue that deep-copies params (read-buffer aliasing impossible), drops oldest on overflow (correct: for every stashed method the newest value wins). Replay ordering is airtight: `dialer.go:193-195` sets `authorizedUser`+`authorized` then `flushPreAuth` replays in wire order; any post-auth message arriving during the window hits `dispatch`'s own `flushPreAuth` (:284) before its handler runs, so a stashed message can never apply behind a newer post-auth one. Rejected/failed authorize → `Close()` → readLoop exit → closeChannels → stash dies with the session. `preAuthMu` serializes both sides. Honest residual: pre-auth overflow (>16 messages during the handshake) silently discards older jobs/notices — bounded, and the newest-still-wins semantics make the loss semantically benign.
+
+## Session 1491 update (Socratic pass 161)
+
+**Claim verified:** "A pool's reconnect directive cannot redirect our hashpower to an arbitrary endpoint." `parseReconnect` (parse.go:266-293) decodes [host, port, wait] best-effort — garbage params still yield a valid zero-value directive (the bare method IS the signal). `handleReconnect` (:447-458) records the directive then `go s.Close()` — async so the read loop isn't self-blocked; close → `!ok` on `Jobs()` → the engine honors `ReconnectWait` (clamped [0, 300s] :460-477, ctx-cancellable :1584-1593) then re-dials the OPERATOR-CONFIGURED pool list. The pool-supplied Host:Port is deliberately never dialed — documented at parse.go:251-255 as the redirection-vector mitigation: client.reconnect is unauthenticated, so honoring its endpoint would let any hostile pool or MITM steal hashpower. The safe subset (delay + reconnect-now) is honored; the unsafe subset (arbitrary endpoint) is dropped. Honest residual: a pool genuinely migrating nodes can't auto-move us — we re-dial the configured list (possibly the same, now-dead pool until failover cycles), bounded churn not theft.
+
+## Session 1492 update (ADR-009 ecosystem recheck)
+
+sv2-spec normative open set unchanged: #236 (`SetTarget.target` ≤ channel `max_target`, updated 2026-10-02 — review continues), #234 (authority key management/rotation, 09-25), #203 (coinbase transaction payouts extension — the JDP-era non-custodial answer Otedama tracks, 09-15), #198 (`coinbase_witness` field, 09-23). SRI tags: v1.12.0 latest (matches the s1409 anchor correction; v1.11.1/1.11.0 behind). sv2-apps tags: v0.8.0 latest, unchanged since s1423. No new normative movement requiring action. Watch item for the next pass cycle: whether Otedama's client-side SetTarget handling validates against the declared channel max_target, in line with #236's direction — queued as s1493's claim.
+
+## Session 1493 update (Socratic pass 162 — real fix)
+
+**Claim falsified then fixed:** queued from s1492 — "client-side SetTarget handling validates against the declared channel max_target" (#236's direction). The audit falsified it at a deeper layer: Otedama **never declares max_target at all**, so there is nothing to validate against — and the claim masks a worse defect.
+
+**Send side (0x10 OpenStandardMiningChannel):** the spec layout is fixed — `request_id U32 | user_identity STR0_255 | nominal_hash_rate F32 | max_target U256` (sv2-spec 05-Mining-Protocol.md §5.3.2, verified live). `OpenMiningChannel.Encode()` emitted only the first three fields — 32 bytes short — so a pool whose decoder reads the required field hits a short buffer and fails the frame. The comment at handshake.go:156 called the omission intentional ("advertising a preference would be dead configuration"; commit 36aa0721b had just removed a never-serialized MaxTargetNBits field) — but the reasoning was wrong about the mechanism: max_target is not an optional preference, it is a fixed-layout field, so omitting it produces a malformed message, not a missing hint. Fixed: `MaxTarget [32]byte` added to the struct, encoded/decoded symmetric; both send sites (engine `openChannel` run.go:1832 and the poolproto dialer dialer.go:154) declare `MaxTargetUnconstrained` (all-ones U256 — "accept whatever target the pool assigns", the honest encoding of the existing policy).
+
+**Receive side (0x11 OpenStandardMiningChannel.Success):** spec layout ends with `extranonce_prefix B0_32 | group_channel_id U32` (§5.3.3) — the decoder instead read `ExtraNonce2Size uint16`, a V1-ism smuggled into V2 that misread the group id's low 16 bits and left 2 trailing bytes. Fixed: `GroupChannelID uint32` per spec (stored, unconsumed — single-channel client); the field rename propagated through every test site. Round-trip self-consistency had hidden the misread; a wire-length assertion now pins the 0x10 layout and a truncation test pins that a pre-fix-length 0x10 fails decode (TestDecodeOpenMiningChannel_TruncatedAtMaxTarget). Provenance: seven fix commits for this defect sit on unmerged branches from the 2026-10-05 mass close (e.g. PR #538's a12bd2cd6) — convention treats re-delivery of a spec-conformance fix as acceptable.
+
+**Honest residual:** with max_target declared as all-ones, #236's "reject SetTarget > max_target" rule is vacuous for Otedama — a hostile pool may still assign any target. The two failure directions stay bounded by design: impossibly tight → starvation warn (s294/s395), trivially easy → per-session 8/s submit cap (s290/s392). go build + vet + stratum/stratumv2/engine tests green.
+
+## Session 1494 update (Socratic pass 163 — recheck of pass 162)
+
+Same-lens recheck of the s1493 wire-conformance fix, all paths clean: (1) production send coverage is complete — the only two `OpenMiningChannel{}` construction sites in non-test code are the engine's `openChannel` (run.go:1832) and the poolproto dialer (dialer.go:154), both declaring `MaxTargetUnconstrained`; no third path constructs a 0x10 payload (grep over `MsgOpenMiningChannel` send sites confirms both route through `sendMsg` → `m.Encode()`). (2) Test literals without the field (messages_test.go:688 etc.) encode the all-zero array — still a *valid* U256 declaration (the strictest possible bound), harmless since only the two production literals determine real wire behavior; the asymmetric-encode/decode contract holds because `DecodeOpenMiningChannel` reads the fixed 32-byte tail unconditionally. (3) The fuzz seed at handshake_fuzz_test.go:33 exercises the new full-length layout via `Encode()`. (4) Decode leniency is unchanged outside the new field: `getB0_255` still permits trailing bytes after group_channel_id (documented Postel asymmetry), so the fix doesn't tighten anything beyond the spec-required read. (5) `MaxTarget`/`GroupChannelID`/`Extranonce` are positionally consumed but semantically unconsumed — the struct comments state this; no consumer is deceived. No further code change needed.
+
+## Session 1495 update (Socratic pass 164 — real fix)
+
+**Claim falsified then fixed:** "pool→client SV2 message types the spec defines but Otedama doesn't consume are ignored honestly — the pool can't change client behavior through them." Falsified for `CloseChannel` (0x18): per sv2-spec §5.3.9 (`channel_id U32 | reason_code STR0_255`, verified live), the server sending it ends the channel — "the client must stop using it." The engine had no decoder entry, so a pool-initiated teardown landed in `Message.Unknown` and the client kept grinding a dead channel until the job-stall warning fired (up to `jobStallWarnAfter`), then the read loop sat blocked until connection error. For a single-channel client that's the difference between honoring a graceful teardown signal and ignoring it.
+
+Fixed: `CloseChannel{ChannelID, Reason}` decode/encode pair in messages.go (spec field order), `frameDecoders` entry, `channelIDOf` case, and a dispatch arm in the session loop that returns `engine: pool closed channel N (reason)` — the same path a connection close takes, so the failover loop takes over immediately. The reason text is passed through `poolproto.SanitizePoolText` like every other pool-controlled string reaching the log. Coverage: dispatch/roundtrip/empty-reason/malformed pins in messages_test.go; end-to-end pin `TestRunSessionV2_CloseChannelEndsSession` drives a `newResponsivePoolCloseChannel` fixture that emits CloseChannel right after activation and asserts the session returns the teardown error.
+
+**Honest residuals:** (a) a CloseChannel addressed to a *group* channel — which the spec says closes all member channels — still lands in the foreign-channel warn+drop path, because `GroupChannelID` (decoded since s1493) isn't plumbed from the handshake into the session loop; single-channel Otedama can't distinguish it from a truly foreign id. (b) `SetExtranoncePrefix` (0x19) stays ignored — `omcs.Extranonce` has no consumers on the standard-channel path, so ignoring it is benign, not just unimplemented. (c) `UpdateChannel`/`NewExtendedMiningJob`/`ChannelEndpointChanged` and other spec types land in `Message.Unknown` — documented forward-compat. go build + vet + stratum/stratumv2/engine tests green.
+
+## Session 1496 update (Socratic pass 165 — recheck of pass 164)
+
+Same-lens recheck of the s1495 CloseChannel fix, all paths clean: (1) **Error semantics are exactly the connection-close path** — the dispatch arm returns a plain `fmt.Errorf`, so run.go:561+ treats it like any session end: `poolConnectFailures.Inc`, workers `SetWork(nil)` (no grinding a superseded job through backoff), `OnReady(false)`, dashboard refresh, then `isFatal` → false (it's a plain error, not `*fatalError`) → pool failover → reconnect backoff. The arm invents no new lifecycle semantics — verified at run.go:560-590. (2) **Foreign/group CloseChannel stays correctly routed** — `channelIDOf` returns the frame's own ChannelID; ≠ session chanID → the existing warn+drop guard (run.go:1093) handles it; the group-channel caveat recorded in s1495 remains accurate, not a new defect. (3) **Pool-controlled reason is sanitized** — `poolproto.SanitizePoolText` wraps `cc.Reason` at the error boundary, same treatment as handshake-error text (s353); `getStr0_255` bounds the field at 255 bytes on the wire. (4) **Dormant-path residual noted:** `poolproto/stratumv2`'s `streamJobs` loop (dialer.go:271+) shares `DispatchFrame` — CloseChannel now *decodes* there but falls through unhandled. Harmless today: the adapter isn't the live V2 path (run.go:780 comment, KNOWN_LIMITATIONS §3); recorded so a future bridge doesn't silently inherit the gap. (5) **Coverage pins both layers** — dispatch/roundtrip/malformed in messages_test.go, end-to-end teardown in TestRunSessionV2_CloseChannelEndsSession. go build + vet + stratum/stratumv2/engine tests green. No further code change needed.
+
+## Session 1497 update (Socratic pass 166 — real fix)
+
+**Claim falsified then fixed:** "s1495's recorded residual — a group-addressed CloseChannel lands on the foreign-channel warn+drop path — is acceptable because GroupChannelID isn't plumbed to the session loop." The `GroupChannelID` decoded in s1493 was simply being discarded at handshake's return. Spec §5.3.9: a CloseChannel addressed to a group channel closes *every member channel* — for a single-channel client, we ARE the only member, so dropping the group close means continuing to grind a channel the pool considers closed. **Fix:** `handshake` now returns `omcs.GroupChannelID` to `runSession`; the foreign-channel guard (run.go:1092) lets only `CloseChannel` frames whose channel_id equals the session's group through to the existing teardown arm — all other foreign-channel frames still warn+drop. **Tests:** `newResponsivePoolGroupCloseChannel` fixture (CloseChannel addressed to the fake's GroupChannelID=4) + `TestRunSessionV2_GroupCloseChannelEndsSession` asserting `pool closed channel 4` — engine/stratum suites green, handshake signature change rippled mechanically through 16 test call sites. Residual: dormant `poolproto/stratumv2` dialer still silently drops CloseChannel — unchanged, non-live path, recorded in s1496.
+
+## Session 1498 update (Socratic pass 167 — recheck of pass 166)
+
+Same-lens recheck of the s1497 group-close fix, all edges clean: (1) **groupID == chanID degenerate assignment** — the guard only runs when `cid != chanID`, so a pool assigning identical ids still reaches the teardown arm through the normal channel match; no path blocked. (2) **groupID == 0** — a CloseChannel(0) from a pool that placed us in group 0 closes our only member channel → teardown is the spec-correct outcome, not a false positive (the handshake assigned it). (3) **Spoofing** — groupID comes from `OpenMiningChannelSuccess`, already echoed-reqID-validated in the handshake; no untrusted surface added. (4) **Guard selectivity preserved** — only `CloseChannel` may ride the group id through; every other foreign-channel type still warn+drops (NewMiningJob/SetTarget/SubmitShares*/SetExtranoncePrefix unchanged). (5) **Signature blast radius contained** — `handshake`'s 4th return is consumed by one production site (run.go:853) and 16 mechanical test call sites; the V1 session path never calls it. Verified by the new group test asserting `pool closed channel 4` end-to-end. Residual from s1496 stands (dormant dialer); no other consumers decode `GroupChannelID` — confirmed single-writer/single-reader.
+
+## Session 1499 update (Socratic pass 168 — real fix)
+
+**Claim falsified then fixed:** "forward-compatible dropping of unimplemented msg_types is honest because DispatchFrame documents it." The decode side is honest, but the session loop dropped `Message.Unknown` frames with **zero observability** — a pool speaking Reconnect/ChannelEndpointChanged/future extensions left no trace for the operator, the same diagnosability class as the pre-s1495 CloseChannel gap. Sweep of the remaining unimplemented types confirmed the drops are all defensible: UpdateChannel (0x16) is client→server only per §5.3.7 (receiving one is direction-invalid), UpdateChannel.Error only matters if we send UpdateChannel (we don't), Reconnect/ChannelEndpointChanged are deliberately never honored (never dial pool-provided endpoints — s1491), SetExtranoncePrefix keeps its documented no-consumer residual (standard-channel client owns extranonce — s1375 series). **Fix:** `seenUnknown` map (bounded at 256 by the uint8 type space) emits `engine: ignoring unrecognized SV2 msg_type 0x%02X` once per type per session — honest visibility without a log-flood vector. **Tests:** `unknownFrame` fixture flag (emits 0x40 twice) + `TestRunSessionV2_UnknownMsgTypeWarnedOnce` — session survives to the later CloseChannel, warn fires exactly once. engine tests green.
+
+## Session 1500 update (Socratic pass 169 — recheck of pass 168)
+
+Same-lens recheck of the s1499 once-per-type warn, all edges clean: (1) **Bound is structural** — the key is `uint8`, so `seenUnknown` can never exceed 256 entries regardless of pool behavior; no eviction logic needed. (2) **Arm ordering** — the Unknown arm sits after the foreign-channel guard and before the typed arms; `channelIDOf` returns ok=false for Unknown frames (no channel field), so they can never be misattributed to our channel nor dropped as foreign. (3) **No log-injection vector** — only `MsgType` (hex-formatted `%02X`) and `len(Payload)` are logged; pool-controlled payload content is never echoed. (4) **Known-type failures unchanged** — a decode error on an implemented type still ends the session → failover; only genuinely-unknown types reach the new arm. (5) **Semantics honest** — wording says "ignoring", matching the drop; direction-invalid types (e.g. client→server UpdateChannel) are still dropped, just now visible. Verified by `TestRunSessionV2_UnknownMsgTypeWarnedOnce`: same type twice → one warn, session survives to the subsequent CloseChannel. engine/stratum tests green.
+
+## Session 1501 update (Socratic pass 170)
+
+**Claim verified (premise strengthened):** "SetExtranoncePrefix (0x19) is dropped because omcs.Extranonce has no consumers — a benign residual." Stronger than previously recorded: for a *standard-channel, non-proxy* client the message is a **structural no-op**, not merely unimplemented — (a) `SubmitSharesStandard` has no extranonce field at all (24-byte fixed layout: channel_id, seq, job_id, nonce, ntime, nversion), so no submission path could carry it; (b) the pool supplies `merkle_root` directly in NewMiningJob, so there is no client-side coinbase assembly that could consume an extranonce prefix; (c) the only spec-defined consumer is `SetCustomMiningJob` (client→server), which we never send; (d) a group-addressed SetExtranoncePrefix is MUST-ignore per spec — we drop all group non-CloseChannel frames anyway. Combined with s1499's once-per-type warn, the drop is now both correct and observable. No fix needed; the residual is reclassified from "unimplemented feature" to "inapplicable by construction".
+
+## Session 1502 update (Socratic pass 171 — ADR-009 ecosystem recheck)
+
+Normative open set unchanged: sv2-spec #203 (coinbase payouts extension — the V1-limited coinbase-validation disclosure in KNOWN_LIMITATIONS stands aligned with its "hybrid is the limit" debate), #234 (authority key management/rotation), #236 (SetTarget MUST NOT exceed channel max_target — note: Otedama applies SetTarget unconditionally via `shareTarget = miner.Hash(...)`; when #236 lands the pool-side norm tightens but our client already trusts the pool's target as authoritative, and s1380's zero/bogus-target guards cover the pathological cases), #198 (coinbase_witness field). Releases re-confirmed via the tags API: SRI v1.12.0 and sv2-apps v0.8.0 remain latest. No action required.
+
+## Session 1503 update (Socratic pass 172)
+
+**Claim verified:** "a submitted SV2 share always carries the active job's identity — never stale job fields, never a foreign channel." Four structural guarantees, all confirmed in the submit arm: (a) `share.JobID != active.JobID` → dropped with `sharesSubmitDropped` metric + debug line, covering both pre-first-job leftovers and superseded-job shares; (b) `NVersion`/`NTime` are taken from `share.*` — the fields the worker actually hashed under, stamped into the share at production time from the Work built out of `job.Version` — so they can only equal the active job's values (pool re-derives the header from them, so this is also the correctness requirement); (c) `ChannelID` is stamped from the session's `chanID`, never the share's — a share can never ride a dead channel's id; (d) `seqNum` is a session-local monotone counter — pool cannot reset it, and the unsent-seq guards on Success/Error responses bound acknowledgement forgery (s1388/s1489 line). Dropped shares still consume a seq — gaps are protocol-legal (Success carries only the last acked seq), so honest. All true; no fix.
+
+## Session 1504 update (Socratic pass 173)
+
+**Claim verified:** "unacknowledged-share bookkeeping stays bounded when the pool never sends SubmitSharesSuccess/Error." The `submitTimes`/`submitTargets` pair is capped at 1024: on exceeding, entries with seq below `seqNum-512` are evicted together (the two maps are keyed identically — always reaped in lockstep, never half-cleaned). Underflow is unreachable: `len > 1024` requires `seqNum >= 1024`, so `seqNum - 512` can't wrap. Entries only exist for actually-sent shares — dropped shares (superseded-job guard, rate cap) consume a seq but never create map entries, so the bound can't be inflated by drops. Evicted shares' latency is honestly unmeasured (lost, not fabricated), and `otedama_shares_submit_in_flight` reflects the post-reap size so a silent pool shows a plateau-then-shed pattern rather than unbounded growth. Trigger frequency is amortized: one reap sheds ~512 entries, so the O(n) scan fires at most once per ~512 sends. All true; no fix.
+
+## Session 1505 update (Socratic pass 174)
+
+**Claim verified:** "the outstanding-job bookkeeping stays bounded over arbitrarily long V2 sessions." Three independent bounds, all confirmed: (a) `storeBoundedJob` caps `jobs` at 64 with FIFO eviction on `jobOrder`; a pool resending an existing job_id refreshes the value without duplicating an order slot (map-of-record keyed on the same id — can't inflate). (b) `jobOrder`'s `order[1:]` sliding window reuses a backing array whose live window is ≤64 ids; Go reallocates on append past cap, so the dead prefix can't accumulate unboundedly — the array never exceeds roughly twice the cap. (c) `SetNewPrevHash` resets both structures wholesale (`jobs` rebuilt containing only the named job, `jobOrder[:0]`): a tip change is also a full GC of job state. Eviction is fail-closed in both directions — a prev-hash naming an evicted/unknown job stops all workers (`active = nil`, `SetWork(nil)`, warn) rather than hashing a stale header (s1478 chain). ntime activation takes `max(pool-declared, job-carried)` preserving monotonicity. All true; no fix.
+
+## Session 1506 update (Socratic pass 175)
+
+**Claim verified:** "every channel-scoped frame the client decodes passes through the foreign-channel guard — no type bypasses it." `channelIDOf` covers all six decoded channel-msg types (NewMiningJob, SetNewPrevHash, SetTarget, SubmitSharesSuccess, SubmitSharesError, CloseChannel) — 6/6 parity with `frameDecoders`' channel-msg entries. The guard itself is unconditional in the loop before every dispatch arm, so the pairing is enforced structurally rather than per-type. Convention invariant recorded for future work: adding a channel-msg decoder without a matching `channelIDOf` case silently exempts that type from foreign-channel rejection — the s1499 Unknown-frame warn does not catch it because the type would be *decoded*. A type-level check (compile-time exhaustiveness or a test asserting decoder↔channelIDOf parity) would close the convention; currently hand-verified complete. All true; no fix.
+
+## Session 1507 update (Socratic pass 176 — real fix)
+
+**Claim falsified then fixed:** "the channelIDOf parity pin covers every channel-scoped decoder" — the switch itself is complete (s1506: 6/6), but its pin test `TestChannelIDOf` still listed only the five pre-s1495 types: `CloseChannel` (added pass 164) was decoded and guarded in production but absent from the parity table, so a future regression removing its case would fail no test. Added the missing case (`CloseChannel{ChannelID: 17}` → `(17, true)`); test green. The convention invariant from pass 175 is now test-enforced for all six current types.
+
+## Session 1508 update (Socratic pass 177 — recheck of pass 176)
+
+Same-lens recheck: `channelIDOf` has exactly six cases (NewMiningJob, SetNewPrevHash, SetTarget, SubmitSharesSuccess, SubmitSharesError, CloseChannel) and the parity table now has exactly six matching channel entries plus the two negative cases (Unknown, Empty). Cross-checked against the spec's client-facing channel-msg decoder set {0x15, 0x18, 0x1c, 0x1e, 0x20, 0x21} — six types, perfect correspondence on both sides. The invariant "every decoded channel-msg hits the foreign-channel guard AND is pinned by the parity table" now holds test-enforced for the full current set. No code change.
+
+## Session 1509 update (Socratic pass 178)
+
+**Claim verified:** "a mid-session `SetTarget` can't silently fake or freeze the share target." Three-layer chain checked end to end: (a) `shareTarget` is replaced verbatim from the pool's U256 — spec-correct, the pool is the target authority; (b) a zero target is not honored as "grind literally" — `updateWork` falls back to the nBits block target, so workers honestly starve (~never yield) rather than produce garbage shares or fake revenue; (c) the starvation signal reaches the operator — `DifficultyFromTarget(0)=+Inf` propagates through `publishDifficulty` to an infinite estimated share interval, and the >3600s gate fires the once-per-episode starvation warn. Easy/absurdly-large targets likewise can't fabricate revenue: shares still must be genuine PoW the pool credits, and the submit rate cap bounds the flood. Cosmetic residual: the warn renders the infinite interval as "~+Inf min" (fmt %.0f on +Inf) — parseable and honest, cosmetic only. All true; no fix.
+
+## Session 1510 update (Socratic pass 179)
+
+**Claim verified:** "pool-provided settlement data can't inflate accept counts or replay rejects past local truth." The Success arm clamps `NewSubmitsAccepted` to `settled` when it's zero or exceeds local settlements — local settlements are both floor and ceiling, so the pool can neither fabricate accepts (`n > settled` clamped) nor over-credit beyond sends (future-seq dropped). Legitimately smaller `n < settled` (a batch where some seqs drew separate Error frames) is honored as sent — never over-credits. The Error arm is replay-proof via the `outstanding` check: an error naming an already-settled or reaper-evicted seq is dropped before counting, so a hostile pool cannot inflate the reject rate (and trip curtailment) by replaying one error frame. Errors settle their own entry — the map can't leak an errored submit until cap-reap. When the reaper evicted `submitTargets[seq]` (`hadTarget=false`) the retarget-artifact classification conservatively defaults to a real reject — the honest direction (overcounts rejects slightly, never undercounts). All true; no fix.
+
+## Session 1511 update (Socratic pass 180)
+
+**Claim verified:** "a NewMiningJob is armed exactly when the header can be honestly hashed — never earlier." The three-way dispatch is spec-faithful: (a) `HasNtimeStart && havePrev` → mine now — an ntime-carrying job is valid for the current tip, and hashing only happens once a prev-hash exists; (b) `!HasNtimeStart` → held as a future job awaiting a SetNewPrevHash that names it — matches the spec's future-job semantics; (c) `HasNtimeStart && !havePrev` → held, not hashed — mining with an unknown prev-hash would produce headers no pool can credit. FIFO-eviction notice is a debug log (job loss is recoverable via the next arrival). `lastJobReceivedAt`/`lastJobAt` update on every arrival regardless of arming — pool liveness tracks job flow, not hashing state, so a curtailed or future-job-holding session still reads as connected. Duplicate job_ids re-arm harmlessly (same map key; `active` just re-points). All true; no fix.
+
+## Session 1512 update (Socratic pass 181)
+
+**Claim verified:** "the retarget-artifact exemption can't launder systematic rejects." `transitionReject` gates on all three conditions: (a) the pool's reason must classify as "difficulty" — other reject classes stay counted; (b) `issued != zero` — a share with no recorded provenance target can't be excused; (c) `issued != current` — the pool must actually have moved the target since the share was issued. A pool flipping the target back before the error arrives (SetTarget→reject→SetTarget-back) reads `issued == current` and counts as a real reject — the honest/conservative direction, so target flips can't hide genuine rejects. Exempted rejects still emit a visible `difficulty-transition` metric label — they're reclassified, never hidden (s1387's systematic-reject visibility preserved). `issued` comes from `share.Target` captured at hash time — provenance is the worker's own record, not the pool's claim. V2 (submitTargets via seq) and V1 (capturedShare.Target) both enforce the same semantics. All true; no fix.
+
+## Session 1513 update (Socratic pass 182)
+
+**Claim verified:** "submit-latency bookkeeping is bounded and the reported quantiles are honest." `LatencyTracker` is a fixed 256-sample ring behind a mutex — memory can't grow with session length, and writers/readers serialize cleanly. Input hygiene: negative samples are rejected at `Record`; NaN/+Inf are unreachable in practice because every sample derives from `time.Duration.Microseconds()` (int64, clamped ~292y) — the guard covers the actual input domain. `Quantile` uses nearest-rank on a sorted copy of the retained window — exact over what was kept, with no streaming-estimator bias to audit. Unmeasured stays unmeasured: shares evicted by the submitTimes reaper or settled only at session end never fabricate a latency sample (s1504/s1479 chain). Gauges publish p50/p95/p99 straight from the same tracker the TUI logs use — display and source can't diverge. All true; no fix.
+
+## Session 1514 update (Socratic pass 183)
+
+**Claim verified:** "the V2 reader path is bounded, decode errors end the session exactly once, and the goroutine can't leak." The reader sends into a 32-deep buffered channel — pool bursts apply backpressure (block, not silent drop) while the session loop drains; both send sites select on `ctx.Done()` so a cancelled session never wedges the writer. Every `ReadFrame` carries a per-frame `poolSilenceTimeout` deadline — a zombie conn that stays open but goes silent ends the session and hands the reconnect loop a live failover path. `DispatchFrame` errors propagate through `pm.err` to a single `return fmt.Errorf("pool read: ...")` — fail-closed, one malformed frame ends the session (no per-frame spam, no tolerated corruption). Goroutine exit is `defer close(inCh)` plus ctx-gated sends; post-cancel reader linger inside `ReadFrame` is bounded by the same deadline and the conn close on session exit. All true; no fix.
+
+## Session 1515 update (Socratic pass 184)
+
+**Claim verified:** "every activation path funnels through one coherent (job, tip, target) builder — workers can never receive a mismatched triple." All three arming sites (NewMiningJob, SetNewPrevHash, SetTarget) call the single `startJob(j, ntime)` → `updateWork(..., prevHash, prevNBits, shareTarget)` closure — the chain-tip and share-target values are session-level state read at arm time, so no path can pair a job with a stale tip or superseded target. The `havePrev` precondition is enforced by every caller: NewMiningJob arms only on `HasNtimeStart && havePrev`, SetNewPrevHash sets `havePrev=true` before arming, SetTarget re-issues only `active != nil && havePrev`. Job/tip tracking survives curtailment honestly: `active`/`activeNTime` update before the `isCurtailed` early return, so state stays current while paused workers never see the work (updateWork is skipped and the pause set already gates grinding). SetNewPrevHash's ntime choice is `max(tip.NtimeStart, job.NtimeStart)` — the freshest legal value. Unknown named job → `active=nil` + `SetWork(nil)` fleet-wide — fail-closed, verified previously. All true; no fix.
+
+## Session 1516 update (ADR-009 ecosystem recheck)
+
+**Recheck:** normative open set unchanged — sv2-spec still holds #203 (coinbase-tx payouts, last touched 2026-09-15), #234 (authority-key mgmt/rotation, 09-25), #236 (SetTarget ≤ max_target, touched 2026-10-02 — still open, watch item: if it lands, pools MUST NOT send an out-of-range SetTarget; today Otedama accepts any value — an over-max target would produce pool-side-invalid shares that our own verification path already refuses to fabricate credit for, so the failure stays honest; optional future guard could warn when `SetTarget > negotiated max_target`), #198 (coinbase_witness, 09-23); the rest (#103 WIP annex, #186/#232 style-only) carry no normative weight. SRI latest remains v1.12.0 (2026-09-17); sv2-apps latest remains v0.8.0 (same date). No action required; ADR-009's tracked trajectory intact.
+
+## Session 1517 update (Socratic pass 185)
+
+**Claim verified:** "intentional idling can never masquerade as a fault stall, and a wedged connection can't pin the session." `updateLiveness` gates the stall monitor on intent: while curtailed or fully arbitration-paused it neither advances samples nor drops `otedama_up` — zero hashrate is expected there, so no monitor state accrues that could fire a false "hashrate stalled" warning on resume (samples only accumulate while the miner is *supposed* to be hashing). Stall detection runs on the stats ticker, so detection latency is tick-bounded. Wedged-connection bound is layered correctly: the V2 reader sets a 30-minute `poolSilenceTimeout` per-frame deadline (beyond inter-block silence, short enough to force failover), and the V1 path gets the same protection from its 5-minute per-line read deadline — a half-open conn on either protocol ends the session and feeds the reconnect loop. V1 and V2 use the same `NewHashrateMonitor(0, 3)` semantics. All true; no fix.
+
+## Session 1518 update (Socratic pass 186)
+
+**Claim verified (premise strengthened):** "the worker share-drop counter can't double-count or silently lose drops across reconnects — but the first post-reset batch never warns." `totalDropped` sums per-worker drop counters, which reset on a new session. The tick logic handles both directions honestly: `dropped > lastDropped` → warn + `Add(delta)` (normal in-session path, counts exactly the new drops); `dropped <= lastDropped` → `Add(dropped)` wholesale (counter reset detected — the new session's total IS the new drop count, no old-session remainder to subtract). Either way the metric accrues exactly the session's drops — no double-counting of pre-reset drops, no loss of post-reset ones. ⚠️ Cosmetic residual: the counter-reset branch adds the drops without emitting the "share submission is not keeping up" warn — the first post-reconnect drop batch is metric-visible but warn-silent (subsequent drops warn normally once `dropped > lastDropped`). Recorded as honest residual; the metric stays truthful.
+
+## Session 1519 update (Socratic pass 187)
+
+**Claim verified:** "the handshake declares exactly the capability set the client can honor — the pool cannot negotiate the session into an unimplemented mode." The declaration is closed: `MinVersion=MaxVersion=2` (the only version implemented — a future protocol rev can't be silently negotiated past our decoder), `Flags` unset → 0 (we offer nothing; any required-flag echo outside that set fails closed, verified earlier), `MaxTargetUnconstrained` (honest — we accept any share target and handle the degenerate cases: 0 → block-target fallback + starvation warn, verified s1509). Vendor/HardwareVersion/Firmware/DeviceID are honest self-identification ("Otedama"/"cpu"), not impersonation. The whole exchange is `handshakeTimeout`-bounded (15s, deadline cleared on return), req_id echo enforced, version-range and flags-subset enforced fail-closed. The `omcs.Target → shareTarget` handoff inherits the s1509 zero-target fallback path — a pool that opens with Target=0 gets block-target difficulty and the starvation warn, not fabricated yield. All true; no fix.
+
+## Session 1520 update (Socratic pass 188)
+
+**Claim verified:** "every Work handed to workers carries a complete, honestly-sourced header and the pool's target — never a partial or client-invented header." `updateWork` populates all five header fields from session state (version+merkle root from the job, prev-hash+nBits from the tip, time via `rollNTime`); a structurally incomplete header can't exist. Time handling is honest both directions: stale pool ntime rolls forward to wall clock (shares stay pool-acceptable), but a *future* declared ntime is kept as-declared — workers never roll a pool's timestamp backward to make it look fresher. Target selection: pool share target when nonzero, block-target fallback only on the documented zero case; `TargetFromNBits` failure returns without dispatching (invalid nBits → no work, not wrong work). Paused workers are skipped at dispatch — they keep their prior Work pointer but the pause set already gates grinding, so a paused device can't produce shares for a job it wasn't issued. The shared `*Work` is immutable post-construction (s1376). All true; no fix.
+
+## Session 1521 update (Socratic pass 189)
+
+**Claim verified (premise strengthened):** "dropped shares burn sequence numbers — the stream is gappy, never corrupt." `seqNum++` runs before the superseded-job guard and rate-cap `submits.take()`, so shares dropped by either consume a sequence number without being sent. Verified the spec requires only strictly-increasing uniqueness within the channel (SubmitSharesStandard `sequence_number`), not density — the gaps are protocol-legal. Every downstream consumer stays honest: burned seqs are never recorded in `submitTimes` (recorded only post-send), so settlement accounting is unaffected; an Error naming a burned seq hits `outstanding=false` and drops like any replay/fabrication (s1510); `last_sequence_number` from the pool is only ever used as a settle threshold against locally-sent seqs; the future-seq guard compares against the current counter, gaps included. Alternative (increment on send) would produce a dense stream but identical correctness — current design is monotone and lawful. All true; no fix.
+
+## Session 1522 update (Socratic pass 190)
+
+**Claim verified:** "SubmitSharesStandard is byte-for-byte spec-conformant, and submitted ntime structurally satisfies the ≥ ntime_start constraint." The encoder at `internal/stratum/messages.go:256` writes the six U32 fields in exactly the spec's wire order (channel_id, sequence_number, job_id, nonce, ntime, version) — field order verified against spec §5.3.11. The `ntime ≥ ntime_start` normative requirement is satisfied structurally, not just observational: shares carry the Work header time, which is `rollNTime(max(tip.NtimeStart, job.NtimeStart))` — roll only moves forward, so submitted ntime can never be below the job's ntime_start; a future-declared ntime likewise passes through ≥. The decoder mirror bounds at `len < 24`. Cross-checked the spec's own note that servers need not verify client sequence monotonicity — confirms s1521's gap-burn verdict is spec-tolerated, not merely tolerated in practice. All true; no fix.
+
+## Session 1523 update (Socratic pass 191, real fix)
+
+**Claim falsified then fixed:** "every spec-decoded message reads its fields at the correct wire type and bound." SubmitSharesSuccess's fourth field, `new_shares_sum`, is U64 per spec §5.3.13 (making the wire payload 20 bytes: channel_id + last_seq + count + U64 sum) — the decoder read it as U32 at `[12:16]` with a 16-byte bound, so a spec-conformant 20-byte frame decoded with only the low half of the sum, and malformed 16–19-byte payloads were accepted as valid frames. No live behavior defect: the field is unused today (settlement clamps to local truth — s1510). Fixed the field to `uint64`, bound to `len < 20`, encoder to emit 20 bytes, updated the decode/fuzz fixtures. A spec-conformant future consumer of `new_shares_sum` now reads the full field; malformed short frames are rejected.
+
+## Session 1524 update (Socratic pass 192, recheck of pass 191)
+
+**Claim verified:** "s1523's wire-type deviation was the only instance of its class." Swept the spec's complete field-type surface: `U64` appears in exactly one message field — the `new_shares_sum` just fixed. All `U256` fields (OpenMiningChannelSuccess.target, NewMiningJob.merkle_root, SetNewPrevHash.prev_hash, SetTarget.target, max_target, merkle_path entries) are decoded as fixed `[32]byte` reads at correct offsets (s1493 lineage). Remaining fields are U8/U16/U32/STR0_255/SEQ/B0_255 — each decoder bounds the payload before fixed-width reads (per the messages_test malformed-frame pins). The s1523 fix itself re-verified: encoder emits exactly 20 bytes (U32×3 + U64), decoder bound `len < 20`, field type `uint64`; `submitTargets`/settle accounting uses only the unchanged `LastSequenceNumber`/`NewSubmitsAccepted` positions — no accounting path touched. stratum + engine suites green.
+
+## Session 1525 update (Socratic pass 193, real fix)
+
+**Claim falsified then fixed:** "pool-sent mining-protocol message types match spec numbering." Auditing every declared msg_type against the upstream spec table (§8) found `MsgSubmitSharesError = 0x1e` — spec assigns SubmitShares.Error to 0x1d and marks 0x1e Reserved. A real pool's reject frames arrived with msg_type 0x1d, never matched the dispatch switch, and fell into the once-per-type unimplemented-message warn — so the reject classification (s1387) and honest sequence accounting (s1479) paths were dead code on the wire; reject counters stayed at zero regardless of pool behavior. The once-per-type warn did surface "unknown 0x1d" once, so the visibility loss was logged rather than fully silent ⚠️ (the operator signal existed but no accounting). Fixed the constant to 0x1d; remaining msg_type constants re-checked against the spec table — all other implemented types (0x10-0x12, 0x15, 0x18, 0x1a, 0x1c, 0x20, 0x21, 0x00-0x02) match. stratum/engine/stratumv2 suites green.
+
+## Session 1526 update (Socratic pass 194, recheck of pass 193)
+
+**Claim verified:** "the corrected msg_type constant propagates everywhere it is consumed." `MsgSubmitSharesError` is referenced only by symbolic name — the dispatch switch arm, the doc-comment table, and test emit sites (`run_test.go` ×4, `messages_test.go` ×2) — so the single-point constant edit re-mapped all consumers atomically; no stale literal 0x1e/0x1d remains in non-test code. Decode path verified unchanged: `DecodeSubmitSharesError` bounds `len < 8` + STR0_255 error_code — unchanged by the renumber (payload layout identical). Downstream honesty chain intact end-to-end now: pool 0x1d frame → dispatch → seq-number sanity (unsent-sequence drop per s1489) → rejectClass classification → counter + accounting decrement. A spec-conformant pool's rejects are now fully visible to operators and to arbitration metrics.
+
+## Session 1527 update (Socratic pass 195, ADR-009 ecosystem recheck)
+
+**Claim verified:** "the upstream normative surface Otedama implements against is unchanged, and s1525's renumber is upstream-blessed." sv2-spec open set: #236 (SetTarget ≤ max_target — under review, unchanged), #234 (authority key mgmt docs — open), #203 (coinbase payout extension — open, the custodial/non-custodial hybrid debate unchanged), #198 (coinbase_witness — open). Newly relevant: **#184 "unused Reserved message type"** — upstream flags 0x1e as a dead slot, which both confirms s1525's reading of the table and warns the slot may be repurposed later (good thing we're off it). SRI latest = v1.12.0 (unchanged since s1409's correction); sv2-apps latest = v0.8.0 (unchanged). No action required.
+
+## Session 1528 update (Socratic pass 196)
+
+**Claim verified:** "channel_id routing is consistent whether or not the peer sets the channel_msg bit correctly." Inbound direction is msg_type-driven: DispatchFrame decodes the declared layout, so channel-scoped msg_types (0x15, 0x18, 0x1d, 0x1c, 0x20, 0x21) read channel_id at payload[0:4] regardless of the header bit — a bit-clear anomaly yields identical foreign-channel filtering via `channelIDOf` (6/6 parity, s1507) at run.go:1096, with SetNewPrevHash correctly exempted (prev-hash is channel-agnostic). Bit-set on a non-channel msg_type mislabels but cannot corrupt parsing: fields are fixed-offset per layout. `Header.Validate` enforces min-4-byte payload only when the bit is set — harmless asymmetry since the field decode itself bounds-checks. Outbound: `WrapMessage` callers pass isChannel=true for submit/open-channel paths (dialer.go:366,415), encoder emits the bit and validates payload ≥4. Spec-conformant on the wire; hostile-flagging fails closed in both directions.
+
+## Session 1529 update (Socratic pass 197)
+
+**Claim verified:** "length-prefixed string fields cannot over-read or over-allocate." All STR0_255 sites (SubmitShares.Error.error_code, every handshake field incl. error strings, OpenMiningChannel.user) funnel through a single `getStr0_255` — reads the 1-byte length, allocates at most 255 bytes, `io.ReadFull` hard-fails if the declared length exceeds remaining payload. No over-read, no amplification (255-byte ceiling). DecodeSubmitSharesError's partial-message-on-error return is discarded by its dispatch arm (error propagates without setting `m.SubmitSharesError`), so a malformed string cannot leak a half-populated message — consistent with the session-fatal decode-error contract. Trailing bytes after a well-formed string are tolerated per the package's Postel convention.
+
+## Session 1530 update (Socratic pass 198)
+
+**Claim verified:** "handshake and channel-open rejections surface the pool's stated reason, never an opaque failure." Both SetupConnection.Error (0x02) and OpenMiningChannel.Error (0x12) carry `flags/req_id` U32 + `error_code` STR0_255 per spec; decoders bound via the verified `getStr0_255` (s1529). At dialer.go the error strings propagate `%q`-quoted inside `ErrHandshakeFailed`, so the operator reads the pool's actual reason — and the rejection can't masquerade as a transport error for failover logic (typed sentinel preserved through %w). Companion guards confirmed intact: `SetupConnectionSuccess.Flags&^offered != 0` rejects undeclared feature demands (fail-closed on extension scope), and channel-open response pins `ReqID` echo so a response can't be attributed to a different open attempt.
+
+## Session 1531 update (Socratic pass 199)
+
+**Claim verified:** "SetNewPrevHash can only activate a job we actually received; unknown job_ids are ignored, never fabricated." `sv2JobAssembler.onSetNewPrevHash` adopts prev_hash/n_bits unconditionally (correct — tip update is independent of job bookkeeping) then emits only `pending[p.JobID]`; `named == nil` returns benignly. ntime is `max(frame.NtimeStart, job.NtimeStart)` honoring spec §5.3.11's ntime ≥ ntime_start submit requirement, sourced from pool-declared values not wall clock. The pending map is bounded at 64 with FIFO eviction preferring newest (most likely to be named next). Honest residual ⚠️: SetNewPrevHash purges ALL unnamed pending jobs — stricter than spec (a future candidate could serve a later tip), but the purge errs toward dropping work, never toward emitting stale work; latent anyway since this adapter is not the live V2 path (KNOWN_LIMITATIONS §3).
+
+## Session 1532 update (Socratic pass 200)
+
+**Claim verified:** "in the live engine path, SetNewPrevHash naming an unknown job fails closed — workers stop rather than continue on a stale header." run.go:1153-1169: `named == nil` sets `active = nil` and `SetWork(nil)` on every worker plus a warn — strictly better than the adapter's benign-ignore (s1531), and precisely the s1478-pinned contract. NewMiningJob dispatch is honest in all three states: `HasNtimeStart && havePrev` mines immediately with pool-declared ntime; `!HasNtimeStart` holds as future job; `HasNtimeStart && !havePrev` holds rather than hashing without a real prev_hash (garbage prevention). Job map bounded at 64 FIFO (jobsCap, storeBoundedJob). SetTarget re-issues the active job so share-target changes take effect immediately (s1366). Same over-strict purge as s1531 — conservative direction, drops candidates never stale-work.
+
+## Session 1533 update (Socratic pass 201)
+
+**Claim verified:** "workers hash exactly the fields the pool declared — no substitution, no stale target." updateWork composes Work from job.MerkleRoot+Version (NewMiningJob), prevHash+prevNBits (SetNewPrevHash), and ntime via rollNTime (forward-only, honoring spec ntime ≥ ntime_start). A zero shareTarget degrades to the nBits block target (strictest side, s1380); invalid nBits returns early without issuing work (fail-closed). Arbitration-paused devices are skipped at the dispatch boundary (s1435). All workers share one immutable *miner.Work — safe because Work is publish-once-immutable (s1376), so no per-device divergence is possible. SubmitSharesStandard carries the share's own ground NVersion — pool-side header recompute can't misattribute a version from a different job.
+
+## Session 1534 update (Socratic pass 202)
+
+**Claim verified:** "the per-session submit rate cap can't be exhausted by honest mining and can't be bypassed by a flood." Token bucket: 1 token/125ms (8/s sustained) + 32 burst, starts full — honest share production (sub-second events, not Hz-scale) never waits. `take()` is non-blocking: exhausted → drop + `sharesSubmitDropped` counter, so flood suppression is observable not silent. Refill goroutine is session-ctx-scoped (s1373 pattern — no cross-session leak). The cap's purpose is honest: it bounds wire frames AND submitTimes growth against a difficulty→0 flood; shares past the cap would be stale by send time anyway, so dropping is the honest outcome rather than queueing.
+
+## Session 1535 update (Socratic pass 203 — real fix)
+
+**Claim falsified then fixed:** "a mid-session mining.set_extranonce is never observed torn." s1450 made extranonce1 and extranonce2Size individually atomic, but completeV1Job loaded them as two separate Loads — a rotation landing between the en1 store and the size store could be read as (new en1, old size), producing a wrong-length extranonce2 the pool rejects on submission. Fix: pair is now a single extranoncePair{en1,size} swapped via one atomic.Pointer — a torn pair is structurally impossible (en1 and size always agree because they are one value). Writer sites (subscribe result, set_extranonce handler) store the pair in one Store; reader sites (completeV1Job, Submit padding) take one Load. Tests updated to the new field; stratumv1 green.
+
+## Session 1536 update (Socratic pass 204 — recheck of pass 203)
+
+**Claim verified:** the pass-203 fix is complete and self-consistent under the same lens. Exactly two writers store the pair — the subscribe result (dialer.go:166) and the set_extranonce handler (stratumv1.go:411) — both via a single `Store(&extranoncePair{en1,size})`. Exactly two readers load it — completeV1Job (:518, then uses only ep.en1/ep.size from that one snapshot) and Submit's en2 padding (:617, one Load). Zero references to the removed fields; build/vet/test green. en2Counter correctly stays a separate monotone roll: pair rotation need not reset it — uniqueness holds either way since the counter never repeats within a session.
+
+## Session 1537 update (Socratic pass 205 — ADR-009 ecosystem recheck)
+
+**Claim verified:** the ecosystem recheck is due and current. sv2-spec landed a normative batch 2026-10-01/02: f2df5159 pins SetupConnection min_version/max_version to 2 as RFC2119 MUST and explains versioning has not started — Otedama already offers exactly [2,2] (dialer.go:120-121) and rejects any UsedVersion outside it (run.go:1840), so the clarification matches implementation with no drift. #231 (roles cleanup) merged today — the tracked converging item; roles taxonomy, no wire impact. Open set stable: #236 (SetTarget≤max_target, updated today), #234, #198, #203 (payouts debate). New issues #216/#217/#219 are all "consider" stage — none normative yet; #219's STR0_255 ASCII question noted as a potential future parser constraint. Releases: SRI v1.12.0, sv2-apps v0.8.0 — unchanged.
+
+## Session 1538 update (Socratic pass 206)
+
+**Claim verified:** NewMiningJob ntime_start semantics are implemented exactly per spec §5.3.9. The decoder honors the 1-byte OPTION tag strictly (0 → future job, 1 → present with 4-byte ntime, anything else → decode error; bounds checked before reads). The live path (run.go:1117-1174) dispatches three ways: present ntime + known prev-hash → startJob with the job's own NtimeStart; absent ntime → held in the bounded jobs map as a future job; present ntime + no prev-hash ever seen → held (hashing with unknown prev_hash would be garbage — fail-closed, not mined). SetNewPrevHash rebuilds the pending map to only the named job, activates it with ntime = max(frame NtimeStart, job's own — the job's start is a lower bound), and unknown-name → active=nil + SetWork(nil) on every worker. Present-ntime jobs that armed also stay in the map harmlessly — the next SetNewPrevHash clears non-named entries anyway.
+
+## Session 1539 update (Socratic pass 207 — recheck of pass 31 surface)
+
+**Claim verified:** the V1 version-rolling disclosure still holds end-to-end. mining.set_version_mask rides the same pre-auth stash gate as notify/set_extranonce (stratumv1.go:290), then delivers exactly one diagnostic notice per session ("Otedama does not roll versions - share rejects may follow") via noticeCh — no silent 100%-reject mystery on mandate-rolling (ASICBoost/DATUM) pools, which KNOWN_LIMITATIONS §14 also discloses. The notify `version` field is still applied to job.Version (parse.go:98) as the header's base version — correct, since absent rolling the declared version is what the header must carry. Malformed-mask silence stays consistent with the file's Postel convention (s7116 note). Ecosystem corroboration: sv2-apps v0.8.0's tProxy ships BIP323 version-rolling with an invalid-non-rollable-version-bit reject code — the gap is shared, disclosed, and bounded.
+
+## Session 1540 update (Socratic pass 208)
+
+**Claim verified:** V1 share attribution is correct end-to-end. The worker share carries the internal u32 wire ID (v1JobWireID — bare decimals keep their numeric value, non-decimals hash via FNV-32a so "1a" cannot truncate to a real job 1). The stale-share gate at run.go:1703 drops anything not matching the current job's wire ID (and everything before the first notify), then the submit echoes capturedJobIDStr — the pool's original string, never the hash — verbatim. ExtraNonce echoes the rolled en2 that was actually folded into this job's coinbase; workerName resolves to the authorized user, not a placeholder. Honest residual: two distinct live job_ids colliding in FNV-32 space would pass the stale gate — ~8 jobs in a 4.3B space makes this negligible (only same-session same-channel shares reach the gate).
+
+## Session 1541 update (Socratic pass 209)
+
+**Claim verified:** V1 set_difficulty → share-target conversion is canonical. diff1Target = 0xffff << 208 — exactly the Bitcoin difficulty-1 target implied by nBits 0x1d00ffff (mantissa 0xffff, exponent 0x1d). TargetFromDifficulty divides at 256-bit big.Float precision (not naive float64 — preserves the low bits of diff1Target that float64 would drop), rejects non-positive/non-finite input, non-positive quotients, and >256-bit results — every failure mode is an error, never a silent clamp. v1JobTarget layers the documented semantics on top: difficulty>0 replaces the nBits block target (that is the entire point of pool share difficulty — shares must be EASIER than blocks), difficulty==0 falls back to nBits (matches pre-wiring + no-notification-yet semantics, same conservative direction as the V2 SetTarget=0 path from s1509), and an unconvertible positive difficulty is an error rather than a silent block-target grind (which would burn hashrate on shares the pool never credits). Byte order verified against TargetFromNBits: big-endian big.Int is reversed into the little-endian Hash layout consistently.
+
+## Session 1542 update (Socratic pass 210)
+
+**Claim verified:** TargetFromNBits implements the canonical compact decode — target = mantissa * 2^(8*(exp-3)) — with every failure mode fail-closed: negative-mantissa bit (0x00800000) rejected (Bitcoin treats the field as signed), exponent < 3 rejected, zero mantissa rejected explicitly because an all-zero target means an infinite silent grind (never a "weird job" that just yields nothing), and results beyond 256 bits rejected. Endianness matches Hash.LessOrEqual's little-endian layout (be magnitude reversed into MSB-at-31). The inverse NBitsFromTarget re-encodes canonically: sign-bit pad, exponent = byte count, top-3-byte mantissa — lossy by design per the nBits format, and used only for display so the rounding is honest. Both directions consistent; cross-checked against TestTargetFromNBits_KnownTargets vectors.
+
+## Session 1543 update (Socratic pass 211)
+
+**Claim verified:** the share-validity comparison is numerically correct for the whole chain. Hash is a 32-byte little-endian value (MSB at index 31 — matches both raw SHA256d digest order and TargetFromNBits/TargetFromDifficulty output), and LessOrEqual walks index 31→0 doing lexicographic compare on the most-significant-first traversal — exactly a numeric ≤ on 256-bit integers, with equality counted as meeting the target (hash ≤ target per Bitcoin). The worker's inner loop (worker.go:285) compares hash.LessOrEqual(localWork.Target) where Target is the pool-assigned share target — so a share is only submitted when it genuinely meets the difficulty the pool declared. Same layout used by V1 v1JobTarget, V2 share targets, and coinbase validation: one comparison, one convention, no endianness seams.
+
+## Session 1544 update (Socratic pass 212)
+
+**Claim verified:** shares are locally pre-validated by construction, not by a second check. There is exactly ONE Share producer in the tree — worker.go:286 constructs a Share only inside the branch guarded by hash.LessOrEqual(localWork.Target), so no byte stream can reach the submit path without numerically satisfying the pool-assigned share target at production time. share.Target echoes the producing work's target for downstream accounting (submitTargets keyed by seq). The staleness hole is closed elsewhere: V1's share.JobID == currentJobID gate and V2's session-scoped sequence ledger handle target epoch changes between mint and submit. No second validation is needed because no second producer exists — HAL drivers report hashrate, they do not mint shares; this is a property enforced by type, not convention.
+
+## Session 1545 update (Socratic pass 213)
+
+**Claim verified:** every header field submitted equals the field actually hashed — no attribution or content mismatch is possible. The Share is populated inside the same branch that compared hash ≤ target, copying the exact `h` used for the comparison: Nonce, NTime (including ntimeRoll applied to the copy at :279/:318), Version, Hash, Target, ChannelID, JobID, ExtraNonce. ntime roll resets per job and nonce restarts at NonceOffset+threadID per work change, so cross-job collisions cannot occur. On the wire, V2's SubmitSharesStandard echoes share.Version/NTime/Nonce/JobID verbatim with an explicit comment that the pool recomputes the header from those fields (run.go:1347-1350), and V1 echoes the string job_id plus en2/ntime/nonce. The only loss path — a full share channel — drops to dropCount, which is instrumented (never silent).
+
+## Session 1546 update (Socratic pass 214)
+
+**Claim verified:** the V1 coinbase construction is canonical and the defensive skip is unreachable through validated inputs. decodeNotifyJob strictly enforces every notify hex field (non-empty coinb1/coinb2, each merkle branch exactly 32 bytes, version/nbits/ntime u32, prevhash exactly 32 bytes — malformed rejects the whole notify, never zero-fills). completeV1Job then folds coinbase = coinb1‖en1‖en2‖coinb2 — the canonical order — and folds the merkle branch sequentially: root = SHA256d(coinbase), then SHA256d(root‖branch) per element. en2 is a fresh per-job big-endian counter in the tail bytes (sizes <8 keep the counter's low bytes, >8 zero-pad) so every coinbase is unique; the same en2 echoes verbatim at submit so the pool rebuilds the identical coinbase. The `ep == nil || en1 == "" || size <= 0 || size > 64` guard cannot trigger through the validated surface: parseSubscribeResult enforces extranonce1OK + extranonce2SizeOK at negotiate (failure = session never starts) and parseSetExtranonce applies the same two validators per update — invalid negotiated state is unreachable, making the guard belt-and-suspenders, not a silent path. CoinbaseTx is retained on the job for the payout verification from s1318.
+
+## Session 1547 update — ADR-009 ecosystem recheck (Socratic pass 215)
+
+sv2-spec normative open set unchanged: #236 (`SetTarget.target` MUST NOT exceed channel `max_target` — last activity Oct 2, still under review), #234 (authority key management and rotation), #203 (coinbase transaction payouts extension — the SEQ0_255 output-limit debate remains open; the author's own "hybrid is the limit" position continues to corroborate Otedama's V1-only-verification disclosure in KNOWN_LIMITATIONS §17), #198 (`coinbase_witness` on NewTemplate), plus style-only #232/#186 and stale WIP #103. SRI latest confirmed v1.12.0 (tags API). sv2-apps latest confirmed v0.8.0 (tags API) — BIP323 version-rolling mask + identity-bound JDS + Loupe hardening, all already tracked. No normative drift → no code action required.
+
+## Session 1548 update (Socratic pass 216)
+
+**Claim verified:** the ntime placed in the worker header is always rolled and monotonic. updateWork unconditionally runs `rollNTime(ntime)` on whatever ntime its caller computed — stale declared times roll forward to wall clock, future times pass verbatim (ntime comes from pool ntime_start which can legitimately be in the future). For immediate jobs ntime = the job's own NtimeStart; on SetNewPrevHash ntime = max(frame NtimeStart, named job's own NtimeStart) — the newer of the two authoritative values; on SetTarget re-issue ntime = the stored activeNTime (the already-rolled value for that job — no regression). rollNTime is also applied identically in the V1 path (:2064). A future-rolled time is still honest: the pool declared that job valid from that timestamp, and the worker's nonce+time pair is what the share echoes back.
+
+## Session 1549 update (Socratic pass 217)
+
+**Claim verified:** every ack/reject frame is validated before it can affect accounting. SubmitSharesSuccess: future `last` (claiming acks for unsent shares) is dropped; otherwise it settles every outstanding seq ≤ last, recording latency honestly, and the pool-reported `NewSubmitsAccepted` is clamped to locally-observed settlements (a pool cannot credit shares it never saw — local observation is floor AND ceiling). SubmitSharesError: future seq dropped, replayed/already-settled seq dropped (one response per seq is canonical, and the cap reaper's evictions land here safely), otherwise settled with latency + both maps cleaned. Reject classification still excludes retarget transitions from the reject-rate counters while keeping them in the per-reason breakdown. CloseChannel surfaces as a session error → failover, not a dead-channel stall. Pre-submit gate: stale-job and cross-session shares are dropped instrumented before reaching the wire (the job-id guard double-covers session start since merged outlives sessions). The rate-cap `submits.take()` sits after attribution so found-but-dropped shares still count under sharesSubmitDropped.
+
+## Session 1550 update (Socratic pass 218)
+
+**Claim verified:** the V1 session carries the same liveness instrumentation as V2, point-for-point. `lastJobAt` updates on every accepted notify at :1669 — including curtailed arrivals, which correctly count as pool liveness (the metric `lastJobReceivedAt` updates unconditionally at :1667). The ticker at :1576 applies the same once-per-episode job-stall warn with the same `!isCurtailed` gate, and `publishDifficulty` at :1573 feeds the same estimatedShareInterval starvation warn (:1586). V1's `mining.set_difficulty` retarget also re-applies the current job immediately under the new share target (:1685) — same immediacy as V2's SetTarget. And the s1318 payout check runs on every non-curtailed V1 job before it's even applied — warn-once-per-episode on both malformed and non-paying coinbases. Two starvation detectors (difficulty-implied interval and wall-clock silence) exist symmetrically on both protocol paths.
+
+## Session 1551 update (Socratic pass 219)
+
+**Claim verified:** CoinbasePaysScript parses the real transaction structure, not a byte-scan. Segwit marker+flag handled; inputs walked by rule (36B outpoint + CompactSize scriptSig + 4B sequence); outputs walked by rule (8B value + CompactSize pkLen + scriptPubKey); each output's scriptPubKey compared byte-for-byte against the expected payout script — so an OP_RETURN tag, scriptSig embed, or witness payload smuggling the target bytes cannot false-positive the check (only an actual spendable output counts). Every truncation/varint path returns an error, and the caller distinguishes "malformed → cannot verify" from "parsed clean → doesn't pay" as separate warn-once signals. Adversarially large CompactSize counts cannot DoS: every walker fails closed on the first out-of-bounds read, so iteration is bounded by the input's real structure.
+
+## Session 1552 update (Socratic pass 220)
+
+**Claim verified:** the share fan-in cannot lose shares silently or leak goroutines. fanIn spawns exactly one goroutine per worker channel; every goroutine exits on input-close or ctx.Done (the receive itself observes ctx — a stuck input can never pin it), and out closes once all inputs drain or ctx dies — lifecycle complete. Buffer is 4N capped at 64 — bounded. Backpressure is honest: when out is full the producer goroutine stalls on send, which stalls the worker's non-blocking send and lands in the instrumented dropCount — the loss is counted where it occurs, never hidden inside the fan-in. Post-session the merged channel outlives the select loop (verified at :1318): it fills, producers stall, and drops surface via dropCount rather than piling up unboundedly. No cross-session re-ordering issue exists either: shares carry the job identity of the header they hashed, and the job-id gate drops anything that isn't for the active job.
+
+## Session 1553 update (Socratic pass 221)
+
+**Claim disproven — real defect fixed:** "the header the V1 worker hashes carries the fields the pool declared" was FALSE since 2026-06-04. `applyJob` constructed `miner.Work.Header` with only MerkleRoot/Time/Bits — `Version` and `PrevHash` were silently zero — while `decodeNotifyJob` parsed job.Version and job.PrevHash into fields nobody read. The pool reconstructs the header from its declared values, so every V1 share failed pool-side verification (~100% rejects; V2's `updateWork` populated both correctly). Two coordinated fixes: (a) `applyJob` now copies `job.Version`/`job.PrevHash` into the header literal; (b) `decodeNotifyJob` normalizes the wire form — V1 prevhash arrives with each 4-byte word byte-swapped ("insane" order, confirmed against the Rust `stratum` crate and BlueMatt's mining-proxy) — into block-header serialization bytes, matching `Job.PrevHash`'s corrected contract (was wrongly documented "big-endian"). **Correction to pass 207's claim:** s1539's "the notify version field is applied to job.Version as the header's base version" implied it reached the hashed header — it was parsed but never copied; the record is corrected here. Regression pins: `TestParseNotify_PrevHashWordSwap` (wire → header-order bytes at decode), `TestApplyJob_HeaderFieldsReachHashedShare` (a running worker's emitted share hashes exactly the declared fields — Version echoed, HashHeader recomputed and matched). Honest residual: version-rolling pools (ASICBoost/DATUM) remain unsupported per KNOWN_LIMITATIONS §14 — shares now carry the declared version faithfully but a mandate-rolling pool still rejects them, loudly disclosed.

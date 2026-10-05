@@ -76,6 +76,17 @@ const maxLineBytes = 64 << 10 // 64 KiB
 
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
+
+// extranoncePair is the negotiated (extranonce1, extranonce2_size)
+// pair. The session stores and swaps it atomically so a mid-session
+// mining.set_extranonce is never observed torn: a job built on the new
+// en1 with the old en2 size would echo a wrong-length extranonce2 the
+// pool rejects.
+type extranoncePair struct {
+	en1  string
+	size int
+}
+
 type session struct {
 	conn *connection
 
@@ -101,6 +112,13 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// diffCh announces every parsed mining.set_difficulty to the caller so
+	// it can retarget in-flight work rather than waiting for the next
+	// notify. Buffered(1) and coalescing — a consumer sees the newest
+	// value even if several retargets arrive back-to-back. Closed when
+	// the session ends. Optional: surfaced via DifficultyUpdates().
+	diffCh chan float64
+
 	// noticeCh delivers pool-sent client.show_message notices to the caller.
 	// Buffered so the read loop never blocks on a slow consumer; closed when
 	// the session ends. The caller may type-assert the Session to
@@ -112,11 +130,26 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time and
-	// may be replaced by a mid-session mining.set_extranonce, which runs
-	// on the read goroutine while Submit reads them on the caller's.
-	extranonce1     atomic.Pointer[string]
-	extranonce2Size atomic.Int64
+	// extranonce holds the negotiated extranoncePair, swapped
+	// atomically. Written on the read goroutine (subscribe result,
+	// mining.set_extranonce), read by completeV1Job/Submit on other
+	// goroutines.
+	extranonce atomic.Pointer[extranoncePair]
+
+	// authorized gates pool-initiated messages until mining.authorize
+	// succeeds. The read loop starts before the handshake completes, so a
+	// notify pushed early (or a hostile pool holding authorize open while
+	// streaming notify/set_difficulty/set_extranonce) would otherwise arm
+	// workers — or rewrite the negotiated difficulty/extranonce — on an
+	// unauthenticated session: hashpower the pool never credits. Stashed
+	// messages replay in wire order once authorization lands.
+	authorized atomic.Bool
+	preAuthMu  sync.Mutex
+	preAuthQ   []preAuthMsg
+	// authorizedUser is the username authorize succeeded with; Submit
+	// echoes it because ckpool-derived pools resolve the share's worker
+	// by name and reject names that were never authorized.
+	authorizedUser atomic.Pointer[string]
 	// en2Counter rolls extranonce2 per job so every job's coinbase (and
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
@@ -124,12 +157,25 @@ type session struct {
 	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
+
+	// sendMu serializes sends on jobsCh/diffCh/noticeCh against the read
+	// loop's deferred closes. Sends happen on the read goroutine except
+	// the stash replay (flushPreAuth), which runs on the Negotiate
+	// goroutine — without the mutex a connection drop mid-handshake could
+	// close a channel just as the replay sends on it (panic).
+	sendMu sync.Mutex
+	closed bool
+
+	// versionMaskWarned makes the ASICBoost diagnostic fire once per
+	// session; the pool may repeat set_version_mask on every retarget.
+	versionMaskWarned atomic.Bool
 }
 
 // Compile-time interface satisfaction checks.
 var (
 	_ poolproto.Session            = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+	_ poolproto.DifficultyWatcher  = (*session)(nil)
 )
 
 // callTimeout bounds how long call waits for a pool response before
@@ -142,6 +188,7 @@ func newSession(conn *connection) *session {
 		conn:     conn,
 		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
@@ -157,8 +204,7 @@ func (s *session) start(ctx context.Context) {
 // readLoop is the single goroutine that reads and dispatches V1 messages.
 // It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
-	defer close(s.jobsCh)
-	defer close(s.noticeCh)
+	defer s.closeChannels()
 	// When the loop exits for any reason (EOF, network error, or ctx cancel),
 	// cancel all in-flight call() invocations so they return immediately
 	// instead of blocking until the caller's context expires. This mirrors
@@ -233,20 +279,82 @@ func (s *session) dispatch(line []byte) {
 		s.handleResponse(msg)
 		return
 	}
-	// Notification or request from pool.
+	// Notification or request from pool. Every pool-initiated method is
+	// gated on authorization (see session.authorized): pre-auth messages
+	// are stashed and replayed in wire order once authorize lands, so a
+	// pool can neither arm jobs nor mutate negotiated session state
+	// before we are authenticated.
 	switch msg.Method {
-	case "mining.notify":
-		s.handleNotify(msg.Params)
-	case "mining.set_difficulty":
-		s.handleSetDifficulty(msg.Params)
-	case "mining.set_extranonce":
-		s.handleSetExtranonce(msg.Params)
-	case "client.show_message":
-		s.handleShowMessage(msg.Params)
-	case "client.reconnect", "mining.reconnect":
-		s.handleReconnect(msg.Params)
+	case "mining.notify", "mining.set_difficulty", "mining.set_extranonce",
+		"client.show_message", "client.reconnect", "mining.reconnect",
+		"mining.set_version_mask":
+		if !s.authorized.Load() {
+			s.stashPreAuth(msg.Method, msg.Params)
+			return
+		}
+		s.flushPreAuth()
+		s.dispatchPoolMsg(msg.Method, msg.Params)
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
+	}
+}
+
+// dispatchPoolMsg applies one pool-initiated message. Only called for
+// authorized sessions — either directly from dispatch or during the
+// post-authorize stash replay.
+func (s *session) dispatchPoolMsg(method string, params json.RawMessage) {
+	switch method {
+	case "mining.notify":
+		s.handleNotify(params)
+	case "mining.set_difficulty":
+		s.handleSetDifficulty(params)
+	case "mining.set_extranonce":
+		s.handleSetExtranonce(params)
+	case "client.show_message":
+		s.handleShowMessage(params)
+	case "client.reconnect", "mining.reconnect":
+		s.handleReconnect(params)
+	case "mining.set_version_mask":
+		s.handleVersionMask()
+	}
+}
+
+// preAuthMsg is a pool-initiated message received before authorization
+// completed, kept in wire order for replay.
+type preAuthMsg struct {
+	method string
+	params json.RawMessage
+}
+
+// preAuthCap bounds the stash so a hostile pool cannot grow memory
+// unboundedly while holding authorize open. Dropping the oldest is
+// semantically right: for every stashed method the newest value wins
+// (latest difficulty, latest extranonce, latest job).
+const preAuthCap = 16
+
+func (s *session) stashPreAuth(method string, params json.RawMessage) {
+	s.preAuthMu.Lock()
+	if len(s.preAuthQ) >= preAuthCap {
+		s.preAuthQ = s.preAuthQ[1:]
+	}
+	cp := make([]byte, len(params))
+	copy(cp, params)
+	s.preAuthQ = append(s.preAuthQ, preAuthMsg{method: method, params: cp})
+	s.preAuthMu.Unlock()
+}
+
+// flushPreAuth replays the stashed pool-initiated messages in wire
+// order. Called by dispatch (before applying any post-auth message) and
+// by Negotiate right after authorized is set; preAuthMu serializes the
+// drain so a stashed message can never apply behind a newer one that
+// followed it.
+func (s *session) flushPreAuth() {
+	s.preAuthMu.Lock()
+	queue := s.preAuthQ
+	s.preAuthQ = nil
+	s.preAuthMu.Unlock()
+	for _, m := range queue {
+		s.dispatchPoolMsg(m.method, m.params)
 	}
 }
 
@@ -275,14 +383,32 @@ func (s *session) handleNotify(params json.RawMessage) {
 func (s *session) handleSetDifficulty(params json.RawMessage) {
 	if d, ok := parseDifficulty(params); ok {
 		s.difficulty.Store(float64ToUint64(d))
+		s.sendMu.Lock()
+		defer s.sendMu.Unlock()
+		if s.closed {
+			return
+		}
+		select {
+		case s.diffCh <- d:
+		default:
+			// Replace any undelivered value so the consumer always sees
+			// the newest retarget, never a stale one.
+			select {
+			case <-s.diffCh:
+			default:
+			}
+			select {
+			case s.diffCh <- d:
+			default:
+			}
+		}
 	}
 }
 
 func (s *session) handleSetExtranonce(params json.RawMessage) {
 	// Some pools rotate extranonce mid-session. Update our copy.
 	if en1, sz, ok := parseSetExtranonce(params); ok {
-		s.extranonce1.Store(&en1)
-		s.extranonce2Size.Store(int64(sz))
+		s.extranonce.Store(&extranoncePair{en1: en1, size: sz})
 	}
 }
 
@@ -292,6 +418,11 @@ func (s *session) handleShowMessage(params json.RawMessage) {
 	// channel, drop the oldest notice to avoid blocking the read loop.
 	notice, ok := parseShowMessage(params)
 	if !ok || notice == "" {
+		return
+	}
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
 		return
 	}
 	select {
@@ -305,6 +436,21 @@ func (s *session) handleShowMessage(params json.RawMessage) {
 		case s.noticeCh <- notice:
 		default:
 		}
+	}
+}
+
+func (s *session) handleVersionMask() {
+	if !s.versionMaskWarned.CompareAndSwap(false, true) {
+		return
+	}
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
+		return
+	}
+	select {
+	case s.noticeCh <- "pool sent mining.set_version_mask (version rolling); Otedama does not roll versions - share rejects may follow":
+	default:
 	}
 }
 
@@ -343,6 +489,11 @@ func (s *session) ReconnectWait() time.Duration {
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
+// DifficultyUpdates returns the channel on which every parsed
+// mining.set_difficulty is delivered. The channel is closed when the
+// session ends. Implements poolproto.DifficultyWatcher.
+func (s *session) DifficultyUpdates() <-chan float64 { return s.diffCh }
+
 // PoolNotices returns the channel of pool-sent operator notices
 // (client.show_message). The channel is closed when the session ends.
 // Implements poolproto.PoolNoticeReceiver.
@@ -364,14 +515,14 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	// extranonce2Size is pool-controlled; anything above the observed
 	// maximum (8–12 bytes) falls back to the old behavior instead of
 	// allocating a pool-dictated buffer per job.
-	en1s := s.extranonce1.Load()
-	sz := int(s.extranonce2Size.Load())
+	ep := s.extranonce.Load()
 	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
-		en1s == nil || *en1s == "" || sz <= 0 ||
-		sz > 64 {
+		ep == nil || ep.en1 == "" || ep.size <= 0 ||
+		ep.size > 64 {
 		return
 	}
-	en1, err := hex.DecodeString(*en1s)
+	sz := ep.size
+	en1, err := hex.DecodeString(ep.en1)
 	if err != nil {
 		return
 	}
@@ -394,15 +545,35 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	}
 	j.MerkleRoot = root
 	j.ExtraNonce = en2
+	// Keep the assembled transaction on the job so the engine can verify
+	// its outputs positionally (see poolproto.Job.CoinbaseTx).
+	j.CoinbaseTx = coinbase
 }
 
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would
 // produce stale (rejected) shares, which is the #1 reject cause after
+// closeChannels marks the session ended and closes the outbound
+// channels under sendMu — the only place they may be closed, so any
+// send racing the close either lands beforehand or is skipped.
+func (s *session) closeChannels() {
+	s.sendMu.Lock()
+	s.closed = true
+	close(s.jobsCh)
+	close(s.diffCh)
+	close(s.noticeCh)
+	s.sendMu.Unlock()
+}
+
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job *poolproto.Job) {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
+		return
+	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -442,10 +613,18 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
+		sz := 0
+		if ep := s.extranonce.Load(); ep != nil {
+			sz = ep.size
+		}
+		en2 = strings.Repeat("00", min(max(sz, 0), maxExtranonce2Size))
+	}
+	workerName := "otedama"
+	if u := s.authorizedUser.Load(); u != nil && *u != "" {
+		workerName = *u
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		workerName,
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

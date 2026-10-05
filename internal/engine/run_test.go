@@ -103,9 +103,9 @@ func (fp *fakePool) serve() {
 
 	// 4. Send OpenMiningChannelSuccess
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 		// All-0xFF target = easiest possible, so the CPU will find shares.
 	}
 	for i := range omcSucc.Target {
@@ -425,15 +425,98 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_OpaqueJobID(t *testing.T) {
+	// V1 job_id is an opaque string, not a decimal — a pool using hex or
+	// UUID IDs must still get its job armed. The internal uint32 is a
+	// deterministic mapping compared only for equality; the pool gets its
+	// original string echoed back at submit time.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0); err != nil {
+		t.Fatalf("applyJob(opaque job ID): %v", err)
+	}
+}
+
+func TestV1JobWireID(t *testing.T) {
+	// Bare decimals keep their numeric value (common pool convention).
+	if got := v1JobWireID("42"); got != 42 {
+		t.Errorf("decimal ID: got %d, want 42", got)
+	}
+	if got := v1JobWireID("0140"); got != 140 {
+		t.Errorf("leading-zero decimal: got %d, want 140", got)
+	}
+	// Mixed strings must NOT silently truncate to the leading digits —
+	// "1a" mapping to job 1 would collide with a real job 1 and produce
+	// wrong-ID echoes at submit.
+	if got := v1JobWireID("1a"); got == 1 {
+		t.Error("mixed ID '1a' silently truncated to job 1")
+	}
+	// Deterministic: same input → same internal ID.
+	if a, b := v1JobWireID("opaque-xyz"), v1JobWireID("opaque-xyz"); a != b {
+		t.Errorf("non-deterministic: %d != %d", a, b)
+	}
+	// Distinct inputs → distinct outputs for the representative shapes.
+	if v1JobWireID("opaque-xyz") == v1JobWireID("opaque-abc") {
+		t.Error("distinct opaque IDs collided")
+	}
+	if v1JobWireID("hex-deadbeef") == v1JobWireID("42") {
+		t.Error("opaque ID collided with decimal ID")
+	}
+}
+
+// Regression: the V1 applyJob must populate every header field the pool
+// declared. Version and PrevHash were silently zero, so the worker
+// hashed a different preimage than the pool reconstructs — every V1
+// share failed verification. Verify end-to-end via the emitted share:
+// the hash must equal HashHeader over a header carrying the job's
+// declared Version and PrevHash.
+func TestApplyJob_HeaderFieldsReachHashedShare(t *testing.T) {
+	var prev, merkle [32]byte
+	for i := range prev {
+		prev[i] = byte(0x10 + i)
+	}
+	for i := range merkle {
+		merkle[i] = byte(0xA0 + i)
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	job := poolproto.Job{
+		JobID:      "7",
+		Version:    0x20000004,
+		PrevHash:   prev,
+		MerkleRoot: merkle,
+		NTime:      uint32(time.Now().Unix()),
+		NBits:      0x1d00ffff,
+	}
+	// Tiny pool difficulty → huge share target → first nonce wins.
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 1e-9); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	var sh miner.Share
+	select {
+	case sh = <-shares:
+	case <-time.After(30 * time.Second):
+		t.Fatal("no share emitted on an essentially-always target")
+	}
+	if sh.Version != job.Version {
+		t.Fatalf("share.Version = 0x%08x, want job.Version 0x%08x", sh.Version, job.Version)
+	}
+	want := miner.Header{
+		Version:    job.Version,
+		PrevHash:   job.PrevHash,
+		MerkleRoot: job.MerkleRoot,
+		Time:       sh.NTime,
+		Bits:       job.NBits,
+		Nonce:      sh.Nonce,
+	}
+	if got := miner.HashHeader(&want); got != sh.Hash {
+		t.Fatalf("share.Hash = %x, want HashHeader over header with job's Version+PrevHash %x", got, sh.Hash)
 	}
 }
 
@@ -538,6 +621,24 @@ func TestV1JobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
 func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	if _, err := v1JobTarget(0x00000000, 0.001); err == nil {
 		t.Error("v1JobTarget should reject invalid nBits even with a valid difficulty")
+	}
+}
+
+func TestV1JobTarget_UnconvertibleDifficulty_ErrorsInsteadOfNBitsFallback(t *testing.T) {
+	const nBits = 0x1d00ffff // genesis nBits, valid
+
+	// Astronomical difficulty underflows the target to zero; microscopic
+	// difficulty overflows the 256-bit target. Both previously fell back to
+	// the nBits block target silently — workers ground shares no pool
+	// credits, with nothing showing why.
+	for _, d := range []float64{1e300, 1e-300} {
+		if _, err := v1JobTarget(nBits, d); err == nil {
+			t.Errorf("v1JobTarget(nBits, %v) should error, not fall back to the block target", d)
+		}
+	}
+	// Boundary sanity: an ordinary share difficulty still resolves.
+	if _, err := v1JobTarget(nBits, 1024); err != nil {
+		t.Errorf("v1JobTarget(nBits, 1024): %v", err)
 	}
 }
 
@@ -1985,7 +2086,7 @@ func TestApplyAllocation_EmptyAssignments(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) != 0 {
 		t.Errorf("empty allocation should log nothing; got %v", logged)
@@ -2002,7 +2103,7 @@ func TestApplyAllocation_IdleDevice(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, log, false)
 
 	if len(logged) == 0 {
 		t.Error("idle device should emit an info log")
@@ -2031,7 +2132,7 @@ func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
 			{DeviceID: "cpu-0", Stream: ""}, // empty Stream → Idle()
 		},
 	}
-	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {})
+	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {}, false)
 
 	if target.HasWork() {
 		t.Error("target device cpu-0 should have been paused (SetWork(nil))")
@@ -2055,7 +2156,7 @@ func TestApplyAllocation_MiningToAI(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, log, false)
 
 	if len(logged) == 0 {
 		t.Error("mining→AI switch should emit a log")
@@ -2078,7 +2179,7 @@ func TestApplyAllocation_AIToMining(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Error("AI→mining switch should emit a log")
@@ -2101,7 +2202,7 @@ func TestApplyAllocation_GenericStreamSwitch(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Error("generic stream switch should emit a log")
@@ -2118,7 +2219,7 @@ func TestApplyAllocation_NoChange(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) != 0 {
 		t.Errorf("no-change assignment should not log; got %v", logged)
@@ -2144,7 +2245,7 @@ func TestApplyAllocation_IdleDevice_FloorReason(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Fatal("floor-idle device should emit an info log")
@@ -2426,6 +2527,23 @@ type responsivePool struct {
 	// SequenceNumber the client never used (future seq), right after
 	// activating the job — exercising the engine's bogus-seq guard.
 	bogusReject bool
+	// dupReject makes serve() emit the same SubmitSharesError twice for
+	// share 2 — a replayed response for an already-settled seq, which
+	// must not double-count in sharesRejected.
+	dupReject bool
+	// closeChannel makes serve() emit CloseChannel for the session's
+	// channel right after activation — SV2 §5.3.9's pool-initiated
+	// channel teardown. The engine must end the session rather than
+	// keep grinding a dead channel.
+	closeChannel bool
+	// groupCloseChannel sends CloseChannel addressed to the group
+	// channel instead — §5.3.9 closes every member channel, so the
+	// session must end the same way.
+	groupCloseChannel bool
+	// unknownFrame emits an unrecognized SV2 msg_type twice after
+	// activation — the engine must drop it forward-compatibly and
+	// warn once per type, not die or flood the log.
+	unknownFrame bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2452,6 +2570,36 @@ func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *respons
 		easy[i] = 0xFF
 	}
 	return newResponsivePoolFull(t, bogusReject, bogusAccept, easy)
+}
+
+// newResponsivePoolDupReject returns a pool that answers share 2 with the
+// same SubmitSharesError twice — a replayed response for an
+// already-settled seq.
+func newResponsivePoolDupReject(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.dupReject = true
+	return fp
+}
+
+// newResponsivePoolCloseChannel returns a pool that sends CloseChannel for
+// channel 1 right after job activation — the pool-initiated channel
+// teardown of SV2 §5.3.9.
+func newResponsivePoolCloseChannel(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.closeChannel = true
+	return fp
+}
+
+// newResponsivePoolGroupCloseChannel sends CloseChannel addressed to the
+// group channel (4) instead — §5.3.9 closes all member channels, so the
+// engine must still end the session.
+func newResponsivePoolGroupCloseChannel(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.groupCloseChannel = true
+	return fp
 }
 
 func newResponsivePoolFull(t *testing.T, bogusReject, bogusAccept bool, shareTarget [32]byte) *responsivePool {
@@ -2520,10 +2668,10 @@ func (fp *responsivePool) serve() {
 
 	// Send OpenMiningChannelSuccess with the pool's configured share target.
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
-		Target:          fp.shareTarget,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
+		Target:         fp.shareTarget,
 	}
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
@@ -2575,6 +2723,26 @@ func (fp *responsivePool) serve() {
 		}
 		payload, _ = resp.Encode()
 		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
+
+	if fp.unknownFrame {
+		// 0x40 ChannelEndpointChanged — unimplemented by design (we
+		// never dial pool-provided endpoints). Sent twice to pin the
+		// once-per-type log bound.
+		for range 2 {
+			fp.emit(conn, 0x40, false, []byte{1, 2, 3})
+		}
+	}
+
+	if fp.closeChannel || fp.groupCloseChannel {
+		cid := uint32(1)
+		if fp.groupCloseChannel {
+			cid = 4 // the group channel the fake handshake assigns
+		}
+		cc := stratum.CloseChannel{ChannelID: cid, Reason: "pool maintenance"}
+		payload, _ = cc.Encode()
+		fp.emit(conn, stratum.MsgCloseChannel, true, payload)
+		return
 	}
 
 	// Read shares and respond accordingly
@@ -2647,6 +2815,11 @@ func (fp *responsivePool) serve() {
 			}
 			payload, _ = resp.Encode()
 			fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			if fp.dupReject {
+				// Replay the identical error frame: the seq is now settled,
+				// so a second copy must not count as another reject.
+				fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			}
 		}
 	}
 }
@@ -3158,7 +3331,7 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 		if err != nil {
 			return
 		}
-		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: omc.ReqID, ChannelID: 1, GroupChannelID: 4}
 		for i := range omcSucc.Target {
 			omcSucc.Target[i] = 0xFF
 		}
@@ -3415,6 +3588,88 @@ waitLoop:
 	}
 }
 
+// TestRunSessionV2_DuplicateRejectIgnored verifies that a replayed
+// SubmitSharesError for an already-settled SequenceNumber is dropped at
+// debug level and never double-counted — SV2 assigns one response per
+// seq, so a repeat is protocol-invalid, and counting it would let a
+// hostile pool inflate the reject rate at will.
+func TestRunSessionV2_DuplicateRejectIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolDupReject(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, level+" "+msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        logf,
+		})
+	}()
+
+	// Deterministic signals: the genuine reject registers exactly once,
+	// and the replay produces an "already-settled seq" debug line.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawDupDrop := false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "already-settled seq") {
+					sawDupDrop = true
+				}
+			}
+			mu.Unlock()
+			if sawDupDrop && m.sharesRejected.Value() > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want exactly 1 (replayed error must not double-count)", got)
+	}
+	if !sawDupDrop {
+		t.Error("replayed reject was not observed/dropped via debug log")
+	}
+}
+
 // TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
 // the TCP connection but never answers SetupConnection makes handshake
 // return within handshakeTimeout instead of blocking forever.
@@ -3437,7 +3692,7 @@ func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
 
 	dec := stratum.NewDecoder(client)
 	start := time.Now()
-	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	_, _, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err == nil {
 		t.Fatal("handshake should fail against a silent peer")
 	}
@@ -3469,7 +3724,7 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(client)
-	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	chanID, _, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -3532,5 +3787,168 @@ func TestSubmitLimiter_BurstThenRefill(t *testing.T) {
 	time.Sleep(submitRateInterval + 50*time.Millisecond)
 	if !l.take() {
 		t.Fatal("take should succeed after a refill tick")
+	}
+}
+
+// TestApplyAllocation_HeldIdle suppresses the repeat idle log while still
+// pausing the worker: a device that stays idle across Decide ticks must not
+// re-log the identical line every interval, but must stay drained.
+func TestApplyAllocation_HeldIdle(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{DeviceID: "cpu-0", Stream: "", HeldIdle: true},
+		},
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	w.SetWork(&miner.Work{JobID: 1})
+	var logged []string
+	applyAllocation(alloc, []*miner.Worker{w}, func(_, m string) { logged = append(logged, m) }, false)
+
+	if len(logged) != 0 {
+		t.Errorf("HeldIdle assignment should not re-log idle; got %v", logged)
+	}
+	if w.HasWork() {
+		t.Error("HeldIdle assignment must still pause the worker")
+	}
+}
+
+// TestRunSessionV2_CloseChannelEndsSession verifies SV2 §5.3.9: when the
+// pool sends CloseChannel for the session's channel, the engine ends the
+// session (error propagates to the failover loop) instead of grinding a
+// dead channel until the job-stall warning fires.
+func TestRunSessionV2_CloseChannelEndsSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolCloseChannel(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log:        func(string, string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession should return an error when the pool closes the channel")
+	}
+	if !strings.Contains(err.Error(), "pool closed channel") {
+		t.Fatalf("runSession error = %v, want a 'pool closed channel' teardown", err)
+	}
+	if !strings.Contains(err.Error(), "pool maintenance") {
+		t.Fatalf("runSession error = %v, want the pool's sanitized reason echoed", err)
+	}
+}
+
+// TestRunSessionV2_GroupCloseChannelEndsSession verifies the group-addressed
+// form of §5.3.9: CloseChannel naming the group channel closes every member
+// channel — ours is the only one — so the session must still end.
+func TestRunSessionV2_GroupCloseChannelEndsSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolGroupCloseChannel(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log:        func(string, string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession should return an error when the pool closes the group channel")
+	}
+	if !strings.Contains(err.Error(), "pool closed channel 4") {
+		t.Fatalf("runSession error = %v, want a 'pool closed channel 4' teardown", err)
+	}
+}
+
+// TestRunSessionV2_UnknownMsgTypeWarnedOnce verifies the forward-compat
+// drop path stays honest: an unrecognized msg_type is dropped without
+// killing the session and warned once per type — even when the pool
+// repeats it — so an operator can see which extension directives are
+// being ignored.
+func TestRunSessionV2_UnknownMsgTypeWarnedOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolCloseChannel(t)
+	fp.unknownFrame = true // emits 0x40 twice before the CloseChannel
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var logMu sync.Mutex
+	var logged []string
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logged = append(logged, msg)
+			logMu.Unlock()
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool closed channel") {
+		t.Fatalf("runSession error = %v, want the session to survive the unknown frame and die on CloseChannel", err)
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	count := 0
+	for _, line := range logged {
+		if strings.Contains(line, "unrecognized SV2 msg_type 0x40") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("unknown-type warn count = %d, want exactly 1 (pool sent the type twice)", count)
 	}
 }

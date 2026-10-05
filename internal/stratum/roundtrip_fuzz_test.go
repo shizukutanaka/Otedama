@@ -28,6 +28,12 @@ func FuzzMessageRoundTrip(f *testing.F) {
 			}
 			return binary.LittleEndian.Uint32(data[off:])
 		}
+		u64 := func(off int) uint64 {
+			if len(data) < off+8 {
+				return 0
+			}
+			return binary.LittleEndian.Uint64(data[off:])
+		}
 		b32 := func(off int) (out [32]byte) {
 			if len(data) >= off+32 {
 				copy(out[:], data[off:off+32])
@@ -132,7 +138,7 @@ func FuzzMessageRoundTrip(f *testing.F) {
 			ChannelID:          u32(156),
 			LastSequenceNumber: u32(160),
 			NewSubmitsAccepted: u32(164),
-			NewSharesSummed:    u32(168),
+			NewSharesSummed:    u64(168),
 		}
 		enc, err = succ.Encode()
 		if err != nil {

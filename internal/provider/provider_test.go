@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ func TestYield_Effective(t *testing.T) {
 		{"zero sats", Yield{SatsPerSecond: 0, NetSatsPerSecond: 0, Confidence: 1.0}, 0},
 		{"zero confidence", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: 0}, 0},
 		{"negative net sats", Yield{SatsPerSecond: 100, NetSatsPerSecond: -1, Confidence: 1.0}, 0},
+		{"confidence above contract clamps at 1", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: 1.7}, 99},
+		{"NaN net sats collapses", Yield{SatsPerSecond: 100, NetSatsPerSecond: math.NaN(), Confidence: 1.0}, 0},
+		{"Inf net sats collapses", Yield{SatsPerSecond: 100, NetSatsPerSecond: math.Inf(1), Confidence: 1.0}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -173,6 +177,21 @@ func TestMiningProvider_LiveNetworkHashrate(t *testing.T) {
 	if liveQ.Yield.SatsPerSecond != 2*staleQ.Yield.SatsPerSecond {
 		t.Errorf("live hashrate yield %e, want exactly 2× the constant-path yield %e",
 			liveQ.Yield.SatsPerSecond, staleQ.Yield.SatsPerSecond)
+	}
+
+	// A wired-but-stale feed is a degraded configured input: the quote must
+	// drop to the 0.7 tier (like a stale price feed) instead of claiming
+	// the 0.95 a fresh feed earns. Unwired keeps the constant at 0.95.
+	unwired := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	unwiredQ := readQuote(t, unwired)
+	if unwiredQ.Yield.Confidence != 0.95 {
+		t.Errorf("unwired: confidence %v, want 0.95 (constant is the design baseline)", unwiredQ.Yield.Confidence)
+	}
+	if staleQ.Yield.Confidence != 0.7 {
+		t.Errorf("wired-but-stale: confidence %v, want 0.7 (degraded configured input)", staleQ.Yield.Confidence)
+	}
+	if liveQ.Yield.Confidence != 0.95 {
+		t.Errorf("live feed: confidence %v, want 0.95", liveQ.Yield.Confidence)
 	}
 }
 
@@ -552,5 +571,47 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	cancel()
 	if p.sendQuote(ctx, &Quote{ProviderID: "new"}) {
 		t.Error("sendQuote returned true on a canceled context; should report failure")
+	}
+}
+
+func TestMiningProvider_SoloSchemeCarriesNoFeeHaircut(t *testing.T) {
+	// Under payout_scheme=solo the coinbase pays the user's address
+	// directly — all-or-nothing, no pool-side cut in the reward. The
+	// quote's net yield must equal gross; every pool-side scheme keeps
+	// the 1% typical-fee haircut.
+	devices := []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	readQuote := func(t *testing.T, p *MiningProvider) Quote {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := p.Start(ctx, devices); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		defer p.Stop()
+		select {
+		case q := <-p.Quotes():
+			return q
+		case <-ctx.Done():
+			t.Fatal("no quote within 2s")
+			return Quote{}
+		}
+	}
+
+	solo := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	solo.SetPayoutScheme("solo")
+	soloQ := readQuote(t, solo)
+	if soloQ.Yield.NetSatsPerSecond != soloQ.Yield.SatsPerSecond {
+		t.Errorf("solo: net %v != gross %v — the coinbase pays the user directly, no pool cut", soloQ.Yield.NetSatsPerSecond, soloQ.Yield.SatsPerSecond)
+	}
+
+	for _, scheme := range []string{"fpps", "pplns", "tides", ""} {
+		pooled := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+		pooled.SetPayoutScheme(scheme)
+		q := readQuote(t, pooled)
+		if q.Yield.NetSatsPerSecond != 0.99*q.Yield.SatsPerSecond {
+			t.Errorf("scheme %q: net %v, want 0.99×gross %v", scheme, q.Yield.NetSatsPerSecond, q.Yield.SatsPerSecond)
+		}
 	}
 }

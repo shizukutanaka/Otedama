@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
@@ -59,13 +60,25 @@ type arbitrationLoopOpts struct {
 
 	// paused, when non-nil, is the shared per-device pause set rewritten
 	// after each Decide: devices whose assignment is idle or routed to a
-	// non-mining ("ai.") stream are marked paused so pool job dispatch
+	// non-mining stream are marked paused so pool job dispatch
 	// (updateWork/applyJob) does not re-arm them between ticks. applyAllocation
 	// alone only pauses a worker once; without this the next pool job
 	// silently undid every arbitration pause (the per-device counterpart
 	// of the curtailGate documented in run.go).
 	paused *pauseSet
 }
+
+// miningStreamPrefix is the StreamID category (provider.go "category.name"
+// convention) for streams executed by SHA256d grinding — the only
+// assignments under which a device's miner worker may keep working. Any
+// other category (ai.* today, future render.*/science.*) means the device
+// left mining and must stay paused.
+const miningStreamPrefix = "mining."
+
+// allDeviceFamilies is the explicit expansion of provider.Quote's nil
+// AcceptedFamilies contract ("all families are accepted") used when
+// folding a quote into a Stream.
+var allDeviceFamilies = []hal.Family{hal.FamilyASIC, hal.FamilyGPU, hal.FamilyCPU}
 
 // pauseSet tracks device IDs arbitration has currently paused (idle below
 // the yield floor, or assigned to a non-mining stream). The arbitration
@@ -94,7 +107,7 @@ func reconcileArbPauses(alloc *arbitration.Allocation, paused *pauseSet) {
 		return
 	}
 	for _, a := range alloc.Assignments {
-		if a.Idle() || strings.HasPrefix(string(a.Stream), "ai.") {
+		if a.Idle() || !strings.HasPrefix(string(a.Stream), miningStreamPrefix) {
 			paused.Pause(a.DeviceID)
 		} else {
 			paused.Resume(a.DeviceID)
@@ -124,24 +137,28 @@ const streamStaleTimeout = 3 * time.Minute
 // power draw is not yet measured; document power_watts as the dominant
 // device's draw if strict per-device gating is needed).
 func (o *arbitrationLoopOpts) powerFloor() float64 {
-	if o.powerWatts <= 0 || o.powerPricePerKWh <= 0 || len(o.devRefs) == 0 {
-		return 0
+	floor := 0.0
+	if o.powerWatts > 0 && o.powerPricePerKWh > 0 && len(o.devRefs) > 0 {
+		var rate float64
+		if o.rateSource != nil {
+			rate, _ = o.rateSource.BTCUSDRate()
+		}
+		if rate > 0 {
+			floor = provider.SatsPerSecond(o.powerWatts/1000*o.powerPricePerKWh, rate) / float64(len(o.devRefs))
+		}
 	}
-	var rate float64
-	if o.rateSource != nil {
-		rate, _ = o.rateSource.BTCUSDRate()
-	}
-	if rate <= 0 {
-		return 0
-	}
-	usdPerHour := o.powerWatts / 1000 * o.powerPricePerKWh
-	floor := provider.SatsPerSecond(usdPerHour, rate) / float64(len(o.devRefs))
+	// The gauge mirrors the floor actually applied this round — 0 included —
+	// so a dead rate feed or an emptied device list cannot leave a stale
+	// positive floor on display while no floor is in force.
 	o.metrics.powerBreakevenFloor.Set(floor)
 	return floor
 }
 
-// runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is canceled or
+// runArbitrationLoop re-evaluates device→stream assignment on a fixed
+// 30s ticker. A fresh quote only updates the shared stream map (and its
+// freshness ledger); the next tick picks it up — Decide is deliberately
+// not run per quote so a provider emitting faster than the interval
+// cannot drive re-allocation churn. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
@@ -159,11 +176,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				return
 			}
 			key := updateStream(opts.streamsMu, opts.streamMap, &q)
-			ts := q.At
-			if ts.IsZero() {
-				ts = time.Now()
-			}
-			lastQuoteAt[key] = ts
+			lastQuoteAt[key] = quoteFreshness(q.At, time.Now())
 		case <-ticker.C:
 			prevAlloc = arbitrationTick(&opts, lastQuoteAt, prevAlloc)
 		}
@@ -251,8 +264,21 @@ func arbitrationTick(opts *arbitrationLoopOpts, lastQuoteAt map[string]time.Time
 	// next pool job, so it must reflect the new Decide result even on
 	// the tick where the worker gets its one-shot SetWork(nil).
 	reconcileArbPauses(alloc, opts.paused)
-	applyAllocation(alloc, opts.workers, opts.log)
+	applyAllocation(alloc, opts.workers, opts.log, prevAlloc == nil)
 	return alloc
+}
+
+// quoteFreshness resolves the timestamp a quote contributes to the
+// freshness ledger. A zero or future-dated At must not set the clock
+// forward: now.Sub(ts) would go negative, so the stream could never
+// age out of pruneStaleStreams and a dead provider's quote would keep
+// routing devices indefinitely. Extracted as a pure function so the
+// clamp is unit-testable without a running loop.
+func quoteFreshness(at, now time.Time) time.Time {
+	if at.IsZero() || at.After(now) {
+		return now
+	}
+	return at
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
@@ -281,21 +307,46 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 	key := q.ProviderID + ":" + q.DeviceID
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
-	existing.AcceptsFamilies = q.AcceptedFamilies
+	// provider.Quote documents nil AcceptedFamilies as "all families
+	// accepted"; on the Stream a nil AcceptsFamilies would instead
+	// reject every family in Accepts(). Translate the contract at
+	// the boundary rather than letting the meaning invert.
+	if q.AcceptedFamilies != nil {
+		existing.AcceptsFamilies = q.AcceptedFamilies
+	} else {
+		existing.AcceptsFamilies = allDeviceFamilies
+	}
 	if existing.YieldPerDevice == nil {
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}
+	// Arbitration compares net yield: provider.go documents
+	// NetSatsPerSecond as "SatsPerSecond minus the provider's fee", and
+	// provider.Yield.Effective() ("what the arbitration engine uses for
+	// comparison") is net-weighted. Copying the gross figure here would
+	// drop every provider fee from the decision — Akash's 20% and the
+	// pool's 1% alike. A provider that sets no explicit fee leaves
+	// NetSatsPerSecond <= 0; then gross is the honest net.
+	netSats := q.Yield.NetSatsPerSecond
+	if netSats <= 0 {
+		netSats = q.Yield.SatsPerSecond
+	}
 	if q.DeviceID != "" {
 		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
+			SatsPerSecond: netSats,
+			Confidence:    q.Yield.Confidence,
+		}
+	} else {
+		// Only a device-agnostic quote sets the stream-wide default; a
+		// per-device quote must not leak its price to devices the provider
+		// declined to quote — otherwise a device excluded by the provider
+		// (e.g. a GPU skipped by the mining provider) silently inherits a
+		// sibling device's yield and can be assigned work it cannot do.
+		existing.DefaultYield = arbitration.Yield{
+			SatsPerSecond: netSats,
 			Confidence:    q.Yield.Confidence,
 		}
 	}
-	existing.DefaultYield = arbitration.Yield{
-		SatsPerSecond: q.Yield.SatsPerSecond,
-		Confidence:    q.Yield.Confidence,
-	}
-	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
+	existing.IsBitcoinMining = strings.HasPrefix(q.ProviderID, miningStreamPrefix)
 	m[key] = existing
 	return key
 }
@@ -317,6 +368,11 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			maps.Copy(rep.YieldPerDevice, s.YieldPerDevice)
+			// A provider can also emit one device-agnostic quote; its
+			// DefaultYield must survive whichever entry became the rep.
+			if rep.DefaultYield == (arbitration.Yield{}) {
+				rep.DefaultYield = s.DefaultYield
+			}
 		} else {
 			// Deep-copy to avoid aliasing the YieldPerDevice map inside m.
 			cp := s
@@ -338,7 +394,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 // applyAllocation applies a Decide result to the miner workers: pausing
 // SHA256d work on the specific device that was idled or switched to AI
 // inference, and logging every change of assignment.
-func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string)) {
+func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string), firstDecide bool) {
 	// pauseDevice stops only the worker whose DeviceID matches the
 	// assignment being processed. Correctness bug fixed session 247:
 	// this previously called SetWork(nil) on every element of workers,
@@ -354,7 +410,6 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 		for _, w := range workers {
 			if w.DeviceID() == deviceID {
 				w.SetWork(nil)
-				return
 			}
 		}
 	}
@@ -362,24 +417,30 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 		switch {
 		case a.Idle():
 			// Device is idle: no stream accepts its family, or all compatible
-			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d.
+			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d
+			// unconditionally so the worker stays drained, but log only on the
+			// idle *transition*: HeldIdle means it was already idle last Decide,
+			// and re-logging the same line every tick would flood the log with
+			// one identical line per device per interval (~2880/day at 30s).
 			pauseDevice(a.DeviceID)
-			reason := cmp.Or(a.Reason, "no compatible stream")
-			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
+			if !a.HeldIdle {
+				reason := cmp.Or(a.Reason, "no compatible stream")
+				log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
+			}
 
 		case a.SwitchedFromID != "":
-			// Stream changed. If switching away from mining, signal workers to pause.
-			// Switching TO mining re-enables them; the pool connection delivers new work.
-			wasAI := strings.HasPrefix(string(a.SwitchedFromID), "ai.")
-			nowAI := strings.HasPrefix(string(a.Stream), "ai.")
+			// Stream changed. Leaving a mining stream pauses the worker;
+			// entering one re-enables it — the pool delivers new work.
+			wasMining := strings.HasPrefix(string(a.SwitchedFromID), miningStreamPrefix)
+			nowMining := strings.HasPrefix(string(a.Stream), miningStreamPrefix)
 			switch {
-			case !wasAI && nowAI:
-				// Mining → AI: pause this device's SHA256d worker.
+			case wasMining && !nowMining:
+				// Mining → non-mining: pause this device's SHA256d worker.
 				pauseDevice(a.DeviceID)
-				log("info", fmt.Sprintf("arbitration: %s → AI inference (%.0f sat/s)",
-					a.DeviceID, a.ExpectedYield))
-			case wasAI && !nowAI:
-				// AI → Mining: workers will receive new work from the pool on next job.
+				log("info", fmt.Sprintf("arbitration: %s → %s (%.0f sat/s)",
+					a.DeviceID, a.Stream, a.ExpectedYield))
+			case !wasMining && nowMining:
+				// Non-mining → mining: workers receive new work on next job.
 				log("info", fmt.Sprintf("arbitration: %s → mining (%.0f sat/s)",
 					a.DeviceID, a.ExpectedYield))
 			default:
@@ -388,7 +449,14 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			}
 
 		default:
-			// No change; assignment held per hysteresis.
+			// No change; assignment held per hysteresis. On the first
+			// Decide there is no previous allocation, so every routed
+			// device is itself a transition — log the initial routing
+			// once rather than staying silent about it.
+			if firstDecide && a.Stream != "" {
+				log("info", fmt.Sprintf("arbitration: %s → %s (%.0f sat/s)",
+					a.DeviceID, a.Stream, a.ExpectedYield))
+			}
 		}
 	}
 }

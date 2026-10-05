@@ -10,6 +10,150 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1553 — V1 シェアが Version=0・PrevHash=ゼロのヘッダをハッシュしていた)
+
+V1 ジョブ適用時 (`applyJob`) が `miner.Work.Header` に `Version`/`PrevHash` を一切コピーしておらず、ワーカーは両フィールドがゼロのヘッダをハッシュしていた — プール側が通知値で再構成するプリイメージと一致しないため V1 の全シェアがプール側検証で拒否される構造欠陥（2026-06-04 から存在、V2 の `updateWork` は正しかった）。併せて `decodeNotifyJob` が prevhash のワイヤ形式（各4バイトワードのバイトスワップ）を正規化せず格納していた問題を修正 — デコード時にワードごと逆スワップし、`Job.PrevHash` はヘッダ直列化バイト列を保持する契約へ明文化（従来の「big-endian」記述は誤り）。エンジンは通知値をヘッダへコピーするよう修正。回帰ピン: `TestParseNotify_PrevHashWordSwap`（デコード変換）・`TestApplyJob_HeaderFieldsReachHashedShare`（稼働ワーカーが出すシェアのハッシュが宣言フィールド入りヘッダの再計算値と一致）。
+
+### Fixed (session 1499 — 未実装のプール送信 msg_type がログなしで黙殺されていた)
+
+`DispatchFrame` は前方互換のため未実装 msg_type を `Message.Unknown` へ落とす設計だが、セッションループはそれを一切ログなく黙殺していた — プールが Reconnect・ChannelEndpointChanged・将来の拡張型を送っても運用者からは完全に不可視。uint8 型空間で 256 エントリに構造的に制限される `seenUnknown` マップで「型ごと1回」の警告を追加（ログフラッド不可）。UpdateChannel (0x16) は spec 上 client→server 方向限定で棄却が正しいこと、SetExtranoncePrefix の無消費者残余（s1375 系列）も再確認。`TestRunSessionV2_UnknownMsgTypeWarnedOnce`（同型2回送信→警告1回、CloseChannel まで生存）を追加。
+
+### Fixed (session 1497 — グループチャネル宛の CloseChannel が foreign-channel 棄却に残っていた)
+
+SV2 spec §5.3.9 はグループチャネル宛の CloseChannel が「そのグループの全メンバーチャネルを閉じる」と規定するが、s1495 の誠実残余として group 宛フレームは foreign-channel の警告+棄却に留まっていた — 単一チャネル運用のクライアントは自分が唯一のメンバーなので、これは実質「閉じられるべき自分のチャネルを閉じない」状態。`handshake` が `OpenMiningChannelSuccess.GroupChannelID`（s1493 でデコード済み・破棄されていた）をセッションループへ返すよう配線し、foreign-channel ガードは「CloseChannel かつ宛先が自分のグループ」のみを通過させて既存の閉塞アームに到達させるよう修正。`TestRunSessionV2_GroupCloseChannelEndsSession`（group id 4 宛で終了すること）を追加。
+
+### Fixed (session 1495 — プール送信の CloseChannel が無視されデッドチャネルを掘り続けていた)
+
+SV2 spec §5.3.9 の `CloseChannel` (0x18, `channel_id U32 | reason_code STR0_255`) は「サーバーがチャネルを閉じた——クライアントはそのチャネルの使用を止めなければならない」と規定されるが、デコーダ未実装のため `Message.Unknown` に落ちて黙殺され、単一チャネル運用では接続切断までジョブ欠乏のまま掘り続ける状態だった。デコード/エンコードと `frameDecoders`・`channelIDOf` 登録を追加し、セッションループで「接続切断と同等のエラー」として返すよう修正 — 理由文字列は `poolproto.SanitizePoolText` 経由でログに安全化され、フェイルオーバーループが即座に引き継ぐ。誠実残余： グループチャネル宛の CloseChannel（spec では全メンバーチャネルを閉じる）は `GroupChannelID` がセッションループへ未配線のため foreign-channel の警告+棄却パスに残る。
+
+### Fixed (session 1493 — SV2 チャネルオープンの送受信がスペックレイアウトとずれていた)
+
+送側 0x10 `OpenStandardMiningChannel` は spec 上 `max_target U256` を必須とする（request_id、user_identity、nominal_hash_rate、max_target の固定レイアウト）が、`OpenMiningChannel.Encode()` が同フィールドを出力しておらず、spec 準拠の厳格なデコーダを持つプールは短いバッファを読んでフレーム全体を棄却し得た。意図的な省略とコメントにあったが、max_target は省略可能な「選好」ではなく固定レイアウトの必須フィールド——省略は設定欠落ではなくメッセージの不正形である。全 0xFF の `MaxTargetUnconstrained`（=「プールの割当を何でも受ける」正直な宣言）を送出するよう修正。受側 0x11 `OpenStandardMiningChannel.Success` は spec 末尾が `group_channel_id U32` なのに `ExtraNonce2Size uint16`（V1 由来の概念）を読んでおり、group id の下位 16bit を誤読し末尾 2 バイトを未消費にしていた。`GroupChannelID uint32` として spec 通りに読み直し（単一チャネル運用のため値自体は未消費だが、フレーム位置を正しく合わせる）。
+
+### Fixed (session 1484 — 変換不能な set_difficulty が nBits ブロック難易度へ黙ってフォールバックしていた)
+
+V1 の `mining.set_difficulty` に正だが変換不能な値（天文的な巨大値でターゲットが0へアンダーフロー、~1e-77 未満で256bit超過のオーバーフロー）を送られた場合、`v1JobTarget` が変換エラーを握り潰して nBits ブロック難易度で掘り続けていた。巨大難易度ではプールが拒否する易しいシェアを量産し、極小難易度ではほぼ不可能なシェアを掘る静かな飢餓となり、記録された難易度と実際の掘削ターゲットが乖離して原因が可視化されなかった。変換失敗をエラーとして伝播し、`applyJob` が warn 付きで当該ジョブを棄却するよう修正（`v1ShareTarget` が同じ変換失敗で `ok=false` を返す対称設計と整合）。
+
+### Fixed (session 1476 — V1 job_id を %d 解析し、mining.submit がプールの元 ID をエコーしていなかった)
+
+V1 の `job_id` は不透明文字列（10進数とは限らない）だが、エンジンは `fmt.Sscanf(job.JobID, "%d")` で uint32 へ潰していた：非10進 ID はエラーでジョブ全体を棄却（静かな採掘停止）、`"1a"` のような混在文字列は先頭桁へ黙って切り詰められ本物の job `"1"` と衝突した。さらに提出側が `FormatUint(share.JobID)` で 10進値を再構成して送出していたため、非10進プールでは全シェアが wrong-ID reject になっていた。新 `v1JobWireID`（10進は値保持、それ以外は FNV-1a）を内部の stale ゲート専用とし、セッションが元文字列を保持して submit が逐語エコーするよう修正。
+
+### Fixed (session 1442 — 恒常アイドルデバイスが毎ティック同一の idle ログを出力していた)
+
+### Fixed (session 1439 — 未来日時のクォートタイムスタンプがストリームを実質不死身にできた)
+
+- `runArbitrationLoop` がクォートの `At` をそのまま鮮度台帳へ書き込んでいたため、
+  未来日時（スキューした時計・不良プロバイダー）で `now.Sub(ts)` が負になり
+  `pruneStaleStreams` が永遠に期限切れ判定できず、死んだプロバイダーのクォートが
+  デバイスをルーティングし続け得た。ゼロ/未来日時は now へクランプする
+  `quoteFreshness` を導入（純粋関数として単体テスト可能に抽出）。
+
+### Fixed (session 1436 — Confidence>1 のクォートが自己の net を超えて裁定スコアを水増しできた)
+
+`arbitration.Yield` の Confidence は [0,1] と文書化されながら未クランプで、`Effective()` は `sats × confidence` を素通ししたため、Confidence=1.5 のクォートは自身の net の 150% まで実効収益を水増しできた。両プロバイダーは内部的に confidence を 0.7–0.95 に制限するためライブ欠陥はなく、第三プロバイダー追加時の拡張点としての潜在境界だったが、`min(confidence,1)` を適用して正規化（+Inf confidence は従来通り非有限→0 へ潰れるピン動作を維持）。回帰テストは 1.5/2.0/+Inf をピン。
+
+### Fixed (session 1414 — ハッシュレートフィード停滞時もクォートが 0.95 confidence を名乗っていた)
+
+ネットワークハッシュレートフィード配線済みで停滞（30分超/未取得）の場合、compile-time 定数へフォールバックしつつ confidence は価格フィード由来の 0.95 のままだった（confidence は `Effective()` 経由で裁定スコアを直接スケールするため実裁定スキュー）。劣化した設定済み入力として価格停滞と同じ 0.7 層へクランプするよう修正（未配線時は定数が設計上の基準入力のため 0.95 維持）。
+
+### Fixed (session 1412 — フェイルオーバー先プールの payout_scheme が収益見積に反映されなかった)
+
+`pools` が複数でスキームが異なる場合（例： 先頭 `fpps`、フェイルオーバー先 `solo`）、採掘クォートの手数料控除係数が起動時の `pools[0]` 固定だったため、フェイルオーバー後の見積が最大 ~1% ずれ続けた。`runReconnectLoop` が各セッション試行で `miningProvider.SetPayoutScheme()` を呼び、実際に掘削対象のプールのスキームでクォートを再価格付けするよう修正（フィールドは `atomic.Pointer` 化し publish() との競合も解消）。
+
+### Fixed (session 1410 — 損益分岐フロアのゲージがレート不通時に古い正値を残していた)
+
+`otedama_power_breakeven_floor_sats_per_second` はフロアが正に計算されたラウンドでのみ更新され、レート取得失敗・デバイス消滅で実適用フロアが 0 に潰れても古い値を保持し続けた（「毎ラウンド再計算」の記述と矛盾）。`powerFloor()` を再構成し、早期リターン経路を含め毎ラウンド実際に適用されるフロア値（0 を含む）をゲージへ反映。回帰テストは全無効入力でゲージ=0・レート断で正値→0 への遷移をピン。
+
+### Fixed (session 1406 — solo payout_scheme のクォートが実在しないプール手数料を差し引いていた)
+
+採掘クォートの netSatsPerSec は `payout_scheme` に無関係な一律 1% 手数料を適用していた。`solo`（コインベースがユーザーアドレスへ直接支払われる全か無かの方式、session 1318 で構造検証済み）では報酬中にプール側の取り分が存在しないのに 1% 過小見積していた。MiningProvider.PayoutScheme（setup で pools[0] のスキームを注入）を導入し、solo 時は net=gross（fee なし）、その他スキーム・未設定は従来の 1% 目安を維持。回帰テストは solo=1.0×・fpps/pplns/tides/未設定=0.99×をピン。
+
+### Fixed (session 1404 — 裁定が手数料控除後収益を見ていなかった)
+
+クォート→ストリーム合成（updateStream）が provider.Yield の gross `SatsPerSecond` のみを仲裁 Yield に写し、`NetSatsPerSecond`（手数料控除後）を破棄していた。provider.go は「arbitration compares net」と文書化し provider.Yield.Effective() も net 加重なのに、実際の Decide は gross 比較だった — Akash の 20% プラットフォーム手数料とプールの 1% 手数料が両方とも決定から消え、ネット収益では採掘優位の局面で AI へ不当配分し得た（~21% の相対歪み）。netSats（NetSatsPerSecond > 0 時、未設定なら gross へフォールバック）を写すよう修正し、net 契約をピンする回帰テストを更新。
+
+### Fixed (session 1396 — 未クォートデバイスへ兄弟デバイス収率の漏洩を閉塞)
+クォート→ストリーム合成（updateStream）が全デバイス別クォートの収率を DefaultYield に上書きしていたため、プロバイダーが意図的に除外したデバイス（例: 非 SHA256d の GPU が採掘ストリーム）が兄弟デバイスの収率で候補に混入し、実行不能な配分を受け得た — 代表エントリは Go マップ反復順で非決定的に選ばれ Decide の決定性保証にも亀裂があった。DefaultYield は本来の設計意図であるデバイス非依存クォート（DeviceID==""）のみが設定するよう修正し、マージ時も agnostic default を正しく引き継ぐようにした。回帰テスト3件追加。
+
+### Fixed (session 1393 — 2ソース退化した価格フィードの乖離を不信扱いへ)
+BTC/USD 価格フィードは3ソースの中央値だが、1件の応答失敗で実態が2ソースの平均値に退化し外れ値排除が効かなくなる — 片側エンドポイントが妥当性帯域（$100〜$100M）内の偽値を返すだけで、採掘 vs 推論の全収益比較を最大 ~275x 歪められた。2ソースが 4x を超えて乖離する場合はフェッチをエラー扱いにし、キャッシュ（5分鮮度 → フォールバック価格経路）を汚染しないよう s1392 と同型の不信ガードを適用。
+
+### Fixed (session 1392 — 乖離するハッシュレートソースの平均化を不信扱いへ)
+ネットワークハッシュレートフィードは2ソースの「中央値」を名乗るが実態は平均値であり、外れ値排除の効果はゼロ — 片側エンドポイントが妥当性帯域内の偽値を返すだけで採掘収益見積を最大 ~54x 歪められ、裁定が採掘を不当にアイドル化し得た。2ソースが 4x を超えて乖離する場合は平均せずフェッチをエラー扱いとし、キャッシュ（30分鮮度 → コンパイル時 ~1000 EH/s フォールバック）を汚染しないよう修正。
+
+### Fixed (session 1391 — 重複・偽造 SubmitSharesError による reject 二重計上を閉塞)
+SV2 の SubmitSharesError は `seq > seqNum`（未送信 seq）のみ排除していたため、既に Success/前回 Error で決済済みの seq を再送したり、送信範囲内の偽造 seq を報告した敵対プールが `otedama_shares_rejected_total`・受理率・受理率警告を自在に水増しできた。SV2 は seq ごとに1応答のため、未決済（submitTimes に残存）でない seq のエラーはリプレイ/偽造/cap 退避として debug レベルで破棄するよう修正（Success 側は既に `settled` クランプ済み）。cap 退避済み seq の正当な遅延エラーも同様に破棄されるトレードオフ（>1024 件の in-flight が必要）は台帳に記録。
+
+### Fixed (session 1365 — セッション開始直後に旧セッション残りシェアを新チャネルへ提出していた混入窓を閉塞)
+
+- `opts.merged` は全セッションで共有されるため、新セッション開始直後（最初のジョブ到着前）にチャネルへ残ったシェアは必ず旧セッションの残りである。V2 の `jobArmed` ゲートと V1 の `haveJob` ゲートはその窓をガード対象外にしていたため、残りシェアが新セッションのチャネル/ジョブ ID で提出されリジェクト・ノイズ（V1 数値ジョブ ID 再利用時には生きたシェアとの誤計上も）を生じていた。両パスで「アクティブジョブ不在 or 不一致なら破棄」へ統一し `jobArmed` ラッチを撤去。V1 偽プールテスト5件はジョブ宣言後にシェアを注入する形へ整合。
+
+### Fixed (session 1364 — V2 読み取りループにサイレンス検出の read deadline 追加)
+V1 は1行ごとの5分 read deadline でサイレントなプールを検出してフェイルオーバーするが、V2 のライブ読み取りループには期限が無かった。TCP が開いたまま一切フレームを送らないゾンビ接続に永久に張り付き、`jobStallWarnAfter` の警告は出てもセッションが終わらずフェイルオーバー不可能だった。30分の per-frame read deadline（`poolSilenceTimeout`）を追加し、デッド接続でセッション終了 → リコネクトループのフェイルオーバーが実際に動作するよう修正。
+
+### Fixed (session 1363 — V1 reject 応答の submit レイテンシを計上)
+V1 パスでプールが reject を返した場合のみラウンドトリップ遅延が `latency` リングに記録されず（accept や接続エラー時は計上済み）、reject 中心に応答する遅いプールがあると p50/p95/p99 が実態より楽観的に見えた。応答到着時に一律計上するよう修正（V2 の SubmitSharesError 処理と対称）。
+
+### Fixed (session 1362 — ワーカーのシェアドロップをメトリクスで可視化 + リセット時の警告抑制バグ修正)
+ワーカーのシェアチャネル満杯で落とした発見済みシェアが warn ログにしか現れず、Prometheus メトリクスには専用カウンタがなかった。`otedama_shares_worker_dropped_total` を追加（エンジン側のレート上限ドロップ `otedama_shares_submit_dropped_total` とは別系）。あわせて `lastDropped` が増分時のみ更新されていたため、ワーカー再生成で `dropCount` がリセットされると古い大きな値が以降の警告を抑制する欠陥を修正 — セッション内ドロップ数を常に正しくベースライン化し、リセット後の新規ドロップも警告・計上されるようになった。`docs/SPECIFICATION.md` と `docs/API.md` のメトリクス表に追記。
+
+### Fixed (session 1349 — version-rolling 要求を静かに捨てていたのを診断通知へ)
+`mining.set_version_mask`（ASICBoost）をサイレントに無視していたため、必須プールでは 100% reject になるだけで原因が分からなかった。セッションにつき1回の診断通知を `noticeCh` 経由でエンジンへ送り、エージェントが roll 非対応である旨を明示。
+
+### Fixed (session 1343 — stash replay とチャンネル close の競合 panic を修正)
+`flushPreAuth` は Negotiate goroutine 上で jobsCh/diffCh/noticeCh に送信するが、ハンドシェイク中の接続断で read loop の defer close と競合し send-on-closed panic（プロセス全体が終了）になり得た。全送信を `sendMu`+`closed` で close と直列化 — close 前に着地するかスキップされるかの二択に。
+
+### Fixed (session 1339 — 認証前メッセージによるセッション状態改竄を遮断)
+s1336 のゲートは `mining.notify` のみで、`mining.set_difficulty`/`set_extranonce` が認証前に即適用されていた。authorize を保留した敵対プールが難易度・extranonce を未認証状態で書き換え可能（掘ったシェアが決してクレジットされない）。全プール起点メソッドにゲートを一般化し、認証前メッセージは wire 順キュー（上限16・最古破棄）に stash → authorize 成功後に `flushPreAuth` で順序 replay。
+
+### Fixed (session 1337 — mining.submit のワーカー名を認証済みユーザー名に一致)
+`mining.submit` の worker_name が `"otedama"` のハードコードで、`mining.authorize` で使う設定プールユーザーと不一致だった。ckpool 派生プール（public-pool.io 等の DATUM 系ソロ構成）はシェアのワーカーを名前で解決し未認証名を reject するため、全シェアがプール側で拒否される可能性があった（コインベース支払検証は通るため静かな収益消失）。authorize 成功時のユーザー名を `session.authorizedUser` に保持し Submit がエコーするよう修正。
+
+### Fixed (session 1336 — 認証前 notify による無認証ハッシュ収穫を遮断)
+V1 の readLoop は handshake 完了前に起動するため、`mining.authorize` 応答前の `mining.notify` がそのままジョブをアームしていた。敵対プールが authorize を保留しつつ notify を流せば handshakeTimeout 上限のハッシュを無認証で収穫可能（再接続毎に反復可）。`session.authorized` ゲートを追加し、認証前 notify は最新1件を stash、authorize 成功後に順序を保って replay（preAuthMu で直列化 — stash ジョブが新ジョブより後に再アームすることはない）。
+
+### Fixed (session 1335 — セッション終了〜再接続間の無駄ハッシュを停止)
+セッション終了時にワーカーが最終ジョブをアームされたまま残り、再接続バックオフ（最大64秒×繰返し）中も掘り続けていた。次セッションは新 extranonce（V1）/新チャネル（V2）を協商するため、そのシェアは必ず破棄される無駄ハッシュだった。`runReconnectLoop` が `poolConnectionState.Set(0)` と同時に全ワーカーを `SetWork(nil)` でアイドル化（pause/未知prevhash と同一の冪等アイドル、次セッションの pause-aware applyJob で再アーム）。
+
+### Fixed (session 1334 — TIDES/solo 支払検証を非出力位置の script 埋め込みで回避不能に)
+V1 コインベース検証が生バイトの部分一致だったため、敵対プールが支払先 script を OP_RETURN・scriptSig・witness など支払いを伴わない位置に埋め込んで検査をパスできた。`poolproto.Job.CoinbaseTx`（completeV1Job が既に合体しているトランザクションを保持）を新設し、btccrypto.CoinbasePaysScript が vout の scriptPubKey を位置限定で照合するよう変更。構造が壊れたコインベースは "cannot verify" を1回警告。
+
+### Fixed (session 1330 — V1 set_difficulty を実行中ワークへ即時伝播)
+
+**変更.** 「プールの難易度変更にワーカーが追従する」主張の第一原理検証で
+実ギャップを修正。V2 は `SetTarget` 到着時に現行ジョブを即時再発行して
+いたが、V1 は `mining.set_difficulty` を原子格納するだけで、次の notify
+が来るまで実行中ワークは旧ターゲットで掘り続けた（拒否会計は
+`transitionReject` で正直だったが旧ターゲットでの発掘は燃費損失）。
+`poolproto.DifficultyWatcher` を新設し stratumv1 が各リターゲットを
+バッファ付き・合体式 `diffCh` で通知、エンジンは即座に `applyJob` で
+現行ジョブを再発行 — V2 と同じセマンティクスに揃えた。
+
+### Changed (session 1323 — 失効ジョブのシェアを提出前に破棄)
+
+**変更.** 「正当なシェアのみ提出する」主張の第一原理検証（ソクラテス式監査）
+で見つかった実ギャップを修正。SV2 の `SetNewPrevHash` は名前を挙げなかった
+ジョブを全て無効化するため、切替直前に見つかったシェアは提出時点で
+既に確定的な stale reject であった（V1 も新規 notify でジョブが差し替わる）。
+V2 は `share.JobID != active.JobID`、V1 は `share.JobID != 直近適用ジョブ`
+を提出前に破棄し、`shares_submit_dropped` に計上＋debug ログ出力。
+拒否率に偽の拒否が混ざらなくなり、wire 上の無駄も消える。
+
+### Changed (session 1318 — 非カストディ検証: TIDES/solo コインベースの支払先確認)
+
+**変更.** 「非カストディ」主張の第一原理検証（ソクラテス式監査）で見つかった実ギャップを修正。
+Stratum V1 の `mining.notify` は `coinb1`/`coinb2` の両半を保持するが、
+プール供給のコインベースが設定済み支払先アドレスへ実際に支払うかは
+一切検証されていなかった。`pools[].payout_scheme` が `tides`/`solo`
+（コインベース内にユーザースクリプトを約束する2方式）を宣言する場合、
+新規 `btccrypto.ScriptForAddress` でアドレスから標準ロッキングスクリプトを導出し、
+各ジョブのコインベース両半を `engine.coinbasePaysTo` で検査 —
+含まれなければエピソードにつき1回警告を出力（fpps/pplns は
+コインベースが正当にプール所有のため対象外）。V2 ジョブはプロトコル上
+`merkle_root` のみで出力を確認不能 — JDP（sv2-spec #203、ADR-009 追跡）
+待ちの構造的制約として godoc に記録。テスト: スクリプト導出ベクトル5件
+（P2PKH/P2SH/P2WPKH/P2WSH/P2TR）+ V1 結合3件 + ヘルパー単体。
+
 ### Changed (session 1316 — gocyclo 分解第2弾、config/arbitration/doctor/cmd 層 6 関数)
 
 **変更.** 循環複雑度 >15 の残存クラスの第 2 弾。`config.ResolveWithOrigins`
@@ -7976,3 +8120,8 @@ Multi-algorithm P2P mining pool supporting SHA256d, Scrypt, Ethash, and RandomX.
 ## Earlier Versions
 
 Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2` branch. They are not carried forward into the v3.0 changelog structure.
+
+### Fixed
+
+- stratum: decode SubmitSharesSuccess `new_shares_sum` as U64 per spec §5.3.13 — the field was read as U32 and the frame bound at 16 bytes, accepting 16–19-byte malformed frames and truncating the difficulty-sum field for any future consumer. Encoder/decoder now use the spec's 20-byte wire layout.
+- stratum: correct `MsgSubmitSharesError` to the spec's 0x1d (was 0x1e, which spec reserves). Real pool reject frames now decode and count instead of landing in the unknown-type warn bucket — the reject-classification and sequence-accounting paths verified in earlier passes were unreachable on the wire.

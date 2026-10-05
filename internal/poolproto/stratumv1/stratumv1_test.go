@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"sync"
@@ -101,6 +102,28 @@ func TestParseNotify_RealisticPayload(t *testing.T) {
 	}
 	if job.ReceivedAt.IsZero() {
 		t.Error("ReceivedAt is zero")
+	}
+}
+
+// Stratum V1's prevhash wire encoding is the "insane" order: each
+// 4-byte word byte-swapped. The job must carry the block header's
+// serialization bytes — the engine copies them verbatim into the
+// hashed preimage, so a missed swap hashes the wrong header and the
+// pool rejects every share.
+func TestParseNotify_PrevHashWordSwap(t *testing.T) {
+	raw := json.RawMessage(`[
+		"60",
+		"0eba48f47bc0ab4bb35b230849868bf1d79aeb19006eed460000000000000000",
+		"01", "ff", [], "00000002", "1d00ffff", "68d36c5e",
+		true
+	]`)
+	job, err := parseNotify(raw)
+	if err != nil {
+		t.Fatalf("parseNotify: %v", err)
+	}
+	want := "f448ba0e4babc07b08235bb3f18b864919eb9ad746ed6e000000000000000000"
+	if got := hex.EncodeToString(job.PrevHash[:]); got != want {
+		t.Errorf("PrevHash = %s, want %s (per-4-byte-word swap)", got, want)
 	}
 }
 
@@ -419,6 +442,7 @@ func TestSession_E2E_SubscribeNotifySubmitAccepted(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Wait for the mining.notify to arrive.
@@ -474,6 +498,7 @@ func TestSession_E2E_SubmitRejected(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -496,6 +521,7 @@ func TestSession_OversizedLineTerminatesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// A misbehaving pool streams more than maxLineBytes with no newline.
@@ -531,6 +557,7 @@ func TestSession_Close_IsIdempotent(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 
 	if err := sess.Close(); err != nil {
 		t.Errorf("first Close: %v", err)
@@ -551,6 +578,7 @@ func TestSession_SubmitAfterCloseFails(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	_ = sess.Close()
 
 	_, err := sess.Submit(context.Background(), poolproto.ShareSubmission{})
@@ -910,12 +938,16 @@ func TestDialer_Negotiate_NonV1Connection_ReturnsError(t *testing.T) {
 // ============================================================================
 
 // makeBareSess builds a minimal session for direct dispatch testing.
+// It models an established session, i.e. post-authorize — the job gate
+// treats notifies as delivered work, not pre-auth stash candidates.
 func makeBareSess() *session {
-	return &session{
+	s := &session{
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
+	s.authorized.Store(true)
+	return s
 }
 
 func TestSession_Dispatch_EmptyLine_IsIgnored(t *testing.T) {
@@ -946,11 +978,11 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if got := sess.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+	if got := sess.extranonce.Load(); got == nil || got.en1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sess.extranonce2Size.Load() != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
+	if sess.extranonce.Load().size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce.Load().size)
 	}
 }
 
@@ -964,6 +996,59 @@ func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
 	sess.dispatch([]byte(`{"method":"mining.notify","params":["NEW","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`))
 	if len(sess.jobsCh) == 0 {
 		t.Error("channel empty after drop-oldest dispatch")
+	}
+}
+
+func TestSession_NotifyBeforeAuthorize_IsStashedNotArmed(t *testing.T) {
+	// A notify arriving before mining.authorize succeeds must not arm
+	// workers: the pool has not authenticated the session, so hashpower
+	// spent on it is never credited (notify-harvesting attack).
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	notify := []byte(`{"method":"mining.notify","params":["PRE","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`)
+	sess.dispatch(notify)
+	select {
+	case j := <-sess.jobsCh:
+		t.Fatalf("pre-auth notify armed job %q — unauthenticated hashpower harvest", j.JobID)
+	default:
+	}
+
+	// Authorization lands: the stashed job replays into the queue.
+	sess.authorized.Store(true)
+	sess.flushPreAuth()
+	select {
+	case j := <-sess.jobsCh:
+		if j.JobID != "PRE" {
+			t.Fatalf("replayed job %q, want PRE", j.JobID)
+		}
+	default:
+		t.Fatal("stashed pre-auth job was not replayed after authorize")
+	}
+}
+
+func TestSession_PreAuthStashPreservesOrder(t *testing.T) {
+	// Notify PRE arrives pre-auth, POST after. The replay must not let the
+	// older job re-arm behind the newer one.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["PRE","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	sess.authorized.Store(true)
+	// POST has clean_jobs=false so it queues rather than superseding PRE —
+	// with true it would correctly discard PRE and ordering is moot.
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["POST","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`))
+	first := <-sess.jobsCh
+	if first.JobID != "PRE" {
+		t.Fatalf("first delivered job %q, want PRE (stash replays before later notifies)", first.JobID)
+	}
+	second := <-sess.jobsCh
+	if second.JobID != "POST" {
+		t.Fatalf("second delivered job %q, want POST", second.JobID)
 	}
 }
 
@@ -987,6 +1072,7 @@ func TestSession_Call_WriteError_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	_, err := sess.call(context.Background(), 1, "mining.submit", nil)
@@ -1002,6 +1088,7 @@ func TestSession_Call_ContextTimeout_ReturnsCtxError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Server reads the request but never responds; test ctx times out first.
@@ -1025,6 +1112,7 @@ func TestSession_Call_SessionClosedWhileWaiting_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 
 	// Server reads the request, then close the session — this cancels the pending
 	// channel so call returns "session closed before response".
@@ -1102,6 +1190,7 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -1118,6 +1207,136 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	}
 }
 
+func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
+	// Pre-auth messages must not mutate negotiated session state either:
+	// a hostile pool holding authorize open could otherwise set a
+	// starvation difficulty or poison extranonce1 before authentication.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.dispatch([]byte(`{"method":"mining.set_difficulty","params":[0.0001]}`))
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["aa11",2]}`))
+	if got := math.Float64frombits(sess.difficulty.Load()); got != 0 {
+		t.Fatalf("pre-auth set_difficulty applied difficulty %v", got)
+	}
+	if ep := sess.extranonce.Load(); ep != nil {
+		t.Fatalf("pre-auth set_extranonce applied extranonce1 %q", ep.en1)
+	}
+
+	// Authorization lands: the stashed messages replay in wire order.
+	sess.authorized.Store(true)
+	sess.flushPreAuth()
+	if got := math.Float64frombits(sess.difficulty.Load()); got != 0.0001 {
+		t.Fatalf("stashed set_difficulty not replayed, got %v", got)
+	}
+	ep := sess.extranonce.Load()
+	if ep == nil || ep.en1 != "aa11" {
+		t.Fatalf("stashed set_extranonce not replayed, got %v", ep)
+	}
+	if ep.size != 2 {
+		t.Fatalf("stashed extranonce2_size not replayed, got %v", ep.size)
+	}
+}
+
+func TestSession_VersionMask_NoticeOnce(t *testing.T) {
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.authorized.Store(true)
+	sess.dispatchPoolMsg("mining.set_version_mask", json.RawMessage(`["ffffffe0"]`))
+	sess.dispatchPoolMsg("mining.set_version_mask", json.RawMessage(`["ffffffe0"]`))
+	got := <-sess.noticeCh
+	if got == "" {
+		t.Fatal("expected a version-rolling diagnostic notice")
+	}
+	select {
+	case extra := <-sess.noticeCh:
+		t.Fatalf("diagnostic must fire once per session, got %q", extra)
+	default:
+	}
+}
+
+func TestSession_SendsAfterChannelClose_DoNotPanic(t *testing.T) {
+	// The stash replay (flushPreAuth) runs on the Negotiate goroutine and
+	// can race the read loop's deferred channel closes when the connection
+	// drops mid-handshake. Sends must skip a closed session, not panic.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.authorized.Store(true)
+	sess.closeChannels()
+	// None of these may panic (send on closed channel).
+	sess.sendJob(&poolproto.Job{JobID: "x"})
+	sess.handleSetDifficulty(json.RawMessage(`[1.0]`))
+	sess.handleShowMessage(json.RawMessage(`["hello"]`))
+	sess.flushPreAuth() // empty queue on this session — also must not panic
+}
+
+func TestSession_Submit_EchoesAuthorizedWorkerName(t *testing.T) {
+	// ckpool-derived pools resolve the share's worker by name and reject
+	// names that were never authorized — Submit must echo the username
+	// mining.authorize succeeded with, not a hardcoded literal.
+	gotWorker := make(chan string, 1)
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			if req.Method == "mining.submit" {
+				var params []json.RawMessage
+				_ = json.Unmarshal(req.Params, &params)
+				var worker string
+				if len(params) > 0 {
+					_ = json.Unmarshal(params[0], &worker)
+				}
+				gotWorker <- worker
+				id, _ := json.Marshal(req.ID)
+				resp := `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+				_, _ = serverConn.Write([]byte(resp))
+			}
+		}
+	}()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
+	user := "bc1qworker.rig1"
+	sess.authorizedUser.Store(&user)
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "X", Nonce: 1, NTime: 1}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	select {
+	case w := <-gotWorker:
+		if w != user {
+			t.Fatalf("submit worker_name %q, want authorized user %q", w, user)
+		}
+	default:
+		t.Fatal("pool received no mining.submit params")
+	}
+}
+
 func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
 	// Closing the server before any submission causes Write in call to fail;
 	// Submit must propagate that error rather than silently swallowing it.
@@ -1127,6 +1346,7 @@ func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -1381,6 +1601,7 @@ func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// On client.reconnect the session must end on its own: Jobs() closes.
@@ -1415,6 +1636,7 @@ func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	select {
@@ -1594,11 +1816,11 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if got := sv1.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+	if got := sv1.extranonce.Load(); got == nil || got.en1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sv1.extranonce2Size.Load() != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
+	if sv1.extranonce.Load().size != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce.Load().size)
 	}
 }
 
@@ -1951,7 +2173,7 @@ func TestSession_PoolNotices_ImplementsInterface(t *testing.T) {
 func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	// Unknown method must not produce any job, notice, or error.
 	sess := makeBareSess()
-	sess.dispatch([]byte(`{"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	sess.dispatch([]byte(`{"method":"mining.suggest_difficulty","params":["1fffe000"]}`))
 	if len(sess.jobsCh) != 0 {
 		t.Error("unknown method enqueued a job")
 	}
@@ -1978,9 +2200,9 @@ func TestSession_SetExtranonce_ConcurrentReaders(t *testing.T) {
 		}(i)
 	}
 	for i := 0; i < 2000; i++ {
-		_ = sess.extranonce2Size.Load()
-		if p := sess.extranonce1.Load(); p != nil {
-			_ = *p
+		if p := sess.extranonce.Load(); p != nil {
+			_ = p.en1
+			_ = p.size
 		}
 	}
 	wg.Wait()
@@ -2021,6 +2243,7 @@ func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Server drains the request but never responds.
@@ -2051,9 +2274,7 @@ func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
 
 func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
 	sess := makeBareSess()
-	en1str := "c0ffee01"
-	sess.extranonce1.Store(&en1str)
-	sess.extranonce2Size.Store(4)
+	sess.extranonce.Store(&extranoncePair{en1: "c0ffee01", size: 4})
 
 	notify := func(id string) poolproto.Job {
 		sess.dispatch([]byte(fmt.Sprintf(
@@ -2089,7 +2310,7 @@ func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
 
 	// Verify the fold end-to-end: merkle == dsha(coinb1|en1|en2|coinb2)
 	// with an empty branch list.
-	en1, _ := hex.DecodeString(*sess.extranonce1.Load())
+	en1, _ := hex.DecodeString(sess.extranonce.Load().en1)
 	coinb1, _ := hex.DecodeString("0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	coinb2, _ := hex.DecodeString("ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000")
 	want := btccrypto.Hash256(append(append(append(append([]byte{}, coinb1...), en1...), j1.ExtraNonce...), coinb2...))
@@ -2194,5 +2415,36 @@ func TestSanitizeNotice_StripsFormatAndSeparators(t *testing.T) {
 	got := sanitizeNotice("ok\u202Eevil\u202C\u2028forged\U000E0061x\u200By")
 	if got != "okevilforgedxy" {
 		t.Errorf("format/separator chars survived: %q", got)
+	}
+}
+
+func TestSession_DifficultyUpdates_DeliversRetargets(t *testing.T) {
+	s := newSession(&connection{})
+	s.handleSetDifficulty(json.RawMessage(`[1024]`))
+	select {
+	case d := <-s.DifficultyUpdates():
+		if d != 1024 {
+			t.Errorf("delivered difficulty = %v, want 1024", d)
+		}
+	default:
+		t.Error("set_difficulty did not reach DifficultyUpdates")
+	}
+
+	// Undelivered values coalesce: two retargets without a consumer drain
+	// leave only the newest — the channel never blocks the read loop.
+	s.handleSetDifficulty(json.RawMessage(`[2048]`))
+	s.handleSetDifficulty(json.RawMessage(`[4096]`))
+	select {
+	case d := <-s.DifficultyUpdates():
+		if d != 4096 {
+			t.Errorf("coalesced difficulty = %v, want 4096", d)
+		}
+	default:
+		t.Error("coalescing retarget missing")
+	}
+	select {
+	case d := <-s.DifficultyUpdates():
+		t.Errorf("unexpected extra delivery: %v", d)
+	default:
 	}
 }

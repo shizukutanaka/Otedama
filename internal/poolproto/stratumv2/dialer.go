@@ -155,6 +155,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		ReqID:           1,
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
+		MaxTarget:       stratum.MaxTargetUnconstrained,
 	}
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
@@ -426,10 +427,14 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	return nil
 }
 
+// parseJobID converts the unified ShareSubmission string into the U32 the
+// V2 wire expects. V2 job IDs are numeric per spec, so strict ParseUint —
+// Sscanf(%d) silently truncates ("1a" → 1), colliding with a real ID.
+// Garbage yields 0, matching the prior contract for the adapter path the
+// engine does not currently call (it emits SubmitSharesStandard inline).
 func parseJobID(s string) uint32 {
-	var id uint32
-	_, _ = fmt.Sscanf(s, "%d", &id)
-	return id
+	n, _ := strconv.ParseUint(s, 10, 32)
+	return uint32(n) //nolint:gosec // bounded by ParseUint bitSize 32
 }
 
 // float64FromBits is the inverse of math.Float64bits, used to read the

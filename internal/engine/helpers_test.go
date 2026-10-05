@@ -251,8 +251,32 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	// The stream must carry the net (post-fee) yield, not the gross:
+	// provider.go documents NetSatsPerSecond as the fee-adjusted rate the
+	// arbitration engine compares, and provider.Yield.Effective() is
+	// net-weighted. 0.099 = 0.1 gross − provider fee.
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.099 (net)", y.SatsPerSecond)
+	}
+}
+
+func TestUpdateStream_NilAcceptedFamiliesAcceptsAll(t *testing.T) {
+	// provider.Quote documents nil AcceptedFamilies as "all families
+	// accepted". Copied verbatim into Stream.AcceptsFamilies it would
+	// instead reject every family in Accepts() — the contract must be
+	// translated at the boundary.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		// AcceptedFamilies intentionally nil.
+	})
+	s := m["mining.stratum:cpu-0"]
+	for _, f := range []hal.Family{hal.FamilyASIC, hal.FamilyGPU, hal.FamilyCPU} {
+		if !s.Accepts(f) {
+			t.Errorf("nil AcceptedFamilies must accept %v; got reject", f)
+		}
 	}
 }
 
@@ -289,6 +313,51 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 	y := s.YieldPerDevice[dev]
 	if y.SatsPerSecond != 0.2 {
 		t.Errorf("expected updated yield 0.2, got %v", y.SatsPerSecond)
+	}
+}
+
+func TestUpdateStream_PerDeviceQuoteDoesNotSetDefaultYield(t *testing.T) {
+	// A per-device quote must not set the stream-wide DefaultYield: the mining
+	// provider quotes only SHA256d-capable devices, and if a CPU's yield leaked
+	// into DefaultYield, a GPU the provider excluded would be evaluated against
+	// the mining stream at the CPU's price — assigned work it cannot execute.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU, hal.FamilyGPU},
+		Yield:            provider.Yield{SatsPerSecond: 0.5, Confidence: 0.9},
+	})
+
+	s := m["mining.stratum:cpu-0"]
+	if s.DefaultYield != (arbitration.Yield{}) {
+		t.Errorf("DefaultYield = %+v, want zero — per-device quotes must not leak", s.DefaultYield)
+	}
+	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 0 {
+		t.Errorf("YieldFor(unquoted gpu-0) = %v, want 0", y.SatsPerSecond)
+	}
+}
+
+func TestUpdateStream_DeviceAgnosticQuoteSetsDefaultYield(t *testing.T) {
+	// A quote with no DeviceID is provider-wide pricing: it is the one writer
+	// of DefaultYield, covering every device in AcceptsFamilies.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID:       "render.grid",
+		AcceptedFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 2.5, Confidence: 0.7},
+	})
+
+	s := m["render.grid:"]
+	if s.DefaultYield.SatsPerSecond != 2.5 {
+		t.Errorf("DefaultYield.SatsPerSecond = %v, want 2.5", s.DefaultYield.SatsPerSecond)
+	}
+	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 2.5 {
+		t.Errorf("YieldFor(unlisted gpu-0) = %v, want 2.5 via DefaultYield", y.SatsPerSecond)
 	}
 }
 
@@ -374,6 +443,40 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	}
 }
 
+func TestStreamsSlice_MergeCarriesAgnosticDefaultYield(t *testing.T) {
+	// A provider mixing one device-agnostic quote ("render.grid:") with
+	// per-device quotes ("render.grid:gpu-0") must keep the agnostic
+	// DefaultYield in the merged stream regardless of which map entry the
+	// (nondeterministic) iteration chose as the representative.
+	for i := 0; i < 20; i++ {
+		m := map[string]arbitration.Stream{
+			"render.grid:gpu-0": {
+				ID:              "render.grid",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+				YieldPerDevice: map[string]arbitration.Yield{
+					"gpu-0": {SatsPerSecond: 5, Confidence: 0.9},
+				},
+			},
+			"render.grid:": {
+				ID:              "render.grid",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+				YieldPerDevice:  map[string]arbitration.Yield{},
+				DefaultYield:    arbitration.Yield{SatsPerSecond: 42, Confidence: 0.8},
+			},
+		}
+		got := streamsSlice(m)
+		if len(got) != 1 {
+			t.Fatalf("iter %d: want 1 merged stream, got %d", i, len(got))
+		}
+		if got[0].DefaultYield.SatsPerSecond != 42 {
+			t.Fatalf("iter %d: merged DefaultYield = %+v, want agnostic 42 preserved", i, got[0].DefaultYield)
+		}
+		if y := got[0].YieldFor("gpu-1"); y.SatsPerSecond != 42 {
+			t.Fatalf("iter %d: YieldFor(unlisted gpu-1) = %v, want 42", i, y.SatsPerSecond)
+		}
+	}
+}
+
 func TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput(t *testing.T) {
 	// The merge must not alias its YieldPerDevice maps back into m;
 	// otherwise a later updateStream call would mutate the returned slice.
@@ -420,7 +523,7 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 		}},
 	}
 	var workers []*miner.Worker // nil-safe: SetWork on nil slice is a no-op
-	applyAllocation(alloc, workers, log)
+	applyAllocation(alloc, workers, log, false)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "ai.akash") && !strings.Contains(joined, "AI") {
@@ -438,7 +541,7 @@ func TestApplyAllocation_IdleAssignment(t *testing.T) {
 			{DeviceID: "gpu-0", Stream: ""}, // Idle() is true when Stream is ""
 		},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "idle") {
@@ -459,7 +562,7 @@ func TestApplyAllocation_NoChangeProducesNoLog(t *testing.T) {
 			// SwitchedFromID empty → no change
 		}},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(lines) != 0 {
 		t.Errorf("steady-state assignment should not log; got %v", lines)
@@ -1197,4 +1300,46 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func TestApplyAllocation_FirstDecideLogsInitialRouting(t *testing.T) {
+	// The very first Decide has no previous allocation, so every routed
+	// device is a transition — the initial routing must be logged once
+	// rather than staying silent.
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID:      "cpu-0",
+			Stream:        "mining.stratum",
+			ExpectedYield: 6000,
+		}},
+	}
+	applyAllocation(alloc, nil, log, true)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "cpu-0") || !strings.Contains(lines[0], "mining.stratum") {
+		t.Errorf("first Decide must log the initial routing once; got %v", lines)
+	}
+}
+
+func TestApplyAllocation_FirstDecideSkipsIdleDevices(t *testing.T) {
+	// Idle devices on the first Decide log via the idle branch
+	// (HeldIdle is false with no previous allocation), so the
+	// firstDecide routed-device line must not double-log them as
+	// switches.
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "gpu-0",
+			Stream:   "", // idle
+		}},
+	}
+	applyAllocation(alloc, nil, log, true)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "idle") {
+		t.Errorf("first-Decide idle device should log idle only; got %v", lines)
+	}
 }

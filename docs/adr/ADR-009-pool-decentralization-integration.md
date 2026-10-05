@@ -1718,3 +1718,72 @@ Nothing new at the implementation layer: the Gomining/DMND first production JDP 
 ### Assessment
 
 Quiet window continues — no action. One observation for the record: `05-Mining-Protocol.md` on `main` now writes `maximum_target`/`min_ntime` while the stratumprotocol.org build still shows `max_target`/`ntime_start` — the spec's field naming is mid-evolution again (Otedama decodes positionally, so wire-immune; relevant only to doc drift). Next recheck due around session 1270.
+
+### Session 1351 update
+
+sv2-spec normative open set unchanged: #203 (push-based payouts, last updated 2026-09-15), #236 (SetTarget ≤ max_target), #234 (authority key management docs), #198 (coinbase_witness) all still open, unmerged — quiet window continues.
+
+Release-verification corrections (self-audit): the authoritative releases pages confirm **SRI latest = v1.11.1** (22 Jul 2026) and **sv2-apps latest = v0.7.0**. Earlier ledger rows that asserted "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — no such releases exist on the official release lists; the corrected anchor is v1.11.1 / v0.7.0. The v1.11.1 SV1-difficulty fix ("no longer rounds up") still matches Otedama's `DifficultyFromTarget` truncation semantics — no action required.
+
+### Session 1361 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based payouts: still open, ongoing debate — warioishere questions the `SEQ0_255` payout cap vs real pools' ~60 outputs; plebhash concedes the design space is "a custodial/non-custodial hybrid at best" given output-count limits, reinforcing that V2 payout verification cannot cover every claim), #236 (SetTarget ≤ max_target: open since 2026-10-02, under GitGab19 review), #234 (authority key docs), #198 (coinbase_witness: Sjors probing deployment via `OPTION[U256]`) all still open/unmerged.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026) — no v1.12.x exists on the official list.
+- **sv2-apps:** latest release remains **v0.7.0** (24 Jul). Its highlights independently validate Otedama's recent hardening directions: tProxy payout verification fixed for split coinbase `scriptSig`s (same axis as session 1318's coinbase-payout check), `UserIdentity` TLVs only after extension `0x0002` negotiation, and downstream share validation against the advertised pow2 difficulty (same axis as our share-target verification). No action required — our wire/protocol behavior already matches these invariants.
+
+Quiet window continues; next recheck ~session 1370.
+
+### Session 1382 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based payouts: still open; plebhash force-pushes actively and concedes the design is "a custodial/non-custodial hybrid at best" — V2 payout verification cannot cover every claim, exactly the limitation Otedama discloses), #236 (SetTarget ≤ max_target), #234 (authority key docs), #198 (coinbase_witness) still open/unmerged. The only other open spec PRs are cosmetic (#186 table formatting) and the long-dormant Proxy Annex draft (#103) — nothing normative.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026; SV1 difficulty conversion no longer rounds up — matches Otedama's `DifficultyFromTarget` truncation semantics). No v1.12.x exists.
+- **sv2-apps:** latest release remains **v0.7.0**; open PRs include #908 (B08 type support in `bitcoin_core_sv2`, new), #904 (monitoring/config/release edge cases), #903 (buffer hardening) — hardening/maintenance wave continues, no protocol-surface changes.
+
+Quiet window continues; next recheck ~session 1393.
+
+### Session 1395 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based non-custodial payouts: still open; `SEQ0_255` payout-cap debate continues — plebhash argues output-count limits are an unavoidable design constraint, so "any solution here will be a custodial/non-custodial hybrid, at best", exactly the V2-verifiability limitation Otedama discloses), #236 (`SetTarget.target` ≤ channel `max_target`: open since 2026-10-02, GitGab19 review cycle active — would close the same gap Otedama's s1269 audit flagged as bounded-by-design), #234 (authority key management docs: TheBlueMatt lgtm, converging), #198 (`coinbase_witness` in `NewTemplate`) still open/unmerged.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026 — SV1 difficulty conversion no longer rounds up; matches Otedama's `DifficultyFromTarget` truncation semantics). No v1.12.x exists.
+- **sv2-apps:** latest release remains **v0.7.0** (24 Jul). v0.5.0's "Translation Proxy payout verification for SOLO mining" continues to independently converge with Otedama's s1318 coinbase-payout verification axis.
+
+Quiet window continues; next recheck ~session 1405.
+
+### Session 1402 update — ecosystem recheck (2026-10-02)
+
+Normative open set confirmed: sv2-spec #203 (coinbase-payouts extension, last update Sep 15 — the SEQ0_255 output-cap debate continues; plebhash's "custodial/non-custodial hybrid at best" assessment stands — JDP still unavailable, Otedama's V1-only payout verification disclosure remains accurate), #236 (SetTarget ≤ max_target, opened Oct 2 — under active review, same-day activity; Otedama's bound-audit position recorded session 1269), #234 (authority key management docs, Sep 25 — converging), #198 (coinbase_witness in NewTemplate, Sep 23 — open), plus cosmetic #232 (style fix, Sep 18) and stale #186/#103. No normative deltas affecting Otedama's shipped V2 surface. SRI releases: latest is v1.11.1 (v1.12.0 does not exist — prior documentation's forward-looking anchor remains corrected). sv2-apps: latest is v0.7.0 (24 Jul) — its translator-proxy payout-verification fix and pow2 share-validation share Otedama's independent hardening directions. No action required.
+
+### Session 1409 update — ecosystem recheck
+
+- **sv2-spec normative open set: unchanged.** #203 (non-custodial payouts extension) open — the SEQ0_255 output-cap debate continues (warioishere raised scalability for larger pools; plebhash reaffirmed "any solution here will be a custodial/non-custodial hybrid, at best" — the same structural ceiling Otedama's V1-only verification discloses). #236 (`SetTarget.target` MUST NOT exceed channel `max_target`) open, under GitGab19 review — Otedama already clamps outbound share-target expectations and treats pool targets adversarially. #234 (document authority key management/rotation) open, converging (TheBlueMatt lgtm w/ nits; bit-aloo review) — clarification-only, no wire change. #198 (witness commitment) remains open per prior tracking.
+- **SRI: v1.12.0 (2026-09-17) is the latest** — correcting a stale anchor in recent rechecks that reported v1.11.1 as latest. v1.12.0's contents (channels_sv2 hardening, codec/framing refactor, BIP323, AES-256-GCM removal) were already tracked since session ~530/604; v1.11.1 (V1-difficulty rounding fix) is a prior line.
+- **sv2-apps: v0.7.0 remains latest** (2026-07-24): split-coinbase-scriptSig payout verification and pow2-difficulty share validation — the same two axes Otedama hardened at sessions 1318/1330 independently.
+- No action required.
+
+### Session 1416 update
+
+- **sv2-spec normative open set (unchanged):** #203 (non-custodial payouts extension) open — the SEQ0_255 output-cap debate continues, and plebhash's "custodial/non-custodial hybrid at best" position remains the upstream consensus shape, matching Otedama's disclosed V1-only payout verification; #236 (SetTarget ≤ channel max_target) open and updated the same day — review round in flight; #234 (authority key management/rotation doc) open, marked ready-for-review with TheBlueMatt LGTM; #198 (`coinbase_witness` on `NewTemplate`) open.
+- **SRI (`stratum-mining/stratum`):** latest is **v1.12.0** (tag e11881b, 2026-09-17 — CI now enforces version bumps of modified crates). The GitHub Releases index tops at v1.11.1; the tag is authoritative.
+- **sv2-apps:** latest is **v0.8.0** (2026-09-17) — verified via the tag page after the Releases index rendered stale (it listed v0.7.0 as top). Highlights: Loupe-audit security hardening across the stack; tProxy supports the **BIP323 version-rolling mask** with an `invalid-non-rollable-version-bit` reject code; late Sv1 shares are validated against their own job's target and extranonce; `SetupConnection` version ranges enforced; handshake is idempotent and `mining.extranonce.subscribe` honored. Several items independently converge with Otedama's own recent strengthening (set_version_mask surfacing s1349, stale-share validation s1323–25, SetupConnection flag rejection merged #1329).
+- **Action needed:** none — the spec blockers Otedama tracks (#203 payout verification, #236 target bound) remain open upstream.
+
+### Session 1423 update
+
+- **sv2-spec normative open set (unchanged):** #203 (non-custodial payouts extension) open — the SEQ0_255 output-cap debate continues and plebhash reconfirmed "custodial/non-custodial hybrid, at best" as the upstream consensus shape, matching Otedama's disclosed V1-only payout verification; #236 (SetTarget ≤ channel max_target) open; #234 (authority key management/rotation doc) open; #198 (`coinbase_witness` on `NewTemplate`) open.
+- **SRI (`stratum-mining/stratum`):** latest remains **v1.12.0** (tag e11881b, 2026-09-17 — confirmed top of the tags list; no newer tag exists).
+- **sv2-apps:** latest remains **v0.8.0** (2026-09-17) — confirmed authoritative via the tags API (v0.8.0 top, then v0.7.0/v0.6.0).
+- **Action needed:** none — the spec blockers Otedama tracks (#203 payout verification, #236 target bound) remain open upstream.
+
+### Session 1434 update — ecosystem anchors reconfirmed (2026-10-03)
+
+- **sv2-spec open PRs:** #236 (`SetTarget.target` MUST NOT exceed `max_target` — active review, would bound server-sent targets to channel max), #234 (authority key management), #203 (coinbase transaction payouts extension — the "custodial/non-custodial hybrid at best" debate), #198 (`coinbase_witness`), plus non-normative #232/#186 (table formatting) and #103 (WIP Proxy Annex). Normative open set unchanged.
+- **Releases:** SRI latest **v1.12.0** (unchanged); sv2-apps latest **v0.8.0** (unchanged, verified via tags API).
+- **Action needed:** none. If #236 lands, Otedama's V2 session inherits the stronger guarantee automatically (server-sent `SetTarget` bounded by channel `max_target`).
+
+### Session 1441 recheck (ecosystem)
+
+Normative open set confirmed unchanged: sv2-spec #203 (coinbase-payouts extension — open, the SEQ0_255 output-cap debate dormant since Sep 15; plebhash's "custodial/non-custodial hybrid at best" assessment stands — JDP still unavailable, Otedama's V1-only payout verification disclosure remains accurate), #236 (`SetTarget.target` ≤ channel `max_target`, opened Oct 2 — under active review; Otedama's bound-audit position recorded session 1269), #234 (authority key management docs — converging), #198 (`coinbase_witness` in NewTemplate — open), plus cosmetic #232. No normative deltas affecting Otedama's shipped V2 surface. **Releases:** SRI latest **v1.12.0** (unchanged, Sep 17); sv2-apps latest **v0.8.0** (unchanged, Sep 17 — verified via releases/latest API after the repo moved under stratum-mining/). No action required.
+
+### Session 1450 recheck (ecosystem)
+
+Normative open set confirmed unchanged: sv2-spec #203 (coinbase-payouts extension — open; the "custodial/non-custodial hybrid at best" consensus stands, matching Otedama's V1-only payout verification disclosure), #236 (`SetTarget.target` ≤ channel `max_target` — open, updated Oct 2 with the cross case: an in-flight SetTarget racing an accepted UpdateChannel is held to the *replaced* max_target until the server re-sends a corrected one), #234 (authority key management docs — open), #198 (`coinbase_witness` in NewTemplate — open); plus non-normative #186 (markdown table fix) and #103 (WIP Proxy Annex, dormant since 2024). No normative deltas affecting Otedama's shipped V2 surface. **Releases:** SRI latest **v1.12.0** (unchanged); sv2-apps latest **v0.8.0** (unchanged — verified via releases/latest API). No action required.

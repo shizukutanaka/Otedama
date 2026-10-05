@@ -373,11 +373,22 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 		return errors.New("rates: all sources failed (all readings implausible)")
 	}
 
+	// With exactly two sources the "median" is an average — and an
+	// average has no outlier rejection: one manipulated or malfunctioning
+	// endpoint returning an in-band reading silently distorts the mean
+	// (the plausibility band bounds each reading, not their agreement).
+	// Two quotes for the same BTC/USD market cannot legitimately diverge
+	// by 4x; when they do, distrust the pair rather than cache a value
+	// the arbitrator will compare mining sats against.
+	slices.Sort(rates)
+	if len(rates) == 2 && rates[1] > rates[0]*4 {
+		return fmt.Errorf("rates: sources disagree %.0f vs %.0f — distrusting feed",
+			rates[0], rates[1])
+	}
 	// Use the median to resist outlier manipulation. For an even number
 	// of surviving sources, average the two middle values — picking a
 	// single middle element would bias toward the higher source and
 	// defeat the outlier resistance when exactly two sources remain.
-	slices.Sort(rates)
 	var median float64
 	if n := len(rates); n%2 == 1 {
 		median = rates[n/2]

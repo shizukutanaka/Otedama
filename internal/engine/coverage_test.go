@@ -7,6 +7,7 @@ package engine
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -557,6 +558,9 @@ func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
 		if got := o.powerFloor(); got != 0 {
 			t.Errorf("%s: powerFloor() = %v, want 0", name, got)
 		}
+		if got := m.powerBreakevenFloor.Value(); got != 0 {
+			t.Errorf("%s: power_breakeven_floor gauge = %v, want 0 — the gauge must mirror the floor actually applied", name, got)
+		}
 	}
 
 	// 3000 W × $0.10/kWh = $0.30/h → at $100,000/BTC = 0.30/100000×1e8/3600
@@ -578,6 +582,16 @@ func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
 	o.devRefs = append(o.devRefs, arbitration.DeviceRef{Identity: hal.Identity{ID: "gpu-0"}})
 	if got := o.powerFloor(); math.Abs(got-want/2) > 1e-9 {
 		t.Errorf("powerFloor() with 2 devices = %v, want ~%v", got, want/2)
+	}
+	// The gauge must track the floor actually applied each round: collapsing
+	// an input (rate feed dead) must drop the gauge to 0, not leave a stale
+	// positive floor on display while none is in force.
+	o.rateSource = provider.StaticRateSource{Rate: 0}
+	if got := o.powerFloor(); got != 0 {
+		t.Errorf("powerFloor() with dead rate = %v, want 0", got)
+	}
+	if got := m.powerBreakevenFloor.Value(); got != 0 {
+		t.Errorf("power_breakeven_floor gauge after rate collapse = %v, want 0", got)
 	}
 }
 
@@ -834,7 +848,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -854,7 +868,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -878,7 +892,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -902,7 +916,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -935,7 +949,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -959,7 +973,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -984,7 +998,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -1013,7 +1027,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -1041,7 +1055,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -1063,7 +1077,7 @@ func TestHandshake_VersionOutOfRange(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool negotiates version outside declared range")
 	}
@@ -1085,7 +1099,7 @@ func TestHandshake_UnhonoredSetupFlags(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool requires unoffered flags")
 	}
@@ -1113,7 +1127,7 @@ func TestHandshake_WrongChannelReqID(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel response echoes a foreign req_id")
 	}
@@ -1139,19 +1153,21 @@ func TestRunReconnectLoop_MultiPool_Failover(t *testing.T) {
 		logMu.Unlock()
 	}
 
+	mp := provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1})
 	r := reconnectOpts{
 		opts: Options{
 			Config: config.Config{
 				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
 				Pools: []config.PoolConfig{
-					{URL: "stratum+v2://127.0.0.1:1"},
-					{URL: "stratum+v2://127.0.0.1:2"},
+					{URL: "stratum+v2://127.0.0.1:1", PayoutScheme: "fpps"},
+					{URL: "stratum+v2://127.0.0.1:2", PayoutScheme: "solo"},
 				},
 			},
 			MaxReconnectAttempts: 4,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: mp,
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck
@@ -1162,6 +1178,11 @@ func TestRunReconnectLoop_MultiPool_Failover(t *testing.T) {
 
 	if !strings.Contains(joined, "pool") {
 		t.Errorf("expected pool failover in logs; got: %v", logs)
+	}
+	// Four attempts dial pools[0], pools[1], pools[0], pools[1] — the quote
+	// scheme must track the pool of the last attempt, not the startup pool.
+	if got := mp.PayoutScheme(); got != "solo" {
+		t.Errorf("provider payout scheme = %q, want %q (last dialed pool)", got, "solo")
 	}
 }
 
@@ -1193,8 +1214,9 @@ func TestRunReconnectLoop_MultiAddr_Failover(t *testing.T) {
 			},
 			MaxReconnectAttempts: 6,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1}),
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck
@@ -1244,7 +1266,7 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
 		if sendJob {
-			// Use numeric job ID "1" so applyJob can parse it with fmt.Sscanf.
+			// Numeric job ID "1" — the share below uses JobID 1 to match.
 			fmt.Fprintf(conn,
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
@@ -1711,6 +1733,11 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
 		close(submitResponseSent)
@@ -1720,7 +1747,12 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	// Keep merged open; one share in buffer.  Closing it would cause
 	// runSessionV1 to return before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	// Inject after the notify lands: pre-job shares are dropped as
+	// cross-session leftovers, so the share must arrive once job 1 is armed.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1787,6 +1819,11 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","Duplicate share",null]}`+"\n")
 		close(submitResponseSent)
@@ -1794,7 +1831,10 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 	}()
 
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1857,6 +1897,11 @@ func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		// Epoch A: the share injected below carries target(0.001).
 		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[0.001]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
@@ -1873,7 +1918,10 @@ func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
 		t.Fatal(err)
 	}
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1936,6 +1984,11 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		// Delay reply by 5 ms so elapsed rounds to >= 1 ms and the p95 > 0
 		// branch in the stats ticker is exercised.
@@ -1948,7 +2001,10 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// One share in buffer; keep merged open so runSessionV1 doesn't return
 	// via the "merged closed" path before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	}()
 
 	var mu sync.Mutex
 	var logLines []string
@@ -2500,16 +2556,18 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
-func TestRunSessionV1_ApplyJobError(t *testing.T) {
+// TestRunSessionV1_OpaqueJobID exercises run.go:~1640: a V1 job_id is an
+// opaque string, not a decimal. A non-numeric ID must arm the job and be
+// echoed back verbatim in mining.submit — mapping it through %d used to
+// either drop the job outright or echo a wrong reformatted ID.
+func TestRunSessionV1_OpaqueJobID(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	defer ln.Close()
 
+	submitCh := make(chan string, 1)
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -2523,29 +2581,40 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Non-decimal job ID: must arm the job, not drop it.
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
-				`"not-a-number",`+
+				`"opaque-xyz",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
 				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
-		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
+		// The engine should submit a share; params[1] must be the ORIGINAL
+		// job_id string, verbatim — "opaque-xyz", not a reformatted decimal.
+		line, _ := r.ReadString('\n')
+		submitCh <- line
+		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+		time.Sleep(50 * time.Millisecond)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	merged := make(chan miner.Share)
+	merged := make(chan miner.Share, 1)
 	defer close(merged)
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		merged <- miner.Share{JobID: v1JobWireID("opaque-xyz"), Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	var logMu sync.Mutex
 	var logLines []string
+	m := newEngineMetrics(metrics.NewRegistry())
 
 	_ = runSessionV1(ctx, sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
 		interval: 200 * time.Millisecond,
+		m:        m,
 		log: func(_, msg string) {
 			logMu.Lock()
 			logLines = append(logLines, msg)
@@ -2553,15 +2622,30 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		},
 	})
 
+	select {
+	case line := <-submitCh:
+		var req struct {
+			Params []string `json:"params"`
+		}
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			t.Fatalf("decode submit: %v", err)
+		}
+		if len(req.Params) < 2 || req.Params[1] != "opaque-xyz" {
+			t.Fatalf("submit must echo the pool's job_id verbatim; got params %v", req.Params)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("engine never submitted the share for the opaque job ID")
+	}
+
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, `V1 job "opaque-xyz"`) {
+		t.Errorf("expected the opaque job to be armed; got: %v", logLines)
 	}
 }
 
-// TestRunSessionV1_SubmitError covers run.go:900–907: when sess.Submit returns
+// TestRunSessionV1_SubmitError covers the V1 submit error path: when sess.Submit returns
 // an error (pool reads the submit then closes without responding), the engine
 // logs "V1 submit: <err>" and, when elapsed > 0, records the latency sample.
 func TestRunSessionV1_SubmitError(t *testing.T) {
@@ -2584,6 +2668,11 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit — read but do not respond
 		// Sleep so elapsed > 0 (triggers latency.Record branch on line 904–906).
 		time.Sleep(5 * time.Millisecond)
@@ -2595,7 +2684,10 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 
 	// Pre-queue one share so the merged case fires and Submit is called.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	var logMu sync.Mutex
 	var logLines []string
@@ -2780,9 +2872,9 @@ func (fp *dropAfterHandshakePool) handle(conn net.Conn) {
 		return
 	}
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF
@@ -2820,8 +2912,9 @@ func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
 			},
 			MaxReconnectAttempts: 10,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1}),
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck
@@ -2877,7 +2970,7 @@ func handshakeCaptureNominal(t *testing.T, serverConn net.Conn) <-chan float32 {
 		}
 		got <- msg.OpenMiningChannel.NominalHashrate
 
-		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, GroupChannelID: 4}
 		payload, _ = omcs.Encode()
 		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
 		encoded, _ = stratum.EncodeFrame(outF)
@@ -2898,7 +2991,7 @@ func TestHandshake_DeclaresNominalHashrateWhenWorkersCold(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"}) // never started: HashRate == 0
 
 	dec := stratum.NewDecoder(clientConn)
-	chanID, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
+	chanID, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -3021,13 +3114,19 @@ func TestUpdateWork_ResumesAfterArbResume(t *testing.T) {
 }
 
 // TestReconcileArbPauses: membership follows the latest allocation —
-// idle (empty Stream) and ai.* assignments pause; mining resumes.
+// idle (empty Stream) and non-mining-category assignments pause; any
+// mining.* stream resumes. The predicate is the stream category prefix,
+// not the specific provider name: a future non-mining stream (render.*,
+// science.*) must still pause the device, and a future mining provider
+// variant (mining.datum) must not.
 func TestReconcileArbPauses(t *testing.T) {
 	paused := &pauseSet{}
 	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
 		{DeviceID: "dev-idle", Stream: ""},
 		{DeviceID: "dev-ai", Stream: "ai.akash"},
+		{DeviceID: "dev-render", Stream: "render.grid"},
 		{DeviceID: "dev-min", Stream: "mining.stratum"},
+		{DeviceID: "dev-datum", Stream: "mining.datum"},
 	}}, paused)
 	if !paused.Paused("dev-idle") {
 		t.Error("idle assignment did not pause dev-idle")
@@ -3035,8 +3134,14 @@ func TestReconcileArbPauses(t *testing.T) {
 	if !paused.Paused("dev-ai") {
 		t.Error("ai.* assignment did not pause dev-ai")
 	}
+	if !paused.Paused("dev-render") {
+		t.Error("non-mining render.* assignment did not pause dev-render")
+	}
 	if paused.Paused("dev-min") {
 		t.Error("mining assignment left dev-min paused")
+	}
+	if paused.Paused("dev-datum") {
+		t.Error("mining.* variant assignment left dev-datum paused")
 	}
 
 	// A nil set must be a no-op (tests that never wire arbitration).
@@ -3057,6 +3162,7 @@ func TestChannelIDOf(t *testing.T) {
 		{"SetTarget", stratum.Message{SetTarget: &stratum.SetTarget{ChannelID: 11}}, 11, true},
 		{"SubmitSharesSuccess", stratum.Message{SubmitSharesSuccess: &stratum.SubmitSharesSuccess{ChannelID: 13}}, 13, true},
 		{"SubmitSharesError", stratum.Message{SubmitSharesError: &stratum.SubmitSharesError{ChannelID: 15}}, 15, true},
+		{"CloseChannel", stratum.Message{CloseChannel: &stratum.CloseChannel{ChannelID: 17}}, 17, true},
 		{"Unknown", stratum.Message{Unknown: &stratum.UnknownMessage{MsgType: 0x99}}, 0, false},
 		{"Empty", stratum.Message{}, 0, false},
 	}
@@ -3065,5 +3171,240 @@ func TestChannelIDOf(t *testing.T) {
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: channelIDOf = (%d, %v), want (%d, %v)", c.name, got, ok, c.want, c.ok)
 		}
+	}
+}
+
+// buildV1CoinbaseParts serialises a minimal coinbase transaction and
+// splits it at the extranonce gap into the notify's coinb1/coinb2 halves.
+// The scriptSig is exactly en1(3 bytes: "c0ffee") + en2(4 bytes), so the
+// halves reassemble to a well-formed transaction the payout verifier can
+// parse. outs are the raw scriptPubKeys of the coinbase's outputs.
+func buildV1CoinbaseParts(outs [][]byte) (string, string) {
+	var b1 strings.Builder
+	b1.WriteString("01000000")               // version
+	b1.WriteString("01")                     // input count
+	b1.WriteString(strings.Repeat("00", 32)) // prev txid
+	b1.WriteString("ffffffff")               // prev vout index
+	b1.WriteString("07")                     // scriptSig length = 3 + 4
+	var b2 strings.Builder
+	b2.WriteString("ffffffff") // sequence
+	b2.WriteString(fmt.Sprintf("%02x", len(outs)))
+	for _, o := range outs {
+		b2.WriteString("00f2052a01000000") // 50 BTC
+		b2.WriteString(fmt.Sprintf("%02x", len(o)))
+		b2.WriteString(hex.EncodeToString(o))
+	}
+	b2.WriteString("00000000") // locktime
+	return b1.String(), b2.String()
+}
+
+// fakeV1PoolCoinb2 is fakeV1Pool with a parameterised coinb2, for the
+// TIDES direct-coinbase payout verification tests.
+func fakeV1PoolCoinb2(t *testing.T, outs [][]byte) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolCoinb2 listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		coinb1, cb2 := buildV1CoinbaseParts(outs)
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`%q,%q,[],"00000002","1d00ffff","68d36c5e",true]}`+"\n",
+			coinb1, cb2)
+		time.Sleep(300 * time.Millisecond)
+	}()
+
+	return ln.Addr().String()
+}
+
+// The coinbase in a notify lacks the configured payout script → warn.
+func TestRunSessionV1_TIDESPayoutMissingWarns(t *testing.T) {
+	addr := fakeV1PoolCoinb2(t, [][]byte{{0x6a, 0x02, 0xde, 0xad}}) // OP_RETURN, pays nothing
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	err := runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns == 0 {
+		t.Error("expected missing-payout warning (tides coinbase lacks our script), got err:", err)
+	}
+	if warns > 1 {
+		t.Errorf("missing-payout warning fired %d times, want once per episode", warns)
+	}
+}
+
+// The coinbase carries the P2PKH script of the configured address → no warn.
+func TestRunSessionV1_TIDESPayoutPresentNoWarn(t *testing.T) {
+	// coinb2 = the P2PKH locking script for the genesis address.
+	payScript, _ := hex.DecodeString("76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	addr := fakeV1PoolCoinb2(t, [][]byte{payScript})
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 0 {
+		t.Errorf("payout present but %d missing-payout warnings fired", warns)
+	}
+}
+
+// Conventional schemes (fpps/pplns) legitimately pay the pool's wallet in
+// the coinbase — the check must not fire for them.
+func TestRunSessionV1_FPPSPayoutCheckSkipped(t *testing.T) {
+	addr := fakeV1PoolCoinb2(t, [][]byte{{0x6a, 0x02, 0xde, 0xad}}) // OP_RETURN, pays nothing
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "fpps",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 0 {
+		t.Errorf("fpps pool triggered %d payout warnings, want 0 (pool-owned coinbase is expected)", warns)
+	}
+}
+
+// A script byte sequence that appears outside the output layer (inside
+// an OP_RETURN push here) is NOT a payout — the former substring check
+// would have been fooled; the positional vout parse must still warn.
+func TestRunSessionV1_TIDESPayoutEvasionWarns(t *testing.T) {
+	payScript, _ := hex.DecodeString("76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	decoy := append([]byte{0x6a, byte(len(payScript))}, payScript...) // OP_RETURN PUSHDATA <script>
+	addr := fakeV1PoolCoinb2(t, [][]byte{decoy})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns == 0 {
+		t.Error("script embedded in OP_RETURN must not satisfy the payout check")
+	}
+}
+
+func TestRunSessionV1_TIDESBadAddressWarns(t *testing.T) {
+	addr := fakeV1Pool(t, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "not-an-address",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "cannot verify") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns != 1 {
+		t.Errorf("unverifiable payout address produced %d warnings, want exactly 1", warns)
+	}
+}
+
+// TestQuoteFreshness pins the freshness-ledger clamp: a quote timestamp
+// that is zero or dated in the future must resolve to now, so a skewed
+// or malformed At cannot make the stream immortal to pruneStaleStreams.
+func TestQuoteFreshness(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want time.Time
+	}{
+		{"zero resolves to now", time.Time{}, now},
+		{"future resolves to now", now.Add(time.Hour), now},
+		{"far future resolves to now", now.AddDate(10, 0, 0), now},
+		{"past is kept", now.Add(-time.Minute), now.Add(-time.Minute)},
+		{"exact now is kept", now, now},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := quoteFreshness(tc.at, now); !got.Equal(tc.want) {
+				t.Errorf("quoteFreshness(%v, %v) = %v, want %v", tc.at, now, got, tc.want)
+			}
+		})
 	}
 }
