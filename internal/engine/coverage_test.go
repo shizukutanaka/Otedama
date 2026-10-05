@@ -3162,6 +3162,7 @@ func TestChannelIDOf(t *testing.T) {
 		{"SetTarget", stratum.Message{SetTarget: &stratum.SetTarget{ChannelID: 11}}, 11, true},
 		{"SubmitSharesSuccess", stratum.Message{SubmitSharesSuccess: &stratum.SubmitSharesSuccess{ChannelID: 13}}, 13, true},
 		{"SubmitSharesError", stratum.Message{SubmitSharesError: &stratum.SubmitSharesError{ChannelID: 15}}, 15, true},
+		{"CloseChannel", stratum.Message{CloseChannel: &stratum.CloseChannel{ChannelID: 17}}, 17, true},
 		{"Unknown", stratum.Message{Unknown: &stratum.UnknownMessage{MsgType: 0x99}}, 0, false},
 		{"Empty", stratum.Message{}, 0, false},
 	}
