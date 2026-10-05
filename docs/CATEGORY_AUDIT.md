@@ -7033,3 +7033,11 @@ CHANGELOG entry added under Fixed (session 1343).
 | S | Does the V2 session have the same producer/close race on its jobs channel? | ✅ Verified structurally impossible: `jobsCh` is written by exactly one site — the `emit` closure inside `readLoop` — and closed by that same goroutine's defer. No other goroutine ever sends on it, so no send-on-closed window exists. The session also has no stash/replay path (SV2 structurally cannot deliver jobs before `OpenMiningChannelSuccess`), so there is no cross-goroutine sender to begin with. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1345 update — first-principles audit of "a stale pool response can't wedge the read loop" (Socratic pass 27)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `handleResponse` sends on the pending call's channel — if the caller already timed out (callTimeout) or its ctx died, does the send block the read goroutine? | ✅ Verified non-blocking: `respCh` is created with capacity 1 and the pending entry is deleted atomically under `pendingMu` before send/close, so at most one buffered send ever happens and it never waits for a receiver. A response that lands after the caller gave up is dropped (`ok=false`), and `cancelPending` closes — never sends — so no send-on-closed panic either (the de-queuer is the only sender). |
+
+Ledger only — verification round, no behavior-visible change.
