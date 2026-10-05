@@ -164,6 +164,48 @@ func TestFetcher_MedianOfTwoSourcesAverages(t *testing.T) {
 	}
 }
 
+// Two wildly divergent in-band readings → the fetch is distrusted and
+// the cache untouched: an average has no outlier rejection, so one
+// manipulated endpoint cannot smuggle a distorted rate through.
+func TestFetcher_DivergentTwoSourcesDistrusted(t *testing.T) {
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srv1 := httptest.NewServer(makeHandler("90000"))
+	srv2 := httptest.NewServer(makeHandler("50000000")) // ~550x, still in-band
+	defer srv1.Close()
+	defer srv2.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name, URL: url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv1.Client(),
+		sources:    []Source{makeSource("s1", srv1.URL), makeSource("s2", srv2.URL)},
+	}
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch succeeded with wildly divergent sources")
+	}
+	if rate, fresh := f.BTCUSDRate(); fresh {
+		t.Errorf("BTCUSDRate fresh=true after divergent fetch, rate=%v — divergent feed must not be cached", rate)
+	}
+}
+
 func TestFetcher_ImplausibleReadingExcludedFromMedian(t *testing.T) {
 	// Three sources, one returning a unit-mangled value (price in BTC ≈ 0.95
 	// instead of USD). It must be dropped before the median so it cannot pull
