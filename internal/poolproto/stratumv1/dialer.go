@@ -163,8 +163,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: %w", poolproto.ErrHandshakeFailed, err)
 	}
-	sess.extranonce1.Store(&en1)
-	sess.extranonce2Size.Store(int64(en2Size))
+	sess.extranonce.Store(&extranoncePair{en1: en1, size: en2Size})
 
 	// Step 2: mining.authorize — authenticate the worker.
 	user := conn.creds.User

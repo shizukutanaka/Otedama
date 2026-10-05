@@ -76,6 +76,17 @@ const maxLineBytes = 64 << 10 // 64 KiB
 
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
+
+// extranoncePair is the negotiated (extranonce1, extranonce2_size)
+// pair. The session stores and swaps it atomically so a mid-session
+// mining.set_extranonce is never observed torn: a job built on the new
+// en1 with the old en2 size would echo a wrong-length extranonce2 the
+// pool rejects.
+type extranoncePair struct {
+	en1  string
+	size int
+}
+
 type session struct {
 	conn *connection
 
@@ -119,11 +130,11 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time and
-	// may be replaced by a mid-session mining.set_extranonce, which runs
-	// on the read goroutine while Submit reads them on the caller's.
-	extranonce1     atomic.Pointer[string]
-	extranonce2Size atomic.Int64
+	// extranonce holds the negotiated extranoncePair, swapped
+	// atomically. Written on the read goroutine (subscribe result,
+	// mining.set_extranonce), read by completeV1Job/Submit on other
+	// goroutines.
+	extranonce atomic.Pointer[extranoncePair]
 
 	// authorized gates pool-initiated messages until mining.authorize
 	// succeeds. The read loop starts before the handshake completes, so a
@@ -397,8 +408,7 @@ func (s *session) handleSetDifficulty(params json.RawMessage) {
 func (s *session) handleSetExtranonce(params json.RawMessage) {
 	// Some pools rotate extranonce mid-session. Update our copy.
 	if en1, sz, ok := parseSetExtranonce(params); ok {
-		s.extranonce1.Store(&en1)
-		s.extranonce2Size.Store(int64(sz))
+		s.extranonce.Store(&extranoncePair{en1: en1, size: sz})
 	}
 }
 
@@ -505,14 +515,14 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	// extranonce2Size is pool-controlled; anything above the observed
 	// maximum (8–12 bytes) falls back to the old behavior instead of
 	// allocating a pool-dictated buffer per job.
-	en1s := s.extranonce1.Load()
-	sz := int(s.extranonce2Size.Load())
+	ep := s.extranonce.Load()
 	if len(j.Coinb1) == 0 || len(j.Coinb2) == 0 ||
-		en1s == nil || *en1s == "" || sz <= 0 ||
-		sz > 64 {
+		ep == nil || ep.en1 == "" || ep.size <= 0 ||
+		ep.size > 64 {
 		return
 	}
-	en1, err := hex.DecodeString(*en1s)
+	sz := ep.size
+	en1, err := hex.DecodeString(ep.en1)
 	if err != nil {
 		return
 	}
@@ -603,7 +613,11 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", min(max(int(s.extranonce2Size.Load()), 0), maxExtranonce2Size))
+		sz := 0
+		if ep := s.extranonce.Load(); ep != nil {
+			sz = ep.size
+		}
+		en2 = strings.Repeat("00", min(max(sz, 0), maxExtranonce2Size))
 	}
 	workerName := "otedama"
 	if u := s.authorizedUser.Load(); u != nil && *u != "" {

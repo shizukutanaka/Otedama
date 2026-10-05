@@ -956,11 +956,11 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if got := sess.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+	if got := sess.extranonce.Load(); got == nil || got.en1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sess.extranonce2Size.Load() != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
+	if sess.extranonce.Load().size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce.Load().size)
 	}
 }
 
@@ -1200,8 +1200,8 @@ func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
 	if got := math.Float64frombits(sess.difficulty.Load()); got != 0 {
 		t.Fatalf("pre-auth set_difficulty applied difficulty %v", got)
 	}
-	if en1 := sess.extranonce1.Load(); en1 != nil {
-		t.Fatalf("pre-auth set_extranonce applied extranonce1 %q", *en1)
+	if ep := sess.extranonce.Load(); ep != nil {
+		t.Fatalf("pre-auth set_extranonce applied extranonce1 %q", ep.en1)
 	}
 
 	// Authorization lands: the stashed messages replay in wire order.
@@ -1210,11 +1210,12 @@ func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
 	if got := math.Float64frombits(sess.difficulty.Load()); got != 0.0001 {
 		t.Fatalf("stashed set_difficulty not replayed, got %v", got)
 	}
-	if en1 := sess.extranonce1.Load(); en1 == nil || *en1 != "aa11" {
-		t.Fatalf("stashed set_extranonce not replayed, got %v", en1)
+	ep := sess.extranonce.Load()
+	if ep == nil || ep.en1 != "aa11" {
+		t.Fatalf("stashed set_extranonce not replayed, got %v", ep)
 	}
-	if got := sess.extranonce2Size.Load(); got != 2 {
-		t.Fatalf("stashed extranonce2_size not replayed, got %v", got)
+	if ep.size != 2 {
+		t.Fatalf("stashed extranonce2_size not replayed, got %v", ep.size)
 	}
 }
 
@@ -1793,11 +1794,11 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if got := sv1.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+	if got := sv1.extranonce.Load(); got == nil || got.en1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sv1.extranonce2Size.Load() != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
+	if sv1.extranonce.Load().size != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce.Load().size)
 	}
 }
 
@@ -2177,9 +2178,9 @@ func TestSession_SetExtranonce_ConcurrentReaders(t *testing.T) {
 		}(i)
 	}
 	for i := 0; i < 2000; i++ {
-		_ = sess.extranonce2Size.Load()
-		if p := sess.extranonce1.Load(); p != nil {
-			_ = *p
+		if p := sess.extranonce.Load(); p != nil {
+			_ = p.en1
+			_ = p.size
 		}
 	}
 	wg.Wait()
@@ -2251,9 +2252,7 @@ func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
 
 func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
 	sess := makeBareSess()
-	en1str := "c0ffee01"
-	sess.extranonce1.Store(&en1str)
-	sess.extranonce2Size.Store(4)
+	sess.extranonce.Store(&extranoncePair{en1: "c0ffee01", size: 4})
 
 	notify := func(id string) poolproto.Job {
 		sess.dispatch([]byte(fmt.Sprintf(
@@ -2289,7 +2288,7 @@ func TestCompleteV1Job_BuildsMerkleAndRollsEN2(t *testing.T) {
 
 	// Verify the fold end-to-end: merkle == dsha(coinb1|en1|en2|coinb2)
 	// with an empty branch list.
-	en1, _ := hex.DecodeString(*sess.extranonce1.Load())
+	en1, _ := hex.DecodeString(sess.extranonce.Load().en1)
 	coinb1, _ := hex.DecodeString("0100000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	coinb2, _ := hex.DecodeString("ffffffff01aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899ac00000000")
 	want := btccrypto.Hash256(append(append(append(append([]byte{}, coinb1...), en1...), j1.ExtraNonce...), coinb2...))
