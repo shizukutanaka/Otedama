@@ -6220,3 +6220,11 @@ All packages build, vet, and test green.
 | M | Same `go vet ./...` (compiles build-tag variants — daemon windows/darwin/linux splits) | ✓ all clean — no tag-gated file fails to typecheck |
 | L | Other tag combinations worth checking (`arm64`, `arm` covered s1308) | ✓ amd64×3 OS + 386/arm×linux = 5 targets verified; coverage adequate for shipped platforms |
 
+## Session 1306 update — post-merge-wave master verification (round 2)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | `go build ./...` + `go vet ./...` on master `e2ee5084f` | ✓ clean — no warnings after the ~40-PR merge wave (incl. code merges #619/#1062/#1235/#1239/#1241/#1293) |
+| R | `go test -race ./...` — all 23 packages | ✓ PASS (engine 30.2s, lightning 97.3s, miner cached; zero failures, zero data races) |
+| R | Post-merge drift between merged fix-PRs | ✓ none observed — all merged refactorings (slices.Sort, errors.Is, strconv) coexist cleanly |
+
