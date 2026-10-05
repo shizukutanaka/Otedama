@@ -7671,3 +7671,7 @@ Verified against live GitHub API (authenticated): sv2-spec open PR set unchanged
 ## Session 1459 update (Socratic pass 132 — real fix)
 
 **Claim falsified (comment):** run.go's `// Arbitration loop: re-run Decide whenever quotes change.` repeated the exact wrong claim s1438 fixed in the arbitration loop itself — the loop's select wakes on the ticker only; quote arrivals just refresh the streams map. Corrected the comment to name the tick-only design and the boundary (quotes refresh, not trigger). Second instance of this false claim removed from the codebase. engine package builds clean.
+
+## Session 1460 update (Socratic pass 133)
+
+**Claim verified:** "The idle-transition latch re-arms correctly across every cycle" — true. HeldIdle is set only when the previous map has an entry for the device AND that entry is itself idle (Stream==""). The re-arm paths all behave: first-ever tick (no prev) logs once; consecutive idle suppresses; idle→stream→idle flips prev.Stream non-empty so the new idle transition logs again; Decide-error fallback preserves the old alloc so an error can't spuriously re-arm or re-log; activity map rebuild skips idle assignments so a device held-idle for days never reappears in provider lines. The one bounded case — a brand-new device appearing with no prev entry — would log on its first idle decision, which is the correct disclosure. Code unchanged.
