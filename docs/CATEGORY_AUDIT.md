@@ -6837,3 +6837,15 @@ No code changes required; verification only.
 | S | Are shares for superseded jobs still submitted? | 🔧 Fixed: no freshness gate existed — shares found before a SetNewPrevHash/new notify but submitted after it are guaranteed stale rejects (SV2 invalidates all unnamed jobs; V1 replaces work each notify). Both paths now drop `share.JobID != active job` before submission, counted in `sharesSubmitDropped` with a debug log. |
 
 All packages build, vet, and test green.
+
+## Session 1324 update — first-principles audit of the "no duplicated hashing work" claim (Socratic pass 6)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can two workers produce an identical header? | ✅ Verified: `setup.go` assigns worker `i` `NonceOffset=i*Threads`, `NonceStep=next-pow2(Threads×workers)` — every (worker,thread) owns a disjoint residue class mod the stride, covering all residues (partition math verified: stride pow2 ≥ total, offsets < stride). Nonce wrap rolls `ntime` forward, so (nonce,ntime) is unique per thread too. |
+| S | Is the hashed header well-formed? | ✅ Verified: `updateWork` populates all five inputs (version, prev-hash, merkle, time, bits); `SetNewPrevHash.PrevHash` is documented LE/header-wire order matching `Header.Bytes` offsets; serialization is canonical 80-byte. |
+| S | Can a share cross session/pool boundaries? | ✅ Verified + strengthened: exactly one session drains `merged` at a time (sessions run sequentially in the reconnect loop); shares arriving from a superseded session are now dropped by the session-1323 JobID gate instead of being submitted under the new session's channel. |
+| S | V1 `set_extranonce` rotation mid-session | ⚠️ Noted: shares ground under the previous extranonce carry the old extranonce2 — JobID gate doesn't cover extranonce rotation (JobID may be unchanged). Rare; recorded as residual. |
+| S | V1 non-clean_jobs pools tolerating brief stale shares | ⚠️ Noted: the JobID gate drops marginal shares a lenient pool might have credited — accepted trade-off for guaranteed-reject elimination. |
+
+All packages build, vet, and test green (engine tests incl. existing V1/V2 share-path matrix pass).
