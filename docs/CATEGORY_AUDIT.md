@@ -6289,3 +6289,10 @@ All packages build, vet, and test green.
 | R | Tracked `*.sh` syntax | ✓ `install.sh` is the only tracked shell script (`scripts/` absent) — parses clean under `sh -n` |
 | R | Dockerfile coherence | ✓ Two-stage `golang:1.24-alpine` builder → distroless static; Go pin satisfies the go.mod toolchain floor; CGO_ENABLED=0 + -trimpath + ldflags `internal/version.*` symbol paths correct (#1275 invariant holds in container build too) |
 
+## Session 1293 update — lint-config linter-name currency
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Deprecated linter names | ✓ Zero in the enabled set: all 33 enabled linters (errcheck/govet/ineffassign/staticcheck/unused/typecheck/gosec/bodyclose/rowserrcheck/goconst/gocritic/revive/unconvert/unparam/dogsled/dupl/gocyclo/misspell/nakedret/prealloc/gosimple/gofmt/gofumpt/goimports/errorlint/nilerr/usestdlibvars/wastedassign) are valid golangci-lint v2 names — no deadcode/varcheck/structcheck/scopelint/maligned/interfacer/golint/ifshort/exportloopref remnants |
+| R | Scoping | ✓ `disable-all: true` + explicit allowlist — no surprise linter activation on tool upgrades |
+
