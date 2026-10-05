@@ -1929,6 +1929,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1226 update — governance-doc ↔ enforcement parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | CODEOWNERS path restrictions | ✅ Clean — MAINTAINERS.md's "committers cannot land lightning/btccrypto/poolproto/stratum-noise without lead review" claim maps to real CODEOWNERS patterns covering exactly those paths; every pattern still resolves to an existing path (re-verified post s1281). |
+| S | Release/tag rules | ✅ Clean — GOVERNANCE.md's tagging rules (patch self-service, minor consensus, CHANGELOG-Unreleased staging) match the single-maintainer CODEOWNERS reality and the unsigned-release state it already discloses honestly. |
+| M | Signing posture | ✅ Clean — GOVERNANCE.md correctly labels cosign/keyless signing as *intended*, not current (release.yml doesn't invoke goreleaser — recorded residual). |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
