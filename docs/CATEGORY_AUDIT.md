@@ -1840,6 +1840,19 @@ enforcement #1239; workflow branch-filter master #1211/#1293).
 
 All packages build, vet, and test green.
 ---
+
+## Session 1237 update — THREAT_MODEL.md parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| crypto-claims | scrypt N=2^17 + AES-256-GCM verified (seedstore); FIPS-140-3 posture note consistent with #522 erratum | Clean |
+| bounds-claims | MaxFrameSize=16MiB, jobsCh buffer=32, outstanding-job maps cap=64 FIFO, submitLimiter token bucket — all verified in code | Clean |
+| future-framing | Tor-by-default correctly attributed to ADR-007 B7 (Proposed), not claimed as implemented | Clean |
+| residual-honesty | Residual-risk paragraphs honestly state what mitigations do NOT cover (wire-rate vs wasted-hashrate, channel DoS at config scale) | Clean |
+
+THREAT_MODEL.md 500 lines fully verified; no stale mitigation claims remain after the #521/#522/#604 corrections.
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
