@@ -6494,3 +6494,15 @@ All packages build, vet, and test green.
 | M | `go mod tidy` drift (unused requires or missing sums). | ✅ Clean: `go mod tidy -diff` produces no changes. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1261 update — walkdir + iter-adoption + new-api-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| L | `filepath.Walk` residual (pre-1.16 idiom) / missing `fs.WalkDir` modernization — the slower `os.FileInfo`-based walker still in tree. | ✅ Clean: zero `filepath.Walk` and zero `fs.WalkDir`/`os.DirFS` — the codebase performs no filesystem-tree walks at all (config/wallet/service paths are all direct single-file I/O). |
+| M | Go 1.23+ iterator adoption — `iter`/`Seq`, `slices.All`/`maps.All`/`slices.Collect`/`slices.Sorted` for map-key collection and lazy transforms. | ✅ Clean: correctly absent — range-over-func is language-gated at go1.23 while go.mod pins `go 1.22` (documented floor: SUSTAINABILITY §28, ADR-009). The two map-key collect sites (`metricKey`, `renderLabels`) are the canonical pre-sized `append`→`slices.Sort`→`strings.Builder` equivalent of `slices.Sorted(maps.Keys(m))`. |
+| L | Newer-stdlib absence census — `os.Root` (1.24 FS confinement), `runtime.AddCleanup`, `testing/synctest`, `testing/quick`, `weak`, `unique`. | ✅ Clean: all absent and correctly so — no confined-FS-traversal site exists for `os.Root`; zero finalizers anywhere (s795/s1815 verified `SetFinalizer` absent, so no `AddCleanup` migration debt); `synctest` needs go1.24+ language anyway and tests already use `clock.Fake` for determinism; `testing/quick`/`weak`/`unique` have no applicable site (property tests are hand-rolled + fuzz; no caches to intern). |
+
+All packages build, vet, and test green.
