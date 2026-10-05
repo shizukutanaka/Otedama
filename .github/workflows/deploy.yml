@@ -269,11 +269,11 @@ jobs:
       - name: Configure kubectl
         env:
           KUBECONFIG_B64: ${{ secrets.PRODUCTION_KUBECONFIG }}
-        if: ${{ secrets.PRODUCTION_KUBECONFIG != '' }}
+        if: ${{ env.KUBECONFIG_B64 != '' }}
         run: |
           mkdir -p ~/.kube
           echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
-      
+
       - name: Rollback deployment
         env:
           KUBECONFIG_B64: ${{ secrets.PRODUCTION_KUBECONFIG }}
@@ -281,11 +281,11 @@ jobs:
         run: |
           kubectl rollout undo deployment/otedama -n otedama
           kubectl rollout status deployment/otedama -n otedama
-      
+
       - name: Notify rollback
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-        if: ${{ secrets.SLACK_WEBHOOK != '' }}
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
         uses: 8398a7/action-slack@v3
         with:
           status: custom

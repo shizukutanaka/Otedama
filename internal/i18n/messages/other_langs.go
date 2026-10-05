@@ -7,7 +7,7 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 
 // French returns the French (fr) message catalog.
 func French() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangFrench, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangFrench, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama est prêt. Le minage va commencer sous peu.",
 		StartupWalletCreated:  "Un nouveau portefeuille Lightning a été créé. Votre phrase de récupération est stockée en sécurité sur cet appareil.",
 		StartupHardwareFound:  "{{.count}} appareil(s) de minage détecté(s) : {{.summary}}",
@@ -30,7 +30,7 @@ func French() (*i18n.Catalog, error) {
 
 // German returns the German (de) message catalog.
 func German() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangGerman, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangGerman, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama ist bereit. Mining beginnt in Kürze.",
 		StartupWalletCreated:  "Ein neues Lightning-Wallet wurde erstellt. Ihr Wiederherstellungs-Seed ist sicher auf diesem Gerät gespeichert.",
 		StartupHardwareFound:  "{{.count}} Mining-Gerät(e) erkannt: {{.summary}}",
@@ -53,7 +53,7 @@ func German() (*i18n.Catalog, error) {
 
 // Portuguese returns the Portuguese (pt) message catalog.
 func Portuguese() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangPortuguese, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangPortuguese, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama está pronto. A mineração começará em breve.",
 		StartupWalletCreated:  "Uma nova carteira Lightning foi criada. Sua semente de recuperação está armazenada com segurança neste dispositivo.",
 		StartupHardwareFound:  "{{.count}} dispositivo(s) de mineração detectado(s): {{.summary}}",
