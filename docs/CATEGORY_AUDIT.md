@@ -1892,6 +1892,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1231 update — script/package-manifest parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Shell-script surface — `find` shows `install.sh` is the repo's only script; workflow references to other scripts must all resolve. | ⚠️ Noted — `release.yml` `build-packages` (tag-gated) references four absent files: `scripts/post-install.sh`, `scripts/pre-remove.sh`, `scripts/otedama.service`, `./config.yaml` — the DEB/RPM `fpm` steps fail on any tag push. Same defect class as the already-recorded `scripts/verify-docker.{sh,ps1}` gap in ci.yml. Fix deferred pending a maintainer decision on whether to author the packaging scripts or drop the packaging job. |
+| S | `code-review.yml` `generate-comment.js` — script absent (`scripts/` doesn't exist). | ✅ Clean — properly gated behind `has_node` (`package.json` absent → `has_node=false` → node steps skipped, fallback comment used). The job's failure in CI is unrelated. |
+| S | Line-ending enforcement — `.editorconfig` declares `end_of_line = lf`, but no `.gitattributes` exists to enforce LF for `*.sh` on Windows checkouts (autocrlf could write CRLF into `install.sh`, breaking bash). | ⚠️ Noted — minor portability gap; users typically run `install.sh` via `curl|sh` or on Unix, so impact is low. A one-line `*.sh text eol=lf` `.gitattributes` would close it. |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
