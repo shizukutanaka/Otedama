@@ -7073,3 +7073,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | `mining.set_version_mask` was silently ignored — is that honest? | 🔧 Fixed: ignoring it is *safe* (no state mutation) but silently dropping it is *dishonest* — on a mandate-rolling ASICBoost pool (e.g. a DATUM endpoint, KNOWN_LIMITATIONS §14) the operator sees an unexplained 100% reject rate with no hint why. `set_version_mask` now joins the gated methods and delivers a one-time-per-session diagnostic notice over `noticeCh` (which the engine surfaces as `engine: pool notice`), telling the operator we do not roll versions. The pre-existing "unknown notification ignored" test was re-pointed at `mining.suggest_difficulty`. |
 
 CHANGELOG entry added under Fixed (session 1349).
+
+## Session 1350 update — first-principles audit of "a payout_scheme typo can't silently disable coinbase verification" (Socratic pass 32)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If the user mistypes `payout_scheme` (e.g. `tiddes`), does the config silently accept it and leave the s1318 coinbase verification off? | ✅ Verified fail-loud: `appendPoolIssues` in `internal/config/config.go` restricts the field to exactly `""`, `fpps`, `pplns`, `tides`, `solo` and rejects anything else at `Validate()` — the binary refuses to run with the typo rather than running unverified. Only `tides`/`solo` opt into the pays-the-user check; `fpps`/`pplns` correctly do not (their coinbases are legitimately pool-owned). |
+
+Ledger only — verification round, no behavior-visible change.
