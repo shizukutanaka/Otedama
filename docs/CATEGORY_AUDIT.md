@@ -6355,3 +6355,14 @@ Ecosystem recheck recorded in ADR-009; next recheck ~session 1297.
 
 All 8 open KNOWN_LIMITATIONS entries re-verified against synced master; no entry is stale.
 
+## Session 1285 update — in-tree fuzz smoke on synced master
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | FuzzValidateAddress (btccrypto) | ✅ 563k execs / 20s, 0 crashes, PASS |
+| R | FuzzParseNotify (stratumv1) | ✅ 2.38M execs / 20s, 0 crashes, PASS |
+| R | FuzzMnemonicToEntropy (lightning) | ✅ 533k execs / 20s, 0 crashes, PASS |
+| R | FuzzDecoder_ReadFrame (stratum) | ✅ 448k execs / 20s, 0 crashes, PASS |
+
+Four representative wire/secret decoders fuzzed 20s each on synced master (~3.9M execs total): zero crashes, zero hangs. Complements the CI fuzz job (#1347).
+
