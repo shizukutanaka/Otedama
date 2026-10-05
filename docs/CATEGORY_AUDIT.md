@@ -6275,3 +6275,10 @@ All packages build, vet, and test green.
 | R | `.goreleaser.yaml` invocation | ⚠️ Noted: no workflow or Makefile target invokes goreleaser — release.yml hand-rolls create-release + cross-build + deb/rpm + brew/scoop instead. The file is valid config but orphaned unless the maintainer runs goreleaser manually |
 | R | Dead-ldflags blast radius | ✓ Bounded: binaries built with the four `main.*` sites fall back to `internal/version` defaults `v3.0.0-alpha.1-dev`/`unknown`/`unknown` — degraded metadata, not a broken binary |
 
+## Session 1295 update — ldflags symbol-path surface census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Correct sites | ✓ Makefile, Dockerfile, `.goreleaser.yaml` all inject `internal/version.{Version,Commit,BuildDate}` — the real symbols (#1275-era fix already landed in these three) |
+| R | Dead-symbol sites | ⚠️ 4 sites still inject nonexistent `main.{Version,GitCommit,BuildTime}`: `.github/workflows/release.yml:92`, `ci-cd.yml:126`, `ci.yml:278`, `ci.yml:334` — binaries built by these jobs report `dev`. Fix already queued in open PR #1275 (its diff covers all 4 sites verbatim); no duplicate PR opened |
+
