@@ -934,11 +934,6 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	jobs := make(map[uint32]*stratum.NewMiningJob)
 	var jobOrder []uint32            // insertion order for jobsCap FIFO eviction
 	var active *stratum.NewMiningJob // job the workers are currently hashing
-	// Latches true once any job has been armed this session; gates the
-	// stale-share drop below so that shares arriving after a
-	// SetNewPrevHash that invalidated every job (active reset to nil)
-	// are still treated as superseded.
-	var jobArmed bool
 	var prevHash [32]byte
 	var prevNBits uint32
 	var activeNTime uint32
@@ -952,7 +947,6 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// "resumes on next job" semantics.
 	startJob := func(j *stratum.NewMiningJob, ntime uint32) {
 		active = j
-		jobArmed = true
 		activeNTime = ntime
 		if opts.isCurtailed() {
 			opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)", j.JobID))
@@ -1255,8 +1249,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			// SetNewPrevHash invalidates every job it doesn't name, so a
 			// share ground under a superseded job is rejected by the pool
-			// before it can even be evaluated — don't submit it.
-			if jobArmed && (active == nil || share.JobID != active.JobID) {
+			// before it can even be evaluated — don't submit it. This also
+			// covers session start: the merged share channel outlives
+			// sessions, so before the first job any share in it is a
+			// leftover from the dead session — submitting it under the new
+			// channel can only produce reject noise.
+			if active == nil || share.JobID != active.JobID {
 				if opts.m != nil {
 					opts.m.sharesSubmitDropped.Inc()
 				}
@@ -1635,7 +1633,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
 			}
-			if haveJob && share.JobID != currentJobID {
+			// Same cross-session rule as the V2 path: before the first
+			// notify, haveJob is false and any share in the merged channel
+			// is a leftover from the dead session — drop it rather than
+			// submit it under the new session's job IDs.
+			if !haveJob || share.JobID != currentJobID {
 				if opts.m != nil {
 					opts.m.sharesSubmitDropped.Inc()
 				}

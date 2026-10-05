@@ -1712,6 +1712,11 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
 		close(submitResponseSent)
@@ -1721,7 +1726,12 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	// Keep merged open; one share in buffer.  Closing it would cause
 	// runSessionV1 to return before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	// Inject after the notify lands: pre-job shares are dropped as
+	// cross-session leftovers, so the share must arrive once job 1 is armed.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1788,6 +1798,11 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","Duplicate share",null]}`+"\n")
 		close(submitResponseSent)
@@ -1795,7 +1810,10 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 	}()
 
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1858,6 +1876,11 @@ func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		// Epoch A: the share injected below carries target(0.001).
 		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[0.001]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
@@ -1874,7 +1897,10 @@ func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
 		t.Fatal(err)
 	}
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Target: issued}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1937,6 +1963,11 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		// Delay reply by 5 ms so elapsed rounds to >= 1 ms and the p95 > 0
 		// branch in the stats ticker is exercised.
@@ -1949,7 +1980,10 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// One share in buffer; keep merged open so runSessionV1 doesn't return
 	// via the "merged closed" path before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	}()
 
 	var mu sync.Mutex
 	var logLines []string
@@ -2585,6 +2619,11 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit — read but do not respond
 		// Sleep so elapsed > 0 (triggers latency.Record branch on line 904–906).
 		time.Sleep(5 * time.Millisecond)
@@ -2596,7 +2635,10 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 
 	// Pre-queue one share so the merged case fires and Submit is called.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	var logMu sync.Mutex
 	var logLines []string
