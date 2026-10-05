@@ -571,6 +571,24 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
+func TestV1JobTarget_UnconvertibleDifficulty_ErrorsInsteadOfNBitsFallback(t *testing.T) {
+	const nBits = 0x1d00ffff // genesis nBits, valid
+
+	// Astronomical difficulty underflows the target to zero; microscopic
+	// difficulty overflows the 256-bit target. Both previously fell back to
+	// the nBits block target silently — workers ground shares no pool
+	// credits, with nothing showing why.
+	for _, d := range []float64{1e300, 1e-300} {
+		if _, err := v1JobTarget(nBits, d); err == nil {
+			t.Errorf("v1JobTarget(nBits, %v) should error, not fall back to the block target", d)
+		}
+	}
+	// Boundary sanity: an ordinary share difficulty still resolves.
+	if _, err := v1JobTarget(nBits, 1024); err != nil {
+		t.Errorf("v1JobTarget(nBits, 1024): %v", err)
+	}
+}
+
 // ----- transitionReject / v1ShareTarget: benign retarget rejects (ESP-Miner #212) -----
 
 func TestV1ShareTarget(t *testing.T) {

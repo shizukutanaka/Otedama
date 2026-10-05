@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1484 — 変換不能な set_difficulty が nBits ブロック難易度へ黙ってフォールバックしていた)
+
+V1 の `mining.set_difficulty` に正だが変換不能な値（天文的な巨大値でターゲットが0へアンダーフロー、~1e-77 未満で256bit超過のオーバーフロー）を送られた場合、`v1JobTarget` が変換エラーを握り潰して nBits ブロック難易度で掘り続けていた。巨大難易度ではプールが拒否する易しいシェアを量産し、極小難易度ではほぼ不可能なシェアを掘る静かな飢餓となり、記録された難易度と実際の掘削ターゲットが乖離して原因が可視化されなかった。変換失敗をエラーとして伝播し、`applyJob` が warn 付きで当該ジョブを棄却するよう修正（`v1ShareTarget` が同じ変換失敗で `ok=false` を返す対称設計と整合）。
+
 ### Fixed (session 1476 — V1 job_id を %d 解析し、mining.submit がプールの元 ID をエコーしていなかった)
 
 V1 の `job_id` は不透明文字列（10進数とは限らない）だが、エンジンは `fmt.Sscanf(job.JobID, "%d")` で uint32 へ潰していた：非10進 ID はエラーでジョブ全体を棄却（静かな採掘停止）、`"1a"` のような混在文字列は先頭桁へ黙って切り詰められ本物の job `"1"` と衝突した。さらに提出側が `FormatUint(share.JobID)` で 10進値を再構成して送出していたため、非10進プールでは全シェアが wrong-ID reject になっていた。新 `v1JobWireID`（10進は値保持、それ以外は FNV-1a）を内部の stale ゲート専用とし、セッションが元文字列を保持して submit が逐語エコーするよう修正。
