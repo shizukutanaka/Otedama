@@ -1748,3 +1748,7 @@ Quiet window continues; next recheck ~session 1393.
 - **sv2-apps:** latest release remains **v0.7.0** (24 Jul). v0.5.0's "Translation Proxy payout verification for SOLO mining" continues to independently converge with Otedama's s1318 coinbase-payout verification axis.
 
 Quiet window continues; next recheck ~session 1405.
+
+### Session 1402 update — ecosystem recheck (2026-10-02)
+
+Normative open set confirmed: sv2-spec #203 (coinbase-payouts extension, last update Sep 15 — the SEQ0_255 output-cap debate continues; plebhash's "custodial/non-custodial hybrid at best" assessment stands — JDP still unavailable, Otedama's V1-only payout verification disclosure remains accurate), #236 (SetTarget ≤ max_target, opened Oct 2 — under active review, same-day activity; Otedama's bound-audit position recorded session 1269), #234 (authority key management docs, Sep 25 — converging), #198 (coinbase_witness in NewTemplate, Sep 23 — open), plus cosmetic #232 (style fix, Sep 18) and stale #186/#103. No normative deltas affecting Otedama's shipped V2 surface. SRI releases: latest is v1.11.1 (v1.12.0 does not exist — prior documentation's forward-looking anchor remains corrected). sv2-apps: latest is v0.7.0 (24 Jul) — its translator-proxy payout-verification fix and pow2 share-validation share Otedama's independent hardening directions. No action required.
