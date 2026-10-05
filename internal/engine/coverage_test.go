@@ -7,6 +7,7 @@ package engine
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -3068,9 +3069,33 @@ func TestChannelIDOf(t *testing.T) {
 	}
 }
 
+// buildV1CoinbaseParts serialises a minimal coinbase transaction and
+// splits it at the extranonce gap into the notify's coinb1/coinb2 halves.
+// The scriptSig is exactly en1(3 bytes: "c0ffee") + en2(4 bytes), so the
+// halves reassemble to a well-formed transaction the payout verifier can
+// parse. outs are the raw scriptPubKeys of the coinbase's outputs.
+func buildV1CoinbaseParts(outs [][]byte) (string, string) {
+	var b1 strings.Builder
+	b1.WriteString("01000000")               // version
+	b1.WriteString("01")                     // input count
+	b1.WriteString(strings.Repeat("00", 32)) // prev txid
+	b1.WriteString("ffffffff")               // prev vout index
+	b1.WriteString("07")                     // scriptSig length = 3 + 4
+	var b2 strings.Builder
+	b2.WriteString("ffffffff") // sequence
+	b2.WriteString(fmt.Sprintf("%02x", len(outs)))
+	for _, o := range outs {
+		b2.WriteString("00f2052a01000000") // 50 BTC
+		b2.WriteString(fmt.Sprintf("%02x", len(o)))
+		b2.WriteString(hex.EncodeToString(o))
+	}
+	b2.WriteString("00000000") // locktime
+	return b1.String(), b2.String()
+}
+
 // fakeV1PoolCoinb2 is fakeV1Pool with a parameterised coinb2, for the
 // TIDES direct-coinbase payout verification tests.
-func fakeV1PoolCoinb2(t *testing.T, coinb2 string) string {
+func fakeV1PoolCoinb2(t *testing.T, outs [][]byte) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -3093,12 +3118,13 @@ func fakeV1PoolCoinb2(t *testing.T, coinb2 string) string {
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
+		coinb1, cb2 := buildV1CoinbaseParts(outs)
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"1",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
 				`%q,%q,[],"00000002","1d00ffff","68d36c5e",true]}`+"\n",
-			"01", coinb2)
+			coinb1, cb2)
 		time.Sleep(300 * time.Millisecond)
 	}()
 
@@ -3107,7 +3133,7 @@ func fakeV1PoolCoinb2(t *testing.T, coinb2 string) string {
 
 // The coinbase in a notify lacks the configured payout script → warn.
 func TestRunSessionV1_TIDESPayoutMissingWarns(t *testing.T) {
-	addr := fakeV1PoolCoinb2(t, "ff")
+	addr := fakeV1PoolCoinb2(t, [][]byte{{0x6a, 0x02, 0xde, 0xad}}) // OP_RETURN, pays nothing
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -3139,7 +3165,8 @@ func TestRunSessionV1_TIDESPayoutMissingWarns(t *testing.T) {
 // The coinbase carries the P2PKH script of the configured address → no warn.
 func TestRunSessionV1_TIDESPayoutPresentNoWarn(t *testing.T) {
 	// coinb2 = the P2PKH locking script for the genesis address.
-	addr := fakeV1PoolCoinb2(t, "76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	payScript, _ := hex.DecodeString("76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	addr := fakeV1PoolCoinb2(t, [][]byte{payScript})
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
@@ -3168,7 +3195,7 @@ func TestRunSessionV1_TIDESPayoutPresentNoWarn(t *testing.T) {
 // Conventional schemes (fpps/pplns) legitimately pay the pool's wallet in
 // the coinbase — the check must not fire for them.
 func TestRunSessionV1_FPPSPayoutCheckSkipped(t *testing.T) {
-	addr := fakeV1PoolCoinb2(t, "ff")
+	addr := fakeV1PoolCoinb2(t, [][]byte{{0x6a, 0x02, 0xde, 0xad}}) // OP_RETURN, pays nothing
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
@@ -3194,22 +3221,35 @@ func TestRunSessionV1_FPPSPayoutCheckSkipped(t *testing.T) {
 	}
 }
 
-// coinbasePaysTo finds the script in either half and correctly rejects a
-// script split across the coinb1/coinb2 boundary (the extranonce gap sits
-// inside the input, so no output script can legitimately straddle it).
-func TestCoinbasePaysTo(t *testing.T) {
-	script := []byte{0x76, 0xa9, 0x14, 0x01, 0x02, 0x88, 0xac}
-	if !coinbasePaysTo([]byte{0x99}, append([]byte{0xaa}, script...), script) {
-		t.Error("script inside coinb2 must match")
-	}
-	if !coinbasePaysTo(append(script, 0xbb), nil, script) {
-		t.Error("script inside coinb1 must match")
-	}
-	if coinbasePaysTo([]byte{0x76, 0xa9}, []byte{0x14, 0x01, 0x02, 0x88, 0xac}, script) {
-		t.Error("script split across the halves must not match")
-	}
-	if coinbasePaysTo(nil, nil, script) {
-		t.Error("empty coinbase must not match")
+// A script byte sequence that appears outside the output layer (inside
+// an OP_RETURN push here) is NOT a payout — the former substring check
+// would have been fooled; the positional vout parse must still warn.
+func TestRunSessionV1_TIDESPayoutEvasionWarns(t *testing.T) {
+	payScript, _ := hex.DecodeString("76a91462e907b15cbf27d5425399ebf6f0fb50ebb88f1888ac")
+	decoy := append([]byte{0x6a, byte(len(payScript))}, payScript...) // OP_RETURN PUSHDATA <script>
+	addr := fakeV1PoolCoinb2(t, [][]byte{decoy})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var warns int32
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + addr,
+		user:         "worker.1",
+		merged:       merged,
+		interval:     200 * time.Millisecond,
+		payoutAddr:   "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		payoutScheme: "tides",
+		log: func(level, msg string) {
+			if level == "warn" && strings.Contains(msg, "does not pay") {
+				atomic.AddInt32(&warns, 1)
+			}
+		},
+	})
+	if warns == 0 {
+		t.Error("script embedded in OP_RETURN must not satisfy the payout check")
 	}
 }
 

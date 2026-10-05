@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1334 — TIDES/solo 支払検証を非出力位置の script 埋め込みで回避不能に)
+V1 コインベース検証が生バイトの部分一致だったため、敵対プールが支払先 script を OP_RETURN・scriptSig・witness など支払いを伴わない位置に埋め込んで検査をパスできた。`poolproto.Job.CoinbaseTx`（completeV1Job が既に合体しているトランザクションを保持）を新設し、btccrypto.CoinbasePaysScript が vout の scriptPubKey を位置限定で照合するよう変更。構造が壊れたコインベースは "cannot verify" を1回警告。
+
 ### Fixed (session 1330 — V1 set_difficulty を実行中ワークへ即時伝播)
 
 **変更.** 「プールの難易度変更にワーカーが追従する」主張の第一原理検証で

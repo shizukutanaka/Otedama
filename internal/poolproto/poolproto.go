@@ -198,6 +198,16 @@ type Job struct {
 	Coinb2       []byte
 	MerkleBranch [][]byte
 
+	// CoinbaseTx is the fully reassembled coinbase transaction
+	// (coinb1 || extranonce1 || ExtraNonce || coinb2), stored by the
+	// session when it folds the parts. It lets the engine inspect the
+	// transaction's outputs positionally — e.g. verifying a declared
+	// direct-payout scheme actually pays the configured address —
+	// which a substring scan of the raw halves cannot do faithfully.
+	// Empty for protocols that never see the coinbase (V2) and for
+	// sessions that negotiated no extranonces.
+	CoinbaseTx []byte
+
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time

@@ -28,7 +28,6 @@
 package engine
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"crypto/tls"
@@ -1527,15 +1526,24 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %q ignored (curtailed)", job.JobID))
 			} else {
-				if len(payoutScript) > 0 && len(job.Coinb1)+len(job.Coinb2) > 0 {
-					if !coinbasePaysTo(job.Coinb1, job.Coinb2, payoutScript) {
+				if len(payoutScript) > 0 && len(job.CoinbaseTx) > 0 {
+					pays, cerr := btccrypto.CoinbasePaysScript(job.CoinbaseTx, payoutScript)
+					switch {
+					case cerr != nil:
+						if !payoutMissingWarned {
+							payoutMissingWarned = true
+							opts.log("warn", fmt.Sprintf(
+								"engine: pool's coinbase is malformed (%v) — cannot verify %q payouts",
+								cerr, opts.payoutScheme))
+						}
+					case !pays:
 						if !payoutMissingWarned {
 							payoutMissingWarned = true
 							opts.log("warn", fmt.Sprintf(
 								"engine: pool's coinbase does not pay to %s — payout_scheme %q promises direct coinbase payouts; your shares may fund the pool's wallet, not yours",
 								maskAddr(opts.payoutAddr), opts.payoutScheme))
 						}
-					} else {
+					default:
 						payoutMissingWarned = false
 					}
 				}
@@ -1922,15 +1930,6 @@ func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-// coinbasePaysTo reports whether the configured locking script appears in
-// the pool-supplied coinbase halves. coinb1/coinb2 bracket the extranonce
-// gap inside the generation input, so every output script sits wholly
-// within one half — scanning each half suffices without reassembling the
-// transaction.
-func coinbasePaysTo(coinb1, coinb2, script []byte) bool {
-	return bytes.Contains(coinb1, script) || bytes.Contains(coinb2, script)
-}
-
 func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, chanID uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {

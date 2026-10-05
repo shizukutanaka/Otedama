@@ -423,6 +423,9 @@ func (s *session) completeV1Job(j *poolproto.Job) {
 	}
 	j.MerkleRoot = root
 	j.ExtraNonce = en2
+	// Keep the assembled transaction on the job so the engine can verify
+	// its outputs positionally (see poolproto.Job.CoinbaseTx).
+	j.CoinbaseTx = coinbase
 }
 
 // sendJob enqueues a new job, respecting the clean_jobs flag.

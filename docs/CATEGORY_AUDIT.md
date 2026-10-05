@@ -6935,3 +6935,12 @@ No code change required this round.
 | S | Can a contradictory pool double-respond (accept then re-reject a settled seq) to inflate rejects? | ⚠️ Noted: a `SubmitSharesError` for an already-settled sequence misses the `tracked` gate and counts as a real reject — bounded by sends and ambiguous by spec (SV2 assigns one response per seq, so the frame is genuinely contradictory). Failing toward flagging bad-pool behavior via the warn log is defensible; suppressing it would hide real contradictions. Recorded honestly rather than changed. |
 
 No code change required this round.
+
+## Session 1334 update — first-principles audit of the "coinbase payout check can't be evaded" claim (Socratic pass 16)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Could a hostile pool embed the payout script's bytes outside the output layer to fool the verification while paying nothing? | 🔧 Fixed: the s1318 check scanned the raw coinbase halves by substring — a script embedded in an OP_RETURN push, scriptSig, or witness data would false-positive "pays". `Job.CoinbaseTx` (the already-assembled transaction, now retained by `completeV1Job`) is parsed positionally: each vout's scriptPubKey must equal the payout script exactly (`btccrypto.CoinbasePaysScript`). Malformed coinbases warn "cannot verify" once per episode rather than silently passing. Evasion regression test added (OP_RETURN decoy). |
+| S | Does the stricter check still miss anything? | ⚠️ Noted: as recorded in s1319, presence of a paying output still cannot verify the *amount* (a dust-value output passes) — inherent without output-value policy; also the check remains gated to `payout_scheme: tides`/`solo` where pool-paid coinbases are legitimate by design elsewhere. |
+
+CHANGELOG entry added under Fixed (session 1334).
