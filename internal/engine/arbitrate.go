@@ -154,8 +154,11 @@ func (o *arbitrationLoopOpts) powerFloor() float64 {
 	return floor
 }
 
-// runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is canceled or
+// runArbitrationLoop re-evaluates device→stream assignment on a fixed
+// 30s ticker. A fresh quote only updates the shared stream map (and its
+// freshness ledger); the next tick picks it up — Decide is deliberately
+// not run per quote so a provider emitting faster than the interval
+// cannot drive re-allocation churn. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
