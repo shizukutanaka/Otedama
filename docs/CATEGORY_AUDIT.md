@@ -1919,6 +1919,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1227 update — embed/testdata/fixture parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | go:embed directives | ✅ Clean — zero `//go:embed` in the tree; the one "embedded" asset (BIP-39 English wordlist) is a Go string literal with an init-time 2048-word integrity self-check. |
+| S | testdata fixtures | ✅ Clean — the only testdata content is one well-formed fuzz seed corpus at `testdata/fuzz/FuzzParseSubscribeResult/`, correctly named under the fuzzer it feeds. |
+| M | Fixture I/O surface | ✅ Clean — zero `os.Open`/`os.ReadFile` on testdata paths; no golden-file pattern in use (deterministic assertions instead). |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
