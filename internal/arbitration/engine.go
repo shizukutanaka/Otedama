@@ -351,6 +351,13 @@ func Decide(in *Input) (*Allocation, error) {
 	return alloc, nil
 }
 
+// streamCandidate pairs a stream with its effective yield for the device
+// being assigned.
+type streamCandidate struct {
+	stream Stream
+	yield  float64
+}
+
 // chooseForDevice selects the best stream for a single device, applying
 // policy preferences and hysteresis.
 func chooseForDevice(
@@ -361,32 +368,7 @@ func chooseForDevice(
 	hysteresis float64,
 	minYield float64,
 ) Assignment {
-	type candidate struct {
-		stream Stream
-		yield  float64
-	}
-
-	// belowFloor records whether at least one stream accepted this device with a
-	// positive yield that nonetheless failed the minYield floor. It lets the idle
-	// reason distinguish "nothing wanted this device" from "the work on offer was
-	// not worth running", which is actionable for an operator tuning the floor.
-	candidates := make([]candidate, 0, len(streams))
-	var belowFloor bool
-	for _, s := range streams {
-		if !s.Accepts(dev.Identity.Family) {
-			continue
-		}
-		y := s.YieldFor(dev.Identity.ID).Effective()
-		if y <= 0 {
-			continue
-		}
-		if y < minYield {
-			belowFloor = true
-			continue
-		}
-		candidates = append(candidates, candidate{stream: s, yield: y})
-	}
-
+	candidates, belowFloor := candidateStreams(dev, streams, minYield)
 	if len(candidates) == 0 {
 		reason := "no compatible stream accepting non-zero work"
 		if belowFloor {
@@ -409,7 +391,7 @@ func chooseForDevice(
 
 	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
-	slices.SortStableFunc(candidates, func(a, b candidate) int {
+	slices.SortStableFunc(candidates, func(a, b streamCandidate) int {
 		sa := policyScore(&a.stream, a.yield, policy)
 		sb := policyScore(&b.stream, b.yield, policy)
 		if sa != sb {
@@ -432,32 +414,8 @@ func chooseForDevice(
 	// policies a higher raw yield with a worse rating is correctly treated
 	// as a marginal (or non-existent) gain rather than a reason to switch.
 	if previous.Stream != "" {
-		for _, c := range candidates {
-			if c.stream.ID == previous.Stream {
-				incScore := policyScore(&c.stream, c.yield, policy)
-				threshold := incScore * (1.0 + hysteresis)
-				if bestScore <= threshold {
-					// Held only counts when a *different*, higher-scoring stream
-					// was suppressed — not when the incumbent is itself the best
-					// (in which case nothing was declined).
-					held := best.stream.ID != c.stream.ID
-					var reason string
-					if held {
-						reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
-					} else {
-						reason = "incumbent is best; stayed"
-					}
-					return Assignment{
-						DeviceID:           dev.Identity.ID,
-						Stream:             c.stream.ID,
-						ExpectedYield:      c.yield,
-						Reason:             reason,
-						Held:               held,
-						ForegoneSatsPerSec: maxRaw - c.yield,
-					}
-				}
-				break
-			}
+		if held, ok := incumbentHold(dev, candidates, best, bestScore, previous, policy, hysteresis, maxRaw); ok {
+			return held
 		}
 	}
 
@@ -472,6 +430,77 @@ func chooseForDevice(
 		a.SwitchedFromID = previous.Stream
 	}
 	return a
+}
+
+// candidateStreams filters streams to those that accept this device and
+// clear the minimum-yield floor with a positive effective yield.
+// belowFloor reports whether at least one stream accepted this device with a
+// positive yield that nonetheless failed the minYield floor — it lets the
+// idle reason distinguish "nothing wanted this device" from "the work on
+// offer was not worth running", which is actionable for an operator tuning
+// the floor.
+func candidateStreams(dev DeviceRef, streams []Stream, minYield float64) (cands []streamCandidate, belowFloor bool) {
+	cands = make([]streamCandidate, 0, len(streams))
+	for _, s := range streams {
+		if !s.Accepts(dev.Identity.Family) {
+			continue
+		}
+		y := s.YieldFor(dev.Identity.ID).Effective()
+		if y <= 0 {
+			continue
+		}
+		if y < minYield {
+			belowFloor = true
+			continue
+		}
+		cands = append(cands, streamCandidate{stream: s, yield: y})
+	}
+	return cands, belowFloor
+}
+
+// incumbentHold returns the assignment that keeps the device on its previous
+// stream when that stream is still a candidate and the best challenger does
+// not beat it by the hysteresis margin. ok is false when the previous stream
+// is gone or the challenger clears the margin — the caller then assigns best.
+func incumbentHold(
+	dev DeviceRef,
+	candidates []streamCandidate,
+	best streamCandidate,
+	bestScore float64,
+	previous *Assignment,
+	policy Policy,
+	hysteresis float64,
+	maxRaw float64,
+) (Assignment, bool) {
+	for _, c := range candidates {
+		if c.stream.ID != previous.Stream {
+			continue
+		}
+		incScore := policyScore(&c.stream, c.yield, policy)
+		threshold := incScore * (1.0 + hysteresis)
+		if bestScore > threshold {
+			return Assignment{}, false
+		}
+		// Held only counts when a *different*, higher-scoring stream was
+		// suppressed — not when the incumbent is itself the best (in which
+		// case nothing was declined).
+		held := best.stream.ID != c.stream.ID
+		var reason string
+		if held {
+			reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
+		} else {
+			reason = "incumbent is best; stayed"
+		}
+		return Assignment{
+			DeviceID:           dev.Identity.ID,
+			Stream:             c.stream.ID,
+			ExpectedYield:      c.yield,
+			Reason:             reason,
+			Held:               held,
+			ForegoneSatsPerSec: maxRaw - c.yield,
+		}, true
+	}
+	return Assignment{}, false
 }
 
 // Scoring constants for policyScore. Extracted so the documented intent and
