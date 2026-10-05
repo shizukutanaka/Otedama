@@ -134,8 +134,10 @@ func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provide
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
 	// The quote's net-fee factor tracks the payout scheme of the pool the
 	// provider prices — pools[0], the same pool defaultPoolURL selects.
+	// runReconnectLoop re-sets it on every session so a failover pool's
+	// scheme reprices subsequent quotes.
 	if len(cfg.Pools) > 0 {
-		miningProvider.PayoutScheme = cfg.Pools[0].PayoutScheme
+		miningProvider.SetPayoutScheme(cfg.Pools[0].PayoutScheme)
 	}
 	if hashSource != nil {
 		miningProvider.NetworkHashrateFunc = hashSource.CurrentHashrate

@@ -581,7 +581,7 @@ func TestMiningProvider_SoloSchemeCarriesNoFeeHaircut(t *testing.T) {
 	}
 
 	solo := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
-	solo.PayoutScheme = "solo"
+	solo.SetPayoutScheme("solo")
 	soloQ := readQuote(t, solo)
 	if soloQ.Yield.NetSatsPerSecond != soloQ.Yield.SatsPerSecond {
 		t.Errorf("solo: net %v != gross %v — the coinbase pays the user directly, no pool cut", soloQ.Yield.NetSatsPerSecond, soloQ.Yield.SatsPerSecond)
@@ -589,7 +589,7 @@ func TestMiningProvider_SoloSchemeCarriesNoFeeHaircut(t *testing.T) {
 
 	for _, scheme := range []string{"fpps", "pplns", "tides", ""} {
 		pooled := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
-		pooled.PayoutScheme = scheme
+		pooled.SetPayoutScheme(scheme)
 		q := readQuote(t, pooled)
 		if q.Yield.NetSatsPerSecond != 0.99*q.Yield.SatsPerSecond {
 			t.Errorf("scheme %q: net %v, want 0.99×gross %v", scheme, q.Yield.NetSatsPerSecond, q.Yield.SatsPerSecond)

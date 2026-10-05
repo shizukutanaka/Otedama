@@ -415,6 +415,7 @@ func Run(ctx context.Context, opts Options) error {
 		wallet:          walletFingerprint,
 		deviceN:         len(devices),
 		providers:       []provider.Provider{miningProvider, akashProvider},
+		miningProvider:  miningProvider,
 		metrics:         m,
 		log:             log,
 		curtailGate:     curtailGate,
@@ -436,8 +437,12 @@ type reconnectOpts struct {
 	wallet    string
 	deviceN   int
 	providers []provider.Provider
-	metrics   *engineMetrics
-	log       func(level, msg string)
+	// miningProvider is the same object as providers[0], held concretely so
+	// the session loop can re-point its payout scheme at the pool being
+	// dialed on each attempt.
+	miningProvider *provider.MiningProvider
+	metrics        *engineMetrics
+	log            func(level, msg string)
 	// curtailGate, when non-nil and true, means hashing is paused by the
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
@@ -496,6 +501,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if poolUser == "" && addrIdx < len(addrs) {
 			payoutAddr = addrs[addrIdx]
 		}
+		// The quote's net-fee factor must price the pool this session dials,
+		// not the pool configured at startup: failover across differently
+		// schemed pools (e.g. fpps -> solo) reprices subsequent quotes.
+		r.miningProvider.SetPayoutScheme(payoutScheme)
 
 		loc := fmt.Sprintf("attempt %d", attempt)
 		if len(pools) > 1 {

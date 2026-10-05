@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -45,14 +46,16 @@ type MiningProvider struct {
 	// nil or stale readings fall back to it (KNOWN_LIMITATIONS §7).
 	NetworkHashrateFunc func() (hps float64, fresh bool)
 
-	// PayoutScheme names the configured pool's payout_scheme
+	// payoutScheme names the configured pool's payout_scheme
 	// (fpps/pplns/tides/solo; empty = unset). publish() uses it to pick
 	// the net-fee factor: under "solo" the coinbase pays the user's
 	// address directly and the reward is all-or-nothing — no pool-side
 	// cut exists in the reward itself, so the net yield carries no fee
 	// haircut. Any other scheme (or unset) keeps the 1% typical-fee
-	// haircut. Setting this field after Start is called is not safe.
-	PayoutScheme string
+	// haircut. Stored atomically because the engine updates it on every
+	// pool session so the quote tracks the pool actually being mined
+	// against, including after failover — see SetPayoutScheme.
+	payoutScheme atomic.Pointer[string]
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
@@ -70,6 +73,23 @@ func NewMiningProvider(poolURL string, rates RateSource) *MiningProvider {
 
 func (p *MiningProvider) ID() string   { return p.id }
 func (p *MiningProvider) Name() string { return fmt.Sprintf("Bitcoin Mining (%s)", p.poolURL) }
+
+// SetPayoutScheme records the payout_scheme of the pool the quote
+// prices (fpps/pplns/tides/solo; empty = unset). Safe to call at any
+// time — the engine calls it once per pool session so failover to a
+// differently-schemed pool reprices subsequent quotes.
+func (p *MiningProvider) SetPayoutScheme(scheme string) {
+	p.payoutScheme.Store(&scheme)
+}
+
+// PayoutScheme returns the scheme currently in force for quote pricing
+// ("" when unset).
+func (p *MiningProvider) PayoutScheme() string {
+	if s := p.payoutScheme.Load(); s != nil {
+		return *s
+	}
+	return ""
+}
 
 func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error {
 	return p.launch(ctx, "mining provider", func() { p.devices = devices }, p.publish)
@@ -135,7 +155,7 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		btcPerSec := (deviceHashrate / networkHashrate) * blockRewardBTC / blockTimeSec
 		satsPerSec := btcPerSec * 1e8
 		netSatsPerSec := satsPerSec * 0.99 // 1% pool fee typical for Stratum V2
-		if p.PayoutScheme == "solo" {
+		if p.PayoutScheme() == "solo" {
 			// The coinbase pays the user's address directly — the reward
 			// is all-or-nothing with no pool-side cut in the reward itself.
 			netSatsPerSec = satsPerSec

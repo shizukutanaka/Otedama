@@ -1153,19 +1153,21 @@ func TestRunReconnectLoop_MultiPool_Failover(t *testing.T) {
 		logMu.Unlock()
 	}
 
+	mp := provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1})
 	r := reconnectOpts{
 		opts: Options{
 			Config: config.Config{
 				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
 				Pools: []config.PoolConfig{
-					{URL: "stratum+v2://127.0.0.1:1"},
-					{URL: "stratum+v2://127.0.0.1:2"},
+					{URL: "stratum+v2://127.0.0.1:1", PayoutScheme: "fpps"},
+					{URL: "stratum+v2://127.0.0.1:2", PayoutScheme: "solo"},
 				},
 			},
 			MaxReconnectAttempts: 4,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: mp,
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck
@@ -1176,6 +1178,11 @@ func TestRunReconnectLoop_MultiPool_Failover(t *testing.T) {
 
 	if !strings.Contains(joined, "pool") {
 		t.Errorf("expected pool failover in logs; got: %v", logs)
+	}
+	// Four attempts dial pools[0], pools[1], pools[0], pools[1] — the quote
+	// scheme must track the pool of the last attempt, not the startup pool.
+	if got := mp.PayoutScheme(); got != "solo" {
+		t.Errorf("provider payout scheme = %q, want %q (last dialed pool)", got, "solo")
 	}
 }
 
@@ -1207,8 +1214,9 @@ func TestRunReconnectLoop_MultiAddr_Failover(t *testing.T) {
 			},
 			MaxReconnectAttempts: 6,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1}),
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck
@@ -2876,8 +2884,9 @@ func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
 			},
 			MaxReconnectAttempts: 10,
 		},
-		metrics: newEngineMetrics(metrics.NewRegistry()),
-		log:     log,
+		metrics:        newEngineMetrics(metrics.NewRegistry()),
+		miningProvider: provider.NewMiningProvider("stratum+v2://127.0.0.1:1", provider.StaticRateSource{Rate: 1}),
+		log:            log,
 	}
 
 	runReconnectLoop(ctx, r) //nolint:errcheck

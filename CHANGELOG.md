@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1412 — フェイルオーバー先プールの payout_scheme が収益見積に反映されなかった)
+
+`pools` が複数でスキームが異なる場合（例： 先頭 `fpps`、フェイルオーバー先 `solo`）、採掘クォートの手数料控除係数が起動時の `pools[0]` 固定だったため、フェイルオーバー後の見積が最大 ~1% ずれ続けた。`runReconnectLoop` が各セッション試行で `miningProvider.SetPayoutScheme()` を呼び、実際に掘削対象のプールのスキームでクォートを再価格付けするよう修正（フィールドは `atomic.Pointer` 化し publish() との競合も解消）。
+
 ### Fixed (session 1410 — 損益分岐フロアのゲージがレート不通時に古い正値を残していた)
 
 `otedama_power_breakeven_floor_sats_per_second` はフロアが正に計算されたラウンドでのみ更新され、レート取得失敗・デバイス消滅で実適用フロアが 0 に潰れても古い値を保持し続けた（「毎ラウンド再計算」の記述と矛盾）。`powerFloor()` を再構成し、早期リターン経路を含め毎ラウンド実際に適用されるフロア値（0 を含む）をゲージへ反映。回帰テストは全無効入力でゲージ=0・レート断で正値→0 への遷移をピン。
