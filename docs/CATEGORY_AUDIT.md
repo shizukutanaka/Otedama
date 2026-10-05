@@ -1879,6 +1879,19 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+
+## Session 1234 update — solo-operations.md parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| codeowners-sample | Doc's CODEOWNERS sample asserts it matches the real file but was missing the `/internal/stratum/noise_pool*` row | **S: fixed** — row added (this PR) |
+| sha-pinning-claim | "全ActionをSHAピン留め（ci.ymlで実施済み）" is false — zero SHA pins in all 8 workflows (tags only: @v4/@v5/@master) | ⚠️ Noted — correction previously attempted in #561 (closed unmerged); left as maintainer decision |
+| renovate-sample | Section presents a Renovate config with `automerge: true` while the repo uses Dependabot (whose config documents that automerge is not an option) | ⚠️ Noted — framed as a proposal, not a current-state claim |
+| dco/contributors/weekly-audit | YAML snippets for dco.yml, contributors-readme-action, govulncheck/osv/scorecard workflows are proposals; security.yml already covers gosec/nancy/codeql/trivy | Clean — advisory framing, session-488 errata intact |
+| dependabot-checklist | "Dependabotの有効化" appears in the getting-started checklist though `.github/dependabot.yml` exists | ⚠️ Noted — checklist is point-in-time guidance, not a status claim |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
