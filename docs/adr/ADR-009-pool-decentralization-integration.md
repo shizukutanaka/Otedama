@@ -1773,3 +1773,9 @@ Normative open set confirmed: sv2-spec #203 (coinbase-payouts extension, last up
 - **SRI (`stratum-mining/stratum`):** latest remains **v1.12.0** (tag e11881b, 2026-09-17 — confirmed top of the tags list; no newer tag exists).
 - **sv2-apps:** latest remains **v0.8.0** (2026-09-17) — confirmed authoritative via the tags API (v0.8.0 top, then v0.7.0/v0.6.0).
 - **Action needed:** none — the spec blockers Otedama tracks (#203 payout verification, #236 target bound) remain open upstream.
+
+### Session 1434 update — ecosystem anchors reconfirmed (2026-10-03)
+
+- **sv2-spec open PRs:** #236 (`SetTarget.target` MUST NOT exceed `max_target` — active review, would bound server-sent targets to channel max), #234 (authority key management), #203 (coinbase transaction payouts extension — the "custodial/non-custodial hybrid at best" debate), #198 (`coinbase_witness`), plus non-normative #232/#186 (table formatting) and #103 (WIP Proxy Annex). Normative open set unchanged.
+- **Releases:** SRI latest **v1.12.0** (unchanged); sv2-apps latest **v0.8.0** (unchanged, verified via tags API).
+- **Action needed:** none. If #236 lands, Otedama's V2 session inherits the stronger guarantee automatically (server-sent `SetTarget` bounded by channel `max_target`).
