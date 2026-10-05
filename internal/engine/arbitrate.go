@@ -59,13 +59,20 @@ type arbitrationLoopOpts struct {
 
 	// paused, when non-nil, is the shared per-device pause set rewritten
 	// after each Decide: devices whose assignment is idle or routed to a
-	// non-mining ("ai.") stream are marked paused so pool job dispatch
+	// non-mining stream are marked paused so pool job dispatch
 	// (updateWork/applyJob) does not re-arm them between ticks. applyAllocation
 	// alone only pauses a worker once; without this the next pool job
 	// silently undid every arbitration pause (the per-device counterpart
 	// of the curtailGate documented in run.go).
 	paused *pauseSet
 }
+
+// miningStreamPrefix is the StreamID category (provider.go "category.name"
+// convention) for streams executed by SHA256d grinding — the only
+// assignments under which a device's miner worker may keep working. Any
+// other category (ai.* today, future render.*/science.*) means the device
+// left mining and must stay paused.
+const miningStreamPrefix = "mining."
 
 // pauseSet tracks device IDs arbitration has currently paused (idle below
 // the yield floor, or assigned to a non-mining stream). The arbitration
@@ -94,7 +101,7 @@ func reconcileArbPauses(alloc *arbitration.Allocation, paused *pauseSet) {
 		return
 	}
 	for _, a := range alloc.Assignments {
-		if a.Idle() || strings.HasPrefix(string(a.Stream), "ai.") {
+		if a.Idle() || !strings.HasPrefix(string(a.Stream), miningStreamPrefix) {
 			paused.Pause(a.DeviceID)
 		} else {
 			paused.Resume(a.DeviceID)
@@ -301,7 +308,7 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 			Confidence:    q.Yield.Confidence,
 		}
 	}
-	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
+	existing.IsBitcoinMining = strings.HasPrefix(q.ProviderID, miningStreamPrefix)
 	m[key] = existing
 	return key
 }
@@ -379,18 +386,18 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
 
 		case a.SwitchedFromID != "":
-			// Stream changed. If switching away from mining, signal workers to pause.
-			// Switching TO mining re-enables them; the pool connection delivers new work.
-			wasAI := strings.HasPrefix(string(a.SwitchedFromID), "ai.")
-			nowAI := strings.HasPrefix(string(a.Stream), "ai.")
+			// Stream changed. Leaving a mining stream pauses the worker;
+			// entering one re-enables it — the pool delivers new work.
+			wasMining := strings.HasPrefix(string(a.SwitchedFromID), miningStreamPrefix)
+			nowMining := strings.HasPrefix(string(a.Stream), miningStreamPrefix)
 			switch {
-			case !wasAI && nowAI:
-				// Mining → AI: pause this device's SHA256d worker.
+			case wasMining && !nowMining:
+				// Mining → non-mining: pause this device's SHA256d worker.
 				pauseDevice(a.DeviceID)
-				log("info", fmt.Sprintf("arbitration: %s → AI inference (%.0f sat/s)",
-					a.DeviceID, a.ExpectedYield))
-			case wasAI && !nowAI:
-				// AI → Mining: workers will receive new work from the pool on next job.
+				log("info", fmt.Sprintf("arbitration: %s → %s (%.0f sat/s)",
+					a.DeviceID, a.Stream, a.ExpectedYield))
+			case !wasMining && nowMining:
+				// Non-mining → mining: workers receive new work on next job.
 				log("info", fmt.Sprintf("arbitration: %s → mining (%.0f sat/s)",
 					a.DeviceID, a.ExpectedYield))
 			default:

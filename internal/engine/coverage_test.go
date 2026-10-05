@@ -3064,13 +3064,19 @@ func TestUpdateWork_ResumesAfterArbResume(t *testing.T) {
 }
 
 // TestReconcileArbPauses: membership follows the latest allocation —
-// idle (empty Stream) and ai.* assignments pause; mining resumes.
+// idle (empty Stream) and non-mining-category assignments pause; any
+// mining.* stream resumes. The predicate is the stream category prefix,
+// not the specific provider name: a future non-mining stream (render.*,
+// science.*) must still pause the device, and a future mining provider
+// variant (mining.datum) must not.
 func TestReconcileArbPauses(t *testing.T) {
 	paused := &pauseSet{}
 	reconcileArbPauses(&arbitration.Allocation{Assignments: []arbitration.Assignment{
 		{DeviceID: "dev-idle", Stream: ""},
 		{DeviceID: "dev-ai", Stream: "ai.akash"},
+		{DeviceID: "dev-render", Stream: "render.grid"},
 		{DeviceID: "dev-min", Stream: "mining.stratum"},
+		{DeviceID: "dev-datum", Stream: "mining.datum"},
 	}}, paused)
 	if !paused.Paused("dev-idle") {
 		t.Error("idle assignment did not pause dev-idle")
@@ -3078,8 +3084,14 @@ func TestReconcileArbPauses(t *testing.T) {
 	if !paused.Paused("dev-ai") {
 		t.Error("ai.* assignment did not pause dev-ai")
 	}
+	if !paused.Paused("dev-render") {
+		t.Error("non-mining render.* assignment did not pause dev-render")
+	}
 	if paused.Paused("dev-min") {
 		t.Error("mining assignment left dev-min paused")
+	}
+	if paused.Paused("dev-datum") {
+		t.Error("mining.* variant assignment left dev-datum paused")
 	}
 
 	// A nil set must be a no-op (tests that never wire arbitration).
