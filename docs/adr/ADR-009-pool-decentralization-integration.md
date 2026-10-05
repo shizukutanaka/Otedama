@@ -1724,3 +1724,11 @@ Quiet window continues — no action. One observation for the record: `05-Mining
 sv2-spec normative open set unchanged: #203 (push-based payouts, last updated 2026-09-15), #236 (SetTarget ≤ max_target), #234 (authority key management docs), #198 (coinbase_witness) all still open, unmerged — quiet window continues.
 
 Release-verification corrections (self-audit): the authoritative releases pages confirm **SRI latest = v1.11.1** (22 Jul 2026) and **sv2-apps latest = v0.7.0**. Earlier ledger rows that asserted "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — no such releases exist on the official release lists; the corrected anchor is v1.11.1 / v0.7.0. The v1.11.1 SV1-difficulty fix ("no longer rounds up") still matches Otedama's `DifficultyFromTarget` truncation semantics — no action required.
+
+### Session 1361 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based payouts: still open, ongoing debate — warioishere questions the `SEQ0_255` payout cap vs real pools' ~60 outputs; plebhash concedes the design space is "a custodial/non-custodial hybrid at best" given output-count limits, reinforcing that V2 payout verification cannot cover every claim), #236 (SetTarget ≤ max_target: open since 2026-10-02, under GitGab19 review), #234 (authority key docs), #198 (coinbase_witness: Sjors probing deployment via `OPTION[U256]`) all still open/unmerged.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026) — no v1.12.x exists on the official list.
+- **sv2-apps:** latest release remains **v0.7.0** (24 Jul). Its highlights independently validate Otedama's recent hardening directions: tProxy payout verification fixed for split coinbase `scriptSig`s (same axis as session 1318's coinbase-payout check), `UserIdentity` TLVs only after extension `0x0002` negotiation, and downstream share validation against the advertised pow2 difficulty (same axis as our share-target verification). No action required — our wire/protocol behavior already matches these invariants.
+
+Quiet window continues; next recheck ~session 1370.
