@@ -33,6 +33,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"os"
@@ -1415,6 +1416,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// job arrive back as stale rejects — submitting them only inflates
 	// the reject counters.
 	var currentJobID uint32
+	var currentJobIDStr string
 	var haveJob bool
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
@@ -1616,11 +1618,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				}
 				lastJob = job
 				appliedDifficulty = applied
-				var jid uint64
-				if _, err := fmt.Sscanf(job.JobID, "%d", &jid); err == nil {
-					currentJobID = uint32(jid)
-					haveJob = true
-				}
+				currentJobID = v1JobWireID(job.JobID)
+				currentJobIDStr = job.JobID
+				haveJob = true
 				opts.log("info", fmt.Sprintf("engine: V1 job %q nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {
@@ -1680,6 +1680,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			capturedShare := share
 			capturedSess := sess
+			capturedJobID := currentJobIDStr
 			if opts.m != nil {
 				// Counted here, not after Submit returns: "submitted" means
 				// the transmission was attempted, matching the V2 path's
@@ -1692,7 +1693,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID:      strconv.FormatUint(uint64(capturedShare.JobID), 10),
+					JobID:      capturedJobID,
 					Nonce:      capturedShare.Nonce,
 					NTime:      capturedShare.NTime,
 					ExtraNonce: capturedShare.ExtraNonce,
@@ -1991,10 +1992,10 @@ func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3). The job's opaque string ID is mapped
+// to the uint32 the miner uses internally via v1JobWireID — V1 job_id is
+// an arbitrary string echoed verbatim at submit time, so the wire never
+// sees this derived value.
 //
 // difficulty is the Stratum V1 session's most recent mining.set_difficulty
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
@@ -2005,12 +2006,8 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, cha
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
-	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
-	}
 	w := &miner.Work{
-		JobID:     jobID,
+		JobID:     v1JobWireID(job.JobID),
 		ChannelID: chanID,
 		Header: miner.Header{
 			MerkleRoot: job.MerkleRoot,
@@ -2028,6 +2025,23 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, cha
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// v1JobWireID derives the internal uint32 job identifier from a V1
+// pool's opaque job_id. Bare decimals keep their numeric value (the
+// common pool convention); anything else — hex, UUIDs, mixed strings
+// like "1a" — is hashed. The value is only ever compared for equality
+// by the stale-share gate; the pool always gets its original string
+// echoed back verbatim at submit time. strconv.ParseUint (not Sscanf)
+// so "1a" cannot silently truncate to job 1 and collide with a real
+// job 1 — previously that produced wrong-ID echoes and all-rejects.
+func v1JobWireID(jobID string) uint32 {
+	if n, err := strconv.ParseUint(jobID, 10, 32); err == nil {
+		return uint32(n) //nolint:gosec // bounded by ParseUint bitSize 32
+	}
+	h := fnv.New32a()
+	h.Write([]byte(jobID)) //nolint:errcheck // hash.Hash Write never fails
+	return h.Sum32()
 }
 
 // rollNTime rolls a stale pool-declared ntime forward to the local wall

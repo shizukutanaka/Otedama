@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1476 — V1 job_id を %d 解析し、mining.submit がプールの元 ID をエコーしていなかった)
+
+V1 の `job_id` は不透明文字列（10進数とは限らない）だが、エンジンは `fmt.Sscanf(job.JobID, "%d")` で uint32 へ潰していた：非10進 ID はエラーでジョブ全体を棄却（静かな採掘停止）、`"1a"` のような混在文字列は先頭桁へ黙って切り詰められ本物の job `"1"` と衝突した。さらに提出側が `FormatUint(share.JobID)` で 10進値を再構成して送出していたため、非10進プールでは全シェアが wrong-ID reject になっていた。新 `v1JobWireID`（10進は値保持、それ以外は FNV-1a）を内部の stale ゲート専用とし、セッションが元文字列を保持して submit が逐語エコーするよう修正。
+
 ### Fixed (session 1442 — 恒常アイドルデバイスが毎ティック同一の idle ログを出力していた)
 
 ### Fixed (session 1439 — 未来日時のクォートタイムスタンプがストリームを実質不死身にできた)

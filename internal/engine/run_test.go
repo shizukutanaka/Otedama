@@ -425,15 +425,45 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_OpaqueJobID(t *testing.T) {
+	// V1 job_id is an opaque string, not a decimal — a pool using hex or
+	// UUID IDs must still get its job armed. The internal uint32 is a
+	// deterministic mapping compared only for equality; the pool gets its
+	// original string echoed back at submit time.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 0); err != nil {
+		t.Fatalf("applyJob(opaque job ID): %v", err)
+	}
+}
+
+func TestV1JobWireID(t *testing.T) {
+	// Bare decimals keep their numeric value (common pool convention).
+	if got := v1JobWireID("42"); got != 42 {
+		t.Errorf("decimal ID: got %d, want 42", got)
+	}
+	if got := v1JobWireID("0140"); got != 140 {
+		t.Errorf("leading-zero decimal: got %d, want 140", got)
+	}
+	// Mixed strings must NOT silently truncate to the leading digits —
+	// "1a" mapping to job 1 would collide with a real job 1 and produce
+	// wrong-ID echoes at submit.
+	if got := v1JobWireID("1a"); got == 1 {
+		t.Error("mixed ID '1a' silently truncated to job 1")
+	}
+	// Deterministic: same input → same internal ID.
+	if a, b := v1JobWireID("opaque-xyz"), v1JobWireID("opaque-xyz"); a != b {
+		t.Errorf("non-deterministic: %d != %d", a, b)
+	}
+	// Distinct inputs → distinct outputs for the representative shapes.
+	if v1JobWireID("opaque-xyz") == v1JobWireID("opaque-abc") {
+		t.Error("distinct opaque IDs collided")
+	}
+	if v1JobWireID("hex-deadbeef") == v1JobWireID("42") {
+		t.Error("opaque ID collided with decimal ID")
 	}
 }
 

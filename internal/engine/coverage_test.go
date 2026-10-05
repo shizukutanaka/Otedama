@@ -1266,7 +1266,7 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
 		if sendJob {
-			// Use numeric job ID "1" so applyJob can parse it with fmt.Sscanf.
+			// Numeric job ID "1" — the share below uses JobID 1 to match.
 			fmt.Fprintf(conn,
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
@@ -2556,16 +2556,18 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
-func TestRunSessionV1_ApplyJobError(t *testing.T) {
+// TestRunSessionV1_OpaqueJobID exercises run.go:~1640: a V1 job_id is an
+// opaque string, not a decimal. A non-numeric ID must arm the job and be
+// echoed back verbatim in mining.submit — mapping it through %d used to
+// either drop the job outright or echo a wrong reformatted ID.
+func TestRunSessionV1_OpaqueJobID(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	defer ln.Close()
 
+	submitCh := make(chan string, 1)
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -2579,29 +2581,40 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Non-decimal job ID: must arm the job, not drop it.
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
-				`"not-a-number",`+
+				`"opaque-xyz",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
 				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
-		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
+		// The engine should submit a share; params[1] must be the ORIGINAL
+		// job_id string, verbatim — "opaque-xyz", not a reformatted decimal.
+		line, _ := r.ReadString('\n')
+		submitCh <- line
+		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+		time.Sleep(50 * time.Millisecond)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	merged := make(chan miner.Share)
+	merged := make(chan miner.Share, 1)
 	defer close(merged)
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		merged <- miner.Share{JobID: v1JobWireID("opaque-xyz"), Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	var logMu sync.Mutex
 	var logLines []string
+	m := newEngineMetrics(metrics.NewRegistry())
 
 	_ = runSessionV1(ctx, sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
 		interval: 200 * time.Millisecond,
+		m:        m,
 		log: func(_, msg string) {
 			logMu.Lock()
 			logLines = append(logLines, msg)
@@ -2609,15 +2622,30 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		},
 	})
 
+	select {
+	case line := <-submitCh:
+		var req struct {
+			Params []string `json:"params"`
+		}
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			t.Fatalf("decode submit: %v", err)
+		}
+		if len(req.Params) < 2 || req.Params[1] != "opaque-xyz" {
+			t.Fatalf("submit must echo the pool's job_id verbatim; got params %v", req.Params)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("engine never submitted the share for the opaque job ID")
+	}
+
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, `V1 job "opaque-xyz"`) {
+		t.Errorf("expected the opaque job to be armed; got: %v", logLines)
 	}
 }
 
-// TestRunSessionV1_SubmitError covers run.go:900–907: when sess.Submit returns
+// TestRunSessionV1_SubmitError covers the V1 submit error path: when sess.Submit returns
 // an error (pool reads the submit then closes without responding), the engine
 // logs "V1 submit: <err>" and, when elapsed > 0, records the latency sample.
 func TestRunSessionV1_SubmitError(t *testing.T) {
