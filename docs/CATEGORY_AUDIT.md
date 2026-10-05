@@ -7116,3 +7116,12 @@ Ledger only — verification round, no behavior-visible change.
 | S | Malformed set_extranonce is dropped silently — consistent? | ⚠️ Noted: unlike `set_version_mask` (a well-formed request we cannot serve → diagnostic notice), a *malformed* set_extranonce is ignored per the protocol's Postel convention for bad params — consistent with every other malformed notification in the file, so no notice is warranted. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1355 update — first-principles audit of channel coalescing semantics (Socratic pass 36)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When `mining.set_difficulty` outpaces the consumer (diffCh cap-1), do workers keep a stale target? | ✅ Verified: `handleSetDifficulty` replaces any undelivered value — the consumer always sees the *newest* retarget, never an overwritten-stale one; the `difficulty` atomic tracks the latest regardless of delivery. |
+| S | When `mining.notify` outpaces the consumer (jobsCh cap-8), is queue state still honest? | ✅ Verified: `CleanJobs` purges the entire queue before enqueue (correct per Stratum — prior work is dead on a new block), and a still-full queue drops the *oldest* job to make room for the newest — superseded work can never crowd out live work. |
+
+Ledger only — verification round, no behavior-visible change.
