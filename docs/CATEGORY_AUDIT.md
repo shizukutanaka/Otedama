@@ -1824,6 +1824,22 @@ All packages build, vet, and test green.
 | unmarshal-reuse | Every `json.Unmarshal`/`yaml` site decodes into a fresh per-call local — no stale-field residue across calls | Clean |
 | url-construction | No `url.URL{}` literal, `RawQuery` mutation, or manual query assembly — provider/pool URLs parsed once via `net/url.Parse` + validated | Clean |
 ---
+
+## Session 1240 checkpoint — full-surface audit complete
+
+The doc↔implementation parity pass (s1193–s1237), ADR body pass (s1236),
+and the sv2-apps v0.8.0 learning pass (s1239) are done. Every user-facing
+doc (README, SPECIFICATION, THREAT_MODEL, DEPLOYMENT, TROUBLESHOOTING,
+API, AUDIT_CHECKLIST, KNOWN_LIMITATIONS, solo-operations, competitive-analysis,
+architecture, MIGRATING-FROM-V2, SUSTAINABILITY, RESEARCH_IMPROVEMENTS) plus
+all 11 ADRs has been verified against shipped code; drift fixed via errata
+or doc corrections. Cumulative audited classes: ~650 across s752–s1239.
+
+New real defects landed on master in this segment: 2 (setup-version range
+enforcement #1239; workflow branch-filter master #1211/#1293).
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
