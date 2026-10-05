@@ -6254,3 +6254,10 @@ All packages build, vet, and test green.
 | R | `sort` package imports | ✓ zero — merged #1235/#619 completed the `slices` migration; only a comment mentions sorting |
 | R | `rand.Read`/`rand.Reader`/`rand.Int` sites | ✓ all crypto/rand (seed material, Noise ephemeral keys, test cert generation, `rand.Int` in engine/setup.go) — none deprecated; math/rand only in tests via `rand.New(rand.NewSource(seed))` for deterministic property/fuzz inputs (not deprecated; v2 migration optional) |
 
+## Session 1299 update — forbidden-path + open-PR conflict-surface audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | CLAUDE.md forbidden paths | ✓ `git ls-files` against all 10 forbidden prefixes (pkg/, web/, internal/{providers,auth,render,scientific,observability,security}/, cmd/otedamad/, k8s/) — zero tracked files |
+| R | Live open-PR mergeability | ✓ merge-tree for the four newest open PRs (#1376–#1379) vs master after the ongoing merge wave — zero conflicts; ledger appends remain union-mergeable |
+
