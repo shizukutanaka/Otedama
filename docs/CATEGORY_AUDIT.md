@@ -6881,3 +6881,12 @@ No code change required this round.
 | S | Can shares "meet" the wrong target? | ✅ Verified: share is emitted only when `hash <= localWork.Target`, which carries the pool-assigned share target (not the block target) end-to-end from the handshake. |
 
 No code change required this round.
+
+## Session 1328 update — first-principles audit of the "the pool is told to pay the configured address" claim (Socratic pass 10)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the payout address be mangled on the wire? | ✅ Verified: `sessionUser` is pure concatenation — `addr` verbatim, `addr + "." + worker` convention, or the explicit `pools[].user` override; both the V1 `mining.authorize` call and the V2 `OpenMiningChannel.User` field transmit it unchanged (no truncation/case folding). |
+| S | Can earnings be silently redirected to another address? | ✅ Verified: `addrConnected` gates failover — a backup payout address is tried only when the active one never established a session; once connected, only pool failover and backoff run, so an outage can never redirect earnings. Config validation requires ≥1 valid address (empty set unreachable post-Validate); `payoutAddr` for coinbase verification is tracked only in the address-derived mode, matching the s1319 scope. |
+
+No code change required this round.
