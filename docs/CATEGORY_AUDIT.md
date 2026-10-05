@@ -1902,6 +1902,12 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1230 update — audit coverage checkpoint
+
+Master's ledger holds 93 session entries (~135 audit classes on the merged branch; ~620+ classes counted across the full audit loop including open branches). The doc↔implementation parity pass (s1191–s1230) is complete: workflow/SPEC/DEPLOYMENT/README/CLAUDE/skills/CODEOWNERS/governance/install surfaces all verified; residuals honestly recorded (ci.yml `/health` probe + Postgres DSN, dead `scripts/verify-docker.*` refs, goreleaser-vs-release.yml divergence) and real drift fixed where found (#1245, #1248, #1275, #1286, #1290, #1293, #1296, #1299, #1303, #1311).
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
