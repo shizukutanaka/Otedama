@@ -7,7 +7,7 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 
 // Russian returns the Russian (ru) message catalog.
 func Russian() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangRussian, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangRussian, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama готов. Майнинг начнётся в ближайшее время.",
 		StartupWalletCreated:  "Создан новый кошелёк Lightning. Фраза восстановления надёжно сохранена на этом устройстве.",
 		StartupHardwareFound:  "Обнаружено {{.count}} майнинговых устройств: {{.summary}}",
@@ -32,7 +32,7 @@ func Russian() (*i18n.Catalog, error) {
 // Note: Arabic is RTL; placeholder positions follow the natural Arabic
 // sentence structure rather than mirroring the English word order.
 func Arabic() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangArabic, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangArabic, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama جاهز. سيبدأ التعدين قريبًا.",
 		StartupWalletCreated:  "تم إنشاء محفظة Lightning جديدة. تم تخزين عبارة الاسترداد بأمان على هذا الجهاز.",
 		StartupHardwareFound:  "تم اكتشاف {{.count}} جهاز تعدين: {{.summary}}",
