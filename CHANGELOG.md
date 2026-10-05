@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1364 — V2 読み取りループにサイレンス検出の read deadline 追加)
+V1 は1行ごとの5分 read deadline でサイレントなプールを検出してフェイルオーバーするが、V2 のライブ読み取りループには期限が無かった。TCP が開いたまま一切フレームを送らないゾンビ接続に永久に張り付き、`jobStallWarnAfter` の警告は出てもセッションが終わらずフェイルオーバー不可能だった。30分の per-frame read deadline（`poolSilenceTimeout`）を追加し、デッド接続でセッション終了 → リコネクトループのフェイルオーバーが実際に動作するよう修正。
+
 ### Fixed (session 1363 — V1 reject 応答の submit レイテンシを計上)
 V1 パスでプールが reject を返した場合のみラウンドトリップ遅延が `latency` リングに記録されず（accept や接続エラー時は計上済み）、reject 中心に応答する遅いプールがあると p50/p95/p99 が実態より楽観的に見えた。応答到着時に一律計上するよう修正（V2 の SubmitSharesError 処理と対称）。
 

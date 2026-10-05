@@ -78,6 +78,15 @@ var arbitrationInterval = 30 * time.Second
 // var (not const) so tests can shrink it to milliseconds.
 var jobStallWarnAfter = 10 * time.Minute
 
+// poolSilenceTimeout bounds how long the V2 read loop tolerates a
+// completely silent connection. The V1 path gets the same protection from
+// its 5-minute per-line read deadline (stratumv1.go); without one here a
+// half-open connection that never sends another frame would pin the
+// engine to a dead pool forever — the stall warn fires but the session
+// never ends, so failover could never happen. 30 minutes sits well beyond
+// inter-block silence while still bounding a wedged connection.
+var poolSilenceTimeout = 30 * time.Minute
+
 // poolDialTimeout bounds a single pool dial attempt — TCP connect for
 // plaintext, connect + TLS handshake for TLS schemes. A blackholed
 // endpoint without it stalls each failover hop for the OS connect
@@ -846,6 +855,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	go func() {
 		defer close(inCh)
 		for {
+			// Generous per-frame read deadline, same idea as the V1
+			// loop's 5-minute bound: a zombie connection that stays
+			// open but goes silent ends the session so the reconnect
+			// loop can fail over — without it the engine would hash
+			// stale work on a dead pool indefinitely.
+			_ = conn.SetReadDeadline(time.Now().Add(poolSilenceTimeout))
 			f, err := dec.ReadFrame()
 			if err != nil {
 				select {
