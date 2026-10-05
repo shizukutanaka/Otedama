@@ -1797,6 +1797,15 @@ All packages build, vet, and test green.
 | any-assertion | `arr[2].(float64)` for extranonce2_size feeds `min(..., maxExtranonce2Size)` — bounded before use (parse.go:299) | Clean |
 | raw-decode | `Params`/`Result`/`Error` stay `json.RawMessage`/`any` and are unmarshalled into concrete types per site — no float64 trap for struct fields | Clean |
 ---
+
+## Session 1244 — t.Fatal-in-goroutine + wg-capture + bench-error
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| t.Fatal-in-goroutine | 26 test files spawn `go func` — none call `t.Fatal`/`t.Fatalf` inside; post-teardown goroutine writes use `t.Errorf`-free helpers or channels (post-#705 contract) | Clean |
+| wg-capture | WaitGroups shared with spawned goroutines are Add-before-spawn | Clean |
+| bench-error | Benchmark bodies don't call `t.Error`-family from helper goroutines | Clean |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
