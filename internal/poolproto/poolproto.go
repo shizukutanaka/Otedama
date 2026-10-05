@@ -166,7 +166,10 @@ type Job struct {
 	// Version is the block-header version field.
 	Version uint32
 
-	// PrevHash is the previous block hash, big-endian.
+	// PrevHash is the previous block hash in the block header's
+	// serialization byte order — the bytes copied verbatim into the
+	// 80-byte header for hashing. The Stratum V1 wire encoding
+	// (each 4-byte word byte-swapped) is normalized at decode.
 	PrevHash [32]byte
 
 	// MerkleRoot is the merkle root constructed by the pool.

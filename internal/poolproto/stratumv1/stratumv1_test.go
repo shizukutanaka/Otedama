@@ -105,6 +105,28 @@ func TestParseNotify_RealisticPayload(t *testing.T) {
 	}
 }
 
+// Stratum V1's prevhash wire encoding is the "insane" order: each
+// 4-byte word byte-swapped. The job must carry the block header's
+// serialization bytes — the engine copies them verbatim into the
+// hashed preimage, so a missed swap hashes the wrong header and the
+// pool rejects every share.
+func TestParseNotify_PrevHashWordSwap(t *testing.T) {
+	raw := json.RawMessage(`[
+		"60",
+		"0eba48f47bc0ab4bb35b230849868bf1d79aeb19006eed460000000000000000",
+		"01", "ff", [], "00000002", "1d00ffff", "68d36c5e",
+		true
+	]`)
+	job, err := parseNotify(raw)
+	if err != nil {
+		t.Fatalf("parseNotify: %v", err)
+	}
+	want := "f448ba0e4babc07b08235bb3f18b864919eb9ad746ed6e000000000000000000"
+	if got := hex.EncodeToString(job.PrevHash[:]); got != want {
+		t.Errorf("PrevHash = %s, want %s (per-4-byte-word swap)", got, want)
+	}
+}
+
 func TestParseNotify_TooFewParams(t *testing.T) {
 	raw := json.RawMessage(`["60", "deadbeef"]`)
 	_, err := parseNotify(raw)

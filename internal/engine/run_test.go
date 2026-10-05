@@ -467,6 +467,59 @@ func TestV1JobWireID(t *testing.T) {
 	}
 }
 
+// Regression: the V1 applyJob must populate every header field the pool
+// declared. Version and PrevHash were silently zero, so the worker
+// hashed a different preimage than the pool reconstructs — every V1
+// share failed verification. Verify end-to-end via the emitted share:
+// the hash must equal HashHeader over a header carrying the job's
+// declared Version and PrevHash.
+func TestApplyJob_HeaderFieldsReachHashedShare(t *testing.T) {
+	var prev, merkle [32]byte
+	for i := range prev {
+		prev[i] = byte(0x10 + i)
+	}
+	for i := range merkle {
+		merkle[i] = byte(0xA0 + i)
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	job := poolproto.Job{
+		JobID:      "7",
+		Version:    0x20000004,
+		PrevHash:   prev,
+		MerkleRoot: merkle,
+		NTime:      uint32(time.Now().Unix()),
+		NBits:      0x1d00ffff,
+	}
+	// Tiny pool difficulty → huge share target → first nonce wins.
+	if err := applyJob([]*miner.Worker{w}, nil, &job, 1, 1e-9); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	var sh miner.Share
+	select {
+	case sh = <-shares:
+	case <-time.After(30 * time.Second):
+		t.Fatal("no share emitted on an essentially-always target")
+	}
+	if sh.Version != job.Version {
+		t.Fatalf("share.Version = 0x%08x, want job.Version 0x%08x", sh.Version, job.Version)
+	}
+	want := miner.Header{
+		Version:    job.Version,
+		PrevHash:   job.PrevHash,
+		MerkleRoot: job.MerkleRoot,
+		Time:       sh.NTime,
+		Bits:       job.NBits,
+		Nonce:      sh.Nonce,
+	}
+	if got := miner.HashHeader(&want); got != sh.Hash {
+		t.Fatalf("share.Hash = %x, want HashHeader over header with job's Version+PrevHash %x", got, sh.Hash)
+	}
+}
+
 func TestApplyJob_BadNBits(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{

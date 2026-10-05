@@ -105,7 +105,15 @@ func decodeNotifyJob(ns notifyStrings) (poolproto.Job, error) {
 	}
 	job.NTime = uint32(v)
 	if b, err := hex.DecodeString(ns.prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+		// Stratum V1 sends prevhash in the "insane" wire order: each
+		// 4-byte word byte-swapped. Un-swap per word so PrevHash holds
+		// the bytes the block header actually serializes.
+		for w := 0; w < 8; w++ {
+			job.PrevHash[w*4+0] = b[w*4+3]
+			job.PrevHash[w*4+1] = b[w*4+2]
+			job.PrevHash[w*4+2] = b[w*4+1]
+			job.PrevHash[w*4+3] = b[w*4+0]
+		}
 	} else {
 		return poolproto.Job{}, fmt.Errorf("notify: prevhash: malformed or wrong length")
 	}

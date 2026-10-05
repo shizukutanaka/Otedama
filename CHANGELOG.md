@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1553 — V1 シェアが Version=0・PrevHash=ゼロのヘッダをハッシュしていた)
+
+V1 ジョブ適用時 (`applyJob`) が `miner.Work.Header` に `Version`/`PrevHash` を一切コピーしておらず、ワーカーは両フィールドがゼロのヘッダをハッシュしていた — プール側が通知値で再構成するプリイメージと一致しないため V1 の全シェアがプール側検証で拒否される構造欠陥（2026-06-04 から存在、V2 の `updateWork` は正しかった）。併せて `decodeNotifyJob` が prevhash のワイヤ形式（各4バイトワードのバイトスワップ）を正規化せず格納していた問題を修正 — デコード時にワードごと逆スワップし、`Job.PrevHash` はヘッダ直列化バイト列を保持する契約へ明文化（従来の「big-endian」記述は誤り）。エンジンは通知値をヘッダへコピーするよう修正。回帰ピン: `TestParseNotify_PrevHashWordSwap`（デコード変換）・`TestApplyJob_HeaderFieldsReachHashedShare`（稼働ワーカーが出すシェアのハッシュが宣言フィールド入りヘッダの再計算値と一致）。
+
 ### Fixed (session 1499 — 未実装のプール送信 msg_type がログなしで黙殺されていた)
 
 `DispatchFrame` は前方互換のため未実装 msg_type を `Message.Unknown` へ落とす設計だが、セッションループはそれを一切ログなく黙殺していた — プールが Reconnect・ChannelEndpointChanged・将来の拡張型を送っても運用者からは完全に不可視。uint8 型空間で 256 エントリに構造的に制限される `seenUnknown` マップで「型ごと1回」の警告を追加（ログフラッド不可）。UpdateChannel (0x16) は spec 上 client→server 方向限定で棄却が正しいこと、SetExtranoncePrefix の無消費者残余（s1375 系列）も再確認。`TestRunSessionV2_UnknownMsgTypeWarnedOnce`（同型2回送信→警告1回、CloseChannel まで生存）を追加。

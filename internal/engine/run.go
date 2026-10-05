@@ -2060,6 +2060,8 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, cha
 		JobID:     v1JobWireID(job.JobID),
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   job.PrevHash,
 			MerkleRoot: job.MerkleRoot,
 			Time:       rollNTime(job.NTime),
 			Bits:       job.NBits,
