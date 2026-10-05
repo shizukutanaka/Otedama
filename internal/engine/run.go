@@ -1205,18 +1205,30 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 						e.SequenceNumber, seqNum))
 					continue
 				}
-				// Settle the outstanding submit if still tracked: an
-				// error is the share's final response too, and leaving
-				// the entry would leak it until some later success.
-				if sent, ok := submitTimes[e.SequenceNumber]; ok {
-					latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
-					delete(submitTimes, e.SequenceNumber)
+				sent, outstanding := submitTimes[e.SequenceNumber]
+				if !outstanding {
+					// SV2 assigns one response per SequenceNumber, so an
+					// error for a seq with no outstanding submit is either
+					// a replay (already settled by a Success or an earlier
+					// Error), a fabricated mid-range seq, or an entry the
+					// submitTimesCap reaper evicted. Counting it would let
+					// a hostile pool inflate the reject rate by replaying
+					// one error frame; drop it like the future-seq check.
+					opts.log("debug", fmt.Sprintf(
+						"engine: share reject for already-settled seq %d ignored",
+						e.SequenceNumber))
+					continue
 				}
+				// Settle the outstanding submit: an error is the share's
+				// final response too, and leaving the entry would leak it
+				// until some later success.
+				latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
+				delete(submitTimes, e.SequenceNumber)
 				reason := poolproto.SanitizePoolText(e.Error)
-				issued, tracked := submitTargets[e.SequenceNumber]
+				issued, hadTarget := submitTargets[e.SequenceNumber]
 				delete(submitTargets, e.SequenceNumber)
 				category, diagnosis := rejectClass(reason)
-				if tracked && transitionReject(category, issued, shareTarget) {
+				if hadTarget && transitionReject(category, issued, shareTarget) {
 					// ESP-Miner #212: the share was ground under a target the
 					// pool has since replaced via SetTarget — a retarget
 					// artifact, not a real reject. Counted in the per-reason

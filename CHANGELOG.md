@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1391 — 重複・偽造 SubmitSharesError による reject 二重計上を閉塞)
+SV2 の SubmitSharesError は `seq > seqNum`（未送信 seq）のみ排除していたため、既に Success/前回 Error で決済済みの seq を再送したり、送信範囲内の偽造 seq を報告した敵対プールが `otedama_shares_rejected_total`・受理率・受理率警告を自在に水増しできた。SV2 は seq ごとに1応答のため、未決済（submitTimes に残存）でない seq のエラーはリプレイ/偽造/cap 退避として debug レベルで破棄するよう修正（Success 側は既に `settled` クランプ済み）。cap 退避済み seq の正当な遅延エラーも同様に破棄されるトレードオフ（>1024 件の in-flight が必要）は台帳に記録。
+
 ### Fixed (session 1365 — セッション開始直後に旧セッション残りシェアを新チャネルへ提出していた混入窓を閉塞)
 
 - `opts.merged` は全セッションで共有されるため、新セッション開始直後（最初のジョブ到着前）にチャネルへ残ったシェアは必ず旧セッションの残りである。V2 の `jobArmed` ゲートと V1 の `haveJob` ゲートはその窓をガード対象外にしていたため、残りシェアが新セッションのチャネル/ジョブ ID で提出されリジェクト・ノイズ（V1 数値ジョブ ID 再利用時には生きたシェアとの誤計上も）を生じていた。両パスで「アクティブジョブ不在 or 不一致なら破棄」へ統一し `jobArmed` ラッチを撤去。V1 偽プールテスト5件はジョブ宣言後にシェアを注入する形へ整合。

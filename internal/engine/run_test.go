@@ -2426,6 +2426,10 @@ type responsivePool struct {
 	// SequenceNumber the client never used (future seq), right after
 	// activating the job — exercising the engine's bogus-seq guard.
 	bogusReject bool
+	// dupReject makes serve() emit the same SubmitSharesError twice for
+	// share 2 — a replayed response for an already-settled seq, which
+	// must not double-count in sharesRejected.
+	dupReject bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2452,6 +2456,16 @@ func newResponsivePoolOpts(t *testing.T, bogusReject, bogusAccept bool) *respons
 		easy[i] = 0xFF
 	}
 	return newResponsivePoolFull(t, bogusReject, bogusAccept, easy)
+}
+
+// newResponsivePoolDupReject returns a pool that answers share 2 with the
+// same SubmitSharesError twice — a replayed response for an
+// already-settled seq.
+func newResponsivePoolDupReject(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.dupReject = true
+	return fp
 }
 
 func newResponsivePoolFull(t *testing.T, bogusReject, bogusAccept bool, shareTarget [32]byte) *responsivePool {
@@ -2647,6 +2661,11 @@ func (fp *responsivePool) serve() {
 			}
 			payload, _ = resp.Encode()
 			fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			if fp.dupReject {
+				// Replay the identical error frame: the seq is now settled,
+				// so a second copy must not count as another reject.
+				fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			}
 		}
 	}
 }
@@ -3412,6 +3431,88 @@ waitLoop:
 	}
 	if got := m.sharesRejected.Value(); got != 1 {
 		t.Errorf("sharesRejected = %d, want exactly 1 (bogus seq 9999 must not count)", got)
+	}
+}
+
+// TestRunSessionV2_DuplicateRejectIgnored verifies that a replayed
+// SubmitSharesError for an already-settled SequenceNumber is dropped at
+// debug level and never double-counted — SV2 assigns one response per
+// seq, so a repeat is protocol-invalid, and counting it would let a
+// hostile pool inflate the reject rate at will.
+func TestRunSessionV2_DuplicateRejectIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolDupReject(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, level+" "+msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        logf,
+		})
+	}()
+
+	// Deterministic signals: the genuine reject registers exactly once,
+	// and the replay produces an "already-settled seq" debug line.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawDupDrop := false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "already-settled seq") {
+					sawDupDrop = true
+				}
+			}
+			mu.Unlock()
+			if sawDupDrop && m.sharesRejected.Value() > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want exactly 1 (replayed error must not double-count)", got)
+	}
+	if !sawDupDrop {
+		t.Error("replayed reject was not observed/dropped via debug log")
 	}
 }
 
