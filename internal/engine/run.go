@@ -912,6 +912,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	jobs := make(map[uint32]*stratum.NewMiningJob)
 	var jobOrder []uint32            // insertion order for jobsCap FIFO eviction
 	var active *stratum.NewMiningJob // job the workers are currently hashing
+	// Latches true once any job has been armed this session; gates the
+	// stale-share drop below so that shares arriving after a
+	// SetNewPrevHash that invalidated every job (active reset to nil)
+	// are still treated as superseded.
+	var jobArmed bool
 	var prevHash [32]byte
 	var prevNBits uint32
 	var activeNTime uint32
@@ -925,6 +930,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// "resumes on next job" semantics.
 	startJob := func(j *stratum.NewMiningJob, ntime uint32) {
 		active = j
+		jobArmed = true
 		activeNTime = ntime
 		if opts.isCurtailed() {
 			opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)", j.JobID))
@@ -1219,13 +1225,17 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			// SetNewPrevHash invalidates every job it doesn't name, so a
 			// share ground under a superseded job is rejected by the pool
 			// before it can even be evaluated — don't submit it.
-			if active != nil && share.JobID != active.JobID {
+			if jobArmed && (active == nil || share.JobID != active.JobID) {
 				if opts.m != nil {
 					opts.m.sharesSubmitDropped.Inc()
 				}
+				var activeID uint32
+				if active != nil {
+					activeID = active.JobID
+				}
 				opts.log("debug", fmt.Sprintf(
 					"engine: share for superseded job %d dropped (active job %d)",
-					share.JobID, active.JobID))
+					share.JobID, activeID))
 				continue
 			}
 			if !submits.take() {

@@ -6849,3 +6849,14 @@ All packages build, vet, and test green.
 | S | V1 non-clean_jobs pools tolerating brief stale shares | ⚠️ Noted: the JobID gate drops marginal shares a lenient pool might have credited — accepted trade-off for guaranteed-reject elimination. |
 
 All packages build, vet, and test green (engine tests incl. existing V1/V2 share-path matrix pass).
+
+## Session 1325 update — first-principles audit of the "submit/accept accounting is honest" claim (Socratic pass 7)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the pool credit a share we never sent? | ✅ Verified: SubmitSharesSuccess with `LastSequenceNumber > seqNum` is dropped; `NewSubmitsAccepted` is clamped to the locally-settled count (floor and ceiling). |
+| S | Can the pool inflate rejects for unsent submits? | ✅ Verified: SubmitSharesError with seq > seqNum dropped; settlement only for tracked sends; both response types carry ChannelID and are filtered by `channelIDOf` (upstream foreign-channel drop). |
+| S | Can a share arrive after total job invalidation? | 🔧 Fixed: when `SetNewPrevHash` names an unknown job, `active` resets to nil — the session-1323 gate then skipped stale detection for in-flight shares. A `jobArmed` latch now drops every drained share once no job is armed mid-session. |
+| S | Do dropped shares corrupt sequence numbering? | ✅ Verified: drops happen after `seqNum++`, matching the rate-cap path — gaps in the sequence are already the model (pool sees dense submits only by design of the counter being per-channel). |
+
+All packages build, vet, and test green.
