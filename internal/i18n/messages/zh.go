@@ -7,7 +7,7 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 
 // Chinese returns the Simplified Chinese (zh-CN) message catalog.
 func Chinese() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangChinese, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangChinese, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama 已就绪。即将开始挖矿。",
 		StartupWalletCreated:  "已创建新的闪电网络钱包。您的恢复助记词已安全存储在本设备上。",
 		StartupHardwareFound:  "检测到 {{.count}} 台挖矿设备：{{.summary}}",
