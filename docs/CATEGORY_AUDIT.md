@@ -6282,3 +6282,10 @@ All packages build, vet, and test green.
 | R | Correct sites | ✓ Makefile, Dockerfile, `.goreleaser.yaml` all inject `internal/version.{Version,Commit,BuildDate}` — the real symbols (#1275-era fix already landed in these three) |
 | R | Dead-symbol sites | ⚠️ 4 sites still inject nonexistent `main.{Version,GitCommit,BuildTime}`: `.github/workflows/release.yml:92`, `ci-cd.yml:126`, `ci.yml:278`, `ci.yml:334` — binaries built by these jobs report `dev`. Fix already queued in open PR #1275 (its diff covers all 4 sites verbatim); no duplicate PR opened |
 
+## Session 1294 update — shell-script + container-manifest hygiene
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Tracked `*.sh` syntax | ✓ `install.sh` is the only tracked shell script (`scripts/` absent) — parses clean under `sh -n` |
+| R | Dockerfile coherence | ✓ Two-stage `golang:1.24-alpine` builder → distroless static; Go pin satisfies the go.mod toolchain floor; CGO_ENABLED=0 + -trimpath + ldflags `internal/version.*` symbol paths correct (#1275 invariant holds in container build too) |
+
