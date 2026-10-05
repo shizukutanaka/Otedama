@@ -1969,6 +1969,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1222 update — container-manifest parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | docker-compose example | ✅ Clean — `otedama doctor` healthcheck semantics documented honestly (exit 1 warn / exit 2 fail), `OTEDAMA_BITCOIN_ADDRESS`/`OTEDAMA_LOG_FORMAT`/`OTEDAMA_DATA_DIR` all resolve to real env names, genesis-address placeholder warning intact, `/var/lib/otedama` volume matches the Dockerfile `VOLUME` and `OTEDAMA_DATA_DIR`. |
+| S | Kubernetes example | ✅ Clean — liveness/readiness probes hit real `/healthz` and `/readyz` endpoints on the named metrics port 9090; `runAsUser: 65532` matches the distroless `nonroot` UID in the Dockerfile; `OTEDAMA_WALLET_PASSPHRASE` via `secretKeyRef` matches `run.go`'s env read. |
+| M | ci.yml container health checks | ⚠️ Noted — `HEALTH_URL: http://localhost:8082/health` targets a path the server does not serve (`/healthz` is real) plus the previously recorded verify-docker script/ARG gaps; already logged as an open residual. |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
