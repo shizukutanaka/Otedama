@@ -511,6 +511,16 @@ func TestSanitizePoolText_StripsC1AndDEL(t *testing.T) {
 	}
 }
 
+func TestSanitizePoolText_StripsFormatAndSeparators(t *testing.T) {
+	// Trojan Source class (CWE-838): bidi overrides reorder displayed
+	// text; Zl/Zp forge extra log lines; tag and zero-width chars are
+	// invisible. All are Cf/Zl/Zp, none are Cc.
+	got := SanitizePoolText("ok\u202Eevil\u202C\u2028forged\U000E0061x\u200By")
+	if got != "okevilforgedxy" {
+		t.Errorf("format/separator chars survived: %q", got)
+	}
+}
+
 // StripUserinfo must remove credentials from the authority section of a
 // pool URL for display, while leaving well-formed URLs untouched.
 func TestStripUserinfo(t *testing.T) {
