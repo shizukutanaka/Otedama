@@ -29,6 +29,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
@@ -489,7 +490,7 @@ func (m *Manager) serviceArgs() string {
 // ProtectHome=); %q escapes it into a quoted token instead.
 func quoteToken(s string) string {
 	if strings.ContainsAny(s, " \t\"") ||
-		strings.IndexFunc(s, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
+		strings.IndexFunc(s, unicode.IsControl) >= 0 {
 		return strconv.Quote(s)
 	}
 	return s
