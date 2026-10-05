@@ -1465,6 +1465,116 @@ as written; the next recheck is due around session 1200.
 
 Quiet window confirmed again — no movement since the s1186 recheck. sv2-spec: #203 (plebhash's push-based non-custodial payout extension) remains open with the SEQ0_255 vs B0_64K bound debate unresolved; #202 (GitGab19's request-response variant) still open, #195 still draft; discussion #192 stays active. The normative open set (#203/#202/#198) is unchanged. SRI low-level crates remain at v1.12.0 (2026-09-17: share-validation hardening, BIP323, codec refactor, AES-256-GCM dropped — ChaCha20-Poly1305 sole cipher, matching Otedama). sv2-apps latest remains v0.7.0 (alpha). No action required.
 
+## Session-1307 ecosystem update (2026-10-02)
+
+### sv2-spec
+
+Normative open set unchanged: #203 (coinbase transaction payouts,
+plebhash — push-based extension), #236 (`SetTarget.target` MUST NOT
+exceed the channel's `max_target` — client-side bound Otedama already
+records in the session-1269 audit), #234 (authority key management and
+rotation), #198 (`coinbase_witness` field in `NewTemplate`) all remain
+open; none merged since the last recheck. The message set Otedama's
+dialer implements is unchanged.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+Latest release confirmed via tags+releases API: v1.12.0 (2026-09-17) —
+the hardening wave already recorded (bounded job storage, min_ntime/nTime
+bounds, codec_sv2/framing_sv2 split, AES-256-GCM removal leaving
+ChaCha20-Poly1305 as the sole cipher, matching Otedama's noise set). No
+v1.13.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+27 open PRs (was ~25 in session-1262's update). Recent activity is the
+same hardening wave plus infra: #908 (B08 type in bitcoin_core_sv2),
+#904 (monitoring/config/release edge cases), #903 (buffer hardening),
+#902 (Windows CI). The tracked set — #881 (WIP jds handle_push_solution),
+#883 (community-multisig coinbase config), #856 (bitcoin_core_sv2
+hardening), #845 (target-field rename matching spec cleanup), #839 (jds
+user_identity token binding) — all still open. Latest release remains
+v0.7.0-era alpha; no release-level change in client-side scope.
+
+### Assessment
+
+Quiet window confirmed — no action. ADR-009's proposal sections stand;
+next recheck due around session 1317.
+
+## Session-1297 ecosystem update (2026-10-04)
+
+sv2-spec normative open set unchanged — #203 (coinbase transaction payouts extension, last updated 2026-09-15), #236 (SetTarget.target MUST NOT exceed max_target — still active, updated 2026-10-02), #234 (authority key management docs, 2026-09-25), #198 (coinbase_witness field, 2026-09-23) all remain open and unmerged; no new normative candidate merged since the s1287 recheck. SRI latest release re-confirmed as v1.12.0 (2026-09-17) — the earlier "v1.12.0 stale" note in the ledger was wrong; v1.12.0 stands as the current release with the hardening wave intact. sv2-apps latest = v0.8.0 (2026-09-17); open-PR count 27 with the hardening wave continuing (#903 buffer hardening, #856 bitcoin_core_sv2 hardening, #878 empty-coinbase-script rejection, #845 spec-field rename alignment, #881 JDS push-solution WIP). No action required — quiet window continues.
+
+## Session-1287 ecosystem update (2026-10-02)
+
+sv2-spec: the normative open set is unchanged (#203/#202/#198, plus #236 SetTarget bound and #234 key management tracked alongside). #202 has a new substantive review thread: reviewer concern that a `RequestPayoutOutputs.Success` can be stale at declaration time — validating side would need epoch-awareness plus a "stale → re-request" signal so a JDC that caches payout sets doesn't silently build superseded coinbases against sliding-window/reset pools. Otedama's DATUM/non-custodial tracking should note this freshness requirement as an open design issue for the eventual client role. SRI low-level crates: latest release confirmed v1.12.0 (2026-09-17) — the earlier ledger re-anchor to v1.11.1 (session 1268) was a verification miss; v1.12.0 is real and current. sv2-apps latest remains v0.7.0 (alpha). No action required.
+
+## Session-1274 ecosystem update (2026-10-02)
+
+- sv2-spec normative open set reshaped: **#202 (non-custodial payouts) and #195 (Dynamic Coinbase Outputs 0x0003) were both CLOSED unmerged** (28–29 Jul 2026) — the payout-extension work consolidated into **#203 (coinbase transaction payouts extension, still open)**. Blitzpool continues to run extension 0x0003 in production per the #202 discussion.
+- Still open and relevant to Otedama: **#236** (`SetTarget.target` MUST NOT exceed `max_target` — our s1269 audit recorded that we deliberately declare no `max_target`), **#234** (authority key management/rotation), **#198** (`coinbase_witness` in NewTemplate), #186 (markdown table fix), #103 draft (Proxy Annex).
+- SRI release line: latest is **v1.11.1** (22 Jul 2026) — confirms the session-1268 re-anchor; earlier ledger mentions of a "v1.12.0" were unverifiable and are stale. v1.11.1's SV1-difficulty-conversion fix ("no longer rounds up") matches our `DifficultyFromTarget` truncation semantics — no action.
+- sv2-apps: 27 open; hardening wave continues — new since last recheck: #908 (B08 in `bitcoin_core_sv2`), #904 (monitoring/config/release edge cases), #902 (Windows CI). Tracked items #881 (handle_push_solution + bitcoind), #883 (community multisig payout), #839 (JDS job-token identity binding) still open.
+- Japanese-source scan (Qiita/Zenn, SV2 + non-custodial mining): no new Otedama-relevant material.
+- Net: no protocol change required; payout-extension consolidation narrows the design surface we track to #203.
+
+## Session-1268 ecosystem update (2026-10-02)
+
+### sv2-spec (github.com/stratum-mining/sv2-spec)
+
+The non-custodial-payout thread gained a deployment signal: on
+#202 (GitGab19's request-response extension), warioishere reports
+blitzpool is already running the extension's current spec and could
+be tested against a jd-client built for extension `0x0003` — the
+first concrete pool-side deployment of the non-custodial payout
+proposal family. #202 also gained normative clarifications: each
+`RequestPayoutOutputs.Success` is single-use (JDC MUST re-request
+per declared job; validating party rejects stale sets with
+`stale-payout-outputs`) and residual/rounding MUST be folded into
+`coinbase_tx_outputs` so the set sums exactly to
+`available_payout_value`. #203 (plebhash's push-based variant) and
+#195 (the original Dynamic Coinbase Outputs draft) remain open; the
+three-way design space is unchanged.
+
+#236 (`SetTarget.target` MUST NOT exceed the channel's `max_target`,
+opened 2026-10-02 by plebhash) is the newest normative-candidate:
+it closes the gap where a server-initiated `SetTarget` could undo
+the `UpdateChannel`/`max_target` bounds of 5.3.3–5.3.7, including
+the cross-message race (a `SetTarget` sent before the server
+accepts an `UpdateChannel` is bound by the superseded `max_target`).
+Directly relevant to Otedama's target-tracking path; worth
+re-auditing the engine's share-target handling if it lands. #234
+(authority key management/rotation doc) remains open with active
+review. Style/WIP items (#232, #186, #103) unchanged.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+Latest listed release is v1.11.1 (2026-07-22): `stratum_translation`
+no longer rounds up SV1 difficulty values during conversion (#2227),
+plus a `stratum-core` patch bump. Earlier ledger entries citing a
+"v1.12.0" release could not be verified against the current
+releases page — treating them as stale and re-anchoring to v1.11.1.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+~25 open PRs; the hardening wave continues — #903 (buffer sv2
+hardening), #856 (`bitcoin_core_sv2` hardening), #839 (bind mining
+job tokens to `user_identity`), #904 (monitoring/config/release
+edge cases), #902 (Windows CI), #908 (B08 type in
+`bitcoin_core_sv2`). #881 (JDP `handle_push_solution`) remains WIP;
+#845 (target field renames tracking spec cleanup) and #883
+(multisig config examples) still tracked.
+
+### Assessment
+
+The normative message set Otedama's dialer implements is still
+unchanged, but the extension space is moving: blitzpool's live
+`0x0003` deployment makes #202's request-response flow the most
+concrete non-custodial-payout proposal to date, and #236's
+`SetTarget` bound is a candidate that would tighten the server
+contract Otedama already assumes. No code action this round;
+re-audit the share-target path if #236 merges.
+
 ## Session-1262 ecosystem update (2026-10-02)
 
 ### sv2-spec (github.com/stratum-mining/sv2-spec)

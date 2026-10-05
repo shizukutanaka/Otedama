@@ -48,6 +48,12 @@ import (
 // efficiently gathered in one call (e.g. runtime.ReadMemStats).
 type CollectFunc func(w io.Writer) error
 
+// Metric kinds emitted in the # TYPE exposition line.
+const (
+	metricKindCounter = "counter"
+	metricKindGauge   = "gauge"
+)
+
 // Registry holds all registered metrics.
 // Safe for concurrent use.
 type Registry struct {
@@ -250,7 +256,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 
 	for _, c := range r.counters {
 		entries = append(entries, entry{
-			name: c.name, help: c.help, kind: "counter",
+			name: c.name, help: c.help, kind: metricKindCounter,
 			labels: c.labels,
 			text:   strconv.FormatUint(c.Value(), 10),
 			key:    metricKey(c.name, c.labels),
@@ -258,7 +264,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 	}
 	for _, g := range r.gauges {
 		entries = append(entries, entry{
-			name: g.name, help: g.help, kind: "gauge",
+			name: g.name, help: g.help, kind: metricKindGauge,
 			labels: g.labels,
 			text:   formatFloat(g.Value()),
 			key:    metricKey(g.name, g.labels),
