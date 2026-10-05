@@ -7009,3 +7009,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | Is the optional `extranonce.subscribe` failure path a correctness risk? | ✅ Verified deliberate: step 3 errors are ignored by design — unsupported pools answer "Method not found" and a torn connection surfaces through the normal Jobs-channel lifecycle. Skipping it never marks the session un-authenticated or un-authorized. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1342 update — first-principles audit of "a stalled consumer can't wedge the session" (Socratic pass 24)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If the engine stops draining `Jobs()` (jobsCh cap 8), does `sendJob` block the read loop — freezing submit responses and every other pool message? | ✅ Verified non-blocking: `sendJob` drains the channel for `clean_jobs`, then always sends under `select{...default}` with a drop-oldest fallback, so it can never block the read goroutine. The read loop therefore keeps dispatching submit responses, difficulty updates and notices regardless of consumer health — a wedged engine degrades to "newest job wins", not a session freeze. Drop-oldest is the semantically right choice for mining (older queued jobs are superseded by newer ones anyway). |
+
+Ledger only — verification round, no behavior-visible change.
