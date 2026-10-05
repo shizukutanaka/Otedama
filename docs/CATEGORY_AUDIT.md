@@ -6981,4 +6981,4 @@ CHANGELOG entry added under Fixed (session 1337).
 | S | Could a *shrinking* en2 size make two jobs' en2 collide and produce duplicate coinbases? | ✅ Verified benign: with `sz < 8` only the counter's low `sz` bytes differ — collisions possible after 256^sz jobs — but a duplicate en2 across *different* jobs is harmless (different prevhash → different header and different pool-side template). Uniqueness exists only for our own job dedup/merkle consistency, not a wire requirement. |
 | S | Residual edge? | ⚠️ Noted: pools that reject straggler old-en1 shares after rotation are free to do so — mitigated in practice because extranonce rotation is conventionally paired with a clean_jobs notify that kills in-flight jobs. Also the Submit-time zero-padding fallback uses the *current* en2Size, which can desync after a rotation — but it is only reachable for jobs whose coinbase never completed (no parts), and those shares are already unverifiable pool-side. |
 
-CHANGELOG entry added under Fixed (session 1338).
+Ledger only — verification round, no behavior-visible change.
