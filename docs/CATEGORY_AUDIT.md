@@ -6211,3 +6211,12 @@ All packages build, vet, and test green.
 | S | `make` targets in workflows | ✅ Clean — `fmt`/`build`/`build-all`/`test-integration` all exist |
 
 All packages build, vet, and test green.
+
+## Session 1309 update — cross-OS compile coverage
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `GOOS=windows/darwin/freebsd` (amd64) `go build ./...` | ✓ all clean after the s1308 uint64 fix |
+| M | Same `go vet ./...` (compiles build-tag variants — daemon windows/darwin/linux splits) | ✓ all clean — no tag-gated file fails to typecheck |
+| L | Other tag combinations worth checking (`arm64`, `arm` covered s1308) | ✓ amd64×3 OS + 386/arm×linux = 5 targets verified; coverage adequate for shipped platforms |
+
