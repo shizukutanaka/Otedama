@@ -435,10 +435,7 @@ func TestSession_E2E_SubscribeNotifySubmitAccepted(t *testing.T) {
 	// Allow a brief moment for set_difficulty to be processed.
 	deadline := time.After(500 * time.Millisecond)
 waitDifficulty:
-	for {
-		if sess.SuggestedDifficulty() == 1024 {
-			break
-		}
+	for sess.SuggestedDifficulty() != 1024 {
 		select {
 		case <-deadline:
 			// Must break the for loop, not just the select: deadline is a
@@ -2188,5 +2185,14 @@ func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
 	got := sanitizeNotice("a\x7fb\u0085c\u009fd")
 	if got != "abcd" {
 		t.Errorf("C1/DEL not stripped: %q", got)
+	}
+}
+
+func TestSanitizeNotice_StripsFormatAndSeparators(t *testing.T) {
+	// Bidi overrides, line separators, tag chars — the Trojan Source
+	// class, which is Cf/Zl/Zp and slips past Cc-only filters.
+	got := sanitizeNotice("ok\u202Eevil\u202C\u2028forged\U000E0061x\u200By")
+	if got != "okevilforgedxy" {
+		t.Errorf("format/separator chars survived: %q", got)
 	}
 }

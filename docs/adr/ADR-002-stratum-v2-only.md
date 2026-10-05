@@ -83,6 +83,22 @@ The question is settled once.
 - `internal/stratum/noise_pool.go` reduces allocation pressure during
   frequent reconnection.
 
+## Errata
+
+**Erratum 1 (session 1236, recorded 2026-10):** The headline decision —
+"No V1 fallback is provided" — predates the shipped V1 dialer. Since
+v3.0.0-alpha.1, `internal/poolproto/stratumv1/` implements Stratum V1
+(JSON-RPC over TCP/TLS) and `poolproto.DialURL` accepts `stratum+tcp://`
+and `stratum+ssl://` URLs alongside `stratum+v2://`. Otedama is
+therefore **V2-preference, not V2-only**: V2 remains the designed-for
+protocol and the only one with miner-sovereignty properties, but V1
+sessions work for pools that lack V2. The security rationale in this
+ADR (V1 downgrade risk, plaintext share submission) still stands and is
+documented in `docs/KNOWN_LIMITATIONS.md` — V1 connections remain the
+user's explicit choice via the configured URL scheme, never an
+automatic downgrade. ADR-009's positioning note already records this
+erratum's substance from the integration side.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model
