@@ -1908,6 +1908,17 @@ Master's ledger holds 93 session entries (~135 audit classes on the merged branc
 
 All packages build, vet, and test green.
 ---
+## Session 1228 update — SPECIFICATION §3.2/§3.3/§6/§7 claims census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Precedence & file-only fields | ✅ Clean — `bitcoin_addresses` and `pools[]` load only from the file layer (no `OTEDAMA_BITCOIN_ADDRESSES`/pool-list env exists); malformed numeric env is warned-not-dropped; `config show` emits origin tags per field. |
+| M | Address/pool validation | ✅ Clean — 26–90 length, `1`/`3`/`bc1` mainnet prefix gate, and `btccrypto.ValidateAddress` checksum exactly as documented. |
+| M | §6 metrics table | ✅ Clean — all 37 documented series exist in source 1:1 and zero unlisted series (exact set match). |
+| S | §7 limitations list | ✅ Clean — six items match KNOWN_LIMITATIONS.md's authoritative entries. |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
