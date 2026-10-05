@@ -260,6 +260,26 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	}
 }
 
+func TestUpdateStream_NilAcceptedFamiliesAcceptsAll(t *testing.T) {
+	// provider.Quote documents nil AcceptedFamilies as "all families
+	// accepted". Copied verbatim into Stream.AcceptsFamilies it would
+	// instead reject every family in Accepts() — the contract must be
+	// translated at the boundary.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		// AcceptedFamilies intentionally nil.
+	})
+	s := m["mining.stratum:cpu-0"]
+	for _, f := range []hal.Family{hal.FamilyASIC, hal.FamilyGPU, hal.FamilyCPU} {
+		if !s.Accepts(f) {
+			t.Errorf("nil AcceptedFamilies must accept %v; got reject", f)
+		}
+	}
+}
+
 func TestUpdateStream_AIAkashIsNotBitcoinMining(t *testing.T) {
 	var mu sync.Mutex
 	m := make(map[string]arbitration.Stream)

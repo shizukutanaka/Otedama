@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
@@ -73,6 +74,11 @@ type arbitrationLoopOpts struct {
 // other category (ai.* today, future render.*/science.*) means the device
 // left mining and must stay paused.
 const miningStreamPrefix = "mining."
+
+// allDeviceFamilies is the explicit expansion of provider.Quote's nil
+// AcceptedFamilies contract ("all families are accepted") used when
+// folding a quote into a Stream.
+var allDeviceFamilies = []hal.Family{hal.FamilyASIC, hal.FamilyGPU, hal.FamilyCPU}
 
 // pauseSet tracks device IDs arbitration has currently paused (idle below
 // the yield floor, or assigned to a non-mining stream). The arbitration
@@ -289,7 +295,15 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 	key := q.ProviderID + ":" + q.DeviceID
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
-	existing.AcceptsFamilies = q.AcceptedFamilies
+	// provider.Quote documents nil AcceptedFamilies as "all families
+	// accepted"; on the Stream a nil AcceptsFamilies would instead
+	// reject every family in Accepts(). Translate the contract at
+	// the boundary rather than letting the meaning invert.
+	if q.AcceptedFamilies != nil {
+		existing.AcceptsFamilies = q.AcceptedFamilies
+	} else {
+		existing.AcceptsFamilies = allDeviceFamilies
+	}
 	if existing.YieldPerDevice == nil {
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}
