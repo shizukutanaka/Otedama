@@ -290,10 +290,16 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Q
 			SatsPerSecond: q.Yield.SatsPerSecond,
 			Confidence:    q.Yield.Confidence,
 		}
-	}
-	existing.DefaultYield = arbitration.Yield{
-		SatsPerSecond: q.Yield.SatsPerSecond,
-		Confidence:    q.Yield.Confidence,
+	} else {
+		// Only a device-agnostic quote sets the stream-wide default; a
+		// per-device quote must not leak its price to devices the provider
+		// declined to quote — otherwise a device excluded by the provider
+		// (e.g. a GPU skipped by the mining provider) silently inherits a
+		// sibling device's yield and can be assigned work it cannot do.
+		existing.DefaultYield = arbitration.Yield{
+			SatsPerSecond: q.Yield.SatsPerSecond,
+			Confidence:    q.Yield.Confidence,
+		}
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
 	m[key] = existing
@@ -317,6 +323,11 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			maps.Copy(rep.YieldPerDevice, s.YieldPerDevice)
+			// A provider can also emit one device-agnostic quote; its
+			// DefaultYield must survive whichever entry became the rep.
+			if rep.DefaultYield == (arbitration.Yield{}) {
+				rep.DefaultYield = s.DefaultYield
+			}
 		} else {
 			// Deep-copy to avoid aliasing the YieldPerDevice map inside m.
 			cp := s

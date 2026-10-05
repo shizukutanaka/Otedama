@@ -292,6 +292,51 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 	}
 }
 
+func TestUpdateStream_PerDeviceQuoteDoesNotSetDefaultYield(t *testing.T) {
+	// A per-device quote must not set the stream-wide DefaultYield: the mining
+	// provider quotes only SHA256d-capable devices, and if a CPU's yield leaked
+	// into DefaultYield, a GPU the provider excluded would be evaluated against
+	// the mining stream at the CPU's price — assigned work it cannot execute.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU, hal.FamilyGPU},
+		Yield:            provider.Yield{SatsPerSecond: 0.5, Confidence: 0.9},
+	})
+
+	s := m["mining.stratum:cpu-0"]
+	if s.DefaultYield != (arbitration.Yield{}) {
+		t.Errorf("DefaultYield = %+v, want zero — per-device quotes must not leak", s.DefaultYield)
+	}
+	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 0 {
+		t.Errorf("YieldFor(unquoted gpu-0) = %v, want 0", y.SatsPerSecond)
+	}
+}
+
+func TestUpdateStream_DeviceAgnosticQuoteSetsDefaultYield(t *testing.T) {
+	// A quote with no DeviceID is provider-wide pricing: it is the one writer
+	// of DefaultYield, covering every device in AcceptsFamilies.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, &provider.Quote{
+		ProviderID:       "render.grid",
+		AcceptedFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 2.5, Confidence: 0.7},
+	})
+
+	s := m["render.grid:"]
+	if s.DefaultYield.SatsPerSecond != 2.5 {
+		t.Errorf("DefaultYield.SatsPerSecond = %v, want 2.5", s.DefaultYield.SatsPerSecond)
+	}
+	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 2.5 {
+		t.Errorf("YieldFor(unlisted gpu-0) = %v, want 2.5 via DefaultYield", y.SatsPerSecond)
+	}
+}
+
 // ============================================================================
 // streamsSlice — deduplicate by StreamID
 // ============================================================================
@@ -371,6 +416,40 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	}
 	if y := s.YieldFor("gpu-1"); y.SatsPerSecond != 700 {
 		t.Errorf("gpu-1 yield = %v, want 700 (was silently wrong before the merge fix)", y.SatsPerSecond)
+	}
+}
+
+func TestStreamsSlice_MergeCarriesAgnosticDefaultYield(t *testing.T) {
+	// A provider mixing one device-agnostic quote ("render.grid:") with
+	// per-device quotes ("render.grid:gpu-0") must keep the agnostic
+	// DefaultYield in the merged stream regardless of which map entry the
+	// (nondeterministic) iteration chose as the representative.
+	for i := 0; i < 20; i++ {
+		m := map[string]arbitration.Stream{
+			"render.grid:gpu-0": {
+				ID:              "render.grid",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+				YieldPerDevice: map[string]arbitration.Yield{
+					"gpu-0": {SatsPerSecond: 5, Confidence: 0.9},
+				},
+			},
+			"render.grid:": {
+				ID:              "render.grid",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+				YieldPerDevice:  map[string]arbitration.Yield{},
+				DefaultYield:    arbitration.Yield{SatsPerSecond: 42, Confidence: 0.8},
+			},
+		}
+		got := streamsSlice(m)
+		if len(got) != 1 {
+			t.Fatalf("iter %d: want 1 merged stream, got %d", i, len(got))
+		}
+		if got[0].DefaultYield.SatsPerSecond != 42 {
+			t.Fatalf("iter %d: merged DefaultYield = %+v, want agnostic 42 preserved", i, got[0].DefaultYield)
+		}
+		if y := got[0].YieldFor("gpu-1"); y.SatsPerSecond != 42 {
+			t.Fatalf("iter %d: YieldFor(unlisted gpu-1) = %v, want 42", i, y.SatsPerSecond)
+		}
 	}
 }
 
