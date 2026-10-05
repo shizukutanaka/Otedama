@@ -7329,3 +7329,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | Can a hostile pool inflate Prometheus label cardinality (memory) by spraying novel reject reasons or IDs that become labels? | ✅ Verified: no pool-controlled string ever reaches a label position. The `reason` label is fed exclusively by `rejectClass`'s fixed six-class output (stale/duplicate/difficulty/hardware/other/difficulty-transition) — the raw pool reason is only logged; any novel reason collapses into "other". `device` labels derive from local `hal.Identity.ID`, the payout label from the operator's own masked address, and build-info labels are compile-time constants. Series are created lazily behind a mutex (no duplicate series) so total cardinality is structurally bounded by the fixed category set plus the local device count — a hostile peer cannot expand it at all. |
+
+## Session 1390 update — first-principles audit of Decide failure modes (Socratic pass 69)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | If Decide fails or panics, can the engine keep running on a corrupt allocation? | ✅ Verified: every *error* path of Decide is fail-closed — `alloc, err` checked at the call site and a failure keeps `prevAlloc` plus a warn log, so a degraded tick degrades to the last-known-good plan, never to a partial/corrupt one. For *panic*: there is deliberately no recover around Decide — it is a pure function whose input space is prevalidated (non-finite yields collapsed upstream, guardrails on input fields verified in earlier passes), so a panic can only signify an internal bug, where crash-on-bug (fail-stop, mining halts, supervisor restarts) is the honest failure mode rather than continuing arbitration on an unknown state. The distinction is correct: errors degrade gracefully, impossible conditions stop loudly. |
