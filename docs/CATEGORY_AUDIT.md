@@ -7521,3 +7521,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | First-principles question: does the `mining.` category prefix actually classify the real providers correctly — and can the freshness-ledger key diverge from the stream-map key so a live stream is pruned while stale (or vice versa)? | ✅ Verified on both halves. `MiningProvider.id = "mining.stratum"` matches `strings.HasPrefix(id, miningStreamPrefix)`; `AkashProvider.id = "ai.akash"` does not — the two wired providers classify exactly right, and the "category.name" convention (provider.go:139) makes every future variant's classification predictable. Key single-sourcing: `updateStream` builds `key := ProviderID + ":" + DeviceID` once and returns it; the loop feeds the SAME returned key into `lastQuoteAt` — the ledger and the stream map cannot diverge on key format, so a live stream is never pruned by a malformed key nor a stale one preserved by a mismatched lookup. ✅ No code change needed. |
+
+## Session 1427 update — power-floor input guards (Socratic pass 102)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: can the power-breakeven floor divide by zero or go negative — `powerFloor` splits cost across `len(devRefs)` devices, so an empty device list or a non-positive input could crash or invert the floor into a subsidy? | ✅ Verified guarded. `len(o.devRefs) > 0` precedes the division (arbitrate.go:141 vs :147) so the divisor is ≥1 by construction. Non-positive `power_watts`, `power_price_per_kwh`, or rate → floor stays 0 (fail-open: power accounting off means no floor, not a wrong floor — consistent with the s1410 contract). `rateSource == nil` also yields 0 rather than reading a default. Gauge mirrors the applied value including 0. ✅ No code change needed. |
