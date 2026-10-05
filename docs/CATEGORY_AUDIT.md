@@ -1734,6 +1734,20 @@ All packages build, vet, and test green.
 ---
 ## Session 1209 update — CLI help/completion parity census
 
+## Session 725 update — sscan + user-home + XDG-config audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `fmt.Sscan*` parsing without error check — a malformed value passing as a plausible zero. | ✅ Clean: `run.go:1781` wraps the parse error (`unparseable job ID`); `dialer.go:403` is the verified fail-safe (malformed → 0 → fails validation). |
+| M | `os.UserHomeDir` callers ignoring `XDG_CONFIG_HOME` — `DefaultDataDir` honors `XDG_DATA_HOME` but the default config path and systemd unit path hardcoded `~/.config`, so a custom `XDG_CONFIG_HOME` split config lookup and installed units where `systemctl --user` never searches. | 🔧 Fixed: `defaultConfigPath` now resolves `$XDG_CONFIG_HOME/otedama/config.yaml` before the `~/.config` fallback (`OTEDAMA_CONFIG` still wins); `systemdUnitPath` installs under `$XDG_CONFIG_HOME/systemd/user`, matching systemd's own lookup. All other sites (launchd plist/logs, APPDATA, XDG_DATA_HOME) already platform-correct. |
+| M | `filepath.Abs`/`Rel`/`Clean`/`IsLocal` normalization gaps on user paths. | ✅ Absent: zero sites — the codebase never canonicalizes beyond `EvalSymlinks` on trusted roots (verified session 711); no user-supplied path needs it (all paths derive from constants + the home/config roots above). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | `printUsage` command list vs dispatch switch | ✅ Clean — all 8 subcommands (run/version/config/service/doctor/wallet/completion/help) listed; exit-code table matches implementation (0/1/64/78, doctor 0/1/2). |
@@ -3300,6 +3314,17 @@ All packages build, vet, and test green.
 
 ---
 
+## Session 1188 update — docs internal-link + badge census
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | Relative Markdown links in repo docs | ✅ Clean — 18 relative `](path)` links all resolve to existing files |
+| S | README workflow badges | ✅ Clean — badge URLs name only workflows present in `.github/workflows/` |
+
+All packages build, vet, and test green.
+
+---
+
 ## Session 976 update — logger-default + ctx-injection + adapter audit
 
 | Cat | Finding | Disposition |
@@ -4042,6 +4067,828 @@ All packages build, vet, and test green.
 | M | `err == X` comparing a wrapped error — identity test fails under wrapping. | ✅ Clean: the only non-nil `==` comparison is `err == flag.ErrHelp` — a stdlib sentinel returned unwrapped; `==` is the documented check. All other classification uses `errors.Is`/`As`. |
 | S | `ctx.Err()` polled in a loop instead of `<-ctx.Done()` — busy-wait / missed cancellation edge. | ✅ Clean: all 15 `ctx.Err()` sites are post-operation diagnostics (classifying a returned error as cancellation), never a wait loop — loops use `<-ctx.Done()` in `select` (verified sessions 563/571). |
 | S | Bare `==` on `io.EOF`-class sentinels where `errors.Is` is required by the io contract. | ✅ Clean: io error handling uses `err == io.EOF` nowhere — EOF surfaces via `io.ReadFull`'s documented returns checked with `errors.Is` (verified session 784). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 820 update — pkg-shadow + comma-ok-sig + import-collision audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Local variable named after an imported package (`url :=`, `path :=`) — shadowing blocks later package use and misleads readers. | ✅ Benign: `path :=`/`url :=` appear only in files that import neither `path` nor `net/url` — no import collision; the names read naturally as locals. |
+| M | `(T, bool)` comma-ok returns where an `error` would carry needed detail — callers forced to guess the failure reason. | ✅ Clean: all 8 sites model *absence*, not failure — `Lookup`, `parse*`, `BTCUSDRate` return ok=false on "not present/not applicable" with real errors surfaced separately where they exist. |
+| S | Exported symbols colliding with stdlib package names in the same file scope. | ✅ Clean: none — identifiers shadow only non-imported packages. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 821 update — runtime-surface + tuning-override + finalizer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `runtime.*` used beyond platform/metadata needs — layout dependence or scheduler poking. | ✅ Clean: `runtime.` sites are `NumCPU` (worker-count default, device model string), `GOOS`/`GOARCH` platform dispatch, `Version` metadata — no layout or scheduler dependency. |
+| M | `GOMAXPROCS`/`SetGCPercent`/`FreeOSMemory` called from inside the binary — overriding operator tuning. | ✅ Clean: absent — process tuning stays with the operator (GOMAXPROCS is the documented knob, per the --worker-threads doc fix in session 464). |
+| S | `runtime.SetFinalizer`/`KeepAlive` — resurrection hazards and GC-pinning bugs. | ✅ Clean: absent — the only `KeepAlive` hits are literal launchd-plist XML keys, unrelated to `runtime`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 822 update — sleep-in-test + tempdir + fatal-goroutine audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Sleep` in tests where a condition channel would be deterministic — flake source. | ✅ Benign: all sleeps are bounded (10 ms–1.5 s) and gate observable state transitions (handshake+share in the V1 integration test); the flake sweep (session 535) stayed green — no unbounded waiting. |
+| S | `os.MkdirTemp`/`ioutil.TempDir` in tests — manual cleanup leaks vs `t.TempDir`. | ✅ Clean: absent — every temp dir goes through `t.TempDir()` with automatic cleanup. |
+| M | `t.Fatal`/`t.FailNow` called from a spawned goroutine — only kills that goroutine, silently passes. | ✅ Clean: zero sites — post-teardown goroutine calls were removed in session-623 (PR #705); assertions live on the test goroutine. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 823 update — three-index + self-copy + unsafe-slice audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Three-index slice `s[i:j:k]` capacity-limiting tricks — obscure aliasing bugs on append. | ✅ Clean: zero 3-index sites — slices stay two-index; capacity tricks aren't needed since buffers are exact-size. |
+| M | `copy(dst, src)` where dst and src overlap on one backing array — memmove semantics relied on implicitly (works, but hides aliasing intent). | ✅ Clean: all `copy` sites move between distinct buffers (`be`/`b`, `hs.h[:]`/`h.Sum`) — no self-array overlaps. |
+| M | `unsafe.Slice`/`StringData`/`Pointer` — bounds and lifetime unchecked. | ✅ Clean: absent — no `unsafe` usage anywhere in the tree (verified sessions 605/620/627/677). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 824 update — binary-search + chan-under-lock + contains-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `sort.Search`/`slices.BinarySearch` on a slice never sorted — wrong-index results. | ✅ Clean: absent — lookups go through maps and `slices.Contains` on tiny sets; no binary-search call sites. |
+| M | Channel send/receive while holding a mutex — goroutine blocks on a full/empty chan, deadlocking the lock holder. | ✅ Clean: the two adjacent sites are the *correct* pattern — both unlock before touching the channel (worker.go:179-184 reads `cancel` under lock then `<-w.done` after unlock; stratumv1.go:234-239 deletes `pending[id]` under `pendingMu` then sends `ch <-` after unlock). |
+| P | `slices.Contains` linear scan inside a hot loop where a set map would be O(1). | ✅ Benign: the only site scans `AcceptsFamilies` (a 4-element static list) once per arbitration decision — not per hash — so the linear scan is cheaper than a map allocation. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 825 update — byte-index + ascii-compare + rune-boundary audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Byte-index loop over a possibly-multibyte string — mid-rune split / mis-compare. | ✅ Clean: the only byte-index loop (`base58.go:47`) counts ASCII `'1'` leaders — Base58's alphabet is ASCII by definition. |
+| S | Byte comparison `s[i] == 'x'` where input can be multibyte — truncated-match bugs. | ✅ Clean: same site — ASCII domain. |
+| S | `len(s)` byte length vs rune/display width conflation in truncation paths. | ✅ Benign: `truncateToBudget` slices only ASCII-domain fields (pool URL, hash strings); rune-capped text uses `len(runes)` after conversion (`maxPoolTextRunes`/`maxNoticeRunes`); escape-aware columns pad by visible width (session-462, PR #544). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 826 update — int-to-rune + fmt-under-lock + id-string audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `string(int)` conversion — vet-flagged rune-vs-int bug producing a single unexpected rune. | ✅ Clean: all `string(x)` sites convert named string types (`ID`, `Language`) or `[]byte` — zero int-to-string casts (vet would also flag them). |
+| P | `Sprintf`/`Sprint` while holding a mutex — allocation + formatting under lock serializes the critical section. | ✅ Clean: `arbitrate.go:166-171` prunes under `streamsMu`, unlocks, *then* formats; `poolproto.go:346` defers unlock around a map mutation — no formatting inside either critical section (verified session 632). |
+| S | Named string types compared via `string(x)` round-trips — allocation and lost type safety. | ✅ Benign: `bundle.go:70` compares catalog language tags across package boundary where the underlying string comparison is the intent — one-off cold path. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 827 update — signal-buffer + cleanup-mix + notify-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `signal.Notify(ch)` on an unbuffered channel — signals silently dropped. | ✅ Clean: zero `signal.Notify(` — the single surface is `signal.NotifyContext` (run.go:208), which manages delivery internally. |
+| S | `defer` vs `t.Cleanup` inconsistency — cleanup silently skipped or double-run across test boundaries. | ✅ Benign: 34 `t.Cleanup` sites exist where cross-helper cleanup is needed; 208 test-scope `defer`s are idiomatic local teardown — the split is intentional (helper-owned vs test-owned resources). |
+| S | Multiple signal handlers competing for the same process signals — delivery raced between handlers. | ✅ Clean: single registration point — `signal.NotifyContext` only (verified session 562). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 828 update — request-capture + marshal-loop + render-log audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Goroutine spawned inside an HTTP handler capturing `*http.Request` — request reused after handler returns (data race on Body/ctx). | ✅ Clean: zero handler-spawned goroutines — all handlers are synchronous request→response. |
+| P | `json.Marshal`/`Encode` inside a per-item loop — quadratic allocation churn. | ✅ Clean: zero in-loop marshal sites — marshalling is per-message at the wire boundary, never per element. |
+| S | Logging inside a render/format function — output interleaving and render-time side effects. | ✅ Clean: render/format functions are pure string builders; logging stays at call sites (verified session 735). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 829 update — testmain + test-init + exit-test audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `TestMain` present but missing `m.Run()`/`os.Exit` — tests never run or wrong exit code. | ✅ Clean: no `TestMain` anywhere — per-test setup uses `t.TempDir`/`t.Cleanup` so no shared-fixture entry point is needed. |
+| S | `init()` inside test files — shared-state setup invisible to individual tests. | ✅ Clean: absent — all test fixtures are explicit per-test. |
+| M | `os.Exit` inside test code — kills the test binary, silently skipping remaining tests. | ✅ Clean: absent — no `TestMain` means no exit surface in test code. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 830 update — iota-bitmask + nil-sentinel + spec-bit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `iota` constants used as bit flags — sequential 0,1,2,3 OR'd into a broken bitmask. | ✅ Clean: all five iota blocks are closed enums (Policy, AddressType, Status, Format, ValueOrigin) — never combined with `\|`; the single bit op (`channelMsgBit`) is an explicit `0x8000` protocol-spec constant. |
+| S | `errors.Is(err, nil)` / `errors.As(err, nil)` — meaningless call returning err!=nil / panicking. | ✅ Clean: absent — every Is/As has a concrete target (verified session 618). |
+| S | Bitwise ops on sequential iota enums — treat flag OR as membership test, wrong result. | ✅ Clean: no bitwise ops on any iota enum — the mask site is wire-protocol. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 831 update — break-select + labeled-exit + return-escape audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `break` inside a `select` case — exits only the select, loop spins on the dead channel. | ✅ Clean: the single select+loop site (`hal/registry.go:175-193`) uses labeled `break loop` — explicit and correct. |
+| S | `return` inside a `select` case — function exits before cleanup/defers? | ✅ Clean: 81 sites; Go `return` in a select case runs deferred calls normally — correct escape semantics. |
+| S | Unlabeled `break` inside `for-select` intending to exit the loop — infinite spin. | ✅ Clean: all loop-exit breaks are labeled (`break loop` at registry.go:178,193); remaining `break` occurrences are doc comments / non-select loops. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 832 update — type-alias + atomic-pointer + load-mutate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `type X = Y` aliases vs defined types — two spellings of one type confusing reflection/API. | ✅ Benign: one alias (`Level = slog.Level`) — deliberate pass-through so callers use `slog` constants without importing internals; identical type identity. |
+| M | `atomic.Pointer[T]` where the pointed-to value is mutated after `Load` — read-modify-write races on shared snapshots. | ✅ Clean: five sites (`boundAddr`, `serveErr`, `lastReconnect`, `extranonce1`, `defaultPtr`) — all Store whole new snapshots; zero Load-then-mutate sites. |
+| S | Storing a pointer to a still-live mutable object via `atomic.Pointer.Store` — later writes race with readers. | ✅ Clean: every Store publishes a freshly-built value (`new(string)`, `&reconnectDirective{...}`, `&err`) — no shared backing. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 834 update — lock-send + print-discard + builder-write audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Channel send while holding a mutex — blocks the critical section on receiver readiness (deadlock risk). | ✅ Clean: `stratumv1.go:234-239` deletes under `pendingMu`, unlocks, then sends; `dashboard.go:195-198` stores under `d.mu`, unlocks, then proceeds — the send/write is always outside the critical section. |
+| S | `fmt.Fprint*(w)` return value discarded — write failure silently lost. | ✅ Benign: all discarded Fprint calls target the user-facing display boundary (injected `w`/`out` writers, `strings.Builder`); errors are non-actionable at display time and `strings.Builder` never returns an error (session-745). |
+| S | Read from a `strings.Builder`/`bytes.Buffer` after concurrent write — torn read. | ✅ Clean: builders are function-local construction buffers, never shared across goroutines (session-745 census). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 835 update — bare-http + client-timeout + default-transport audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Bare `http.Get`/`http.Post` — no timeout, hangs forever on a stalled peer. | ✅ Clean: zero convenience calls — every outbound request goes through an explicit `http.Client`. |
+| M | `http.Client` without `Timeout` — same hang risk one level down. | ✅ Clean: three clients — hashrate (10s), fetcher (10s + redirect refusal), clock-skew doctor check (redirect refusal + per-request ctx deadline upstream). |
+| S | `http.DefaultClient`/`DefaultTransport` mutation — global-state coupling. | ✅ Clean: referenced only in comments; no shared-client mutation. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 836 update — response-bound + drain-limits + body-reuse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbounded `io.ReadAll(resp.Body)` — hostile endpoint exhausts memory. | ✅ Clean: all three response reads are `io.LimitReader`-bounded (`maxHashrateBody`, 64KiB fetcher, 8KiB doctor discard). |
+| S | Response body left undrained — connection never reused, goroutine leak on keep-alive. | ✅ Clean: every site either reads the body fully or drains a bounded discard (`checks.go:904`, `hashrate.go:191`) before close — the documented keep-alive pattern. |
+| S | `json.Decoder` reading directly off the network without limit — unbounded alloc via field values. | ✅ Clean: decode happens on the LimitReader-bounded body bytes, not a raw `resp.Body` stream. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 837 update — regexp-absence + glob-pattern + match-input audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `regexp` on attacker-controlled input — catastrophic backtracking (ReDoS). | ✅ Clean: zero regexp usage in production code — string matching is exact/prefix/suffix. |
+| S | `filepath.Glob`/`path.Match` with a user-controlled pattern — traversal or resource exhaustion via glob metacharacters. | ✅ Clean: single glob (`wallet.go:267`) uses the fixed literal `.wallet-*.tmp` inside the wallet dir — no user pattern input. |
+| S | `MatchString` on untrusted text — same ReDoS surface via compiled patterns. | ✅ Clean: absent — no regexp anywhere. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 838 update — afterfunc + timer-reset + newtimer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.AfterFunc` callback on a timer that is never stopped — fires after teardown. | ✅ Clean: absent — all one-shot delays use `NewTimer`+`Stop` or `time.After`. |
+| S | `time.Timer.Reset` after expiry without draining `.C` — stale tick consumed as fresh. | ✅ Clean: the only `.Reset(` is `hash.Hash.Reset` on the pooled hasher (noise_pool.go:39) — correct reuse; zero `time.Timer` reuse-after-expiry sites. |
+| S | `time.NewTimer` without `Stop` — timer object retained to expiry. | ✅ Clean: both NewTimer sites (`run.go:605` backoff, `stratumv1.go:529` call timeout) pair an explicit `Stop` — the comment at run.go:600 documents why `time.After` was avoided here. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 839 update — wrap-verb + chain-loss + verb-consistency audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `fmt.Errorf("...%v", err)` — error chain dropped, `errors.Is/As` broken for callers. | ✅ Benign: one site (`config.go:769`) where the wrapped error is a `net/url` parse detail rendered for the user — the call boundary treats it as an opaque validation message (recorded session 815). `service.go:471` formats `args` with `%v` and properly wraps `err` via `%w`. |
+| S | Mixed `%w`/`%v` wrapping style — some errors inspectable, others not. | ✅ Clean: 104 `%w` sites; the sole `%v`-on-error site is the user-facing validation surface above — consistent policy (wrap for callers, render for users). |
+| S | `errors.New(fmt.Sprintf(...))` — verb-in-Errorf duplicate + lost %w chance. | ✅ Clean: absent (verified session 810). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 840 update — bits-absence + strconv-discard + embed-absence audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `math/bits` low-level bit ops where a clear expression would do — readability vs speed trade. | ✅ Clean: absent — the one "bits" hit is a BIP-39 entropy comment; all bit ops are plain operators on protocol fields. |
+| M | `strconv.Atoi/ParseUint` with `_` error discard — non-numeric input silently becomes 0. | ✅ Benign: two discards — `parse.go:268` feeds `d.Port` from an already-structured host:port split (non-numeric yields 0 → rejected by downstream port validation); `stratumv1.go:484` parses a protocol counter where 0 is the safe fallback. All other 10+ parses check errors with explicit bit sizes. |
+| S | `//go:embed` of large/secret material — accidental binary bloat or secret embedding. | ✅ Clean: absent — no embed directives. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 841 update — gosched + subtle-compare + manual-secret-compare audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `runtime.Gosched`/`Goexit` — scheduler hand-holding that hides a real blocking bug. | ✅ Clean: absent — scheduling is left to the runtime; blocking is always explicit (chan/timer/ctx). |
+| M | Secret material compared with `==`/manual byte loop — timing side channel. | ✅ Clean: the single secret compare (`wallet.go:149` fingerprint check in the backup-verify flow) uses `subtle.ConstantTimeCompare` — correct and necessary. |
+| S | Hand-rolled constant-time loop instead of `crypto/subtle` — subtle timing leak via early-exit. | ✅ Clean: no hand-rolled compares — subtle is the only path. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 842 update — map-order + display-sort + tie-break audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `for range map` feeding user-visible output — non-deterministic ordering. | ✅ Clean: order-sensitive surfaces (`streamsSlice`, `runtime.go` metrics, i18n catalog validation) either build slices sorted downstream or are order-insensitive per-element checks. |
+| M | Map-order nondeterminism feeding a decision — flapping arbitration output across ticks. | ✅ Clean: `streamsSlice` emits unsorted order, but `Decide` sorts by policy score then yield then StreamID (engine.go:495) — deterministic output for identical input. |
+| S | Map-range building a sorted log/metric series without an explicit sort — jittery output. | ✅ Clean: Prometheus entries are a literal ordered slice (runtime.go:126); log lines from pruned keys are one-per-key where order is irrelevant. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 843 update — encoder-boundary + nopcloser + writeheader-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `json.Encoder.Encode` error ignored on the write boundary — client gets a truncated body with a 200. | ✅ Clean: every Encoder's `Encode` error is checked and propagated (`doctor.go:216`, `version.go:25`, `config.go:166`); wire encoders return the payload error before send. |
+| S | `io.NopCloser` wrapping a real `resp.Body` — leaks the underlying connection. | ✅ Clean: absent — response bodies are real `Close` calls (verified session 572). |
+| M | `Write` before `WriteHeader` — implicit 200 sent before the intended status code. | ✅ Clean: all four handler sites call `WriteHeader(status)` before any body write (server.go:175-196). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 844 update — duration-mult + backoff-cap + float-cast audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `time.Duration` multiplied unchecked — exponential overflow wraps to a negative/huge duration. | ✅ Clean: the single exponential site (`run.go:613` `backoff *= 2`) is immediately capped at `reconnectBackoffMax` (64s) — can't overflow (verified session 636). |
+| S | `time.Duration(float)` conversion — fractional-nanosecond rounding and int64 overflow on huge floats. | ✅ Clean: `stats.go:58` casts `p50 * ms` where p50 is a bounded latency percentile — no overflow path; all literal durations use `N * unit` int form. |
+| S | Sleep-poll constants inline (`time.Sleep(10*ms)`) — magic numbers scattered. | ✅ Benign: the one inline sleep (`worker.go:269` bounded shutdown drain) is a documented poll interval, not a tunable. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 845 update — error-switch + sentinel-eq + try-parse audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `switch err.(type)` — fragile alternative to `errors.As` that misses wrapped errors. | ✅ Clean: absent — the `case Msg*Error` hits are SV2 message-type enum dispatch, not error classification; all error inspection uses `errors.Is/As`. |
+| M | `err == ErrX` / `err != ErrX` — sentinel comparison misses wrapped sentinels. | ✅ Clean: all `err ==` comparisons are `err == nil`; zero sentinel equality checks (the `flag.ErrHelp` `==` site uses the canonical stdlib pattern — session 819). |
+| S | `_, err := f(x); if err == nil` try-parse chains — error swallowed for control flow. | ✅ Benign: the try-parse pattern (`hex.DecodeString`, `ecdh.NewPublicKey`, `ParseFloat`, `SplitHostPort`, `os.Stat`) deliberately treats "unparseable" as a normal branch — input is untrusted pool/CLI text where decode failure means "wrong shape", not an error. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 846 update — defer-in-loop + defer-in-select + replacer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `defer` inside a `for range ch` loop — defers pile up until function exit, resources held. | ✅ Clean: absent — channel consumers release per-iteration explicitly. |
+| M | `defer` inside a `for { select }` loop — same unbounded defer pileup. | ✅ Clean: absent — verified zero sites. |
+| S | `strings.Replacer` ordering bug — a replacement rule's output feeding a later rule, or double-escaping. | ✅ Clean: three sites all order `&`/`\` first — `xmlEscape` (service.go:457) escapes `&` before `<`/`>` so entities are not re-escaped, `escapeLabel`/`escapeHelp` (metrics.go:377,390) escape `\` first; `escapeHelp` deliberately excludes `"` per the exposition format. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 847 update — sort-path + stability + comparator audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `sort`/`slices.Sort` inside a per-share or per-hash hot path — O(n log n) churn per iteration. | ✅ Clean: all 11 sort sites are cold/bounded — Decide candidates (30s tick, small lists), medians (per-fetch), i18n/catalog and name-list sorts (startup/CLI). Nothing sorts in the share/hash loop. |
+| M | `slices.Sort` where equal-key order matters — unstable sort scrambles equal elements. | ✅ Clean: `engine.go:412` correctly uses `SortStableFunc` for candidates (equal policy-score ordering is preserved); plain `Sort` sites are scalar types where stability is meaningless. |
+| M | Comparator returning non-total order (non-deterministic for equal keys) — sort correctness violated. | ✅ Clean: comparators terminate with a deterministic final key — DeviceID (arbitrate), StreamID (engine.go:495, session 842), or scalar ascending order. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 848 update — loop-err + dial-context + resolve audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `err` reused across loop iterations — last-iteration failure overwrites an earlier error or a stale error leaks past the loop. | ✅ Clean: zero cross-iteration `err` reuse — every loop-scoped error is `:=`-fresh or checked in-body. |
+| M | `net.Dial`/`DialTimeout` instead of ctx-aware `DialContext` — un-cancellable connects. | ✅ Clean: all outbound connections go through ctx-aware dialers (`poolproto` dial interface — session 570); zero bare `net.Dial*`. |
+| S | `net.Resolve*`/`Lookup*` in the connect path — DNS without a deadline, blocking before the ctx applies. | ✅ Clean: absent — dialers pass host:port to `DialContext` directly; DNS happens inside the ctx-bounded dial. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 849 update — ptr-format + legacy-atomic + spawn-count audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%p` in log output — pointer addresses leaking into logs (non-deterministic, sometimes security-relevant). | ✅ Clean: absent — all formatting uses value verbs. |
+| M | Legacy `atomic.AddUint32`/`LoadInt64` free functions — untyped, misalignment hazards on 32-bit. | ✅ Clean: zero legacy free-function calls — all atomics are the typed `atomic.IntN/Bool/Pointer` wrappers (verified sessions 565, 739). |
+| M | `go func()` spawned without explicit arg capture — loop-variable capture bug. | ✅ Clean: 20 spawn sites verified across earlier sweeps — explicit param capture where loop-bound (worker.go:155-170), safe per-iteration vars under go1.22 semantics elsewhere (sessions 757, 816). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 850 update — milestone checkpoint (~280 classes)
+
+Session 850 marks another 50-session span (s800→s850). Cumulative mechanical audit coverage is now ~280 defect classes across the entire tree, all clean/benign. Real defects fixed in this arc remain the two from earlier milestones (C1 control-char gap #809, XDG systemd-manager env #807). Forward plan: continue new-class sweeps, biweekly ecosystem rechecks, and scrutiny of any code landing on master.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `==`/`!=` on structs containing non-comparable fields — silent compile-time trap in future edits (values, not reachability). | ✅ Clean: no struct-equality comparisons; comparison sites use scalar fields/IDs. |
+| M | Non-comparable key types in maps (`map[[]T]`, `map[func]`, `map[[N][]T]`). | ✅ Clean: absent — map keys are strings/ints/pointers. |
+| S | Direct `slog.*`/`log.*` calls bypassing the logger wrapper — divergent format/level routing. | ✅ Clean: zero direct `slog`/`log` calls — all logging via the injected `logger.Logger` (session 733 verified the wrapper contract). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 851 update — walk-dir + glob + open-mode audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| P | `filepath.Walk` in a hot path — calls `Lstat` per entry (slow vs `WalkDir`'s DirEntry). | ✅ Clean: absent — both directory scans use `os.ReadDir` (returns DirEntry lazily), which is the recommended primitive for a bounded flat listing. |
+| M | `filepath.Glob` with a user-controlled pattern — `ErrBadPattern` panic risk, unintended traversal. | ✅ Clean: sole site (wallet.go:267) uses a fixed literal `.wallet-*.tmp` — no user input. |
+| M | `os.OpenFile` with write flags but loose mode — credentials/data written world-readable. | ✅ Clean: two opens — logfile `O_CREATE|O_WRONLY|O_APPEND` at `0600`, configfile `os.Open` read-only; wallet file handled separately at `0600`. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 852 update — field-collision + builtin-shadow + stringer audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Struct field colliding with a method name (`Name` field + `Name()` method) — silent method-shadowing bug. | ✅ Clean: absent — all `Name()`/`String()`/`Error()` methods read plain fields or return literals; no field/method name collisions. |
+| M | Field or variable shadowing a builtin (`len`, `cap`, `copy`, `error`, `string`, `any`) — confusing and hides the builtin in scope. | ✅ Clean: zero declarations shadow builtins (the single match is doc text). |
+| S | `String()` on a type that leaks internals (pointer receiver reading mutable fields unsynchronized) — racy or leaky display. | ✅ Clean: all 10 `String()` methods are pure formatters on value receivers or read-only fields. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 853 update — unkeyed-literal + enum-valid + any-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unkeyed struct literal — silently breaks when a field is added/reordered. | ✅ Clean: absent — all composite literals are field-keyed. |
+| M | Exported enum without a `Valid()`/`Validate()` guard — out-of-range values from the wire or config reach the domain unchecked. | ✅ Clean: every exported enum defines `Valid()` (i18n ID/Lang, arbitration Policy, hal Family) and every wire-bearing struct defines `Validate()` (stratum Header, hal Identity, Config, lightning Entropy). |
+| S | `interface{}`/`any` fields in structs — untyped escape hatch hiding type bugs. | ✅ Clean: counts are small and bounded per file; every `any` site was verified in the s651/682/764 sweeps (error values, test seams, message templates). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 854 update — func-value + callback-field + callback-lock audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Stored `func` values escaping their scope — closures over loop vars or resources that outlive validity. | ✅ Clean: all 10 stored funcs are statement-scoped helpers used within the enclosing function — no escape into fields or channels. |
+| M | `func` fields called without a nil check — panic on optional callbacks. | ✅ Clean: every callback field (`log`, `Logger`, `OnReady`, `onConnected`) is either defaulted at construction or nil-guarded at each call site (verified s642/782). |
+| M | Callback invoked while holding a mutex — reentrancy deadlock if the callback takes the lock. | ✅ Clean: arbitration log callbacks are deliberately invoked after `streamsMu` is released (refactored in #714, verified s789). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 855 update — atomic-field + custom-marshal + racy-access audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `atomic.*` field also written non-atomically — torn read/write bypassing the atomic guarantee. | ✅ Clean: the 5 `atomic.Pointer` fields (httpserver boundAddr/serveErr, stratumv1 lastReconnect/extranonce1, logger defaultPtr) are accessed exclusively via `.Load()/.Store()/.CompareAndSwap()`; the 13 `atomic.Int64`/`Float64` counters likewise (s739). |
+| M | Custom `MarshalJSON`/`UnmarshalJSON` bypassing `encoding/json` invariants — recursion, duplicate keys, partial unmarshal. | ✅ Clean: absent — marshalling is plain tagged structs (s721/739). |
+| M | Same field accessed both via `atomic` and plain ops — data race. | ✅ Clean: no field mixes atomic and plain access; plain-access fields are mutex-guarded instead (s740/764). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 857 update — counter-inc + interface-surface + wrap-reach audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `seqNum`/`counter`/`nonce` `++` arithmetic — wraparound to a previously-sent value on uint32 fields. | ✅ Clean: sole counter increment is `seqNum++` (engine/run.go:1191) — a u32 at ≤10 submits/s needs ~13 years to wrap, and the future-sequence guard tolerates any residual case (sessions 738, 772). |
+| S | Interfaces too large (ISP violation) or too small to be useful — bad API boundaries. | ✅ Clean: 12 interface declarations, all 1–4 methods — `Clock`, `Connection`, `Session`, `Dialer`, `Provider`, `RateSource`, `NetworkHashrateSource`, plus file-local `encodable`/`rateStats`; proper ISP. |
+| M | Counter incremented then read unsynchronized — torn state between `++` and `Load`. | ✅ Clean: `seqNum` is guarded by the session mutex on both paths; share counters are `atomic.Int64` (s739). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 858 update — chan-capacity + unbuffered + chan-struct audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbuffered `make(chan T)` between producer/consumer — coupling goroutine scheduling to correctness (deadlock on late receiver). | ✅ Clean: zero unbuffered channels — every data channel specifies capacity ≥1 — the single `make(chan struct{})` (worker.go:140 `done`) is a broadcast channel signaled by `close()`, where capacity is meaningless. |
+| M | Buffered channel with capacity 0-vs-1 confusion in tests of the drain path. | ✅ Clean: all capacities are deliberate (1 for signals/notifications, larger for job queues). |
+| S | `chan` stored in structs without lifecycle ownership — ambiguous who closes. | ✅ Clean: every channel field has a documented owner that closes it (verified across s559/642/682/779). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 859 update — time-since + tuple-assign + sub-direction audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `time.Now().Sub(t)` instead of `time.Since(t)` — skips monotonic-clock reading, and legacy idiom. | ✅ Clean: zero `Now().Sub` — all 16 elapsed-time sites use `time.Since`/`time.Until`, which read the monotonic component. |
+| M | `a, b = b, a` tuple assignment with a RHS that mutates — order-of-evaluation surprises. | ✅ Clean: sole multi-assign (main.go:162 `best, bestDist = c, d`) binds independent loop vars — no aliased mutation. |
+| M | `t1.Sub(t2)` reversed (negative duration interpreted as positive) — sign-flip in age checks. | ✅ Clean: every `Sub` call has receiver = later time (age measurements compare `t.After(...)`/positive durations; sessions 611/758 verified). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 860 update — verb-scope + cast-bound + conv-loop audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `%v` applied to the `error` itself inside `fmt.Errorf` — loses the wrap chain (`errors.Is/As` fail). | ✅ Clean: `%v` appears only on non-error args (difficulty float, Policy enum, arg list); the error arg always uses `%w` (104 sites; sole deliberate `%v`-on-error at config.go:769, documented opaque-message choice — s839). |
+| M | `float64→int`/`int→uint32` casts on pool-controlled values — truncation or sign flip. | ✅ Clean: all casts bounded upstream — quantile index clamps by construction, `NonceStep` = NumCPU, `MsgLength` payload pre-bounded, big.Int mantissa finite-checked. |
+| P | `string↔[]byte` conversion inside a hot loop — per-iteration allocation churn. | ✅ Clean: zero conversions inside loops — all conversion sites are cold-path (s758). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 861 update — equal-method + time-eq + comparator-order audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `Equal`/`Compare`/`Less` method inconsistent with `==` or sort order — two notions of equality. | ✅ Clean: absent — no custom equality methods; all comparisons are scalar `==` or `time.Before/After` (correct, location-insensitive). |
+| M | `==`/`!=` on `time.Time` — wall+monotonic+location triple compare, false inequality on same instant. | ✅ Clean: zero `==` on times — all time comparisons use `Before`/`After`/`Equal` methods (sessions 611, 692). |
+| S | `strings.Compare`/`bytes.Compare` result compared to literal `-1`/`0`/`1` instead of `<0`/`==0`/`>0` — sign convention bug. | ✅ Clean: clean — comparators use the generic `cmp.Compare` (4 sites: arbitration engine.go:325/416/418, metrics.go:272-275), which returns -1/0/+1; no legacy literal-sign comparisons. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 862 update — fprintf-scope + sprintf-rate + write-err audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `fmt.Fprintf` result error discarded where the writer can fail (net conn, file) — partial output unnoticed. | ✅ Clean: all 10 `Fprintf` sites write to `strings.Builder`/`io.Writer` text output (setup wizard, doctor report, plist builder) — per `fmt` contract error is returned on first failure only; all write targets are infallible or errors propagate at the return boundary (s745). |
+| P | `fmt.Sprintf` on every iteration of the hot loop — reflection-driven alloc per share/hash. | ✅ Clean: zero Sprintf inside the share/hash loop — all sites are per-event (session end, failover, job emit) or per-render-tick formatters. |
+| M | `fmt.Fprint*` used where `io.WriteString`/`Write` suffices — needless format parsing per call. | ✅ Benign: the few `Fprintln`/`Fprintf` calls are in wizard/report code where formatting is the point; hot paths use `WriteString`/`Builder` directly (s767). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 863 update — rlock-pairing + lock-balance + mixed-guard audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `RLock` without `RUnlock` (or paired with `Unlock`) — reader-leak deadlock. | ✅ Clean: per-file counts match exactly — btccrypto 2/2, clock 1/1, hal 3/3, metrics 2/2, poolproto 2/2, fetcher 4/4, hashrate 1/1. |
+| M | `Lock`/`Unlock` imbalance — unlock on one path skipped. | ✅ Clean: counts per file balanced or the asymmetry is a documented defer-vs-explicit pattern (stats 3/4, fetcher 5/6 — deferred-unlock paths verified s640). |
+| M | Field read under `RLock` but written under `Lock` on the same mutex — correct pairing required. | ✅ Clean: every `RLock` site is a leaf read of mutex-guarded fields; writes take the full `Lock` (s740/764 verified upgrade-free). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 864 update — flag-dup + exec-argv + exec-lookup audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Duplicate `flag.X("name", ...)` registration — panic at init. | ✅ Clean: absent — no `flag` package use; argv parsing is a bespoke switch in `cmd/otedama` (verified s737/803). |
+| M | `exec.Command(name, args...)` with user-controlled `name` or interpolated `args` — argv injection. | ✅ Clean: all 4 call sites use fixed literal commands (`systemctl`, `launchctl`, `sc.exe`, plus the `runCmd` seam) with literal argument lists — no user input reaches argv (s690/764). |
+| M | `exec.LookPath`/relative command names — PATH-hijacked binaries. | ✅ Clean: commands resolve via PATH deliberately for service managers; unit names passed are compile-time constants, never user strings. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 864 correction — flag package actually in use
+
+The first entry of this session claimed "no `flag` package use; argv parsing
+is a bespoke switch". That was wrong: the grep only matched `flag.String(`
+/ `flag.Bool(` package-level forms and missed the `*Var` registrations.
+Actual usage: `flag.NewFlagSet(name, flag.ContinueOnError)` per subcommand
+in `cmd/otedama` (run/doctor/service/version/config/completion) with
+`StringVar`/`BoolVar`/`String`/`Bool` registrations — the bespoke part is
+only the top-level subcommand dispatch switch. Re-verified for the original
+defect class: every flag name within each FlagSet registers exactly once,
+so no duplicate-registration panic; `ContinueOnError` keeps `flag` from
+calling `os.Exit` inside library code. Verdict stays **clean**, but for the
+correct reason.
+
+---
+
+## Session 865 update — map-key + hash-adjacency + key-normalize audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Map key type wider than needed or user-controlled without bound — memory/DoS or lookup misses. | ✅ Clean: keys are `string` (device IDs, metric names — bounded enumerated sets), `uint32`/`uint64` (request/sequence IDs — wire widths), or `ProtocolID` (closed enum); no user-unbounded key space. |
+| M | Case-sensitivity mismatch on keys — "FOO" and "foo" treated as different keys where they should not be. | ✅ Clean: every string-key map uses a canonical form at insert — IDs are lowercased at the wire boundary, metric names are literal constants, method names are spec-exact (s749/766). |
+| S | `map[string]func()` dispatch built per-call instead of at init — per-call map alloc. | ✅ Clean: dispatch maps are package-level vars built once (method dispatch s633, driver registry s524). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 866 update — select-case + send-only + recv-mix audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `select` mixing send and recv cases without a `ctx.Done()` — random choice can pick a send while a recv was required for progress. | ✅ Clean: absent — no select mixes send+recv cases; each select is either recv-with-ctx-done or a bounded send under the non-blocking pattern (s588/732). |
+| M | `select` containing only send cases — blocks forever on a full channel. | ✅ Clean: absent — every send uses either `select { case ch <- v: case <-ctx.Done(): ... }` or `default:` non-blocking form. |
+| S | `select` recv cases evaluated in misleading order — first-ready random pick assumed as priority. | ✅ Clean: code never relies on case order — loops always include `ctx.Done()` and treat channel order as fair (fanin merges verified s636/773). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 867 update — random-access + io-copy + discard-drain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `ReadAt`/`WriteAt`/`Seek` on a shared offset — caller-visible position races. | ✅ Clean: absent — all I/O is sequential stream reads. |
+| M | `io.Copy` with a pooled or reused buffer — copy-buffer aliasing. | ✅ Clean: only two `io.Copy` calls, both to `io.Discard` for drain-before-close — no buffer, no aliasing. |
+| M | `io.Copy` error discarded on a partial body — silent truncation. | ✅ Benign: both sites discard-by-design (response bounded by `LimitReader` at 8KiB / `maxHashrateBody`); the drain is only for connection reuse, data unused (s836). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 868 update — transport + client-timeout + package-client audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Custom `RoundTripper`/`http.Transport` with a poisoned proxy or TLS downgrade. | ✅ Clean: absent — all outbound HTTP uses the default transport via `http.Client`. |
+| M | `http.Client` without `Timeout` — hung responses block forever. | ✅ Clean: all three client literals (`doctor` clock-skew probe, `rates` hashrate + fetcher) set an explicit `Timeout` (s581/835). |
+| M | `http.Get`/`http.Post`/`DefaultClient` — unconfigurable timeouts and shared state. | ✅ Clean: absent — every request goes through an owned `&http.Client{...}` with redirect refusal (s343). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 869 update — http-optional-iface + cookie-surface + handler-stream audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `Flusher`/`Hijacker`/`Pusher`/`ResponseController` misuse — broken HTTP semantics, premature flush, or hijack leaks. | ✅ Clean: absent — every handler writes a complete response via `w.Write`/marshal and returns. |
+| M | `Cookie`/`SetCookie` — session-fixation or unbounded cookie surface. | ✅ Clean: absent — `/healthz`, `/readyz`, `/metrics`, `/` endpoints set no cookies; no browser session. |
+| S | Handler keep-alive misuse — response written after `Hijack` or double `WriteHeader`. | ✅ Clean: no hijack; each handler issues exactly one header-write (single `WriteHeader` or implicit 200). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 870 update — task-chan + chan-chan + mailbox audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `chan func()` task channels — closure panics die in the worker, ordering lost. | ✅ Clean: absent — work is dispatched by direct calls or bounded data channels, never closure queues. |
+| M | `chan chan` rendezvous patterns — deadlock-prone request-reply. | ✅ Clean: absent — RPC waits use `map[id]chan` keyed correlation, not nested channels (s533). |
+| S | Mailbox actor pattern — messages from multiple writers interleaving on one state. | ✅ Clean: V1 `dispatch()` is a synchronous call from the single read-loop owner; V2 uses the same per-connection owner model. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 871 update — debug-surface + pprof + leak-helper audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `expvar`/`plugin`/`cgo-ffi` — implicit global mutation or unsafe plugin surface. | ✅ Clean: absent. |
+| M | `net/http/pprof` blank-import — handlers silently land on `http.DefaultServeMux` exposed to the network. | ✅ Clean: explicit import; handler funcs called directly on the custom mux only; mounted only when `--pprof` (default off) — plus non-loopback warn (s453). |
+| S | Goroutine-leak detection absent — leaked goroutines slip tests. | ✅ Benign: `goleak` deliberately not vendored (zero-dep policy); in-test `runtime.NumGoroutine` delta checks used in `rates/fetcher_test.go` instead. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 873 update — rate-limiter + token-bucket + clock-doc audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Token-bucket limiter bugs — starts empty, blocks on take, unbounded refill, or ignores ctx. | ✅ Clean: `submitLimiter` starts full, `take()` is non-blocking (drop + counter), refill is ticker-driven and capped at `submitBurst`, and the refill goroutine exits on `ctx.Done()` (engine/run.go:1847-1880). |
+| M | `clock.NewRateLimiter` referenced in the clock doc comment — phantom API? | ✅ Benign: exists only inside a doc-comment example illustrating how a caller injects `clock.Clock` — not a symbol in the package. |
+| S | Rate limit on a non-Clock wall clock — untestable drift. | ✅ Benign: `submitLimiter` uses `time.NewTicker` directly; shares are real-time events, `take()` is non-blocking so injection adds no value. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 874 update — pooled-hasher + secret-residue + hkdf-chain audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `sync.Pool` hashers returned unreset or with secret residue — cross-user key bleed. | ✅ Clean: `getHasher()` always `Reset()`s on borrow; put occurs after `Sum()` — the pool carries no post-state. However the hasher is returned without zeroing the key material used, which matches the existing threat model (Noise key derivation output is the secret, not the hasher internals — `crypto/hmac`-equivalent internals are not attacker-visible). |
+| M | Pooled HMAC built by hand instead of `crypto/hmac` — subtle deviation from RFC 2104. | ✅ Verified correct: blockSize=64 for SHA-256, key>64 hashed first, ipad 0x36 / opad 0x5C over a 64-byte zero-padded key — exact HMAC construction (and the unpooled reference still exists for cross-check in tests). |
+| S | hkdf2/hkdf3 chained on pooled HMAC — intermediate slices could alias. | ✅ Clean: every `hmacSHA256Pooled` returns a fresh `Sum(nil)`; `append(out1, 0x02)` allocates new (cap=len) — no aliasing between chain steps. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 876 update — readslice + line-ceiling + alias-copy audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Unbounded line reads on an untrusted stream — memory exhaustion via one long line. | ✅ Clean: V1 `readLine` uses `bufio.ReadSlice` + `ErrBufferFull` → terminate on >`maxLineBytes`; the buffer can never accumulate (documented at stratumv1.go:189-197). |
+| M | `ReadSlice` result used after the next read — buffer alias corruption. | ✅ Clean: the line is copied into a fresh slice before return (`out := make; copy`) — the reader's buffer may be reused safely. |
+| S | `ReadString` on interactive stdin — unbounded operator input. | ✅ Benign: `engine/setup.go` mnemonic-verify reads the operator's own stdin; bounded by the physical paste, cold path only. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 975 update — run-flags + wallet-env + signal-exit audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `--help` output going to stderr (usage-error stream) or an unset flag indistinguishable from one set to its default — breaking the "flags > env" fallback logic. | ✅ Clean: `hasHelpFlag` pre-check routes help to stdout while parse errors stay on stderr; `fs.Visit` records only explicitly-set flags in `setFlags`. |
+| M | Wallet secrets living in `config.Config` — round-tripping through `config show` or landing in config.yaml. | ✅ Clean: both passphrases are CLI-only `runFlags` fields, deliberately excluded from the config struct; `applyRunEnvFallbacks` fills them from env only when the flag is empty (flag > env). |
+| M | A graceful SIGINT/SIGTERM being reported as a runtime failure — nonzero exit on a normal stop. | ✅ Clean: `signal.NotifyContext` + `defer cancel()`; `engine.Run` returning `context.Canceled` is filtered to `exitOK`. |
+| M | TUI/echo-attached behavior firing on a pipe or service journal — mojibake in logs. | ✅ Clean: `isTerminal` uses `os.ModeCharDevice` (stdlib-only, no x/term dep) — false on files/pipes/journal capture. |
+| M | `/readyz` reporting ready before the pool session is established, or panicking when the HTTP server is disabled. | ✅ Clean: `onReady` bridge is nil-guarded (`httpSrv != nil`) and only flips the ready flag the engine publishes. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 977 update — doctor-checkset + perm-gate + cross-field audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | The "17 parallel checks" count in docs drifting from `DefaultChecks`. | ✅ Clean: the slice lists exactly 17 — config, address, failover, datadir, wallet, reachability, diversity, endpoint-diversity, encryption, TLSCA, payout scheme, power, profitability floor, hardware, network, clock skew, env vars. |
+| M | doctor inspecting a different data dir than the engine uses — `DataDir` empty vs default-resolved mismatch. | ✅ Clean: `checkDataDir`/`checkWallet` mirror `config.DefaultDataDir()` exactly; empty with no home → Skip, not a false Fail. |
+| M | A restored 0644 wallet.dat passing the enclosing-directory check — readable encrypted seed. | ✅ Clean: `checkWallet` separately warns on `perm&0o077` for the file itself (non-Windows); fingerprint display is best-effort/non-fatal; constants mirrored without importing crypto. |
+| M | `tls_ca_file` set on a non-`stratum+tls://` pool silently ignored at dial time, or doctor and the dialer disagreeing on "valid PEM". | ✅ Clean: warns on scheme mismatch; validates with the same `x509.NewCertPool().AppendCertsFromPEM` the dialer uses. |
+| M | `power_watts` set without `electricity_price_per_kwh` (or vice versa) — a silently-dead cost metric the operator believes is live. | ✅ Clean: `checkPowerEconomics` validates the pair as cross-field intent, not each field alone; plaintext-pool warning redacts userinfo via `StripUserinfo` before display. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 978 update — decide-guard + yield-finite + determinism audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A NaN/Inf provider quote winning the sort or poisoning `TotalYield` — arbitration deciding on garbage. | ✅ Clean: `Yield.Effective` collapses non-finite and non-positive inputs to 0 via `!(x > 0)` guards (NaN comparisons are false → 0); a bad quote can never win. |
+| M | Non-finite/negative hysteresis margin or min-yield floor silently accepted — unpredictable switch behavior. | ✅ Clean: `Decide` rejects NaN/±Inf/negative for both knobs up front (the s325/s331 hardening). |
+| M | Duplicate device IDs silently deduplicated — one device's assignment overwriting another's. | ✅ Clean: duplicates are a hard error before any allocation. |
+| M | Map-order allocation output making Decide nondeterministic — flaky comparisons and diffs. | ✅ Clean: devices copied then sorted by ID before the loop; `prev` lookup is a keyed map, output order deterministic. |
+| M | A device missing from `YieldPerDevice` returning zero — the good stream scored as nothing. | ✅ Clean: `YieldFor` falls back to `DefaultYield`; `Accepts` is `slices.Contains` over declared families. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 979 update — seed-encrypt + decrypt-oracle + fingerprint-sidecar audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | An empty passphrase producing a wallet.dat that is scrypt-of-nothing — "encrypted" in name only. | ✅ Clean: `EncryptSeed` and `NewWalletManager` both hard-reject empty passphrases. |
+| S | Scrypt running on a corrupt/oversized ciphertext before validation — CPU-burn oracle or version confusion. | ✅ Clean: `DecryptSeed` checks version and empty-ciphertext before key derivation; GCM `Open` failure maps to `ErrWrongPassphrase` — no distinguishing between wrong password and tampered file. |
+| S | Key/plaintext material lingering on the heap after use. | ✅ Clean: `zeroBytes` defers wipe the passphrase, derived key, and plaintext (best-effort semantics documented). |
+| M | A wallet.dat restored from backup without its fingerprint sidecar permanently breaking fingerprint identity checks, or a stale fingerprint silently overwritten. | ✅ Clean: missing sidecar is recreated best-effort from the loaded seed with `0600`, never overwriting an existing file — a disagreeing fingerprint is a signal, not masked. |
+| M | dataDir created with wide permissions before the wallet lands. | ✅ Clean: `MkdirAll(dataDir, 0o700)`; stale temp files swept before open. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 981 update — curtail-hysteresis + payout-failover + submit-cap audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Curtail/reconnect toggling every tick on a rate hovering at the threshold — pause flapping. | ✅ Clean: `curtailDecision` only transitions on boundary crossings (below→pause, recovered→resume); threshold≤0, stale, or non-positive rates leave state untouched. |
+| M | `payoutAddresses` failover rotating away from a working payout on a transient pool failure — mining rewards redirected. | ✅ Clean: dedup preserves primary-first order and rotation happens only when the current address never established a session (documented in `runReconnectLoop`), so a proven address is never abandoned. |
+| M | `sessionUser` overriding an explicit per-pool `User` with the address-derived form. | ✅ Clean: precedence is `poolUser` > `addr.worker` > `addr`, matching the documented config contract. |
+| S | A pool driving difficulty to 0 → every worker submit spawns a wire frame, flooding pool and process. | ✅ Clean: `submitLimiter` token bucket — 8/s refill, burst 32, starts full, `take()` drops instead of blocking; refill goroutine exits on ctx.Done. |
+| M | `maskAddr` leaking payout addresses into logs. | ✅ Clean: first6…last4 for >12 chars; short strings pass through (regtest addresses only). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 982 update — poll-lifecycle + quote-freshness + yield-source audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A double `Start` racing the loop's device-set write — torn state or a second writer on quoteCh. | ✅ Clean: `launch` checks `p.cancel != nil` and runs `prepare` under `p.mu`, so a rejected start cannot mutate state the running loop reads; the loop goroutine is the sole channel writer. |
+| M | `Stop` on a never-started provider panicking, or `quoteCh` recreated while the loop still writes — send-after-close. | ✅ Clean: nil-cancel guard makes Stop a no-op; channel is recreated only after `wg.Wait()` under lock, so the writer has provably exited. |
+| M | A stalled arbitration reader blocking the polling loop forever — provider freezes. | ✅ Clean: `sendQuote` drops the oldest buffered quote when the channel is full, then sends the newest — freshest estimate always wins, loop never blocks; ctx-cancel aborts cleanly. |
+| M | Zero-GPU hosts publishing an attractive AI-inference quote — arbitration assigning work to a nonexistent device. | ✅ Clean: publishes an explicit zero-yield quote (`Confidence: 0` → `Effective() == 0`) so arbitration excludes the stream gracefully. |
+| M | Stale/absent network-hashrate or price feeds fabricating yields from thin air. | ✅ Clean: live feed wins only when `fresh && h > 0`, else the documented constant; measured device hashrate preferred over family estimates; non-SHA256d devices skipped; USD rate fallback documented. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 983 update — ansi-truncate + width-detect + url-shorten audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A truncated styled line bleeding its color into the rest of the frame — corrupted dashboard output. | ✅ Clean: `truncateVisible` copies every escape up to the cut verbatim, then appends `reset`, so no style stays open past the boundary. |
+| M | `visibleLen` miscounting non-color CSI sequences (e.g. `\x1b[2J`) — columns misalign after a clear-screen. | ✅ Clean: escape mode ends on any CSI final byte `'@'..'~'` (not just `m`); the `[` introducer and parameter bytes are consumed without ending the sequence. |
+| M | Truncate helpers slicing negative-length budgets — panic on a narrow terminal. | ✅ Clean: `truncateToBudget` returns "" at budget≤0; `shortenURL` returns the URL as-is under maxLen<4; `truncateVisible` returns "" at maxVisible≤0. |
+| M | Terminal resize invisible until restart (fixed-width render), or a transient ioctl failure collapsing the layout. | ✅ Clean: `detectWidth` queries TIOCGWINSZ every render tick; failures, non-files, and degenerate widths (<40) keep the previous value. |
+| M | `SetWidth` accepting a degenerate width that panics the renderer. | ✅ Clean: values below the documented 40-column minimum are rejected and the previous width stands; setting locks auto-detection for tests/embedders. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 984 update — wallet-verify + rotate + secret-input audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `wallet verify`/`change-passphrase` invoking `NewWalletManager` on an absent wallet.dat — silently creating a fresh wallet instead of inspecting the real one. | ✅ Clean: both verbs `os.Stat` first and exit with "no wallet found"; verify prefers the fingerprint sidecar so no decrypt happens at all. |
+| S | A mistyped recovery phrase passing through to fingerprint compare — half-valid input treated as "wrong wallet". | ✅ Clean: `MnemonicToEntropy` validates the BIP-39 checksum before any comparison. |
+| S | Fingerprint comparison short-circuiting per-byte — a timing oracle on a wallet identifier. | ✅ Clean: `subtle.ConstantTimeCompare`; mismatch prints both fingerprints, no early exit. |
+| S | Passphrases accepted on argv — process lists / shell history exposing the wallet key. | ✅ Clean: env-only (`OTEDAMA_WALLET_PASSPHRASE`/`_NEW_PASSPHRASE`); the error text itself teaches "never on argv". |
+| M | A prompt echoing into piped/captured output, or the phrase reader unreplacable in tests. | ✅ Clean: prompt goes to stderr only when stdin is a real terminal (`isTerminal` on `*os.File`); the reader is injected (`io.Reader`). |
+| M | `service` subcommand dispatch mishandling help or unknown verbs. | ✅ Clean: `help/--help/-h` → stdout; unknown → stderr + usage, exit 64. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 985 update — log-rotate + config-display + cmd-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | `--log-file` growing without bound, or rotation dropping writes. | ✅ Clean: `cappedLogFile` rotates at `maxLogFileBytes` to a single `.old` backup; a failed rotate falls back to appending — writes are never lost; 0600 perms; size seeded from `Stat` and re-stat after the marker. |
+| S | A config value containing ESC/newline/DEL injected into `config show` output — ANSI forgery or fake log lines on the operator's terminal. | ✅ Clean: `safeDisplay` strips every `unicode.IsControl` rune (which includes the C1 range the daemon's `quoteToken` still misses — the display path is already safe; the pending fix is #809); empty or all-control values render as the placeholder, never "". |
+| M | Log writes racing rotation — interleaved bytes across two files. | ✅ Clean: `Write`/`rotateLocked`/`Close` all hold `c.mu`; rotation marker written inside the same critical section. |
+| M | `version`/`doctor`/`config` verbs misrouting stdout vs stderr. | ✅ Clean: same help-to-stdout / errors-to-stderr convention as `run`; `config show` JSON writes to stdout only. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 986 update — fetch-fanout + plausibility + skew audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Per-source goroutines leaking when a fetch aborts early — unbounded channel or blocked senders. | ✅ Clean: `results` is buffered to `len(sources)` so every sender completes; `wg.Wait` → `close` before collecting; one failure can't stall the fan-in. |
+| M | A single source's poisoned reading (unit error, manipulated feed) pulling the median. | ✅ Clean: every reading is band-checked against `[minPlausible,maxPlausible]` per source, dropped from the median, and logged only for genuinely implausible non-zero values; the median of survivors wins. |
+| M | A huge/never-ending response body pinning memory or the connection. | ✅ Clean: `io.LimitReader` caps the body; non-200 responses are drained through the same bound so keep-alive reuse stays safe. |
+| M | A stale hashrate/rate quietly treated as fresh — arbitration deciding on yesterday's quote. | ✅ Clean: `CurrentHashrate`/`BTCUSDRate` return `(value, fresh)` where fresh requires `hashrate > 0` and age < cache duration. |
+| M | "All sources failed" swallowing the concrete causes, or clock-skew reporting skipped when rates fail. | ✅ Clean: per-source errors collected into `errors.Join` (inspectable via Is/As); skew is aggregated from every response's Date header and persisted before the rate check, so it survives a total outage. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 987 update — driver-registry + detect-fanout + identity-gate audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A nil/empty-named/duplicate driver corrupting the registry or silently replacing the registered driver. | ✅ Clean: `Register` rejects all three before the locked map write; `Lookup` returns `(driver, ok)`. |
+| M | `Drivers` exposing the live map's iteration order or a mutable view — nondeterministic detect order or external mutation. | ✅ Clean: returns a freshly-allocated slice sorted by name; callers may modify it freely. |
+| M | Driver enumeration leaking goroutines or a deadlocked result channel when one driver stalls. | ✅ Clean: results channel buffered to `len(drivers)` so every Enumerate sender completes; `close` runs in a separate goroutine after `wg.Wait`; per-driver errors are labeled, never fatal to the fan-in. |
+| S | A device identity containing whitespace or `/` poisoning `YieldPerDevice` keys or sysfs paths. | ✅ Clean: `Identity.Validate` rejects empty IDs, invalid families, and every `unicode.IsSpace` rune plus `/` (the s512 hardening). |
+| M | A missing/garbled sysfs file hard-failing GPU detection — vendor/model inference must be best-effort. | ✅ Clean: `readSysFile` returns "" on error; inference degrades to generic labels. |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 988 update — fanin-cancel + scheme-ssot + userinfo-strip audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | A stuck input channel (never written, never closed) pinning a `fanIn` goroutine after cancellation — `out` never closes. | ✅ Clean: both the receive and the send `select` include `ctx.Done()`; the merge exits on cancel and `out` closes after `wg.Wait` in a dedicated goroutine. |
+| M | Pool-scheme parsing duplicated per package — `stratum+v2tls://` misread as `v2` on prefix overlap, or a new scheme parsed by one site but not another. | ✅ Clean: `knownSchemes` is the single source of truth for `FromURL` and `StripScheme`, ordered longest-prefix-first (`v2tls` before `v2`); unknown schemes are a hard `ErrUnknownProtocol`. |
+| S | `user:pass` embedded in a pool URL echoed into logs/doctor/TUI. | ✅ Clean: `StripUserinfo` redacts only a `@` inside the authority (before the first `/`) and returns malformed URLs unchanged — redaction can't corrupt diagnostics; every display boundary calls it. |
+| M | A nil/Unknown/dup dialer registration silently degrading the protocol map. | ✅ Clean: `Register` panics at init-time invariants (nil, `ProtocolUnknown`, duplicate) — unreachable post-startup, matching the repo's panic census rule. |
+| S | Pool-controlled text (reject reasons, error objects, job IDs) forging ANSI escapes or flooding logs. | ✅ Clean: `SanitizePoolText` strips every `unicode.IsControl` rune (C0+DEL+C1) and truncates to 256 runes before any log/render site. |
 
 All packages build, vet, and test green.
 
@@ -5110,6 +5957,51 @@ All packages build, vet, and test green.
 | L | `w.Write` before `w.WriteHeader` in an HTTP handler — body flush implicitly sends 200, making the later status a silent no-op. | ✅ Clean: all 4 httpserver handlers call `WriteHeader(status)` before any body write — correct header-then-body order. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1252 update — post-merge-wave integrity + convention-leftover audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Merge-wave semantic breakage — ~300 ledger/code PRs merged in one wave could reintroduce patterns newer fixes removed, or leave the tree unbuildable. | ✅ Clean: fresh `go build ./...`, `go vet ./...`, `go test ./...` on post-wave master — all green. Ledger dedupe: 99 `## Session` blocks, zero duplicate session numbers from the union-merge passes. |
+| M | Deprecated-pattern re-landing — merged code PRs branched from older masters can carry `os.IsNotExist`, `sort.Ints`, `interface{}`, `ioutil`, bare `fmt.Sprintf("%d"/"%q")` back in. | ⚠️ Noted (fixed): `sort.*`/`interface{}`/`ioutil`/`fmt.Sprintf` bare sites all zero — but `os.IsNotExist` ×2 in `internal/config/config_file_test.go` (original session-50 code, never covered by #1239) — modernized to `errors.Is(err, os.ErrNotExist)` this round. The `fmt.Errorf` verb-free literals that remain are by user decision (#1185 closed unmerged) — not a regression. |
+| L | `unicode.IsControl` + `strconv.Quote` divergence in `quoteToken` — master carried the strconv modernization while open #809 carried the C1 gap fix; an unmerged-order merge would lose one intent. | ✅ Clean: union-resolved on #809's branch to keep both intents (`unicode.IsControl` + `strconv.Quote`); pushed and mergeable. |
+
+All packages build, vet, and test green.
+
+## Session 1300 update — post-merge-wave master verification (checkpoint)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | build/vet/gofmt on master HEAD | ✓ `go build ./...`, `go vet ./...` green; `gofmt -l` zero across cmd+internal after the #1104–#1115 merge wave |
+| R | test -race (heavy packages) | ✓ `go test -race` arbitration 1.1s / stratum 1.1s / engine 30.0s — all pass at HEAD `2ae99feab`+ |
+| R | Merge-wave composition | ✓ last ~30 merges are docs-only ledger PRs; prior code merges (#677/#704/#714/#957/#1235/#1239/#1241/#1293 etc.) re-verified green together — no interaction defect |
+
+## Session 1301 update — os.IsNotExist sweep completion + open-fix dedupe
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `os.IsNotExist` residual call sites (deprecated since Go 1.16; merged #1239 modernized 4 sites but missed test files) | **S: fixed** — 4 remaining real sites modernized to `errors.Is(err, os.ErrNotExist)`: cmd/otedama logfile_test.go:85, wallet_test.go:136/:172, internal/lightning/wallet_test.go:396. The ×2 in internal/config/config_file_test.go are already covered by open #1333 (not re-fixed); remaining grep hits are prose comments, not call sites |
+| R | Open fix-PR redundancy audit | ⚠️ Noted — #1321 (UsedVersion range) is a strict subset of open #1329 (UsedVersion+Flags+ReqID in both dialer & engine paths); merging #1329 supersedes #1321. No other fix-PR pairs overlap (#1275 ldflags, #1311 install.sh, #1335 maps.Copy, #1339 cmp.Or, #1341 Cf-sanitize, #1344 Go-pins, #1346 govulncheck, #1347 fuzz-job, #1351/#1352 workflow fixes are all disjoint) |
+| R | Test gate after change | ✓ `go test ./cmd/otedama ./internal/lightning` green; `go vet` clean |
+
+
+## Session 1308 update — 32-bit portability (GOARCH=386/arm build)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `setup.go:89` — `1 << 31` untyped constant overflows `int` on 32-bit | **S: fixed** — compute `total` in uint64; GOARCH=386+arm `go build`/`go vet` now clean (releases ship amd64/arm64 only, but the source should compile everywhere) |
+| M | Other `1<<3x`/`math.Max*` constant-overflow sites | ✓ none — grep census across the tree found only the fixed site |
+All packages build, vet, and test green.
+
+## Session 1304 update — linter-toolchain version parity
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `Makefile:53` `setup` installed `golangci-lint@latest` — since upstream v2 (2025-03) `@latest` resolves to a v2 release that rejects the repo's v1-schema `.golangci.yml` (`linters-settings`/`disable-all`/`issues.exclude-rules`), so `make setup` + `make lint` on a fresh machine fails at config parse | **S: fixed** — pinned `@v1.64.8`, the same v1 release KNOWN_LIMITATIONS records as the local tooling version; v2 migration remains the documented maintainer decision |
+| R | `.golangci.yml` linter-name validity | ✓ all 28 enabled linters are valid v1 names; none renamed/removed in the pinned v1 line |
+| R | Linter-version drift ledger | ✓ KNOWN_LIMITATIONS (v1.55.2 ci.yml pin, action@v3, v2 schema) still accurate — now cites the Makefile fix so the four pin sites are: ci.yml v1.55.2, actions v3 (v1 era), Makefile v1.64.8 |
 ---
 
 ## Session 1316 update — gocyclo decomposition batch B (config/arbitration/doctor/cmd)
