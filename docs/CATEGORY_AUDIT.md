@@ -7631,3 +7631,7 @@ Ledger only — verification round, no behavior-visible change.
 ## Session 1449 update (Socratic pass 122)
 
 **Claim verified:** "A stalled arbitration consumer cannot deadlock providers or lose quote recency" — true. Each provider publishes from a single poller goroutine into a bounded channel (16 mining / 32 AI); sendQuote first tries a non-blocking send, and on a full buffer drops exactly one oldest quote then sends the newest with a ctx escape — newest-wins semantics, never blocking the producer. The arbitration loop's own quote branch (updateStream + ledger write) is O(1) mutex work per quote and structurally cannot stall: its other branches are the ticker and ctx.Done(). If the whole loop exits via ctx cancel, mergeQuotes drains its inputs and the providers' sendQuote returns false on the same ctx — no publisher outlives the consumer. Code unchanged.
+
+## Session 1450 update (Socratic pass 123)
+
+**Ecosystem recheck (ADR-009):** sv2-spec normative open set unchanged — #203 payouts extension (hybrid-consensus stands), #236 SetTarget ≤ max_target (new Oct-2 clarification: in-flight SetTarget racing UpdateChannel bound to replaced max_target), #234 authority key mgmt, #198 coinbase_witness. SRI latest v1.12.0, sv2-apps latest v0.8.0 — both confirmed via authoritative tags/releases APIs. No action required.
