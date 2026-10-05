@@ -7635,3 +7635,7 @@ Ledger only — verification round, no behavior-visible change.
 ## Session 1450 update (Socratic pass 123)
 
 **Ecosystem recheck (ADR-009):** sv2-spec normative open set unchanged — #203 payouts extension (hybrid-consensus stands), #236 SetTarget ≤ max_target (new Oct-2 clarification: in-flight SetTarget racing UpdateChannel bound to replaced max_target), #234 authority key mgmt, #198 coinbase_witness. SRI latest v1.12.0, sv2-apps latest v0.8.0 — both confirmed via authoritative tags/releases APIs. No action required.
+
+## Session 1451 update (Socratic pass 124)
+
+**Claim verified:** "applyAllocation's three-way switch covers every transition class correctly" — mostly true, with one latent gap now disclosed. Mining→non-mining drains via pauseDevice + the pause set (both already synced by reconcileArbPauses); non-mining→mining relies on the next pool job re-feeding the worker (the disclosed resume-latency edge); mining→mining logs "switched" but takes no drain/resume action — correct *today* because exactly one `mining.*` provider exists, so two distinct mining streams per device are unreachable (updateStream keys collide on the same providerID). ⚠️ Latent: the moment a second mining provider ships (e.g. a DATUM backend alongside stratum), a mining→mining switch would leave the worker grinding the *old* stream's work until that stream's own session supplies a job — a silent cross-provider assignment bug. A future fix should drain on any SwitchedFromID where the stream identity changed, not just prefix transitions. Code unchanged.
