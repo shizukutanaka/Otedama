@@ -5972,3 +5972,10 @@ All packages build, vet, and test green.
 | R | Open fix-PR redundancy audit | ⚠️ Noted — #1321 (UsedVersion range) is a strict subset of open #1329 (UsedVersion+Flags+ReqID in both dialer & engine paths); merging #1329 supersedes #1321. No other fix-PR pairs overlap (#1275 ldflags, #1311 install.sh, #1335 maps.Copy, #1339 cmp.Or, #1341 Cf-sanitize, #1344 Go-pins, #1346 govulncheck, #1347 fuzz-job, #1351/#1352 workflow fixes are all disjoint) |
 | R | Test gate after change | ✓ `go test ./cmd/otedama ./internal/lightning` green; `go vet` clean |
 
+
+## Session 1308 update — 32-bit portability (GOARCH=386/arm build)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `setup.go:89` — `1 << 31` untyped constant overflows `int` on 32-bit | **S: fixed** — compute `total` in uint64; GOARCH=386+arm `go build`/`go vet` now clean (releases ship amd64/arm64 only, but the source should compile everywhere) |
+| M | Other `1<<3x`/`math.Max*` constant-overflow sites | ✓ none — grep census across the tree found only the fixed site |
