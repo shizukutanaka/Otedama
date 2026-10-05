@@ -331,7 +331,7 @@ func (d *Dashboard) poolLine(s *Stats, cols int) string {
 
 // padToVisibleWidth appends spaces so s occupies width visible columns.
 // fmt's %-Ns pads by rune count, which counts ANSI escape bytes as width —
-// a value carrying colour codes would be under-padded and the column after
+// a value carrying color codes would be under-padded and the column after
 // it would drift left by the escape length. Use this wherever the field
 // already contains escapes.
 func padToVisibleWidth(s string, width int) string {

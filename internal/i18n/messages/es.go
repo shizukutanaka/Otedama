@@ -7,7 +7,7 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 
 // Spanish returns the Spanish (es) message catalog.
 func Spanish() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangSpanish, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangSpanish, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama está listo. La minería comenzará en breve.",
 		StartupWalletCreated:  "Se ha creado una nueva cartera Lightning. Tu semilla de recuperación está almacenada de forma segura en este dispositivo.",
 		StartupHardwareFound:  "Se detectaron {{.count}} dispositivos de minería: {{.summary}}",
