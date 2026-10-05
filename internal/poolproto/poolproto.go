@@ -420,15 +420,24 @@ var (
 // log-flooding vector.
 const maxPoolTextRunes = 256
 
-// SanitizePoolText removes Unicode control characters (C0, DEL, C1 —
-// including ANSI escape introducers) from pool-controlled text and
-// truncates it to 256 runes. Callers use it before logging or rendering
-// any string the pool supplied (share-reject reasons, error objects,
-// job IDs), so escape sequences cannot manipulate the terminal or forge
-// log lines.
+// unsafePoolRune reports whether r must be stripped from display and log
+// text: Cc control characters (C0, DEL, C1 — including ANSI escape
+// introducers), Cf format characters (bidi overrides U+202A–U+202E and
+// U+2066–U+2069, zero-width spaces/joiners, tag characters U+E0000+ —
+// the Trojan Source class, CWE-838), and Zl/Zp line/paragraph
+// separators that forge extra log lines without being Cc.
+func unsafePoolRune(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp)
+}
+
+// SanitizePoolText removes characters unsafePoolRune rejects from
+// pool-controlled text and truncates it to 256 runes. Callers use it
+// before logging or rendering any string the pool supplied
+// (share-reject reasons, error objects, job IDs), so escape sequences
+// cannot manipulate the terminal or forge log lines.
 func SanitizePoolText(s string) string {
 	clean := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unsafePoolRune(r) {
 			return -1
 		}
 		return r

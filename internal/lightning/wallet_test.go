@@ -5,6 +5,7 @@ package lightning
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -393,7 +394,7 @@ func TestNewWalletManager_SweepsStaleTempFiles(t *testing.T) {
 	if _, err := NewWalletManager(dir, "p", deterministicReader(0x42), testWL(t)); err != nil {
 		t.Fatalf("NewWalletManager: %v", err)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
 		t.Error("stale .wallet-*.tmp survived startup sweep")
 	}
 	if _, err := os.Stat(fresh); err != nil {
