@@ -1929,12 +1929,12 @@ func TestCheckPoolReachability_MalformedAlongsideReachableWarns(t *testing.T) {
 
 func TestCheckWallet_MalformedFingerprintNotEchoed(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	// Control bytes + wrong length — must not be echoed into the report.
 	evil := "a\x1b[31mZ\nnot-hex-at-all"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(evil), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(evil), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	r := checkWallet(dir).Run(context.Background())
@@ -1957,7 +1957,7 @@ func TestIsFingerprint(t *testing.T) {
 		"":          false,
 		"a1b2c3":    false, // too short
 		"A1B2C3D4":  false, // uppercase
-		"a1b2c3d ":  false, // space
+		"a1b2c3d ":  false, //nolint:gocritic // deliberate: trailing space must be rejected
 		"a1b2c3d\n": false, // newline
 		"zzzzzzzz":  false, // not hex
 	} {
