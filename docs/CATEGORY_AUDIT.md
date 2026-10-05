@@ -6336,3 +6336,13 @@ CI saturation recorded honestly — the repo's Actions queue appears starved (jo
 | R | Unreleased section currency | ⚠️ Noted: last Unreleased entry covers session 323; hundreds of merged changes since (V1/V2 hardening, metrics fixes, stdlib modernization, CI repairs, dep bumps) are unrecorded. File last modified 2026-09-30 (8e86d7d8f) — the convention of skipping changelog entries for docs-only rounds is working as designed, but real fixes/feat merged post-323 are absent from the ledger. Wholesale backfill is out of scope for an audit round; recorded as drift for a future docs round. |
 | R | Release anchors | ✓ `[3.0.0-alpha.1] — 2026-04-24` section exists; latest git tag is v2.1.9 (no v3 tag) — consistent with alpha status |
 
+## Session 1287 update — ecosystem recheck (ADR-009)
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | sv2-spec normative open set | ✓ Unchanged (#203/#202/#198 + #236/#234 tracking); #202 gained a new freshness/epoch-awareness review thread — recorded in ADR-009 |
+| R | SRI latest release | ⚠️ Corrected: v1.12.0 (2026-09-17) IS the latest — the session-1268 ledger re-anchor to v1.11.1 was a verification miss |
+| R | sv2-apps latest | ✓ v0.7.0 (alpha) remains latest |
+
+Ecosystem recheck recorded in ADR-009; next recheck ~session 1297.
+
