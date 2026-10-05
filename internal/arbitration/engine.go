@@ -90,13 +90,15 @@ type Yield struct {
 // Effective returns the confidence-adjusted yield. A quote with zero
 // confidence is treated as zero yield. Non-finite inputs (NaN/±Inf —
 // e.g. a provider division producing 0/0 upstream) collapse to 0 so a
-// bad quote can never win the sort or poison TotalYield.
+// bad quote can never win the sort or poison TotalYield. Confidence is
+// documented as [0,1]; it is clamped to 1 here so a provider emitting a
+// larger value cannot inflate its effective yield above its own net.
 func (y Yield) Effective() float64 {
 	if !(y.SatsPerSecond > 0) || !(y.Confidence > 0) {
 		return 0
 	}
-	v := y.SatsPerSecond * y.Confidence
-	if math.IsInf(v, 0) {
+	v := y.SatsPerSecond * min(y.Confidence, 1.0)
+	if math.IsInf(v, 0) || math.IsInf(y.Confidence, 0) {
 		return 0
 	}
 	return v

@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1436 — Confidence>1 のクォートが自己の net を超えて裁定スコアを水増しできた)
+
+`arbitration.Yield` の Confidence は [0,1] と文書化されながら未クランプで、`Effective()` は `sats × confidence` を素通ししたため、Confidence=1.5 のクォートは自身の net の 150% まで実効収益を水増しできた。両プロバイダーは内部的に confidence を 0.7–0.95 に制限するためライブ欠陥はなく、第三プロバイダー追加時の拡張点としての潜在境界だったが、`min(confidence,1)` を適用して正規化（+Inf confidence は従来通り非有限→0 へ潰れるピン動作を維持）。回帰テストは 1.5/2.0/+Inf をピン。
+
 ### Fixed (session 1414 — ハッシュレートフィード停滞時もクォートが 0.95 confidence を名乗っていた)
 
 ネットワークハッシュレートフィード配線済みで停滞（30分超/未取得）の場合、compile-time 定数へフォールバックしつつ confidence は価格フィード由来の 0.95 のままだった（confidence は `Effective()` 経由で裁定スコアを直接スケールするため実裁定スキュー）。劣化した設定済み入力として価格停滞と同じ 0.7 層へクランプするよう修正（未配線時は定数が設計上の基準入力のため 0.95 維持）。

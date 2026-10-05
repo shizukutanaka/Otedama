@@ -64,6 +64,10 @@ func TestYield_Effective(t *testing.T) {
 		{"+Inf confidence treated as zero", Yield{100, math.Inf(1)}, 0},
 		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
 		{"negative sats and confidence treated as zero", Yield{-50, -0.5}, 0},
+		// Confidence is documented [0,1]: a value above 1 must not
+		// inflate the effective yield above the provider's own net.
+		{"confidence above 1 clamps to full", Yield{100, 1.5}, 100},
+		{"confidence 2 clamps to full", Yield{100, 2.0}, 100},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
