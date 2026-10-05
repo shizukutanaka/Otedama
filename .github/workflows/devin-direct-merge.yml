@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [synchronize, opened]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   check-conflict-and-comment:
     runs-on: ubuntu-latest
@@ -31,4 +35,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "/fix-conflict mainブランチとの競合を git merge で解消し、テストを通してください。"
+          gh pr comment ${{ github.event.pull_request.number }} --body "/fix-conflict masterブランチとの競合を git merge で解消し、テストを通してください。"
