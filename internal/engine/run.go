@@ -368,7 +368,9 @@ func Run(ctx context.Context, opts Options) error {
 	activityMu := sync.Mutex{}
 	activity := make(map[string]float64)
 
-	// Arbitration loop: re-run Decide whenever quotes change.
+	// Arbitration loop: re-run Decide on a fixed tick (the loop's select
+	// only wakes on the ticker or ctx — quotes only refresh the streams map,
+	// they do not trigger decisions; see runArbitrationLoop).
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
 		devRefs:       devRefs,
 		streamsMu:     &streamsMu,

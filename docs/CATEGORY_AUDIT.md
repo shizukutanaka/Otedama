@@ -7667,3 +7667,7 @@ Ledger only — verification round, no behavior-visible change.
 ## Session 1458 update (ADR-009 ecosystem recheck)
 
 Verified against live GitHub API (authenticated): sv2-spec open PR set unchanged in the normative window — #236 (`SetTarget.target` MUST NOT exceed `max_target`, updated 10-02, still under review — aligns with Otedama's client-side share-target clamp shipped in #368), #234 (authority key mgmt/rotation), #203 (coinbase-payout extension, output-bounding debate), #198 (coinbase_witness field), plus style/WIP entries (#232/#186/#103). No merges landed that change our normative picture. SRI tags: latest remains v1.12.0 (v1.11.1 previously over-reported as latest — corrected in s1409). sv2-apps tags: latest remains v0.8.0. No action required.
+
+## Session 1459 update (Socratic pass 132 — real fix)
+
+**Claim falsified (comment):** run.go's `// Arbitration loop: re-run Decide whenever quotes change.` repeated the exact wrong claim s1438 fixed in the arbitration loop itself — the loop's select wakes on the ticker only; quote arrivals just refresh the streams map. Corrected the comment to name the tick-only design and the boundary (quotes refresh, not trigger). Second instance of this false claim removed from the codebase. engine package builds clean.
