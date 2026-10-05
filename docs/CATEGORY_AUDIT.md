@@ -6543,3 +6543,15 @@ All packages build, vet, and test green.
 | L | `time.Sleep` — production busy-wait/polling where a channel or condition variable is the idiomatic primitive. | ⚠️ Noted: one site (`miner/worker.go:269`) — 10 ms yield only while `localWork == nil` (no job yet), a bounded cold-path poll that exits the moment work arrives; the hot path never sleeps. A `sync.Cond` would add a second sync primitive to the mining hot loop to save ≤10 ms of first-job latency — recorded, not changed. |
 
 All packages build, vet, and test green.
+
+---
+
+## Session 1253 update — merged-fix invariant re-verification (post-wave) + Stringer/reflect surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Defensive invariants regressed by the merge wave — merged code PRs branched from older masters could silently undo bounds/validation landed earlier (the s1068 class, round 2 on the post-wave tree). | ✅ All intact: V1 notify required-field reject (`malformed or empty/wrong length` ×4 sites), `maxExtranonce2Size=64` bound, `pendingCap` eviction + engine `jobsCap` notice, `newSubmitLimiter` wiring, `CipherState.aead` reuse (no per-frame re-derivation), `SetWriteDeadline` on V2 writes, `sanitizeNotice` C0/DEL/C1 strip on client.show_message, non-finite rejects in rates/arbitration/config. |
+| M | `String()` self-recursion / `fmt.Sprintf("%s", self)` — a Stringer that formats itself, or `binary.Read`/`binary.Write`/`reflect` creeping into non-test hot paths (allocation + reflect cost where the wire code is hand-rolled for speed). | ✅ Clean: 10 non-test `String()` impls all literal/switch/hex compositions, none self-formatting; zero `Sprintf("%s"` bare sites; zero non-test `binary.Read`/`binary.Write`/`reflect` uses (fuzz_test `reflect.DeepEqual` only). |
+| L | Marker debt crept back via merged branches — TODO/FIXME/XXX/HACK landing inside code or as unannotated prose debt. | ✅ Clean: zero markers in `internal/`+`cmd/` (AUDIT_CHECKLIST rule 6 holds post-wave); doc-side hits are the checklist rule itself plus audit-ledger meta-references — all legit. |
+
+All packages build, vet, and test green.
