@@ -5955,7 +5955,6 @@ All packages build, vet, and test green.
 | L | `unicode.IsControl` + `strconv.Quote` divergence in `quoteToken` — master carried the strconv modernization while open #809 carried the C1 gap fix; an unmerged-order merge would lose one intent. | ✅ Clean: union-resolved on #809's branch to keep both intents (`unicode.IsControl` + `strconv.Quote`); pushed and mergeable. |
 
 All packages build, vet, and test green.
-All packages build, vet, and test green.
 
 ## Session 1300 update — post-merge-wave master verification (checkpoint)
 
