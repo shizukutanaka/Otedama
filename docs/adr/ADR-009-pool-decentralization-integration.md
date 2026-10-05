@@ -1732,3 +1732,11 @@ Release-verification corrections (self-audit): the authoritative releases pages 
 - **sv2-apps:** latest release remains **v0.7.0** (24 Jul). Its highlights independently validate Otedama's recent hardening directions: tProxy payout verification fixed for split coinbase `scriptSig`s (same axis as session 1318's coinbase-payout check), `UserIdentity` TLVs only after extension `0x0002` negotiation, and downstream share validation against the advertised pow2 difficulty (same axis as our share-target verification). No action required — our wire/protocol behavior already matches these invariants.
 
 Quiet window continues; next recheck ~session 1370.
+
+### Session 1382 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based payouts: still open; plebhash force-pushes actively and concedes the design is "a custodial/non-custodial hybrid at best" — V2 payout verification cannot cover every claim, exactly the limitation Otedama discloses), #236 (SetTarget ≤ max_target), #234 (authority key docs), #198 (coinbase_witness) still open/unmerged. The only other open spec PRs are cosmetic (#186 table formatting) and the long-dormant Proxy Annex draft (#103) — nothing normative.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026; SV1 difficulty conversion no longer rounds up — matches Otedama's `DifficultyFromTarget` truncation semantics). No v1.12.x exists.
+- **sv2-apps:** latest release remains **v0.7.0**; open PRs include #908 (B08 type support in `bitcoin_core_sv2`, new), #904 (monitoring/config/release edge cases), #903 (buffer hardening) — hardening/maintenance wave continues, no protocol-surface changes.
+
+Quiet window continues; next recheck ~session 1393.

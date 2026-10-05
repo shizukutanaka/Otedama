@@ -7281,3 +7281,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | Can a slow or stuck provider deadlock the arbitration loop by withholding a quote? | ✅ Verified: providers push quotes asynchronously on a buffered channel (mining 16, AI 32) — `Decide` only reads `quoteCh`, so a provider that stops polling simply stops producing; the 3-minute staleness pruner retires the stream and devices move on rather than blocking. `sendQuote` is ctx-guarded on both the fast and the drop-oldest path, and when the buffer is full it evicts the *oldest* buffered quote so Decide always sees the freshest estimate — no unbounded queue, no stale-flood. Double-Start is rejected (`already started`), the loop goroutine is ctx-scoped, and `close(quoteCh)` on exit makes provider shutdown visible to the reader rather than an invisible hang. |
+
+## Session 1382 update — ecosystem recheck (Socratic pass 61)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | ADR-009 ecosystem recheck | ✅ Verified: sv2-spec normative open set unchanged (#203/#236/#234/#198 still open; #203's author himself concedes payout verification is at best a custodial/non-custodial hybrid — confirming the disclosed limit of our V1-only coinbase check); SRI latest = v1.11.1; sv2-apps latest = v0.7.0 with only maintenance/hardening PRs open. No Otedama action required. Recorded in ADR-009. |
