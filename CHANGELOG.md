@@ -8116,3 +8116,7 @@ Multi-algorithm P2P mining pool supporting SHA256d, Scrypt, Ethash, and RandomX.
 ## Earlier Versions
 
 Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2` branch. They are not carried forward into the v3.0 changelog structure.
+
+### Fixed
+
+- stratum: decode SubmitSharesSuccess `new_shares_sum` as U64 per spec §5.3.13 — the field was read as U32 and the frame bound at 16 bytes, accepting 16–19-byte malformed frames and truncating the difficulty-sum field for any future consumer. Encoder/decoder now use the spec's 20-byte wire layout.
