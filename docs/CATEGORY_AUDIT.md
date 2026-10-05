@@ -7134,3 +7134,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | Failover honesty — could failover silently select a non-operator address? | ✅ Verified: `payoutAddresses` only yields the configured list; rotation stays inside it and `addrConnected` freezes the address once a session establishes. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1357 update — first-principles audit of Prometheus counter monotonicity (Socratic pass 38)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can any code path decrement a counter (breaking PromQL `rate()`/scrapes)? | ✅ Verified: the `Counter` API exposes only `Inc()` and `Add(delta uint64)` — unsigned-only deltas by type design; no Dec/Sub surface exists anywhere. Monotonicity is enforced structurally, not by convention. The counter/gauge name-collision panic prevents a dual-TYPE scrape corruption as well. |
+
+Ledger only — verification round, no behavior-visible change.
