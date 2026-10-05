@@ -43,9 +43,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
-    from pool-side truth; a periodic reconciliation against pool stats
-    (where the pool exposes them) would catch silent miscounting.
+10. ✅ **"Trust the pool's numbers" reconciliation** — done to the extent the
+    wire allows (sessions 288/310/321/322): V2 `SubmitSharesSuccess.LastSequenceNumber`
+    is validated before crediting and pool-reported batch accepts are counted;
+    V1 exposes no stats RPC, so no further reconciliation surface exists.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers
@@ -432,11 +433,13 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
-10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
-    checksum and `go.sum`, and document it in THREAT_MODEL's dependency
-    assumptions.
+9. ✅ **Constant-time comparison audit** — done (sessions 554/645/841):
+   `crypto/subtle` is the only secret-comparison boundary; `bytes.Equal` sites
+   are all on non-secret protocol fields (checksums, magic bytes).
+10. ✅ **Supply-chain: pin and verify the crypto dep** — done (session 1279):
+    `golang.org/x/crypto` is pinned in go.mod with go.sum checksums, `go mod
+    verify` passes, and `govulncheck` shows zero reachable vulnerabilities;
+    THREAT_MODEL lists the dependency assumptions.
 
 ---
 
