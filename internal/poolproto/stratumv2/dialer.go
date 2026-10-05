@@ -243,24 +243,20 @@ func (s *session) start(ctx context.Context) {
 
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
-	// SV2 job/tip state, mirroring the engine's inline loop: a job is
-	// emittable only once both NewMiningJob (merkle root + version) and
-	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
-	// (no ntime_start) wait for the SetNewPrevHash that names them.
-	pending := make(map[uint32]*stratum.NewMiningJob)
-	var pendingOrder []uint32 // insertion order for pendingCap FIFO eviction
-	var prevHash [32]byte
-	var prevNBits uint32
-	havePrev := false
-
-	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
+	// SV2 job/tip state lives in the assembler: a job is emittable only
+	// once both NewMiningJob (merkle root + version) and SetNewPrevHash
+	// (prev-hash + nBits + ntime) are known. Future jobs (no ntime_start)
+	// wait for the SetNewPrevHash that names them. Mirrors the engine's
+	// inline loop.
+	a := &sv2JobAssembler{pending: make(map[uint32]*stratum.NewMiningJob)}
+	a.emit = func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
 			JobID:      strconv.FormatUint(uint64(j.JobID), 10),
 			Version:    j.Version,
-			PrevHash:   prevHash,
+			PrevHash:   a.prevHash,
 			MerkleRoot: j.MerkleRoot,
 			NTime:      ntime,
-			NBits:      prevNBits,
+			NBits:      a.prevNBits,
 			CleanJobs:  clean,
 			ReceivedAt: time.Now(),
 		}
@@ -285,46 +281,66 @@ func (s *session) readLoop(ctx context.Context) {
 			continue // skip undecodable frame, keep reading
 		}
 		if msg.NewMiningJob != nil {
-			j := msg.NewMiningJob
-			if _, ok := pending[j.JobID]; !ok {
-				pendingOrder = append(pendingOrder, j.JobID)
+			if !a.onNewMiningJob(msg.NewMiningJob) {
+				return
 			}
-			pending[j.JobID] = j
-			for len(pendingOrder) > pendingCap {
-				delete(pending, pendingOrder[0])
-				pendingOrder = pendingOrder[1:]
-			}
-			if j.HasNtimeStart && havePrev {
-				if !emit(j, j.NtimeStart, false) {
-					return
-				}
-			}
-			// Future job (or no tip yet): held until SetNewPrevHash.
 		}
 		if msg.SetNewPrevHash != nil {
-			p := msg.SetNewPrevHash
-			prevHash = p.PrevHash
-			prevNBits = p.NBits
-			havePrev = true
-			named := pending[p.JobID]
-			pending = map[uint32]*stratum.NewMiningJob{}
-			pendingOrder = pendingOrder[:0]
-			if named != nil {
-				pending[p.JobID] = named
-				pendingOrder = append(pendingOrder, p.JobID)
-				ntime := p.NtimeStart
-				if named.HasNtimeStart && named.NtimeStart > ntime {
-					ntime = named.NtimeStart
-				}
-				if !emit(named, ntime, true) {
-					return
-				}
+			if !a.onSetNewPrevHash(msg.SetNewPrevHash) {
+				return
 			}
 		}
 		// Note: SetTarget (share difficulty) has no carrier on
 		// poolproto.Job; the engine's inline V2 loop handles it. This
 		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
 	}
+}
+
+// sv2JobAssembler accumulates NewMiningJob/SetNewPrevHash frames into a
+// stream of complete poolproto.Jobs. emit returns false when the receiver
+// should stop (ctx done / channel closed).
+type sv2JobAssembler struct {
+	pending      map[uint32]*stratum.NewMiningJob
+	pendingOrder []uint32 // insertion order for pendingCap FIFO eviction
+	prevHash     [32]byte
+	prevNBits    uint32
+	havePrev     bool
+	emit         func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool
+}
+
+func (a *sv2JobAssembler) onNewMiningJob(j *stratum.NewMiningJob) bool {
+	if _, ok := a.pending[j.JobID]; !ok {
+		a.pendingOrder = append(a.pendingOrder, j.JobID)
+	}
+	a.pending[j.JobID] = j
+	for len(a.pendingOrder) > pendingCap {
+		delete(a.pending, a.pendingOrder[0])
+		a.pendingOrder = a.pendingOrder[1:]
+	}
+	if j.HasNtimeStart && a.havePrev {
+		return a.emit(j, j.NtimeStart, false)
+	}
+	// Future job (or no tip yet): held until SetNewPrevHash.
+	return true
+}
+
+func (a *sv2JobAssembler) onSetNewPrevHash(p *stratum.SetNewPrevHash) bool {
+	a.prevHash = p.PrevHash
+	a.prevNBits = p.NBits
+	a.havePrev = true
+	named := a.pending[p.JobID]
+	a.pending = map[uint32]*stratum.NewMiningJob{}
+	a.pendingOrder = a.pendingOrder[:0]
+	if named == nil {
+		return true
+	}
+	a.pending[p.JobID] = named
+	a.pendingOrder = append(a.pendingOrder, p.JobID)
+	ntime := p.NtimeStart
+	if named.HasNtimeStart && named.NtimeStart > ntime {
+		ntime = named.NtimeStart
+	}
+	return a.emit(named, ntime, true)
 }
 
 // Jobs returns the channel of incoming jobs.
