@@ -42,7 +42,7 @@ func cmdWallet(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdWalletVerify(args[1:], stdin, stdout, stderr)
 	case "change-passphrase":
 		return cmdWalletChangePassphrase(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case helpSubcommand, helpFlag, "-h":
 		// Same convention as `service`/`config`: an explicit help request
 		// goes to stdout with exit 0, not stderr + exitUsage — otherwise
 		// it looks identical to a mistake to scripts checking $?.
