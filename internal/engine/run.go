@@ -1199,8 +1199,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 						n = settled
 					}
 					opts.log("info", fmt.Sprintf("engine: share accepted (+%d)", n))
-					if opts.m != nil && n > 0 {
-						opts.m.sharesAccepted.Add(n)
+					if opts.m != nil {
+						if n > 0 {
+							opts.m.sharesAccepted.Add(n)
+						}
+						// Re-sync the in-flight gauge: it is refreshed at
+						// send time, and without this it keeps showing the
+						// pre-settle depth until the next submit arrives.
+						opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
 					}
 				}
 			}
@@ -1239,6 +1245,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				reason := poolproto.SanitizePoolText(e.Error)
 				issued, hadTarget := submitTargets[e.SequenceNumber]
 				delete(submitTargets, e.SequenceNumber)
+				if opts.m != nil {
+					opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
+				}
 				category, diagnosis := rejectClass(reason)
 				if hadTarget && transitionReject(category, issued, shareTarget) {
 					// ESP-Miner #212: the share was ground under a target the
