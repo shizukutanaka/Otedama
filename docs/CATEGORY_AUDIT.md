@@ -5994,3 +5994,12 @@ All packages build, vet, and test green.
 | M | `setup.go:89` — `1 << 31` untyped constant overflows `int` on 32-bit | **S: fixed** — compute `total` in uint64; GOARCH=386+arm `go build`/`go vet` now clean (releases ship amd64/arm64 only, but the source should compile everywhere) |
 | M | Other `1<<3x`/`math.Max*` constant-overflow sites | ✓ none — grep census across the tree found only the fixed site |
 All packages build, vet, and test green.
+
+## Session 1304 update — linter-toolchain version parity
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `Makefile:53` `setup` installed `golangci-lint@latest` — since upstream v2 (2025-03) `@latest` resolves to a v2 release that rejects the repo's v1-schema `.golangci.yml` (`linters-settings`/`disable-all`/`issues.exclude-rules`), so `make setup` + `make lint` on a fresh machine fails at config parse | **S: fixed** — pinned `@v1.64.8`, the same v1 release KNOWN_LIMITATIONS records as the local tooling version; v2 migration remains the documented maintainer decision |
+| R | `.golangci.yml` linter-name validity | ✓ all 28 enabled linters are valid v1 names; none renamed/removed in the pinned v1 line |
+| R | Linter-version drift ledger | ✓ KNOWN_LIMITATIONS (v1.55.2 ci.yml pin, action@v3, v2 schema) still accurate — now cites the Makefile fix so the four pin sites are: ci.yml v1.55.2, actions v3 (v1 era), Makefile v1.64.8 |
+
