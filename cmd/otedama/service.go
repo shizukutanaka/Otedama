@@ -31,7 +31,7 @@ func cmdService(args []string, stdout, stderr io.Writer) int {
 		return cmdServiceUninstall(stdout, stderr)
 	case "status":
 		return cmdServiceStatus(stdout, stderr)
-	case "help", helpFlag, "-h":
+	case helpSubcommand, helpFlag, "-h":
 		// Without this, "otedama service --help" fell through to
 		// "unknown subcommand" on stderr with exit 64 — an explicit help
 		// request looking identical to a mistake, the same class of bug

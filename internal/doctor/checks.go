@@ -321,6 +321,17 @@ func checkWallet(dataDir string) Check {
 // very long pool list cannot turn doctor into a port scanner.
 const maxReachabilityProbes = 8
 
+// reachProbe is the outcome of a single TCP probe against one pool URL.
+// Exactly one of the fields describes the outcome: badURL when the URL
+// could not be reduced to a host:port, err when the dial failed, or
+// latency on success.
+type reachProbe struct {
+	host    string
+	latency time.Duration
+	err     error
+	badURL  string
+}
+
 func checkPoolReachability(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
@@ -336,83 +347,94 @@ func checkPoolReachability(cfg *config.Config) Check {
 				urls = urls[:maxReachabilityProbes]
 			}
 
-			type probe struct {
-				host    string
-				latency time.Duration
-				err     error
-				badURL  string
-			}
-			results := make([]probe, len(urls))
-			var wg sync.WaitGroup
-			for i, u := range urls {
-				host := stripScheme(poolproto.StripUserinfo(u))
-				if host == "" {
-					results[i].badURL = poolproto.StripUserinfo(u)
-					continue
-				}
-				results[i].host = host
-				wg.Add(1)
-				go func(idx int) {
-					defer wg.Done()
-					d := net.Dialer{Timeout: 5 * time.Second}
-					start := time.Now()
-					conn, err := d.DialContext(ctx, "tcp", results[idx].host)
-					if err != nil {
-						results[idx].err = err
-						return
-					}
-					_ = conn.Close()
-					results[idx].latency = time.Since(start).Round(time.Millisecond)
-				}(i)
-			}
-			wg.Wait()
-
-			var reachable, unreachable, unparseable []string
-			for _, r := range results {
-				switch {
-				case r.badURL != "":
-					unparseable = append(unparseable, r.badURL)
-				case r.err != nil:
-					unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
-				default:
-					reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
-				}
-			}
-
-			switch {
-			case len(reachable) == 0 && len(unreachable) == 0:
-				return Result{
-					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
-					Fix:    "check the pool URL in config.yaml",
-				}
-			case len(reachable) == 0:
-				return Result{
-					Status: StatusFail,
-					Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
-					Fix:    "check internet connection or try a different pool",
-				}
-			case len(unreachable) > 0 || len(unparseable) > 0:
-				var parts []string
-				if len(unreachable) > 0 {
-					parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
-				}
-				if len(unparseable) > 0 {
-					parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
-				}
-				return Result{
-					Status: StatusWarn,
-					Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
-						len(reachable), len(urls), strings.Join(reachable, ", "), strings.Join(parts, "; ")),
-					Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
-				}
-			default:
-				return Result{
-					Status: StatusPass,
-					Detail: strings.Join(reachable, ", "),
-				}
-			}
+			results := probePools(ctx, urls)
+			reachable, unreachable, unparseable := classifyProbes(results)
+			return reachabilityResult(len(urls), reachable, unreachable, unparseable)
 		},
+	}
+}
+
+// probePools dials every URL's host:port in parallel with a 5s timeout and
+// returns one reachProbe per input URL, in order.
+func probePools(ctx context.Context, urls []string) []reachProbe {
+	results := make([]reachProbe, len(urls))
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		host := stripScheme(poolproto.StripUserinfo(u))
+		if host == "" {
+			results[i].badURL = poolproto.StripUserinfo(u)
+			continue
+		}
+		results[i].host = host
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			d := net.Dialer{Timeout: 5 * time.Second}
+			start := time.Now()
+			conn, err := d.DialContext(ctx, "tcp", results[idx].host)
+			if err != nil {
+				results[idx].err = err
+				return
+			}
+			_ = conn.Close()
+			results[idx].latency = time.Since(start).Round(time.Millisecond)
+		}(i)
+	}
+	wg.Wait()
+	return results
+}
+
+// classifyProbes buckets probe outcomes into display strings.
+func classifyProbes(results []reachProbe) (reachable, unreachable, unparseable []string) {
+	for _, r := range results {
+		switch {
+		case r.badURL != "":
+			unparseable = append(unparseable, r.badURL)
+		case r.err != nil:
+			unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
+		default:
+			reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
+		}
+	}
+	return reachable, unreachable, unparseable
+}
+
+// reachabilityResult folds the classified probes into the check's Result:
+// Fail when nothing parses or nothing dials, Warn on partial success, Pass
+// when every probed pool answered.
+func reachabilityResult(total int, reachable, unreachable, unparseable []string) Result {
+	switch {
+	case len(reachable) == 0 && len(unreachable) == 0:
+		return Result{
+			Status: StatusFail,
+			Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
+			Fix:    "check the pool URL in config.yaml",
+		}
+	case len(reachable) == 0:
+		return Result{
+			Status: StatusFail,
+			Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
+			Fix:    "check internet connection or try a different pool",
+		}
+	case len(unreachable) > 0 || len(unparseable) > 0:
+		var parts []string
+		if len(unreachable) > 0 {
+			parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
+		}
+		if len(unparseable) > 0 {
+			parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
+		}
+		return Result{
+			Status: StatusWarn,
+			Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
+				len(reachable), total, strings.Join(reachable, ", "), strings.Join(parts, "; ")),
+			Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
+		}
+	default:
+		return Result{
+			Status: StatusPass,
+			Detail: strings.Join(reachable, ", "),
+		}
 	}
 }
 
