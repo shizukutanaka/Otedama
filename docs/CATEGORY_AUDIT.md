@@ -7287,3 +7287,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | ADR-009 ecosystem recheck | ✅ Verified: sv2-spec normative open set unchanged (#203/#236/#234/#198 still open; #203's author himself concedes payout verification is at best a custodial/non-custodial hybrid — confirming the disclosed limit of our V1-only coinbase check); SRI latest = v1.11.1; sv2-apps latest = v0.7.0 with only maintenance/hardening PRs open. No Otedama action required. Recorded in ADR-009. |
+
+## Session 1383 update — first-principles audit of V2 channel attribution (Socratic pass 62)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a share be submitted under the wrong channel — a stale channel ID from a dead session or a frame belonging to a different channel? | ✅ Verified: outbound `SubmitSharesStandard` always stamps `chanID` — the session-local variable set once at OpenMiningChannelSuccess — so an emitted share can never carry a superseded channel; the `active == nil || share.JobID != active.JobID` guard drops every share that predates the current job, which transitively covers the channel switch (a new session = new channel = new active job). Inbound, frames whose `channel_id` doesn't match the session's channel are dropped with an explicit "foreign channel ignored" warn — the pool can't smuggle another channel's jobs, targets, or acks into this session. The only channel set is the one this session opened, and only the session's own sequence numbers map into `submitTimes`/`submitTargets`, so last-sequence accounting can't be poisoned cross-channel either. |
