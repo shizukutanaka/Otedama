@@ -6890,3 +6890,12 @@ No code change required this round.
 | S | Can earnings be silently redirected to another address? | ✅ Verified: `addrConnected` gates failover — a backup payout address is tried only when the active one never established a session; once connected, only pool failover and backoff run, so an outage can never redirect earnings. Config validation requires ≥1 valid address (empty set unreachable post-Validate); `payoutAddr` for coinbase verification is tracked only in the address-derived mode, matching the s1319 scope. |
 
 No code change required this round.
+
+## Session 1329 update — first-principles audit of the "a V1 share validates pool-side" claim (Socratic pass 11)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a share ever bind a merkle root the pool didn't intend? | ✅ Verified: `completeV1Job` folds en1 + a fresh big-endian en2 counter into `coinb1\|\|en1\|\|en2\|\|coinb2`, hashes the merkle branch, and carries the en2 verbatim `Job.ExtraNonce → Work → Share → ShareSubmission`, so the pool rebuilds the identical coinbase — the share is verifiable end-to-end (the historical zero-merkle defect is unreachable: subscribe requires valid en1/en2size, notify requires non-empty coinb1/2, en2size is bounded at negotiation). |
+| S | Is per-job en2 reuse across shares a validity defect? | ✅ Verified: en2 rolls per job, not per share — shares sharing en2 differ in nonce and remain distinct, valid work (difficulty is what the pool credits). Not a defect; recorded honestly as a deliberate simplification. |
+
+No code change required this round.
