@@ -1732,6 +1732,33 @@ All packages build, vet, and test green.
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
 ---
+
+## Session 1247 — setup-flags-subset (real defect fixed)
+## Session 727 update — control-class + unicode-api + cut-family audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Hand-rolled control-char check missing the C1 range — `quoteToken` (which exists to stop control-char injection into service definitions) used `r < ' ' || r == 0x7f`, passing U+0080–U+009F (incl. U+0085 NEL) raw into unit files. | 🔧 Fixed: now `unicode.IsControl`, matching the codebase convention at the other 4 sites (poolproto.go:431, stratumv1/parse.go:207, config.go:204/210) — full C0+C1+DEL coverage. |
+| L | Ad-hoc range checks duplicating `unicode.Is*` semantics. | ✅ Clean: classification elsewhere is all `unicode.Is*`/`utf8.ValidString` (`IsSpace`, `IsControl`, `ValidString`); the fixed site was the only hand-rolled range check. |
+| M | `strings.Cut`/`CutSuffix` family misuse. | ✅ Clean: zero `Cut`/`CutSuffix`; the 4 `CutPrefix` sites all check the `ok` comma-ok (prefix-strip idiom, verified session 667). |
+
+All packages build, vet, and test green.
+
+---
+
+## Session 877 update — runtime-surface + tuning-override + cpu-default audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| setup-flags-subset | `SetupConnectionSuccess.Flags` decoded but never checked: client offers 0 flags, so any nonzero return demands an unhonorable feature (same fail-open class as sv2-apps #695 / s1239 UsedVersion) | **S: fixed** — reject `Flags &^ sc.Flags != 0` with `ErrHandshakeFailed`; test `TestDialer_Negotiate_UnhonoredFlags` |
+---
+
+## Session 1248 — handshake-echo-validation (real defects fixed)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| handshake-echo-validation | `engine/run.go` live SV2 handshake skipped all three response checks: UsedVersion not range-checked (dialer-only fix in #1321), SetupConnectionSuccess.Flags unchecked (dialer-only in #1329), OpenMiningChannelSuccess.ReqID echo never verified (both paths) | **S: fixed** — all three checks added to `handshake()`; ReqID check also added to `dialer.go`; 3 engine tests + 1 dialer test |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
@@ -6035,6 +6062,7 @@ Post-change census on golangci-lint v2.14 + PR #1391's config: goconst, errcheck
 | M | Third-generation stdlib surface absent or current — `iter`/`unique`/`weak`/`os.Root`/`crypto/fips140`/`jsonv2`/`synctest` (Go 1.23+ additions that would be wrong here anyway). | ✅ Absent everywhere: no imports of any — the wire codecs stay hand-rolled by design (checked). |
 | L | Workflow actions tracking mutable branches — `trivy-action@master` ×5, `gosec@master` ×3, `trufflehog@main` — branch refs move silently under CI. | ⚠️ Noted: documented decision is no SHA pinning (solo-ops #561 corrected the claim), but `master`/`main` refs are weaker than versioned tags like `@v4`/`@v5` used elsewhere — recorded for the maintainers rather than changed (pin versions would need per-action release verification CI can't currently exercise). |
 
+All packages build, vet, and test green.
 All packages build, vet, and test green.
 ## Session 1311 update — lint-debt batch 1: misspell (46 sites)
 
