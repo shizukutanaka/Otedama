@@ -107,7 +107,7 @@ func CoinbasePaysScript(tx, script []byte) (bool, error) {
 	for i := uint64(0); i < vin; i++ {
 		off += 36 // prev txid + vout index
 		sl, err := readCompactSize(tx, &off)
-		if err != nil {
+		if err != nil || sl > uint64(len(tx)-off) {
 			return false, fmt.Errorf("btccrypto: bad scriptSig length")
 		}
 		off += int(sl) + 4 // scriptSig + sequence
@@ -122,7 +122,7 @@ func CoinbasePaysScript(tx, script []byte) (bool, error) {
 	for i := uint64(0); i < vout; i++ {
 		off += 8 // value
 		pkLen, err := readCompactSize(tx, &off)
-		if err != nil || off+int(pkLen) > len(tx) {
+		if err != nil || pkLen > uint64(len(tx)-off) {
 			return false, fmt.Errorf("btccrypto: bad output script length")
 		}
 		if bytes.Equal(tx[off:off+int(pkLen)], script) {

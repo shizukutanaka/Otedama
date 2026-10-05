@@ -76,3 +76,25 @@ func TestScriptForAddress_RejectsInvalid(t *testing.T) {
 		}
 	}
 }
+
+// A pool-controlled CompactSize near 2^63 must be rejected, not converted
+// to a negative int offset that panics the session goroutine.
+func TestCoinbasePaysScript_HugeLengthsRejected(t *testing.T) {
+	huge := []byte{0xff, 0, 0, 0, 0, 0, 0, 0, 0x80}
+	prefix := append(make([]byte, 4), 0x01)
+	prefix = append(prefix, make([]byte, 36)...)
+
+	scriptSig := append(append([]byte{}, prefix...), huge...)
+	scriptSig = append(scriptSig, make([]byte, 10)...)
+
+	pk := append(append([]byte{}, prefix...), 0x00, 0, 0, 0, 0, 0x01)
+	pk = append(pk, make([]byte, 8)...)
+	pk = append(pk, huge...)
+	pk = append(pk, make([]byte, 10)...)
+
+	for name, tx := range map[string][]byte{"scriptSig": scriptSig, "pkScript": pk} {
+		if ok, err := CoinbasePaysScript(tx, []byte{0x00, 0x14}); err == nil || ok {
+			t.Errorf("%s: got (%v, %v), want error", name, ok, err)
+		}
+	}
+}
