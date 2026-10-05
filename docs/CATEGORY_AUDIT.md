@@ -7098,3 +7098,12 @@ Ledger only — verification round, no behavior-visible change.
 | S | After a SetNewPrevHash invalidated every job (`active=nil`), can a subsequently activated job ever re-arm workers — or does `jobArmed` permanently poison the session? | ✅ Verified: `jobArmed` is a one-way latch set inside `startJob` on every activation — it does not gate arming, only the stale-share drop. A future `NewMiningJob` named by a later `SetNewPrevHash` (or an immediate-activation job) calls `startJob` again, restoring `active` and re-arming workers. The stale-superseded-share drop stays correct across any number of tip advances. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1353 update — first-principles audit of "the displayed pool difficulty is the target workers actually grind against" (Socratic pass 34)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | On mid-session `mining.set_difficulty`, do workers keep grinding the superseded target until the next job (silent wasted hashrate, misleading dashboard)? | ✅ Verified honest: the `diffCh` consumer re-issues `applyJob` against the new difficulty immediately (run.go:1577-1592), deduplicated by `appliedDifficulty`; paused/curtailed workers are skipped by `applyJob` as usual. `v1JobTarget` falls back to the block target only when no pool difficulty was assigned — the same displayed value is the grind value. |
+| S | Pool difficulty harder than block difficulty — wasted work? | ⚠️ Noted: an above-block pool target makes every accepted share a block candidate — valid per the protocol, still honest accounting (transitionReject handles rejects); the too-low-direction is bounded by the per-session submit cap (#419). |
+
+Ledger only — verification round, no behavior-visible change.
