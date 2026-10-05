@@ -7090,3 +7090,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | SRI / sv2-apps latest versions | ⚠️ Noted: earlier ledger rows claiming "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — official release lists show v1.11.1 (SRI) and v0.7.0 (sv2-apps) as latest. Corrected anchor recorded in ADR-009. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1352 update — re-verification of the session-1323/1325 stale-share latch (Socratic pass 33)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | After a SetNewPrevHash invalidated every job (`active=nil`), can a subsequently activated job ever re-arm workers — or does `jobArmed` permanently poison the session? | ✅ Verified: `jobArmed` is a one-way latch set inside `startJob` on every activation — it does not gate arming, only the stale-share drop. A future `NewMiningJob` named by a later `SetNewPrevHash` (or an immediate-activation job) calls `startJob` again, restoring `active` and re-arming workers. The stale-superseded-share drop stays correct across any number of tip advances. |
+
+Ledger only — verification round, no behavior-visible change.
