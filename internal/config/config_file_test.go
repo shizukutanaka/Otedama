@@ -4,6 +4,7 @@
 package config_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -110,7 +111,7 @@ func TestConfigFile_MissingFileIsOK(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nonexistent.yaml")
 	// Simulate what main.go does: try to open, get ENOENT, return empty config.
 	_, err := os.Open(path)
-	if !os.IsNotExist(err) {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected ENOENT, got: %v", err)
 	}
 	// loadConfigFile silently ignores ENOENT — verified by returning empty config.
@@ -121,7 +122,7 @@ func TestConfigFile_ExampleFileIsValid(t *testing.T) {
 	// The shipped config.yaml.example must parse cleanly and produce
 	// a valid (though incomplete) config. This prevents example rot.
 	examplePath := "../../config.yaml.example"
-	if _, err := os.Stat(examplePath); os.IsNotExist(err) {
+	if _, err := os.Stat(examplePath); errors.Is(err, os.ErrNotExist) {
 		t.Skip("config.yaml.example not found (run from repo root)")
 	}
 	f, err := os.Open(examplePath)
