@@ -6441,3 +6441,14 @@ All packages build, vet, and test green.
 | testing/synctest | Zero usage; clock-sensitive paths already test via `internal/clock.Fake` injection — synctest would be an alternative seam, not a fix | ✓ Clean |
 
 All packages build, vet, and test green.
+## Session 1272 checkpoint — workflow-file audit pass complete
+
+All eight workflow files under `.github/workflows/` have now had at least one dedicated audit round: `ci.yml` + `ci-cd.yml` (master-trigger fix #1293, Go pins #1344, ldflags #1352), `test.yml` (fuzz job #1347), `security.yml` (govulncheck #1346), `code-review.yml` (Node dead-weight, s1270), `deploy.yml` (secrets-in-if fix #1352; npm dead-weight + needs-skip cascade + phantom paths noted), `release.yml` (ldflags #1275, dead cosign config noted earlier), `devin-direct-merge.yml` (permissions + branch name #1351).
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| coverage | Workflow audit surface complete: 8/8 files audited across s1263–s1271 | — milestone |
+| open-defects | Maintainer-level items outstanding: Node dead-weight test job (deploy.yml + code-review.yml), needs-skip cascade to production, phantom k8s/helm paths, floating @master action refs, deprecated create-release@v1 | ⚠️ Noted — recorded, not fixed |
+| ledger | Master ledger ~100 session entries; ~6 real workflow defects fixed this pass | — recorded |
+
+All packages build, vet, and test green.
