@@ -7723,3 +7723,11 @@ Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, activ
 ## Session 1472 update (Socratic pass 144)
 
 **Claim held:** OpenMiningChannelSuccess's extranonce_prefix being decoded-but-unused is consistent with the standard-channel wire contract — SubmitSharesStandard carries no extranonce field (channel_id, sequence_number, job_id, nonce, ntime, version only), so for a direct standard channel the pool fixes the extranonce inside the precomputed merkle_root it serves. Honest residual: the field exists for proxy/aggregation semantics the engine doesn't exercise; discarding it is spec-consistent, not a bug. omcs.Target flows to share-target (with zero-target → block-target fallback, s1380) and omcs.ChannelID stamps every outbound frame (s1383). No code change.
+
+## Session 1473 update (Socratic pass 145)
+
+**Claim held (3 surfaces):**
+
+1. V2 `SetTarget` is symmetric with the V1 path verified in s1353: the new share target is applied immediately and the active job is re-issued to workers (no next-job wait), logged once. `active == nil` guards the re-issue correctly — nothing to retarget before the first job.
+2. The one-response-per-sequence invariant is enforced on BOTH settlement paths: SubmitSharesError drops future seqs AND already-settled/reaped seqs before any rejection is counted — a hostile pool cannot inflate the reject rate by replaying or fabricating error frames. submitTimes and submitTargets are deleted pairwise on every settlement path (success, error, cap-reaper) — no unbounded growth.
+3. `seqNum++` consuming a sequence for a share then dropped by the stale-job gate (active==nil or wrong JobID) leaves a gap the pool can never ack — harmless by construction: settlement only iterates outstanding entries, and a fabricated mid-gap seq lands in the `!outstanding` drop. Honest accounting.
