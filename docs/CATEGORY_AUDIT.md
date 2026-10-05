@@ -6982,3 +6982,12 @@ CHANGELOG entry added under Fixed (session 1337).
 | S | Residual edge? | ⚠️ Noted: pools that reject straggler old-en1 shares after rotation are free to do so — mitigated in practice because extranonce rotation is conventionally paired with a clean_jobs notify that kills in-flight jobs. Also the Submit-time zero-padding fallback uses the *current* en2Size, which can desync after a rotation — but it is only reachable for jobs whose coinbase never completed (no parts), and those shares are already unverifiable pool-side. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1339 update — first-principles audit of "pre-auth pool messages can't mutate session state" (Socratic pass 21)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The s1336 gate covered `mining.notify` — but could a hostile pool holding authorize open still rewrite *negotiated state* before authentication? | 🔧 Fixed: `mining.set_difficulty` and `mining.set_extranonce` applied instantly on dispatch, so a pool could set a starvation difficulty or poison extranonce1/en2size while keeping the session unauthenticated — shares then mined against state the pool never authorized (never creditable). The gate now covers **every** pool-initiated method (`mining.notify`, `set_difficulty`, `set_extranonce`, `client.show_message`, `client.reconnect`, `mining.reconnect`): pre-auth messages stash in a wire-ordered queue (cap 16, drop-oldest — newest always wins semantically) and replay via `flushPreAuth` once authorize succeeds. `TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed` pins both halves. |
+| S | Could the stash itself be a memory DoS? | ✅ Verified: capped at 16 params blobs (each already bounded by the 1 MiB read-line ceiling) → ≤16 MiB worst case, freed on flush/close; drop-oldest keeps the semantically-dominant newest message per method. |
+
+CHANGELOG entry added under Fixed (session 1339).

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"sync"
@@ -995,7 +996,7 @@ func TestSession_NotifyBeforeAuthorize_IsStashedNotArmed(t *testing.T) {
 
 	// Authorization lands: the stashed job replays into the queue.
 	sess.authorized.Store(true)
-	sess.flushPreAuthJob()
+	sess.flushPreAuth()
 	select {
 	case j := <-sess.jobsCh:
 		if j.JobID != "PRE" {
@@ -1181,6 +1182,39 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	}
 	if res.Reason == "" {
 		t.Error("Reason should be non-empty when pool returns error")
+	}
+}
+
+func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
+	// Pre-auth messages must not mutate negotiated session state either:
+	// a hostile pool holding authorize open could otherwise set a
+	// starvation difficulty or poison extranonce1 before authentication.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.dispatch([]byte(`{"method":"mining.set_difficulty","params":[0.0001]}`))
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["aa11",2]}`))
+	if got := math.Float64frombits(sess.difficulty.Load()); got != 0 {
+		t.Fatalf("pre-auth set_difficulty applied difficulty %v", got)
+	}
+	if en1 := sess.extranonce1.Load(); en1 != nil {
+		t.Fatalf("pre-auth set_extranonce applied extranonce1 %q", *en1)
+	}
+
+	// Authorization lands: the stashed messages replay in wire order.
+	sess.authorized.Store(true)
+	sess.flushPreAuth()
+	if got := math.Float64frombits(sess.difficulty.Load()); got != 0.0001 {
+		t.Fatalf("stashed set_difficulty not replayed, got %v", got)
+	}
+	if en1 := sess.extranonce1.Load(); en1 == nil || *en1 != "aa11" {
+		t.Fatalf("stashed set_extranonce not replayed, got %v", en1)
+	}
+	if got := sess.extranonce2Size.Load(); got != 2 {
+		t.Fatalf("stashed extranonce2_size not replayed, got %v", got)
 	}
 }
 

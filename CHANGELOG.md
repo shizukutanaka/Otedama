@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1339 — 認証前メッセージによるセッション状態改竄を遮断)
+s1336 のゲートは `mining.notify` のみで、`mining.set_difficulty`/`set_extranonce` が認証前に即適用されていた。authorize を保留した敵対プールが難易度・extranonce を未認証状態で書き換え可能（掘ったシェアが決してクレジットされない）。全プール起点メソッドにゲートを一般化し、認証前メッセージは wire 順キュー（上限16・最古破棄）に stash → authorize 成功後に `flushPreAuth` で順序 replay。
+
 ### Fixed (session 1337 — mining.submit のワーカー名を認証済みユーザー名に一致)
 `mining.submit` の worker_name が `"otedama"` のハードコードで、`mining.authorize` で使う設定プールユーザーと不一致だった。ckpool 派生プール（public-pool.io 等の DATUM 系ソロ構成）はシェアのワーカーを名前で解決し未認証名を reject するため、全シェアがプール側で拒否される可能性があった（コインベース支払検証は通るため静かな収益消失）。authorize 成功時のユーザー名を `session.authorizedUser` に保持し Submit がエコーするよう修正。
 

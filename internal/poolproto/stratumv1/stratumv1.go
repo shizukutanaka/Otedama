@@ -125,15 +125,16 @@ type session struct {
 	extranonce1     atomic.Pointer[string]
 	extranonce2Size atomic.Int64
 
-	// authorized gates job delivery until mining.authorize succeeds. The
-	// read loop starts before the handshake completes, so a notify pushed
-	// early (or a hostile pool holding authorize open while streaming
-	// notify) would otherwise arm workers on an unauthenticated session —
-	// hashpower the pool never credits. Stashed notifies are replayed in
-	// order once authorization lands.
+	// authorized gates pool-initiated messages until mining.authorize
+	// succeeds. The read loop starts before the handshake completes, so a
+	// notify pushed early (or a hostile pool holding authorize open while
+	// streaming notify/set_difficulty/set_extranonce) would otherwise arm
+	// workers — or rewrite the negotiated difficulty/extranonce — on an
+	// unauthenticated session: hashpower the pool never credits. Stashed
+	// messages replay in wire order once authorization lands.
 	authorized atomic.Bool
 	preAuthMu  sync.Mutex
-	preAuthJob json.RawMessage
+	preAuthQ   []preAuthMsg
 	// authorizedUser is the username authorize succeeded with; Submit
 	// echoes it because ckpool-derived pools resolve the share's worker
 	// by name and reject names that were never authorized.
@@ -257,20 +258,79 @@ func (s *session) dispatch(line []byte) {
 		s.handleResponse(msg)
 		return
 	}
-	// Notification or request from pool.
+	// Notification or request from pool. Every pool-initiated method is
+	// gated on authorization (see session.authorized): pre-auth messages
+	// are stashed and replayed in wire order once authorize lands, so a
+	// pool can neither arm jobs nor mutate negotiated session state
+	// before we are authenticated.
 	switch msg.Method {
-	case "mining.notify":
-		s.handleNotify(msg.Params)
-	case "mining.set_difficulty":
-		s.handleSetDifficulty(msg.Params)
-	case "mining.set_extranonce":
-		s.handleSetExtranonce(msg.Params)
-	case "client.show_message":
-		s.handleShowMessage(msg.Params)
-	case "client.reconnect", "mining.reconnect":
-		s.handleReconnect(msg.Params)
+	case "mining.notify", "mining.set_difficulty", "mining.set_extranonce",
+		"client.show_message", "client.reconnect", "mining.reconnect":
+		if !s.authorized.Load() {
+			s.stashPreAuth(msg.Method, msg.Params)
+			return
+		}
+		s.flushPreAuth()
+		s.dispatchPoolMsg(msg.Method, msg.Params)
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
+	}
+}
+
+// dispatchPoolMsg applies one pool-initiated message. Only called for
+// authorized sessions — either directly from dispatch or during the
+// post-authorize stash replay.
+func (s *session) dispatchPoolMsg(method string, params json.RawMessage) {
+	switch method {
+	case "mining.notify":
+		s.handleNotify(params)
+	case "mining.set_difficulty":
+		s.handleSetDifficulty(params)
+	case "mining.set_extranonce":
+		s.handleSetExtranonce(params)
+	case "client.show_message":
+		s.handleShowMessage(params)
+	case "client.reconnect", "mining.reconnect":
+		s.handleReconnect(params)
+	}
+}
+
+// preAuthMsg is a pool-initiated message received before authorization
+// completed, kept in wire order for replay.
+type preAuthMsg struct {
+	method string
+	params json.RawMessage
+}
+
+// preAuthCap bounds the stash so a hostile pool cannot grow memory
+// unboundedly while holding authorize open. Dropping the oldest is
+// semantically right: for every stashed method the newest value wins
+// (latest difficulty, latest extranonce, latest job).
+const preAuthCap = 16
+
+func (s *session) stashPreAuth(method string, params json.RawMessage) {
+	s.preAuthMu.Lock()
+	if len(s.preAuthQ) >= preAuthCap {
+		s.preAuthQ = s.preAuthQ[1:]
+	}
+	cp := make([]byte, len(params))
+	copy(cp, params)
+	s.preAuthQ = append(s.preAuthQ, preAuthMsg{method: method, params: cp})
+	s.preAuthMu.Unlock()
+}
+
+// flushPreAuth replays the stashed pool-initiated messages in wire
+// order. Called by dispatch (before applying any post-auth message) and
+// by Negotiate right after authorized is set; preAuthMu serializes the
+// drain so a stashed message can never apply behind a newer one that
+// followed it.
+func (s *session) flushPreAuth() {
+	s.preAuthMu.Lock()
+	queue := s.preAuthQ
+	s.preAuthQ = nil
+	s.preAuthMu.Unlock()
+	for _, m := range queue {
+		s.dispatchPoolMsg(m.method, m.params)
 	}
 }
 
@@ -288,33 +348,6 @@ func (s *session) handleResponse(msg rpcMessage) {
 }
 
 func (s *session) handleNotify(params json.RawMessage) {
-	if !s.authorized.Load() {
-		s.preAuthMu.Lock()
-		s.preAuthJob = append(s.preAuthJob[:0], params...)
-		s.preAuthMu.Unlock()
-		return
-	}
-	s.flushPreAuthJob()
-	job, err := parseNotify(params)
-	if err != nil {
-		return
-	}
-	s.completeV1Job(&job)
-	s.sendJob(&job)
-}
-
-// flushPreAuthJob replays the newest notify stashed before authorization.
-// Called by handleNotify and by Negotiate right after authorized is set;
-// preAuthMu serializes the replay against delivery, so a job that arrived
-// pre-auth can never re-arm behind a newer one that followed it.
-func (s *session) flushPreAuthJob() {
-	s.preAuthMu.Lock()
-	params := s.preAuthJob
-	s.preAuthJob = nil
-	s.preAuthMu.Unlock()
-	if len(params) == 0 {
-		return
-	}
 	job, err := parseNotify(params)
 	if err != nil {
 		return

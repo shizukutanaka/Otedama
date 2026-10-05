@@ -192,7 +192,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// share's worker by name and reject names that were never authorized.
 	sess.authorizedUser.Store(&user)
 	sess.authorized.Store(true)
-	sess.flushPreAuthJob()
+	sess.flushPreAuth()
 
 	// Step 3 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)
