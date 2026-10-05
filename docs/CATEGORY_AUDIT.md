@@ -7593,3 +7593,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | First-principles question: can a provider-supplied quote timestamp corrupt the freshness ledger that retires dead providers' streams? | ⚠️ Found and fixed a latent boundary. `q.At` was written verbatim to `lastQuoteAt`; a zero value was already handled, but a FUTURE-dated `At` made `now.Sub(ts)` negative forever — the stream could never age past `streamStaleTimeout`, so a dead/misbehaving provider's quote would keep routing devices indefinitely (immortal stream). Both internal providers stamp `time.Now()`, so this is an extension-point hardening (same class as the Confidence>1 clamp in session 1436), not a live defect. Fixed via `quoteFreshness(at, now)`: zero or future → now, otherwise the past timestamp is kept. Extracted as a pure function (same testable-seam pattern as `v1JobTarget`) and pinned with a unit test covering zero/future/far-future/past/exact-now. ✅ |
+
+## Session 1440 update — freshness clamp completeness (Socratic pass 114)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Same-lens re-verification of the session-1439 fix: does any other consumer read `Quote.At`, and could an un-clamped path remain? | ✅ Complete at the single source. `Quote.At` has exactly one consumer in the codebase — the `lastQuoteAt` freshness ledger written in the `runArbitrationLoop` quote branch (arbitrate.go:179), now clamped via `quoteFreshness`. `updateStream` stores no timestamp field, and no last-quote gauge or other reader exists. Both shipped providers stamp `time.Now()` themselves, so the clamp is extension-point hardening for future providers, consistent with the Confidence>1 clamp (session 1436). The unit test pins zero/future/far-future/past/exact-now. ✅ |
