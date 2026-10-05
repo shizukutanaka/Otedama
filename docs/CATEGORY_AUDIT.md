@@ -6012,3 +6012,14 @@ All packages build, vet, and test green.
 | F | Residual gocyclo — engine `run.go` monsters (`runSession` 88, `runSessionV1` 53, `runReconnectLoop` 26, `Run` 24) plus the five wire/codec functions covered by open #1396. | ⚠️ Noted: deferred to batch C — run.go needs state-plumbing care; wire/codec findings clear when #1396 merges. |
 
 All packages build, vet, and scoped-test green.
+---
+
+## Session 1312 update — lint-debt batch 2: goconst + errcheck + errorlint (10 sites)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | goconst 6: `"help"` ×5 in cmd/otedama dispatch (4 switch cases + `knownSubcommands`), `"counter"`/`"gauge"` ×14 in metrics table entries. | **S: fixed** — `helpSubcommand` added next to `helpFlag`; `metricKindCounter`/`metricKindGauge` consts in metrics.go now source all 14 `# TYPE` kind fields (metrics.go + runtime.go). |
+| S | errcheck 1: `defer httpSrv.Stop()` in run.go discarded the Stop error. | **S: fixed** — `defer func() { _ = httpSrv.Stop() }()`; Stop's error at shutdown is ignorable (check-blank intentionally off; the serve loop's own errors still propagate). |
+| S | errorlint 3: `err == flag.ErrHelp` and `err != context.Canceled` (run.go) compared sentinels directly; `fmt.Errorf ... %v` (config.go) dropped the wrap chain. | **S: fixed** — both comparisons now `errors.Is`; host:port error now wraps with `%w` so callers can inspect `*net.AddrError`. |
+
+Post-change census on golangci-lint v2.14 + PR #1391's config: goconst, errcheck, errorlint → **0 findings**. Remaining lint debt: misspell 46 (fixed in #1392), gosec 19, gocyclo 15, gocritic 13, staticcheck 5 → next batches.

@@ -800,7 +800,7 @@ func validatePoolTarget(rest string) error {
 	}
 	host, port, err := net.SplitHostPort(rest)
 	if err != nil {
-		return fmt.Errorf("must be host:port (e.g. pool.example.com:3333): %v", err)
+		return fmt.Errorf("must be host:port (e.g. pool.example.com:3333): %w", err)
 	}
 	if host == "" {
 		return fmt.Errorf("host is empty")
