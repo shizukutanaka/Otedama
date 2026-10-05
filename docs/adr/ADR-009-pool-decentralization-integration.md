@@ -1574,3 +1574,42 @@ concrete non-custodial-payout proposal to date, and #236's
 `SetTarget` bound is a candidate that would tighten the server
 contract Otedama already assumes. No code action this round;
 re-audit the share-target path if #236 merges.
+
+## Session-1262 ecosystem update (2026-10-02)
+
+### sv2-spec (github.com/stratum-mining/sv2-spec)
+
+Normative open set unchanged: #203 (push-based non-custodial payouts,
+plebhash) remains open — the SEQ0_255-vs-B0_64K payout-set scalability
+question is still debated in-thread; #202 (RequestPayoutOutputs,
+GitGab19) remains the request-response alternative with the
+epoch-freshness / exact-sum rounding review thread; #195 remains the
+original draft. #236 (SetTarget.target bounded by the channel's
+max_target), #234 (authority-key management doc), and #198
+(coinbase_witness on NewTemplate) all remain open. #232/#186 are
+table-formatting style PRs; #103 is the long-running Proxy Annex WIP.
+Nothing new affects Otedama's implemented message surface.
+
+### Stratum Reference Implementation (stratum-mining/stratum)
+
+Latest tag is still v1.12.0 (2026-09-17, e11881b): channels_sv2
+hardening, BIP323 adaptations, codec/framing split, and the
+noise_sv2 AES-256-GCM removal leaving ChaCha20-Poly1305 as the sole
+cipher — matching Otedama's `internal/stratum` cipher set. No v1.13.
+
+### sv2-apps (stratum-mining/sv2-apps)
+
+Latest release remains v0.7.0 (alpha). The open-PR list stands at ~25;
+items tracked since the last update (#845 target-field rename, #856
+bitcoin_core_sv2 hardening, #839 JDS user_identity binding, #881
+handle_push_solution WIP, #878 empty-coinbase-script rejection, #883
+community-multisig config examples) continue unchanged. New entries in
+the window: #908 (B08 type support in bitcoin_core_sv2, Oct 3), #904
+(monitoring/config/release edge cases, Oct 1), #903 (Buffer sv2
+hardening, Sep 29), #902 (Windows CI support, Sep 28). No
+release-level change affecting this ADR's client-side scope.
+
+### Assessment
+
+Quiet window confirmed — no action. ADR-009's proposal sections stand
+as written; the next recheck is due around session 1275.
