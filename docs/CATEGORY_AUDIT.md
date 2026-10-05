@@ -6908,3 +6908,12 @@ No code change required this round.
 | S | Can a burst of retargets wedge or mislead the consumer? | ✅ Verified: `diffCh` is buffered(1) and replaces any undelivered value — the read loop never blocks and the consumer always sees the newest target, never a stale one; channel closes with the session (nil'd in the engine's select). Malformed/non-positive values are dropped by `parseDifficulty` before the push. |
 
 Code change: `poolproto.DifficultyWatcher` + stratumv1 `diffCh`/`DifficultyUpdates()` + engine re-issue path (V1 parity with V2 `SetTarget` handling) + unit test.
+
+## Session 1331 update — first-principles audit of the "paused devices resume onto the right job" claim (Socratic pass 13)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does an arbitration-paused worker resume onto stale work — or can any path re-arm it while paused? | ✅ Verified: pausing sets `SetWork(nil)` (the worker holds no work at all, not a stale job); un-pausing only deletes the pause-set entry, so the device re-arms with the *current* job on the next `applyJob`/`updateWork` — identical semantics to `curtailGate` ("hashing resumes on next job", documented). Every re-issue path — job notify, retarget push (s1330 `diffCh`), V2 `SetTarget`, V1 `set_difficulty` — routes through `applyJob`/`updateWork`, which skip `paused.Paused(deviceID)`, so a pause can never be silently re-armed (#494 invariant holds across all arms). |
+| S | What does a resumed device lose between un-pause and the next job? | ⚠️ Noted: up to one job interval (~seconds to ~a minute) of hashing latency — the worker idles on nil work rather than a stale job, so it loses throughput, never validity. Mirrors the curtail path's documented semantics; the job-starvation warn (`jobStallWarnAfter`) covers the pathological case of a pool that stops sending jobs entirely. Benign; re-issuing on resume would need the session's current job plumbed into the arbitration loop for no additional safety. |
+
+No code change required this round.
