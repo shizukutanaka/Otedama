@@ -6268,3 +6268,10 @@ All packages build, vet, and test green.
 | R | Chronological order | ⚠️ Noted: ~80 monotonicity violations — merge-conflict resolutions scrambled block order (runs like 591–634 and 604–693 sit reversed; 1012→726, 1220→719 jumps). Reordering is deliberately NOT done here: it would conflict every open ledger-appending PR at once; each block's `## Session NNNN` header keeps chronology recoverable regardless of file position |
 | R | Uniqueness / completeness | ✓ 195 `## Session` blocks, zero duplicate session numbers — no entries lost or doubled by the merge waves |
 
+## Session 1296 update — release-pipeline responsibility split
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | `.goreleaser.yaml` invocation | ⚠️ Noted: no workflow or Makefile target invokes goreleaser — release.yml hand-rolls create-release + cross-build + deb/rpm + brew/scoop instead. The file is valid config but orphaned unless the maintainer runs goreleaser manually |
+| R | Dead-ldflags blast radius | ✓ Bounded: binaries built with the four `main.*` sites fall back to `internal/version` defaults `v3.0.0-alpha.1-dev`/`unknown`/`unknown` — degraded metadata, not a broken binary |
+
