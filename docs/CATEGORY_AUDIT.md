@@ -7081,3 +7081,12 @@ CHANGELOG entry added under Fixed (session 1349).
 | S | If the user mistypes `payout_scheme` (e.g. `tiddes`), does the config silently accept it and leave the s1318 coinbase verification off? | ✅ Verified fail-loud: `appendPoolIssues` in `internal/config/config.go` restricts the field to exactly `""`, `fpps`, `pplns`, `tides`, `solo` and rejects anything else at `Validate()` — the binary refuses to run with the typo rather than running unverified. Only `tides`/`solo` opt into the pays-the-user check; `fpps`/`pplns` correctly do not (their coinbases are legitimately pool-owned). |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1351 update — ADR-009 ecosystem recheck
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | sv2-spec normative open set | ⚠️ Noted: #203/#236/#234/#198 all still open, unmerged — quiet window; JDP non-custodial payout extension remains the tracked gating item for full V2 non-custody. |
+| S | SRI / sv2-apps latest versions | ⚠️ Noted: earlier ledger rows claiming "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — official release lists show v1.11.1 (SRI) and v0.7.0 (sv2-apps) as latest. Corrected anchor recorded in ADR-009. |
+
+Ledger only — verification round, no behavior-visible change.

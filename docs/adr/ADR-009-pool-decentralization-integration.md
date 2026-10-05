@@ -1718,3 +1718,9 @@ Nothing new at the implementation layer: the Gomining/DMND first production JDP 
 ### Assessment
 
 Quiet window continues — no action. One observation for the record: `05-Mining-Protocol.md` on `main` now writes `maximum_target`/`min_ntime` while the stratumprotocol.org build still shows `max_target`/`ntime_start` — the spec's field naming is mid-evolution again (Otedama decodes positionally, so wire-immune; relevant only to doc drift). Next recheck due around session 1270.
+
+### Session 1351 update
+
+sv2-spec normative open set unchanged: #203 (push-based payouts, last updated 2026-09-15), #236 (SetTarget ≤ max_target), #234 (authority key management docs), #198 (coinbase_witness) all still open, unmerged — quiet window continues.
+
+Release-verification corrections (self-audit): the authoritative releases pages confirm **SRI latest = v1.11.1** (22 Jul 2026) and **sv2-apps latest = v0.7.0**. Earlier ledger rows that asserted "v1.12.0 confirmed" and "sv2-apps v0.8.0" were verification misses — no such releases exist on the official release lists; the corrected anchor is v1.11.1 / v0.7.0. The v1.11.1 SV1-difficulty fix ("no longer rounds up") still matches Otedama's `DifficultyFromTarget` truncation semantics — no action required.
