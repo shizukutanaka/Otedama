@@ -18,7 +18,7 @@ import (
 //   - Placeholders ({{.name}}) are left untouched so that upper-layer
 //     text/template rendering works across languages.
 func Japanese() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangJapanese, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangJapanese, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama起動完了。まもなくマイニング開始。",
 		StartupWalletCreated:  "新規Lightningウォレットを作成。復元シードはこのデバイスに安全に保存済み。",
 		StartupHardwareFound:  "マイニングデバイスを{{.count}}台検出: {{.summary}}",
