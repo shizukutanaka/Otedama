@@ -6023,3 +6023,16 @@ All packages build, vet, and scoped-test green.
 | S | errorlint 3: `err == flag.ErrHelp` and `err != context.Canceled` (run.go) compared sentinels directly; `fmt.Errorf ... %v` (config.go) dropped the wrap chain. | **S: fixed** — both comparisons now `errors.Is`; host:port error now wraps with `%w` so callers can inspect `*net.AddrError`. |
 
 Post-change census on golangci-lint v2.14 + PR #1391's config: goconst, errcheck, errorlint → **0 findings**. Remaining lint debt: misspell 46 (fixed in #1392), gosec 19, gocyclo 15, gocritic 13, staticcheck 5 → next batches.
+
+---
+
+## Session 1254 update — legacy-os.Is surface + action pinning + stdlib adoption audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Legacy `os.Is*` surface left by the errors.Is modernization — #1239/#1333 covered `os.IsNotExist`; the sibling helpers (`os.IsExist`, `os.IsPermission`, `os.IsTimeout`, `os.IsInterrupt`, `os.IsSymlink`, `os.ErrClosed`) needed the same census. | ✅ Clean: zero legacy `os.Is*` sites outside tests (`os.ErrClosed` appears only as a test-fixture return value). The errors.Is convention is now complete repo-wide. |
+| M | Manual map-copy loops where `maps.Copy`/`maps.Clone` is the established stdlib idiom (adopted at metrics.go:401). | ⚠️ Noted (fixed): `streamsSlice` in `internal/engine/arbitrate.go` hand-rolled two `for k, v { dst[k]=v }` loops — both are exact `maps.Copy` semantics (merge into existing map; the second keeps its `len` hint). Converted; `TestStreamsSlice*` green. |
+| M | Third-generation stdlib surface absent or current — `iter`/`unique`/`weak`/`os.Root`/`crypto/fips140`/`jsonv2`/`synctest` (Go 1.23+ additions that would be wrong here anyway). | ✅ Absent everywhere: no imports of any — the wire codecs stay hand-rolled by design (checked). |
+| L | Workflow actions tracking mutable branches — `trivy-action@master` ×5, `gosec@master` ×3, `trufflehog@main` — branch refs move silently under CI. | ⚠️ Noted: documented decision is no SHA pinning (solo-ops #561 corrected the claim), but `master`/`main` refs are weaker than versioned tags like `@v4`/`@v5` used elsewhere — recorded for the maintainers rather than changed (pin versions would need per-action release verification CI can't currently exercise). |
+
+All packages build, vet, and test green.

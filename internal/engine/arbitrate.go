@@ -11,6 +11,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -317,17 +318,13 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// just whichever map entry happened to be iterated first.
 			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
-			for devID, y := range s.YieldPerDevice {
-				rep.YieldPerDevice[devID] = y
-			}
+			maps.Copy(rep.YieldPerDevice, s.YieldPerDevice)
 		} else {
 			// Deep-copy to avoid aliasing the YieldPerDevice map inside m.
 			cp := s
 			if len(s.YieldPerDevice) > 0 {
 				ypd := make(map[string]arbitration.Yield, len(s.YieldPerDevice))
-				for k, v := range s.YieldPerDevice {
-					ypd[k] = v
-				}
+				maps.Copy(ypd, s.YieldPerDevice)
 				cp.YieldPerDevice = ypd
 			}
 			merged[s.ID] = &cp
