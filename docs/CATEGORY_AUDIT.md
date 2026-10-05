@@ -6403,3 +6403,15 @@ Smoke run on darwin/arm64 go1.27.1 from synced master.
 | go.mod | `go mod verify` all modules verified; `go mod tidy` clean | ✓ Clean |
 
 govulncheck v1.1.4, source analysis mode (calls into the vuln symbol are required to count).
+
+## Session 1277 update — external research pass (sv2-apps v0.7.0 + mining literature)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| sv2-apps v0.7.0 | Downstream share validation now verifies shares against the advertised power-of-two difficulty (ckolivas #630) — the same direction as our shareTarget plumbing (updateWork compares found hashes against the pool-assigned target; SetTarget/set_difficulty retargets covered by transitionReject) | ✓ Aligned |
+| sv2-apps v0.7.0 | tProxy builds `UserIdentity` TLVs only when extension 0x0002 is negotiated (#624) — same fail-closed pattern as #1321/#1329 (reject responses outside the offered set) | ✓ Aligned |
+| mining literature | APoW (arXiv 2601.02496, pool-level withholding auditability), inertial mining (2604.06092, consensus-layer equilibrium), BWH under PPS/FPPS (2607.01209, share-accounting theory) — all consensus/pool-server layer; nothing actionable for a client-side CLI | ✓ Monitored |
+| sv2-apps latest | v0.7.0 (24 Jul 2026) remains the newest release; open-PR count ~27 (hardening wave: #908 B08 type, #904 monitoring edges, #902 Windows CI) | ✓ Monitored |
+
+No protocol or implementation change required.
+
