@@ -848,7 +848,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -868,7 +868,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -892,7 +892,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -916,7 +916,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -949,7 +949,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -973,7 +973,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -998,7 +998,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -1027,7 +1027,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -1055,7 +1055,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -1077,7 +1077,7 @@ func TestHandshake_VersionOutOfRange(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool negotiates version outside declared range")
 	}
@@ -1099,7 +1099,7 @@ func TestHandshake_UnhonoredSetupFlags(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool requires unoffered flags")
 	}
@@ -1127,7 +1127,7 @@ func TestHandshake_WrongChannelReqID(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel response echoes a foreign req_id")
 	}
@@ -2991,7 +2991,7 @@ func TestHandshake_DeclaresNominalHashrateWhenWorkersCold(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"}) // never started: HashRate == 0
 
 	dec := stratum.NewDecoder(clientConn)
-	chanID, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
+	chanID, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}

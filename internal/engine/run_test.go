@@ -2483,6 +2483,10 @@ type responsivePool struct {
 	// channel teardown. The engine must end the session rather than
 	// keep grinding a dead channel.
 	closeChannel bool
+	// groupCloseChannel sends CloseChannel addressed to the group
+	// channel instead — §5.3.9 closes every member channel, so the
+	// session must end the same way.
+	groupCloseChannel bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2528,6 +2532,16 @@ func newResponsivePoolCloseChannel(t *testing.T) *responsivePool {
 	t.Helper()
 	fp := newResponsivePoolOpts(t, false, false)
 	fp.closeChannel = true
+	return fp
+}
+
+// newResponsivePoolGroupCloseChannel sends CloseChannel addressed to the
+// group channel (4) instead — §5.3.9 closes all member channels, so the
+// engine must still end the session.
+func newResponsivePoolGroupCloseChannel(t *testing.T) *responsivePool {
+	t.Helper()
+	fp := newResponsivePoolOpts(t, false, false)
+	fp.groupCloseChannel = true
 	return fp
 }
 
@@ -2654,8 +2668,12 @@ func (fp *responsivePool) serve() {
 		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
 	}
 
-	if fp.closeChannel {
-		cc := stratum.CloseChannel{ChannelID: 1, Reason: "pool maintenance"}
+	if fp.closeChannel || fp.groupCloseChannel {
+		cid := uint32(1)
+		if fp.groupCloseChannel {
+			cid = 4 // the group channel the fake handshake assigns
+		}
+		cc := stratum.CloseChannel{ChannelID: cid, Reason: "pool maintenance"}
 		payload, _ = cc.Encode()
 		fp.emit(conn, stratum.MsgCloseChannel, true, payload)
 		return
@@ -3608,7 +3626,7 @@ func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
 
 	dec := stratum.NewDecoder(client)
 	start := time.Now()
-	_, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	_, _, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err == nil {
 		t.Fatal("handshake should fail against a silent peer")
 	}
@@ -3640,7 +3658,7 @@ func TestHandshake_DeadlineCleared(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(client)
-	chanID, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	chanID, _, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -3769,5 +3787,45 @@ func TestRunSessionV2_CloseChannelEndsSession(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "pool maintenance") {
 		t.Fatalf("runSession error = %v, want the pool's sanitized reason echoed", err)
+	}
+}
+
+// TestRunSessionV2_GroupCloseChannelEndsSession verifies the group-addressed
+// form of §5.3.9: CloseChannel naming the group channel closes every member
+// channel — ours is the only one — so the session must still end.
+func TestRunSessionV2_GroupCloseChannelEndsSession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolGroupCloseChannel(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log:        func(string, string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession should return an error when the pool closes the group channel")
+	}
+	if !strings.Contains(err.Error(), "pool closed channel 4") {
+		t.Fatalf("runSession error = %v, want a 'pool closed channel 4' teardown", err)
 	}
 }

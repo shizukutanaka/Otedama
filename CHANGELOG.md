@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1497 — グループチャネル宛の CloseChannel が foreign-channel 棄却に残っていた)
+
+SV2 spec §5.3.9 はグループチャネル宛の CloseChannel が「そのグループの全メンバーチャネルを閉じる」と規定するが、s1495 の誠実残余として group 宛フレームは foreign-channel の警告+棄却に留まっていた — 単一チャネル運用のクライアントは自分が唯一のメンバーなので、これは実質「閉じられるべき自分のチャネルを閉じない」状態。`handshake` が `OpenMiningChannelSuccess.GroupChannelID`（s1493 でデコード済み・破棄されていた）をセッションループへ返すよう配線し、foreign-channel ガードは「CloseChannel かつ宛先が自分のグループ」のみを通過させて既存の閉塞アームに到達させるよう修正。`TestRunSessionV2_GroupCloseChannelEndsSession`（group id 4 宛で終了すること）を追加。
+
 ### Fixed (session 1495 — プール送信の CloseChannel が無視されデッドチャネルを掘り続けていた)
 
 SV2 spec §5.3.9 の `CloseChannel` (0x18, `channel_id U32 | reason_code STR0_255`) は「サーバーがチャネルを閉じた——クライアントはそのチャネルの使用を止めなければならない」と規定されるが、デコーダ未実装のため `Message.Unknown` に落ちて黙殺され、単一チャネル運用では接続切断までジョブ欠乏のまま掘り続ける状態だった。デコード/エンコードと `frameDecoders`・`channelIDOf` 登録を追加し、セッションループで「接続切断と同等のエラー」として返すよう修正 — 理由文字列は `poolproto.SanitizePoolText` 経由でログに安全化され、フェイルオーバーループが即座に引き継ぐ。誠実残余： グループチャネル宛の CloseChannel（spec では全メンバーチャネルを閉じる）は `GroupChannelID` がセッションループへ未配線のため foreign-channel の警告+棄却パスに残る。

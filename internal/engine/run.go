@@ -850,7 +850,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers, opts.nominalHashrate)
+	chanID, groupID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers, opts.nominalHashrate)
 	if err != nil {
 		return err
 	}
@@ -1088,11 +1088,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			// addressed to a different channel would corrupt job,
 			// prev-hash, or share-target state. SetNewPrevHash is
 			// exempt: SV2 lets the pool address it to the group
-			// channel our standard channel belongs to, whose ID the
-			// handshake does not expose.
+			// channel our standard channel belongs to.
 			if cid, ok := channelIDOf(&pm.msg); ok && cid != chanID && pm.msg.SetNewPrevHash == nil {
-				opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
-				continue
+				// A CloseChannel addressed to our group closes every
+				// member channel (SV2 §5.3.9) — let it through so the
+				// teardown arm below can end the session.
+				if pm.msg.CloseChannel == nil || cid != groupID {
+					opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
+					continue
+				}
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
@@ -1782,7 +1786,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // exchange. Var so tests can shrink it.
 var handshakeTimeout = 15 * time.Second
 
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, miner.Hash, error) {
+func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
 	// Bound the entire handshake: a peer that accepts the connection but
 	// never answers SetupConnection would otherwise hold the failover
@@ -1801,30 +1805,30 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		DeviceID:        "cpu",
 	}
 	if err := sendMsg(conn, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	f, err := dec.ReadFrame()
 	if err != nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: setup response: %w", err)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: setup response: %w", err)
 	}
 	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	if msg.SetupConnectionError != nil {
-		return 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
+		return 0, 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
 	}
 	if msg.SetupConnectionSuccess == nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
-		return 0, miner.Hash{}, fmt.Errorf("engine: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
 	}
 	// SetupConnectionSuccess.flags is the subset of offered flags the server
 	// requires. We offer none, so any nonzero value is unhonorable — fail
 	// closed rather than silently proceed (sv2-apps #695 class).
 	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
-		return 0, miner.Hash{}, fmt.Errorf("engine: pool requires flags 0x%08x outside offered set 0x%08x",
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: pool requires flags 0x%08x outside offered set 0x%08x",
 			msg.SetupConnectionSuccess.Flags, sc.Flags)
 	}
 
@@ -1847,30 +1851,30 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		MaxTarget:       stratum.MaxTargetUnconstrained,
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	f, err = dec.ReadFrame()
 	if err != nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
 	}
 	msg, err = stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	if msg.OpenMiningChannelError != nil {
-		return 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
+		return 0, 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
 	}
 	if msg.OpenMiningChannelSuccess == nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
 	}
 	if msg.OpenMiningChannelSuccess.ReqID != omc.ReqID {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel response echoes req_id %d, sent %d",
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel response echoes req_id %d, sent %d",
 			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
 	// map directly.
-	return omcs.ChannelID, miner.Hash(omcs.Target), nil
+	return omcs.ChannelID, omcs.GroupChannelID, miner.Hash(omcs.Target), nil
 }
 
 // ----- Shared helpers -----
