@@ -1216,6 +1216,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
 			}
+			// SetNewPrevHash invalidates every job it doesn't name, so a
+			// share ground under a superseded job is rejected by the pool
+			// before it can even be evaluated — don't submit it.
+			if active != nil && share.JobID != active.JobID {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", fmt.Sprintf(
+					"engine: share for superseded job %d dropped (active job %d)",
+					share.JobID, active.JobID))
+				continue
+			}
 			if !submits.take() {
 				if opts.m != nil {
 					opts.m.sharesSubmitDropped.Inc()
@@ -1336,6 +1348,12 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// no rejects, no disconnect, just nothing credited. Warn once per
 	// episode and re-arm when the interval recovers.
 	var starvedWarned bool
+	// The most recently applied job's ID gates share submission: once a
+	// newer notify replaces the work, shares ground under the superseded
+	// job arrive back as stale rejects — submitting them only inflates
+	// the reject counters.
+	var currentJobID uint32
+	var haveJob bool
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
@@ -1502,6 +1520,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					opts.log("warn", err.Error())
 					continue
 				}
+				var jid uint64
+				if _, err := fmt.Sscanf(job.JobID, "%d", &jid); err == nil {
+					currentJobID = uint32(jid)
+					haveJob = true
+				}
 				opts.log("info", fmt.Sprintf("engine: V1 job %q nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {
@@ -1516,6 +1539,15 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
+			}
+			if haveJob && share.JobID != currentJobID {
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				opts.log("debug", fmt.Sprintf(
+					"engine: share for superseded V1 job %d dropped (current job %d)",
+					share.JobID, currentJobID))
+				continue
 			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.

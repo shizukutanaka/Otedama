@@ -6826,3 +6826,14 @@ All packages build, vet, and test green.
 | S | Residual gap for operators? | ⚠️ Noted: nothing verifies the configured payout address is one the *operator* controls (e.g. by deriving it from wallet.dat). Deliberate — addresses are free-form so any external wallet/exchange address works — but a mistyped address routes payouts to a stranger; the s1318 coinbase check only verifies pool→configured-address, not configured-address→operator-ownership. |
 
 No code changes required; verification only.
+
+## Session 1323 update — first-principles audit of the "valid share submission" claim (Socratic pass 5)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Are shares only submitted when they meet the pool target? | ✅ Verified: the worker emits a Share only when `hash.LessOrEqual(localWork.Target)` — no below-target wire waste. |
+| S | Does a pool SetTarget actually reach the workers? | ✅ Verified: SetTarget → `shareTarget` updated + `startJob` re-issues work immediately (and the superseded-target reject is already classified as benign, ESP-Miner #212). |
+| S | Is a share bound to the job it was ground under? | ✅ Verified: `Share.JobID` comes from the captured `localWork.JobID`, carried into `SubmitSharesStandard.JobID` — the pool recomputes against that job. |
+| S | Are shares for superseded jobs still submitted? | 🔧 Fixed: no freshness gate existed — shares found before a SetNewPrevHash/new notify but submitted after it are guaranteed stale rejects (SV2 invalidates all unnamed jobs; V1 replaces work each notify). Both paths now drop `share.JobID != active job` before submission, counted in `sharesSubmitDropped` with a debug log. |
+
+All packages build, vet, and test green.

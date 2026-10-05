@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 1323 — 失効ジョブのシェアを提出前に破棄)
+
+**変更.** 「正当なシェアのみ提出する」主張の第一原理検証（ソクラテス式監査）
+で見つかった実ギャップを修正。SV2 の `SetNewPrevHash` は名前を挙げなかった
+ジョブを全て無効化するため、切替直前に見つかったシェアは提出時点で
+既に確定的な stale reject であった（V1 も新規 notify でジョブが差し替わる）。
+V2 は `share.JobID != active.JobID`、V1 は `share.JobID != 直近適用ジョブ`
+を提出前に破棄し、`shares_submit_dropped` に計上＋debug ログ出力。
+拒否率に偽の拒否が混ざらなくなり、wire 上の無駄も消える。
+
 ### Changed (session 1318 — 非カストディ検証: TIDES/solo コインベースの支払先確認)
 
 **変更.** 「非カストディ」主張の第一原理検証（ソクラテス式監査）で見つかった実ギャップを修正。
