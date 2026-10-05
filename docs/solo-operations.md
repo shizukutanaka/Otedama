@@ -560,7 +560,7 @@ Otedamaがその罠に入らないために：
 ### 7.1 CODEOWNERS の設計
 
 ```
-# .github/CODEOWNERS — 実ファイルと同じ構成（2026-09 時点）
+# .github/CODEOWNERS — 実ファイルと同じ構成（2026-10 時点）
 # Global fallback: メンテナが全PRをレビュー
 *                           @shizukutanaka
 
@@ -569,6 +569,7 @@ Otedamaがその罠に入らないために：
 /internal/btccrypto/        @shizukutanaka
 /internal/poolproto/        @shizukutanaka
 /internal/stratum/noise*    @shizukutanaka
+/internal/stratum/noise_pool* @shizukutanaka
 
 # CI/リリース自動化
 /.github/                   @shizukutanaka
