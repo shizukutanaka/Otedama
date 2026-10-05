@@ -6804,3 +6804,14 @@ All packages build, vet, and test green.
 | S | Would a permanently-paused rig be invisible to liveness? | ✅ Intentional and now honest: `allArbPaused` keeps `otedama_up=1` and skips the stall monitor — justified *because* the pause is a real `SetWork(nil)` idle, not silent work starvation. (This ordering matters: the metric semantics are only correct as long as pause means idle.) |
 
 All packages build, vet, and test green; no code changes required — verification only.
+
+## Session 1321 update — first-principles audit of the "encrypted pool link" claim (Socratic pass 3)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | "stratum+tls://" — does the V1 TLS scheme actually establish TLS? | ✅ Verified: registered `Dialer{useTLS:true}` → `dialTLS` → `tls.Dialer` (system roots, TLS 1.2+, ServerName from dial address); never falls back to plaintext (the silent-downgrade defect was fixed in a prior session). |
+| S | `tls_ca_file` — does the configured private-CA bundle reach the verifier without disabling verification? | ✅ Verified: run.go reads it → `creds.TLSRootCAsPEM` → `tlsConfigWithExtraCAs` (system pool + PEM). Unreadable file → warn + system roots (fails cleanly for private-CA pools, never downgrades). |
+| S | "stratum+v2tls://" — same posture? | ✅ Verified: `stratum.DialTLS` with the same secure defaults; plaintext `stratum+v2://` logs an explicit warning at connect. |
+| S | Is the cleartext exposure symmetric between V1 and V2? | 🔧 Fixed: V2 plaintext warned at connect but V1 (`stratum+tcp://`) logged only `connected` — and V1 is the protocol carrying the payout address as its username. Added the identical warn, gated on the TLS scheme. |
+
+All packages build, vet, and test green.
