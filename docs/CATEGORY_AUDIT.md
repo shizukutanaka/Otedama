@@ -7154,3 +7154,11 @@ Ledger only — verification round, no behavior-visible change.
 The first-principles lens ("does the implementation actually do what the product claims?") has now covered: non-custodial payout routing (wire, coinbase verify, scheme gate, address stickiness, provenance), arbitration honesty (pause persist, fail-closed dup IDs, net yield, counters), share truthfulness (valid-only submission, seq/batch accounting, en2 uniqueness, job binding), pool-transport honesty (TLS surface, plaintext warning, bounds), target/difficulty honesty (display=grind, retarget propagation, coalescing), session lifecycle (end→idle, reconnect→fresh, backoff), and metrics monotonicity. Real fixes landed: coinbase-payout verification + cannot-verify warning, version-mask diagnostics, stale-share drops + jobArmed latch, plaintext-V1 warn parity, en2 bounds (already shipped earlier). Residual honest edges recorded as ⚠️ Noted: dust-amount blind spot, V1 non-clean_jobs acceptance window, set_extranonce pre-rotation job ambiguity, pause-window hashrate underestimation bias, silent malformed-notification drops (Postel-consistent).
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1360 update — re-verification of the "pause-window hashrate bias" residual edge (Socratic pass 40)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does a pause episode dilute the hashrate arbitration sees (self-reinforcing under-valuation)? | ✅ Verified stronger than the earlier ⚠️ note: the operational path is immune — `hashrateWindow` differentiates cumulative counters into a *windowed* rate (0 during a pause, true rate immediately on resume), feeds metrics/TUI/stall monitor, and `uptimeAccountant` separately counts only productive seconds into `otedama_productive_seconds`. The lifetime average (`Worker.Stats().HashRate = HashesTotal/Uptime`) is consumed only by diagnostic display (logStats/HashRateString) — documented semantics, no arbitration input. No code change needed; the ⚠️ edge narrows to "lifetime-average display drifts low across pauses" — honest, cosmetic. |
+
+Ledger only — verification round, no behavior-visible change.
