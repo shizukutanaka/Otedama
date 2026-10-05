@@ -6871,3 +6871,13 @@ All packages build, vet, and test green.
 | S | What if two devices share an ID? | ⚠️ Noted: hal IDs unique by construction ("cpu-0", "gpu-renderD*"); `Decide` rejects duplicates fail-closed (arbitration freezes rather than misroutes — correct bias). `SetupConnection.DeviceID="cpu"` is a wire field in a different namespace, benign naming collision. |
 
 No code change required this round.
+
+## Session 1327 update — first-principles audit of the "measured hashrate is honest" claim (Socratic pass 9)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Is the reported hashrate derived from real attempted hashes? | ✅ Verified: `hashCount.Add(1)` per nonce attempt in grind's inner loop; `Stats().HashRate` is the documented lifetime average (hashes/uptime) — not luck-derived from found shares. Nominal SV2 declaration is capability-derived with the live rate winning on reconnect; fresh-session 0 correctly falls back so vardiff is seeded honestly. |
+| S | Does the average distort after arbitration pauses? | ⚠️ Noted: uptime accrues while paused (no hashing), so the lifetime average sags after idle episodes and the mining quote understates the device's capability on resume — a self-reinforcing bias toward staying off mining. Latent today (a single CPU mining device); flagged as a semantic wrinkle, not a correctness defect. |
+| S | Can shares "meet" the wrong target? | ✅ Verified: share is emitted only when `hash <= localWork.Target`, which carries the pool-assigned share target (not the block target) end-to-end from the handshake. |
+
+No code change required this round.
