@@ -7611,3 +7611,7 @@ Ledger only — verification round, no behavior-visible change.
 ## Session 1444 update (Socratic pass 117)
 
 **Claim verified:** "A device-agnostic quote (DeviceID == \"\") occupies a well-formed map slot" — true. updateStream keys it `providerID:` (e.g. `ai.akash:`): distinct from any real device key (hardware IDs cannot contain `:`), pruned by the same freshness ledger, and merged into the shared StreamID by streamsSlice like per-device entries. The DefaultYield it writes stays the only device-agnostic yield (per-device quotes write only their own slot since s1396). No collision, no orphaning. Code unchanged.
+
+## Session 1445 update (Socratic pass 118)
+
+**Claim verified:** "The all-paused liveness exemption hides only stall signals, not connection death" — true. updateLiveness short-circuits before hashMon.Observe when isCurtailed()||allArbPaused(), suppressing only the *stall* signal (zero-hashrate warning + otedama_up=0); it cannot hide a dead pool because connection failure propagates via a different path entirely (runSession error → failover/reconnect → silence warnings), never through the stall monitor. allArbPaused correctly requires every worker paused (a single unpaused worker keeps the stall monitor fed), and arbPaused persists across reconnects since the set is shared and rewritten by every arbitration tick. Code unchanged.
