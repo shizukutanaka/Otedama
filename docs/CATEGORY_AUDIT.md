@@ -1806,6 +1806,15 @@ All packages build, vet, and test green.
 | wg-capture | WaitGroups shared with spawned goroutines are Add-before-spawn | Clean |
 | bench-error | Benchmark bodies don't call `t.Error`-family from helper goroutines | Clean |
 ---
+
+## Session 1242 — post-rename-name + chan-len + defer-in-init
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| post-rename-name | Wallet atomic save captures `tmp.Name()` pre-rename and only for Remove/Chmod on the temp path — no stale handle reliance (lightning/wallet.go:298) | Clean |
+| chan-len | No `len()`/`cap()` calls on shared channels — no racy sizing decisions | Clean |
+| defer-in-init | 4 `init()` fns (wordlist integrity, secp256k1/v1/v2 registration) — no defer inside init, all atomic | Clean |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
