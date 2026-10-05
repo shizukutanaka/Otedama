@@ -7057,3 +7057,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | When `runSessionV1`/V2 returns on `Jobs()` close, do workers keep hashing the last armed job through the backoff window? | ✅ Verified handled: the reconnect loop sets `w.SetWork(nil)` on every worker the moment a session ends — before dashboard update and backoff sleep — so nothing hashes a dead session's superseded job (V1 renegotiates fresh extranonces, V2 a fresh channel, so the old job could never pay anyway). Session-end liveness (`poolConnectionState=0`, `OnReady(false)`) is updated in the same block. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1348 update — first-principles audit of the "four revenue streams" claim (Socratic pass 30)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | The product definition promises arbitration across four streams (mining, AI inference, rendering, scientific compute) — does the code implement all four? | ✅ Verified honest: `internal/provider/` ships only `MiningProvider` (real Stratum V2/V1) and `AkashProvider` (simulated price feed — name rendered "(simulated)" everywhere, no live bids). README opens by disclosing exactly this boundary ("only two streams are actually implemented ... rendering and scientific computing are planned v4.0-scope"), KNOWN_LIMITATIONS §1 documents the simulation gap with a verifiability recipe, and CLAUDE.md prohibits speculative pre-v4.0 implementations. The claim's honesty rests on prominent disclosure, which holds. |
+
+Ledger only — verification round, no behavior-visible change.
