@@ -118,13 +118,15 @@ mkdir -p "$INSTALL_BIN"
 # naming: .goreleaser.yaml produces "otedama_<ver>_<os>_<arch>.tar.gz" where
 # <ver> is the tag minus its leading "v" (GoReleaser's .Version strips it),
 # release.yml produces "otedama-<os>-<arch>.tar.gz", and ci-cd.yml uploads
-# the bare binary "otedama-<os>-<arch>". Try each convention in turn so the
-# installer works regardless of which pipeline produced the release.
+# the bare binary "otedama-<os>-<arch>" (Windows adds ".exe"). Try each
+# convention in turn so the installer works regardless of which pipeline
+# produced the release.
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 TAGVER="${VERSION#v}"
 CANDIDATES=(
     "otedama_${TAGVER}_${OS}_${ARCH}.tar.gz"
     "otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+    "otedama-${OS}-${ARCH}.exe"
     "otedama-${OS}-${ARCH}"
     "otedama-${OS}-${ARCH}.tar.gz"
 )

@@ -76,8 +76,8 @@ func FingerprintFilePath(dataDir string) string {
 	return filepath.Join(dataDir, fingerprintFile)
 }
 
-// WalletOption configures optional NewWalletManager creation behaviour.
-// The zero value of every option's effect is the pre-existing behaviour,
+// WalletOption configures optional NewWalletManager creation behavior.
+// The zero value of every option's effect is the pre-existing behavior,
 // so adding a new WalletOption never requires touching an existing call.
 type WalletOption func(*walletOptions)
 
@@ -106,7 +106,7 @@ func WithMnemonicPassphrase(p string) WalletOption {
 	return func(o *walletOptions) { o.mnemonicPassphrase = p }
 }
 
-// NewWalletManager initialises the wallet subsystem.
+// NewWalletManager initializes the wallet subsystem.
 //
 // If wallet.dat exists in dataDir, it is decrypted using passphrase
 // and the existing seed is returned. If it does not exist, a new
@@ -120,7 +120,7 @@ func WithMnemonicPassphrase(p string) WalletOption {
 // call NewEnglishWordList() from this package. Passing nil returns an
 // error.
 //
-// opts configures optional creation behaviour; see WithMnemonicPassphrase.
+// opts configures optional creation behavior; see WithMnemonicPassphrase.
 func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *WordList, opts ...WalletOption) (*WalletManager, error) {
 	if dataDir == "" {
 		return nil, errors.New("lightning: dataDir must not be empty")

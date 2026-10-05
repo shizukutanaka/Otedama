@@ -53,7 +53,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
-// Engine timing constants. Centralised here so the reconnection and
+// Engine timing constants. Centralized here so the reconnection and
 // re-arbitration cadence is documented in one place rather than buried
 // as magic numbers in the run loops.
 const (
@@ -178,7 +178,7 @@ func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (ne
 	}
 }
 
-// Run starts a full mining session and blocks until ctx is cancelled.
+// Run starts a full mining session and blocks until ctx is canceled.
 // It orchestrates every subsystem: wallet, HAL, providers, arbitration,
 // TUI, and the Stratum V2 pool connection.
 func Run(ctx context.Context, opts Options) error {
@@ -445,7 +445,7 @@ type reconnectOpts struct {
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
-// exponential backoff (capped at reconnectBackoffMax) until ctx is cancelled, a fatal
+// exponential backoff (capped at reconnectBackoffMax) until ctx is canceled, a fatal
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	pools := poolURLs(&r.opts.Config)
@@ -599,7 +599,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
-		// cancelled (shutdown) the timer is released immediately instead of
+		// canceled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
@@ -686,7 +686,7 @@ func (o sessionOpts) allArbPaused() bool {
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
-// honouring curtailment and arbitration idling. While curtailed — or while
+// honoring curtailment and arbitration idling. While curtailed — or while
 // every worker is arbitration-paused — the miner is intentionally idle, so a
 // zero hashrate is *expected*, not a fault: the stall monitor is not advanced
 // (no false "hashrate stalled — check device health" warning) and otedama_up
@@ -721,8 +721,8 @@ type poolMsg struct {
 
 // runSession runs one pool connection: dial, handshake, then stream
 // jobs to workers and shares back to the pool until the connection
-// drops or ctx is cancelled. Returns the error that ended the session
-// (nil if ctx was cancelled cleanly).
+// drops or ctx is canceled. Returns the error that ended the session
+// (nil if ctx was canceled cleanly).
 //
 // Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
 // poolproto.DialURL so the protocol abstraction is load-bearing for V1.
@@ -736,7 +736,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
 		return runSessionV1(ctx, opts)
 	}
-	// Schemes poolproto recognises but Otedama does not implement —
+	// Schemes poolproto recognizes but Otedama does not implement —
 	// currently datum:// (ADR-009, OCEAN's SV1-transport variant) — must
 	// fail fast here rather than fall through to the plaintext SV2 dial
 	// and speak binary V2 frames to a pool expecting a different
@@ -745,7 +745,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if proto != poolproto.ProtocolStratumV2 && proto != poolproto.ProtocolStratumV2TLS {
 		return fmt.Errorf("engine: pool URL %q has unsupported protocol %q "+
 			"(supported schemes: stratum+tcp://, stratum+tls://, stratum+v2://, stratum+v2tls://; "+
-			"datum:// is recognised but not implemented — ADR-009)",
+			"datum:// is recognized but not implemented — ADR-009)",
 			opts.poolURL, proto)
 	}
 
@@ -1583,6 +1583,16 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
+		return 0, miner.Hash{}, fmt.Errorf("engine: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
+	}
+	// SetupConnectionSuccess.flags is the subset of offered flags the server
+	// requires. We offer none, so any nonzero value is unhonorable — fail
+	// closed rather than silently proceed (sv2-apps #695 class).
+	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
+		return 0, miner.Hash{}, fmt.Errorf("engine: pool requires flags 0x%08x outside offered set 0x%08x",
+			msg.SetupConnectionSuccess.Flags, sc.Flags)
+	}
 
 	var hashRate float32
 	for _, w := range workers {
@@ -1617,6 +1627,10 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+	}
+	if msg.OpenMiningChannelSuccess.ReqID != omc.ReqID {
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel response echoes req_id %d, sent %d",
+			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
@@ -1725,7 +1739,7 @@ func updateWork(workers []*miner.Worker, paused *pauseSet, job *stratum.NewMinin
 // closes — means a worker essentially never produces a share the pool
 // credits, since ordinary hardware cannot solve a real block. A difficulty
 // of 0 (no set_difficulty received yet, e.g. the first job of a session)
-// falls back to the nBits target, matching pre-wiring behaviour. Extracted
+// falls back to the nBits target, matching pre-wiring behavior. Extracted
 // as a pure function so the target-selection logic is unit-testable without
 // a running Worker.
 func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
@@ -1809,7 +1823,7 @@ func applyJob(workers []*miner.Worker, paused *pauseSet, job *poolproto.Job, cha
 // (aging) ntime lands outside the pool's acceptance window once the job
 // has been grinding for a while — a guaranteed reject that burns
 // hashrate for nothing. Rolling ntime forward is standard miner
-// behaviour (it is part of the effective nonce space); a future ntime
+// behavior (it is part of the effective nonce space); a future ntime
 // is kept verbatim since undershooting ntime_start is itself a reject.
 func rollNTime(declared uint32) uint32 {
 	if now := uint32(time.Now().Unix()); declared < now {

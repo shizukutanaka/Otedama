@@ -18,6 +18,7 @@ import (
 
 const (
 	helpFlag       = "--help"
+	helpSubcommand = "help"
 	displayDefault = "(default)"
 )
 
@@ -31,7 +32,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 		return cmdConfigShow(args[1:], stdout, stderr)
 	case "validate":
 		return cmdConfigValidate(args[1:], stdout, stderr)
-	case "help", helpFlag, "-h":
+	case helpSubcommand, helpFlag, "-h":
 		// See cmdService's identical case: an explicit help request must
 		// not look like the "unknown subcommand" error path.
 		fmt.Fprintln(stdout, "otedama config: expected subcommand (show|validate)")
