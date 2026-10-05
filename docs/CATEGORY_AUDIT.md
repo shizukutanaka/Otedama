@@ -7025,3 +7025,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | `flushPreAuth` replays stashed messages on the Negotiate goroutine — can it race the read loop's deferred `close(jobsCh/diffCh/noticeCh)` and panic the process (send on closed channel)? | 🔧 Fixed: the race was real (connection drop mid-handshake: read loop exits and closes channels while the post-authorize replay sends on them). All outbound sends (`sendJob`, `handleSetDifficulty`, `handleShowMessage`) are now serialized with the closes under `sendMu` + `closed` flag — a send either lands before the close or is skipped. `TestSession_SendsAfterChannelClose_DoNotPanic` pins it; package still green under `-race`. |
 
 CHANGELOG entry added under Fixed (session 1343).
+
+## Session 1344 update — first-principles audit of "the V2 side can't hit the s1343 send-on-close race" (Socratic pass 26)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does the V2 session have the same producer/close race on its jobs channel? | ✅ Verified structurally impossible: `jobsCh` is written by exactly one site — the `emit` closure inside `readLoop` — and closed by that same goroutine's defer. No other goroutine ever sends on it, so no send-on-closed window exists. The session also has no stash/replay path (SV2 structurally cannot deliver jobs before `OpenMiningChannelSuccess`), so there is no cross-goroutine sender to begin with. |
+
+Ledger only — verification round, no behavior-visible change.
