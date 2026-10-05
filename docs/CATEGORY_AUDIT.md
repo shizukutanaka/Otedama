@@ -6261,3 +6261,10 @@ All packages build, vet, and test green.
 | R | CLAUDE.md forbidden paths | ✓ `git ls-files` against all 10 forbidden prefixes (pkg/, web/, internal/{providers,auth,render,scientific,observability,security}/, cmd/otedamad/, k8s/) — zero tracked files |
 | R | Live open-PR mergeability | ✓ merge-tree for the four newest open PRs (#1376–#1379) vs master after the ongoing merge wave — zero conflicts; ledger appends remain union-mergeable |
 
+## Session 1298 update — ledger self-integrity audit
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Chronological order | ⚠️ Noted: ~80 monotonicity violations — merge-conflict resolutions scrambled block order (runs like 591–634 and 604–693 sit reversed; 1012→726, 1220→719 jumps). Reordering is deliberately NOT done here: it would conflict every open ledger-appending PR at once; each block's `## Session NNNN` header keeps chronology recoverable regardless of file position |
+| R | Uniqueness / completeness | ✓ 195 `## Session` blocks, zero duplicate session numbers — no entries lost or doubled by the merge waves |
+
