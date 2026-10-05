@@ -6245,3 +6245,12 @@ All packages build, vet, and test green.
 | R | API `mergeable` field | ⚠️ Noted — GitHub computes it lazily (returns null on first GET); `git merge-tree` against fetched PR refs is the reliable oracle and was used instead |
 | R | Redundant fix pairs re-verified | ✓ the only overlap remains #1321 ⊂ #1329 (recorded s1301); no conflicting semantics among the 33 fix PRs |
 
+## Session 1302 update — deprecated-API census wave 2
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| M | `os.IsExist`/`os.IsPermission`/`os.IsTimeout`/`strings.Title`/`bytes.Title`/`io/ioutil` — legacy predicate & string APIs | ✓ zero call sites across the tree |
+| M | `os.IsNotExist` residual sites | ⚠️ Noted — fully covered by open PRs: #1382 (logfile_test:85, cmd wallet_test:136/172, lightning wallet_test:396) + #1333 (config_file_test:113/124); zero sites will remain once both merge |
+| R | `sort` package imports | ✓ zero — merged #1235/#619 completed the `slices` migration; only a comment mentions sorting |
+| R | `rand.Read`/`rand.Reader`/`rand.Int` sites | ✓ all crypto/rand (seed material, Noise ephemeral keys, test cert generation, `rand.Int` in engine/setup.go) — none deprecated; math/rand only in tests via `rand.New(rand.NewSource(seed))` for deterministic property/fuzz inputs (not deprecated; v2 migration optional) |
+
