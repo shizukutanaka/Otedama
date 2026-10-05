@@ -7049,3 +7049,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | Does `Submit` treat anything other than literal `result: true` as acceptance? | ✅ Verified strict: `Accepted` requires `resp.result.(bool) == true` — `false`, `null`, strings, objects, or a missing result all return `Accepted:false`, and `errResult` surfaces as `Reason`. A pool can never inflate our accepted-shares accounting with a non-bool truthy value. `call` transport errors propagate as errors rather than phantom rejects. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1347 update — first-principles audit of "workers don't grind a dead session's job" (Socratic pass 29)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When `runSessionV1`/V2 returns on `Jobs()` close, do workers keep hashing the last armed job through the backoff window? | ✅ Verified handled: the reconnect loop sets `w.SetWork(nil)` on every worker the moment a session ends — before dashboard update and backoff sleep — so nothing hashes a dead session's superseded job (V1 renegotiates fresh extranonces, V2 a fresh channel, so the old job could never pay anyway). Session-end liveness (`poolConnectionState=0`, `OnReady(false)`) is updated in the same block. |
+
+Ledger only — verification round, no behavior-visible change.
