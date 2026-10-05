@@ -7263,3 +7263,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | Can `stratum+v2://` silently run plaintext despite SV2 mandating Noise encryption? | ⚠️ Noted: `stratum+v2://` does run plaintext — the Noise NX handshake exists in `internal/stratum` but the live connect path never invokes it (blocked on the ADR-011 secp256k1 dependency decision). But it is never *silent*: the connect path emits a session-level warn naming the gap, the reason, and both encrypted alternatives (`stratum+v2tls://`, or V1 `stratum+tls://`/`stratum+tcp://`). The warning is structurally unavoidable — issued before the first frame is exchanged, not buried in a per-job log. This is a spec-nonconformance the code declares honestly rather than a hidden downgrade; the V1 plaintext case now warns identically, so the two schemes fail openly and symmetrically. |
+
+## Session 1379 update — first-principles audit of wallet corruption → payout reroute (Socratic pass 58)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a corrupted wallet.dat silently mint a fresh seed — rerouting every future payout to an address the operator never chose? | ✅ Verified: `loadExisting` errors on unreadable file, unparseable blob, or failed decrypt, and `NewWalletManager` propagates the error instead of falling through to seed generation — a broken wallet stops the process rather than silently swapping identity. Wrong passphrase and corrupted file share one opaque `ErrWrongPassphrase` so the decrypt boundary can't serve as a validity oracle. The fingerprint sidecar is recreated only when absent and never overwrites a disagreeing file — a fingerprint/wallet mismatch persists as a detectable signal instead of being masked. Atomic temp+rename saves plus an age-bounded (>60s) stale-temp sweep mean a killed write can't half-corrupt the file, and the sweep can't unlink a live concurrent save's temp file. |
