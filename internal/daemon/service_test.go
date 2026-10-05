@@ -27,10 +27,10 @@ func mockRunCmd(t *testing.T, fn func(name string, args ...string) error) {
 }
 
 // setGoos overrides goos for the duration of the test.
-func setGoos(t *testing.T, os string) {
+func setGoos(t *testing.T, goosName string) {
 	t.Helper()
 	t.Cleanup(func() { goos = realGoos })
-	goos = os
+	goos = goosName
 }
 
 func makeTestManager(t *testing.T) *Manager {

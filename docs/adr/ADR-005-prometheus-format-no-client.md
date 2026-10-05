@@ -45,8 +45,11 @@ Otedama does not use them. If a future need arises, we will reconsider.
 
 ### Positive
 
-- **Two fewer transitive dependencies.** Our `go.mod` direct line
-  count remains at three (`x/crypto`, `yaml.v3`, plus stdlib).
+- **Fewer transitive dependencies.** Our `go.mod` direct require
+  list is now `go.yaml.in/yaml/v3` (the maintained continuation of
+  archived `gopkg.in/yaml.v3` — ADR-003 erratum), `x/crypto`, and
+  `x/sys` (added for `internal/tui` live terminal-width queries),
+  plus stdlib.
 - **Binary size unaffected by metrics.** The metrics package compiles
   to a few KB.
 - **Format compliance is testable.** Our `WriteText` output is
@@ -59,9 +62,13 @@ Otedama does not use them. If a future need arises, we will reconsider.
 
 - **No automatic Go runtime metrics.** `client_golang` ships with
   pre-built collectors for `runtime.MemStats`, GC pauses, and
-  goroutine count. We have to write these ourselves if needed.
-  Currently we only export Otedama-specific metrics; users wanting
-  Go runtime metrics can add an exporter sidecar (cAdvisor, node\_exporter).
+  goroutine count. We have since written our own:
+  `internal/metrics/runtime.go` ships `RuntimeCollector()` as a
+  `CollectFunc` for `go_*` series — but it is not registered on the
+  default registry today, so `/metrics` still emits only
+  Otedama-specific series. Users wanting runtime metrics can
+  register it (`Registry.RegisterCollector`) or add an exporter
+  sidecar (cAdvisor, node\_exporter).
 - **No HTTP middleware.** `promhttp.Handler()` provides a tested HTTP
   handler with content negotiation. Our `httpserver` writes plain text
   with the right Content-Type header — but if Prometheus ever switches
