@@ -6120,3 +6120,20 @@ gosec 19 and gocyclo 15 remain for the next batch).
 | L | gocyclo remains (10 findings after this batch) — `cmdRun` 17, `chooseForDevice` 16, `ResolveWithOrigins` 32, `Config.Validate` 26, `checkPoolReachability` 17, `runArbitrationLoop` 21, `Run` 24, `runReconnectLoop` 26, `runSession` 88, `runSessionV1` 53. | ⚠️ Noted: deferred to the next two lint batches — config/arbitration/doctor/cmd layer next, then the engine `run.go` monsters (state-plumbing risk warrants their own PR). |
 
 All packages build, vet, and test green (`stratum`, `poolproto/...`, `btccrypto` — the packages that exercise these paths).
+## Session 1314 update — golangci-lint v2: gosec triage (22 findings)
+
+Fourth lint batch: all 22 gosec findings triaged site-by-site. Every G115
+cast is provably bounded upstream; every G101 is a UI message string;
+every G703 is the user-owned datadir. One real hardening tightened.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| A | G101 ×9 — `StartupWalletCreated` "recovery seed" text in i18n catalogs trips the credential regex. | ⚠️ Noted — localized UI strings, not secrets. `//nolint:gosec` with reason on each flagged line. |
+| B | G703 ×3 — `os.ReadFile`/`os.Stat` on `lightning.*FilePath(dataDir)` in wallet subcommands. | ⚠️ Noted — dataDir is the user's own `--datadir`-equivalent flag; joining under it is the command's purpose. `//nolint:gosec`. |
+| C | G115 ×7 — int→byte/uint32 casts in `wire.go` ×3, `frame.go` ×3, `sha256d.go`, `stratumv1.go`, `run.go` (ntime), `setup.go`. | ⚠️ Noted — every cast is bounded above: length checks precede the `byte(len)` writes, `Validate()` caps `MsgLength` before `byte(h.MsgLength)`, `i*Threads` is < total ≤ 2³¹ under the guard, `uint32(time.Now().Unix())` is the wire u32 ntime field. `//nolint:gosec` each. |
+| D | `setup.go` partition guard `len(sha256d) > 1 && total <= 1<<31` — Threads is `runtime.NumCPU()` ≥ 1 so total is positive, but the guard didn't say so. | **S: fixed** — added `total > 0` to the guard so the non-negative → uint32 conversion is explicitly bounded on both ends. |
+
+Verification: `go build`, `go vet`, `go test` on the 6 touched packages
+pass; gosec 22 → 0. Remaining lint debt: gocyclo 15 (function
+decomposition — the largest class, next batch), plus the misspell 46 /
+goconst 6 already fixed in open #1392/#1393.
