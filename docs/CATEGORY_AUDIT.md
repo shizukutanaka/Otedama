@@ -7515,3 +7515,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | First-principles question: does `lastQuoteAt` (the freshness ledger) grow unboundedly with churned stream keys — a slow leak where every ever-seen provider:device key persists forever? | ✅ Verified bounded and honest. `pruneStaleStreams` iterates `seen` and deletes expired keys from BOTH `streamMap` and `seen` itself (arbitrate.go:281-282), so the ledger cannot outlive the streams it tracks — a provider that stops quoting has all its keys expire together within the freshness window. Keys are the same `providerID:deviceID` space in both maps, so no orphan entry can exist. Pre-seeded streams (present in `m` without a `seen` entry) are never pruned — the documented intent for injected streams, and they do not enter the ledger. ✅ No code change needed. |
+
+## Session 1426 update — mining classification + key single-sourcing (Socratic pass 101)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | First-principles question: does the `mining.` category prefix actually classify the real providers correctly — and can the freshness-ledger key diverge from the stream-map key so a live stream is pruned while stale (or vice versa)? | ✅ Verified on both halves. `MiningProvider.id = "mining.stratum"` matches `strings.HasPrefix(id, miningStreamPrefix)`; `AkashProvider.id = "ai.akash"` does not — the two wired providers classify exactly right, and the "category.name" convention (provider.go:139) makes every future variant's classification predictable. Key single-sourcing: `updateStream` builds `key := ProviderID + ":" + DeviceID` once and returns it; the loop feeds the SAME returned key into `lastQuoteAt` — the ledger and the stream map cannot diverge on key format, so a live stream is never pruned by a malformed key nor a stale one preserved by a mismatched lookup. ✅ No code change needed. |
