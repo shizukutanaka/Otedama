@@ -1949,6 +1949,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1224 update — Makefile reference parity census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Doc/workflow `make <target>` references | ✅ Clean — every real target referenced from docs and workflows (`CI`, `all`, `audit`, `build`, `build-all`, `fmt`, `fuzz`, `lint`, `security`, `setup`, `test`, `test-e2e`, `test-integration`) exists; remaining grep hits are English prose ("make progress", "make that", "make clear", "make by", "make today"). |
+| S | External-tool invocations | ✅ Clean — `golangci-lint`, `gofumpt`, `gosec`, `govulncheck` all degrade gracefully (`command -v` guard + install hint) or are installed by the `setup` target; no `scripts/` directory is referenced or required. |
+| M | `install.sh` shell refs | ✅ Clean — the only in-repo shell script; no Makefile target or doc step calls a missing `.sh`. |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
