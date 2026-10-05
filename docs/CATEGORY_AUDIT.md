@@ -1732,6 +1732,20 @@ All packages build, vet, and test green.
 | M | Hand-rolled serialization on a wire/storage boundary — `binary.Write`/`gob`/custom `MarshalText` implementations diverging from the canonical codec. | ✅ Absent: zero `binary.Write`/`gob`/MarshalText sites — V1 is `encoding/json`, V2 is the single custom frame codec in `internal/stratum`. |
 
 ---
+
+## Session 1247 — setup-flags-subset (real defect fixed)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| setup-flags-subset | `SetupConnectionSuccess.Flags` decoded but never checked: client offers 0 flags, so any nonzero return demands an unhonorable feature (same fail-open class as sv2-apps #695 / s1239 UsedVersion) | **S: fixed** — reject `Flags &^ sc.Flags != 0` with `ErrHandshakeFailed`; test `TestDialer_Negotiate_UnhonoredFlags` |
+---
+
+## Session 1248 — handshake-echo-validation (real defects fixed)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| handshake-echo-validation | `engine/run.go` live SV2 handshake skipped all three response checks: UsedVersion not range-checked (dialer-only fix in #1321), SetupConnectionSuccess.Flags unchecked (dialer-only in #1329), OpenMiningChannelSuccess.ReqID echo never verified (both paths) | **S: fixed** — all three checks added to `handshake()`; ReqID check also added to `dialer.go`; 3 engine tests + 1 dialer test |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
