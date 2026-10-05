@@ -187,3 +187,20 @@ jobs:
       with:
         name: benchmark-results
         path: benchmark-results.txt
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run fuzz smoke tests
+      run: make fuzz

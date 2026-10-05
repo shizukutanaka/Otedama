@@ -329,3 +329,14 @@ func TestSafeDisplay_AllControlCharsBecomesDefault(t *testing.T) {
 		t.Errorf("safeDisplay(all-control) = %q, want '(default)'", got)
 	}
 }
+
+func TestSafeDisplay_StripsFormatAndSeparators(t *testing.T) {
+	// Bidi overrides (Trojan Source), Zl/Zp line forgeries, tag and
+	// zero-width chars are Cf/Zl/Zp — not Cc — and must not reach the
+	// terminal.
+	in := "ok\u202Eevil\u202C\u2028x\U000E0061y"
+	got := safeDisplay(in)
+	if got != "okevilxy" {
+		t.Errorf("safeDisplay left format/separator chars: %q", got)
+	}
+}
