@@ -47,6 +47,12 @@ jobs:
           go install github.com/sonatype-nexus-community/nancy@latest
           go list -json -deps ./... | nancy sleuth
       
+      # Go vulnerability database scan (the CLAUDE.md three-layer requirement)
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      
       # CodeQL Analysis
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
