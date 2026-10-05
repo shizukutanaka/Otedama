@@ -7107,3 +7107,12 @@ Ledger only — verification round, no behavior-visible change.
 | S | Pool difficulty harder than block difficulty — wasted work? | ⚠️ Noted: an above-block pool target makes every accepted share a block candidate — valid per the protocol, still honest accounting (transitionReject handles rejects); the too-low-direction is bounded by the per-session submit cap (#419). |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1354 update — first-principles audit of "a mid-session set_extranonce can't manufacture unverifiable jobs" (Socratic pass 35)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | A hostile/misbehaving pool sends `mining.set_extranonce` with `extranonce2_size=0`, negative, or non-hex extranonce1 — does the session start producing jobs whose shares can never validate (silent hash waste)? | ✅ Verified bounded: `parseSetExtranonce` enforces `extranonce1OK` (non-empty valid hex) and `extranonce2SizeOK` (0 < sz ≤ 64) at the parse boundary; an invalid rotation is dropped and the prior negotiated values stay in force. The same bounds gate the subscribe-response parse (parse.go:323), so the session can never enter the sz≤0 state that makes completeV1Job skip coinbase folding. |
+| S | Malformed set_extranonce is dropped silently — consistent? | ⚠️ Noted: unlike `set_version_mask` (a well-formed request we cannot serve → diagnostic notice), a *malformed* set_extranonce is ignored per the protocol's Postel convention for bad params — consistent with every other malformed notification in the file, so no notice is warranted. |
+
+Ledger only — verification round, no behavior-visible change.
