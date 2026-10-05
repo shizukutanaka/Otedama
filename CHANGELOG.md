@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1336 — 認証前 notify による無認証ハッシュ収穫を遮断)
+V1 の readLoop は handshake 完了前に起動するため、`mining.authorize` 応答前の `mining.notify` がそのままジョブをアームしていた。敵対プールが authorize を保留しつつ notify を流せば handshakeTimeout 上限のハッシュを無認証で収穫可能（再接続毎に反復可）。`session.authorized` ゲートを追加し、認証前 notify は最新1件を stash、authorize 成功後に順序を保って replay（preAuthMu で直列化 — stash ジョブが新ジョブより後に再アームすることはない）。
+
 ### Fixed (session 1335 — セッション終了〜再接続間の無駄ハッシュを停止)
 セッション終了時にワーカーが最終ジョブをアームされたまま残り、再接続バックオフ（最大64秒×繰返し）中も掘り続けていた。次セッションは新 extranonce（V1）/新チャネル（V2）を協商するため、そのシェアは必ず破棄される無駄ハッシュだった。`runReconnectLoop` が `poolConnectionState.Set(0)` と同時に全ワーカーを `SetWork(nil)` でアイドル化（pause/未知prevhash と同一の冪等アイドル、次セッションの pause-aware applyJob で再アーム）。
 

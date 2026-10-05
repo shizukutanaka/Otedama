@@ -419,6 +419,7 @@ func TestSession_E2E_SubscribeNotifySubmitAccepted(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Wait for the mining.notify to arrive.
@@ -474,6 +475,7 @@ func TestSession_E2E_SubmitRejected(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -496,6 +498,7 @@ func TestSession_OversizedLineTerminatesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// A misbehaving pool streams more than maxLineBytes with no newline.
@@ -531,6 +534,7 @@ func TestSession_Close_IsIdempotent(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 
 	if err := sess.Close(); err != nil {
 		t.Errorf("first Close: %v", err)
@@ -551,6 +555,7 @@ func TestSession_SubmitAfterCloseFails(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	_ = sess.Close()
 
 	_, err := sess.Submit(context.Background(), poolproto.ShareSubmission{})
@@ -910,12 +915,16 @@ func TestDialer_Negotiate_NonV1Connection_ReturnsError(t *testing.T) {
 // ============================================================================
 
 // makeBareSess builds a minimal session for direct dispatch testing.
+// It models an established session, i.e. post-authorize — the job gate
+// treats notifies as delivered work, not pre-auth stash candidates.
 func makeBareSess() *session {
-	return &session{
+	s := &session{
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
+	s.authorized.Store(true)
+	return s
 }
 
 func TestSession_Dispatch_EmptyLine_IsIgnored(t *testing.T) {
@@ -967,6 +976,59 @@ func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
 	}
 }
 
+func TestSession_NotifyBeforeAuthorize_IsStashedNotArmed(t *testing.T) {
+	// A notify arriving before mining.authorize succeeds must not arm
+	// workers: the pool has not authenticated the session, so hashpower
+	// spent on it is never credited (notify-harvesting attack).
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	notify := []byte(`{"method":"mining.notify","params":["PRE","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`)
+	sess.dispatch(notify)
+	select {
+	case j := <-sess.jobsCh:
+		t.Fatalf("pre-auth notify armed job %q — unauthenticated hashpower harvest", j.JobID)
+	default:
+	}
+
+	// Authorization lands: the stashed job replays into the queue.
+	sess.authorized.Store(true)
+	sess.flushPreAuthJob()
+	select {
+	case j := <-sess.jobsCh:
+		if j.JobID != "PRE" {
+			t.Fatalf("replayed job %q, want PRE", j.JobID)
+		}
+	default:
+		t.Fatal("stashed pre-auth job was not replayed after authorize")
+	}
+}
+
+func TestSession_PreAuthStashPreservesOrder(t *testing.T) {
+	// Notify PRE arrives pre-auth, POST after. The replay must not let the
+	// older job re-arm behind the newer one.
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["PRE","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	sess.authorized.Store(true)
+	// POST has clean_jobs=false so it queues rather than superseding PRE —
+	// with true it would correctly discard PRE and ordering is moot.
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["POST","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`))
+	first := <-sess.jobsCh
+	if first.JobID != "PRE" {
+		t.Fatalf("first delivered job %q, want PRE (stash replays before later notifies)", first.JobID)
+	}
+	second := <-sess.jobsCh
+	if second.JobID != "POST" {
+		t.Fatalf("second delivered job %q, want POST", second.JobID)
+	}
+}
+
 // ============================================================================
 // session.call — error paths
 // ============================================================================
@@ -987,6 +1049,7 @@ func TestSession_Call_WriteError_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	_, err := sess.call(context.Background(), 1, "mining.submit", nil)
@@ -1002,6 +1065,7 @@ func TestSession_Call_ContextTimeout_ReturnsCtxError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Server reads the request but never responds; test ctx times out first.
@@ -1025,6 +1089,7 @@ func TestSession_Call_SessionClosedWhileWaiting_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 
 	// Server reads the request, then close the session — this cancels the pending
 	// channel so call returns "session closed before response".
@@ -1102,6 +1167,7 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -1127,6 +1193,7 @@ func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -1381,6 +1448,7 @@ func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// On client.reconnect the session must end on its own: Jobs() closes.
@@ -1415,6 +1483,7 @@ func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
 	}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	select {
@@ -2021,6 +2090,7 @@ func TestSession_Call_CallTimeout_ReleasesPending(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.start(context.Background())
+	sess.authorized.Store(true) // test drives an established (post-authorize) session
 	defer sess.Close()
 
 	// Server drains the request but never responds.

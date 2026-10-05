@@ -124,6 +124,16 @@ type session struct {
 	// on the read goroutine while Submit reads them on the caller's.
 	extranonce1     atomic.Pointer[string]
 	extranonce2Size atomic.Int64
+
+	// authorized gates job delivery until mining.authorize succeeds. The
+	// read loop starts before the handshake completes, so a notify pushed
+	// early (or a hostile pool holding authorize open while streaming
+	// notify) would otherwise arm workers on an unauthenticated session —
+	// hashpower the pool never credits. Stashed notifies are replayed in
+	// order once authorization lands.
+	authorized atomic.Bool
+	preAuthMu  sync.Mutex
+	preAuthJob json.RawMessage
 	// en2Counter rolls extranonce2 per job so every job's coinbase (and
 	// hence merkle root) is unique even when the nonce space wraps.
 	en2Counter atomic.Uint64
@@ -274,6 +284,33 @@ func (s *session) handleResponse(msg rpcMessage) {
 }
 
 func (s *session) handleNotify(params json.RawMessage) {
+	if !s.authorized.Load() {
+		s.preAuthMu.Lock()
+		s.preAuthJob = append(s.preAuthJob[:0], params...)
+		s.preAuthMu.Unlock()
+		return
+	}
+	s.flushPreAuthJob()
+	job, err := parseNotify(params)
+	if err != nil {
+		return
+	}
+	s.completeV1Job(&job)
+	s.sendJob(&job)
+}
+
+// flushPreAuthJob replays the newest notify stashed before authorization.
+// Called by handleNotify and by Negotiate right after authorized is set;
+// preAuthMu serializes the replay against delivery, so a job that arrived
+// pre-auth can never re-arm behind a newer one that followed it.
+func (s *session) flushPreAuthJob() {
+	s.preAuthMu.Lock()
+	params := s.preAuthJob
+	s.preAuthJob = nil
+	s.preAuthMu.Unlock()
+	if len(params) == 0 {
+		return
+	}
 	job, err := parseNotify(params)
 	if err != nil {
 		return

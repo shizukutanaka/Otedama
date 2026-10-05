@@ -6953,3 +6953,13 @@ CHANGELOG entry added under Fixed (session 1334).
 | S | Could a share found in the gap still reach a valid destination? | ✅ Verified: merged shares produced between sessions block on the unbuffered channel until the next session drains them, then drop at the superseded check — accounting was already honest; only the wasted hashpower was the defect. |
 
 CHANGELOG entry added under Fixed (session 1335).
+
+## Session 1336 update — first-principles audit of "jobs only arm an authenticated session" (Socratic pass 18)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can a pool make workers mine on an *unauthenticated* session? | 🔧 Fixed: `sess.start` launches `readLoop` before `mining.subscribe`/`mining.authorize`, so `handleNotify` armed any notify received during the handshake window. A hostile pool holding the authorize call pending while streaming `mining.notify` could harvest up to `handshakeTimeout` of hashpower that can never be credited — repeatable on every reconnect. `session.authorized` now gates delivery; pre-auth notifies are stashed (newest only) and replayed in order once the authorize result lands (`flushPreAuthJob`, `preAuthMu`-serialized so a stashed job can never re-arm behind a newer one). |
+| S | Do legitimate pools lose work under the gate? | ✅ Verified: notify-before-authorize is outside normal Stratum ordering, but rather than dropping it outright the stash/replay preserves the job — `TestSession_NotifyBeforeAuthorize_IsStashedNotArmed` and `TestSession_PreAuthStashPreservesOrder` pin the behavior. |
+| S | Same gap on the V2 path? | ✅ Verified: SV2 cannot deliver mining jobs before `OpenMiningChannelSuccess`, which is itself the authorization point — the protocol's message ordering enforces the gate structurally. |
+
+CHANGELOG entry added under Fixed (session 1336).

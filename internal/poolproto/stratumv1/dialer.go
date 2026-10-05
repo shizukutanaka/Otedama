@@ -186,6 +186,10 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
+	// From here the session is authenticated: allow job delivery and replay
+	// any notify the pool pushed during the handshake (see session.authorized).
+	sess.authorized.Store(true)
+	sess.flushPreAuthJob()
 
 	// Step 3 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)
