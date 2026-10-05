@@ -89,7 +89,7 @@ jobs:
         CGO_ENABLED: 0
       run: |
         BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-        LDFLAGS="-s -w -X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S) -X main.GitCommit=$GITHUB_SHA"
+        LDFLAGS="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${GITHUB_REF#refs/tags/} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=$GITHUB_SHA"
         go build -ldflags "$LDFLAGS" -o otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} ./cmd/otedama
         tar czf otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} README.md LICENSE
 

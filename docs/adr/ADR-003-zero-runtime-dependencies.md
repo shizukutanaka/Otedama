@@ -136,6 +136,27 @@ rationale in `go.mod`. Migration was scoped but not performed in session
 lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
 new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 
+## Erratum 2 (added session 1236, does not alter the accepted decision)
+
+Two updates since Erratum 1:
+
+1. **YAML migration completed.** The `gopkg.in/yaml.v3` →
+   `go.yaml.in/yaml/v3` migration recommended above was executed
+   (PR #444, merged); `go.mod` now requires `go.yaml.in/yaml/v3 v3.0.5`
+   and the go-yaml archival concern is resolved.
+
+2. **`golang.org/x/sys` joined the dependency set.** The title's
+   dependency whitelist ("stdlib + x/crypto + yaml") is now
+   understated: `go.mod` also directly requires `golang.org/x/sys`,
+   used by `internal/tui/width_unix.go` and `width_windows.go` for
+   terminal-width detection (`unix.IoctlGetWinsize` / Windows console
+   API). `x/sys` is the quasi-stdlib syscall surface maintained by the
+   Go team — same provenance class as `x/crypto` — so it satisfies this
+   ADR's zero-external-dependency intent; it was simply absent from the
+   enumerated whitelist. Effective policy read today: **stdlib +
+   `golang.org/x/crypto` + `golang.org/x/sys` +
+   `go.yaml.in/yaml/v3`**.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model
