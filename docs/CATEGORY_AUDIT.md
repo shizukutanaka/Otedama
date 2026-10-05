@@ -6064,6 +6064,79 @@ Post-change census on golangci-lint v2.14 + PR #1391's config: goconst, errcheck
 
 All packages build, vet, and test green.
 All packages build, vet, and test green.
+## Session 1311 update — lint-debt batch 1: misspell (46 sites)
+
+| Cat | Finding | Disposition |
+| --- | ------- | ----------- |
+| M | `misspell` (US locale) flagged 46 British-English spellings across comments and user-facing strings in 12 files (`Initialise`, `initialised`, `recognised`, `honouring`, `synchronise`, `cancelled`, `behaviour`, `serialisation`, `marshalling`, `colour`). | **S: fixed** — `misspell -locale US -w` on the 12 flagged files; diff verified to touch comments and doctor `Detail`/`Fix` message strings only — zero identifier renames. All packages build + test green; re-run reports 0 misspell findings. |
+| M | `gofumpt` formatting drift. | ✅ Clean: `gofumpt -l .` lists zero files. |
+
+Toolchain note: lint findings were enumerated with golangci-lint v2.14.0 + the v2 config from PR #1391; remaining classes (gosec 22, gocyclo 15, gocritic 13, goconst 6, staticcheck 5, errorlint 3, errcheck 1) are scheduled for follow-up batches.
+
+---
+
+## Session 1260 update — unicode-sanitize + context-leftover + runtime-surface audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | All three user-facing sanitizers (`poolproto.SanitizePoolText`, `stratumv1.sanitizeNotice`, `cmd.safeDisplay`) stripped only `unicode.IsControl` — the Cc category. Cf format characters (bidi overrides U+202A–U+202E / U+2066–U+2069, zero-width spaces/joiners U+200B–U+200F, tag characters U+E0000+, BOM U+FEFF) and Zl/Zp line/paragraph separators passed through to logs, the TUI, and `otedama config` output — the Trojan Source class (CWE-838) plus non-Cc line forgery. | 🔧 Fixed: predicate widened to `unicode.In(r, Cc, Cf, Zl, Zp)` via `unsafePoolRune`/`unsafeDisplayRune`; `sanitizeNotice` (a verbatim duplicate) now delegates to `SanitizePoolText`; three format/separator regression tests added (poolproto, stratumv1, cmd). |
+| M | `stratumv1.sanitizeNotice` was an exact duplicate of `poolproto.SanitizePoolText` — predicate drift guaranteed. | 🔧 Fixed: `sanitizeNotice` now delegates; `maxNoticeRunes` kept for the existing test contract. |
+| L | `context.Background()` at call sites vs `t.Context()`/`b.Loop()` in tests — the go1.24-gated API cannot compile under `go 1.22` module floor (same class as s1258/s1259). | ⚠️ Noted: version-gated, tracked with the maps.Keys/`slices.Collect` deferral. |
+| L | `runtime`/`runtime/debug`/`pprof` surface — prior censuses (s821, s871, s877, s883) remain accurate: zero new runtime escapes, zero debug imports, pprof gated. | ✅ Clean. |
+
+All packages build, vet, and test green.
+## Session 1313 update — golangci-lint v2 judgment classes (staticcheck + gocritic)
+
+Follow-up to #1391: the v2 migration exposed ~111 findings hidden by dead
+lint jobs. After #1392 (misspell) and #1393 (goconst/errcheck/errorlint),
+this batch clears the remaining mechanical classes — staticcheck (5) and
+gocritic (13). Findings verified against code before fixing.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| A | staticcheck QF1001/1006/S1000 — De Morgan on digit/hex check (doctor), `for ctx.Err() == nil` reconnect loop (engine), single-case select → `<-time.After` (engine test), index-order negation (metrics test), poll loop condition hoist (stratumv1 test). | **S: fixed** — all 5 rewritten to the canonical form; build+vet+pkg tests green; staticcheck now 0. |
+| B | gocritic hugeParam — `sessionOpts.allArbPaused` (256B receiver) and `channelIDOf(stratum.Message)` (104B param). | **S: fixed** — pointer receivers; matches sibling methods and both call sites already hold the value. |
+| C | gocritic ifElseChain/initClause — wallet Stat cascade (lightning), `if submits++;` in engine test. | **S: fixed** — `switch` on `errors.Is` and hoisted increment. |
+| D | gocritic importShadow — `os` param in daemon test, `tls` var in stratumv2 test. | **S: fixed** — renamed to `goosName`/`tlsDialer`. |
+| E | gocritic octalLiteral/httpNoBody/zeroByteRepeat — `0600`→`0o600` (doctor test), `nil`→`http.NoBody` (doctor + hashrate), `bytes.Repeat`→`make` (stratum test). | **S: fixed** — 5 sites, idiomatic forms. |
+| F | gocritic offBy1 — `line[:strings.Index(line, "✓")]` in tui test would slice to -1 if marker absent. | **S: fixed** — guarded with `idx < 0 → t.Fatalf`. |
+| G | gocritic mapKey — `"a1b2c3d "` whitespace key in fingerprint test map. | ⚠️ Noted — deliberate fixture proving `isFingerprint` rejects trailing whitespace; annotated `//nolint:gocritic`. gocritic now 0. |
+
+Verification: `go build`, `go vet`, and `go test` on all 10 touched
+packages pass. golangci-lint v2.14 recount: staticcheck 5→0, gocritic
+13→0 (remaining 46 misspell + 6 goconst are covered by open #1392/#1393;
+gosec 19 and gocyclo 15 remain for the next batch).
+---
+
+## Session 1315 update — gocyclo decomposition: wire/codec layer (batch 1 of 3)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `stratum.DispatchFrame` — cyclo 25: 12-case switch repeating the decode-then-assign idiom per MsgType. | **S: fixed** — replaced with a `frameDecoders` table (`map[uint8]func([]byte, *Message) error`) + a single lookup; adding a message type is now one table entry, not a new case arm. Unknown types still route to `Message.Unknown`. |
+| S | `session.dispatch` (stratumv1) — cyclo 19: RPC parse + response matching + 5 notification handlers in one switch. | **S: fixed** — per-handler methods (`handleResponse`, `handleNotify`, `handleSetDifficulty`, `handleSetExtranonce`, `handleShowMessage`, `handleReconnect`); dispatch is now a 5-case method table. Behavior identical (drop-oldest notice, close-on-reconnect preserved). |
+| S | `session.readLoop` (stratumv2) — cyclo 19: frame loop + pending-job map + prevhash tracking + emit select interleaved. | **S: fixed** — extracted `sv2JobAssembler` state struct with `onNewMiningJob`/`onSetNewPrevHash`; the loop is now ReadFrame → DispatchFrame → one call per frame type. FIFO eviction and clean-jobs semantics preserved. |
+| S | `parseNotify` (stratumv1) — cyclo 25: 9-positional JSON unmarshal + strict hex/uint decode in one function. | **S: fixed** — split at the format boundary: `unmarshalNotifyParams` (positional → typed strings, incl. the 0/1 cleanJobs tolerance) and `decodeNotifyJob` (strict hex/uint decode). Strictness comments retained — a wrong merkle root is silent wasted work. |
+| M | `btccrypto.ValidateBech32Address` — cyclo 22: surface checks + charset decode + checksum + witness rules + classification. | **S: fixed** — split into `decodeBech32String` (BIP-173 surface: bc1 prefix, case, ≤90, hrp, ≥8 data chars, charset→ints), the checksum/witness-program middle section (BIP-350 const selection, `convertBits`, 2–40 length), and `classifyWitnessProgram` (v0: 20→P2WPKH/32→P2WSH; v1: 32→P2TR). |
+| L | gocyclo remains (10 findings after this batch) — `cmdRun` 17, `chooseForDevice` 16, `ResolveWithOrigins` 32, `Config.Validate` 26, `checkPoolReachability` 17, `runArbitrationLoop` 21, `Run` 24, `runReconnectLoop` 26, `runSession` 88, `runSessionV1` 53. | ⚠️ Noted: deferred to the next two lint batches — config/arbitration/doctor/cmd layer next, then the engine `run.go` monsters (state-plumbing risk warrants their own PR). |
+
+All packages build, vet, and test green (`stratum`, `poolproto/...`, `btccrypto` — the packages that exercise these paths).
+## Session 1314 update — golangci-lint v2: gosec triage (22 findings)
+
+Fourth lint batch: all 22 gosec findings triaged site-by-site. Every G115
+cast is provably bounded upstream; every G101 is a UI message string;
+every G703 is the user-owned datadir. One real hardening tightened.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| A | G101 ×9 — `StartupWalletCreated` "recovery seed" text in i18n catalogs trips the credential regex. | ⚠️ Noted — localized UI strings, not secrets. `//nolint:gosec` with reason on each flagged line. |
+| B | G703 ×3 — `os.ReadFile`/`os.Stat` on `lightning.*FilePath(dataDir)` in wallet subcommands. | ⚠️ Noted — dataDir is the user's own `--datadir`-equivalent flag; joining under it is the command's purpose. `//nolint:gosec`. |
+| C | G115 ×7 — int→byte/uint32 casts in `wire.go` ×3, `frame.go` ×3, `sha256d.go`, `stratumv1.go`, `run.go` (ntime), `setup.go`. | ⚠️ Noted — every cast is bounded above: length checks precede the `byte(len)` writes, `Validate()` caps `MsgLength` before `byte(h.MsgLength)`, `i*Threads` is < total ≤ 2³¹ under the guard, `uint32(time.Now().Unix())` is the wire u32 ntime field. `//nolint:gosec` each. |
+| D | `setup.go` partition guard `len(sha256d) > 1 && total <= 1<<31` — Threads is `runtime.NumCPU()` ≥ 1 so total is positive, but the guard didn't say so. | **S: fixed** — added `total > 0` to the guard so the non-negative → uint32 conversion is explicitly bounded on both ends. |
+
+Verification: `go build`, `go vet`, `go test` on the 6 touched packages
+pass; gosec 22 → 0. Remaining lint debt: gocyclo 15 (function
+decomposition — the largest class, next batch), plus the misspell 46 /
+goconst 6 already fixed in open #1392/#1393.
 
 ## Session 1258 update — third-wave idiom modernization census
 

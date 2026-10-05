@@ -35,6 +35,39 @@ kind リテラル14箇所を `metricKindCounter`/`metricKindGauge` へ集約、
 `defer httpSrv.Stop()` の破棄エラーを明示的に `_ =` へ、pool URL の
 `%v` を `%w` へ修正。goconst/errcheck/errorlint の3クラスを0件に。
 
+### Changed (session 1311 — lint 債務バッチ1: misspell 一括正規化)
+
+**変更.** golangci-lint v2 で可視化された misspell 指摘46件（US ロケール基準の英語スペル）を一括正規化 — `cancelled→canceled`、`serialisation→serialization`、`honour→honor` 等。コメントおよび doctor 診断の `Detail`/`Fix` メッセージ文字列のみ、識別子の改名なし。残存クラス（gosec/gocyclo/gocritic/goconst/staticcheck/errorlint/errcheck）は後続バッチで処理。
+
+### Changed (session 1313 — lint debt batch 3: staticcheck + gocritic)
+
+Clear the mechanical classes the golangci-lint v2 migration (#1391)
+surfaced: all 5 staticcheck findings (De Morgan forms, `for ctx.Err() ==
+nil`, single-case select) and all 13 gocritic findings (hugeParam pointer
+receivers on `sessionOpts.allArbPaused`/`channelIDOf`, ifElseChain→switch,
+importShadow renames, httpNoBody, octalLiteral, zeroByteRepeat, initClause,
+offBy1 index guard). One deliberate test fixture (whitespace map key)
+annotated `//nolint:gocritic`.
+
+### Changed (session 1315 — gocyclo wire/codec 層の分解、5/15 件)
+
+**変更.** 循環複雑度 >15 の残存クラスを段階的に解消。第 1 弾はワイヤ/コーデック
+層の 5 関数: `stratum.DispatchFrame` を 12 ケース switch から `frameDecoders`
+テーブル検索へ、`stratumv1 session.dispatch` をハンドラーメソッド群へ、
+`stratumv2 session.readLoop` のジョブ組立状態を `sv2JobAssembler` 構造体へ、
+`stratumv1 parseNotify` を `unmarshalNotifyParams` + `decodeNotifyJob` へ、
+`btccrypto.ValidateBech32Address` を `decodeBech32String` + `classifyWitnessProgram`
+へ分割。動作は不変（FIFO 退避・clean-jobs・厳格 decode・BIP-350 チェックサム選択
+を保持）。gocyclo 検出数は 15→10。
+
+### Changed (session 1314 — lint debt batch 4: gosec triage)
+
+Triaged all 22 gosec findings from the v2 lint run: `//nolint:gosec`
+with per-site justification for provably-bounded casts (G115 ×7),
+user-owned-datadir paths (G703 ×3), and UI message strings matching the
+credential regex (G101 ×9). Real hardening: the nonce-partition guard in
+`setup.go` now also requires `total > 0`.
+
 ### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
 
 **変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:

@@ -7,7 +7,7 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 
 // Korean returns the Korean (ko) message catalog.
 func Korean() (*i18n.Catalog, error) {
-	return i18n.NewCatalog(i18n.LangKorean, map[i18n.ID]string{
+	return i18n.NewCatalog(i18n.LangKorean, map[i18n.ID]string{ //nolint:gosec // localized UI message string, not a credential
 		StartupReady:          "Otedama 준비 완료. 곧 채굴이 시작됩니다.",
 		StartupWalletCreated:  "새 라이트닝 지갑이 생성되었습니다. 복구 시드가 이 기기에 안전하게 저장되어 있습니다.",
 		StartupHardwareFound:  "채굴 장치 {{.count}}개를 감지했습니다: {{.summary}}",
