@@ -43,9 +43,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
-    from pool-side truth; a periodic reconciliation against pool stats
-    (where the pool exposes them) would catch silent miscounting.
+10. ✅ **"Trust the pool's numbers" reconciliation** — done to the extent the
+    wire allows (sessions 288/310/321/322): V2 `SubmitSharesSuccess.LastSequenceNumber`
+    is validated before crediting and pool-reported batch accepts are counted;
+    V1 exposes no stats RPC, so no further reconciliation surface exists.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers
@@ -87,8 +88,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. ✅ **engine→poolproto wiring** — done (session 1282 verification):
+   `runSessionV1` calls `poolproto.DialURL` and drives the protocol-agnostic
+   `poolproto.Session` (Jobs/Submit); the V2 path is protocol-gated on
+   `ProtocolStratumV2/TLS`. Dialers are registered and load-bearing.
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -141,8 +144,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
-   to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+8. ✅ **Seed backup reminder / verification flow** — done (sessions 387/498):
+   first-run wallet setup prompts the user to re-enter a random subset of
+   recovery words (`verifyBackupPhrase`, internal/engine/setup.go), catching
+   unwritten or transposed seeds before funds depend on them.
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
@@ -432,11 +437,13 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
-10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
-    checksum and `go.sum`, and document it in THREAT_MODEL's dependency
-    assumptions.
+9. ✅ **Constant-time comparison audit** — done (sessions 554/645/841):
+   `crypto/subtle` is the only secret-comparison boundary; `bytes.Equal` sites
+   are all on non-secret protocol fields (checksums, magic bytes).
+10. ✅ **Supply-chain: pin and verify the crypto dep** — done (session 1279):
+    `golang.org/x/crypto` is pinned in go.mod with go.sum checksums, `go mod
+    verify` passes, and `govulncheck` shows zero reachable vulnerabilities;
+    THREAT_MODEL lists the dependency assumptions.
 
 ---
 
