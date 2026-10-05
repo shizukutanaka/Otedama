@@ -6972,3 +6972,13 @@ CHANGELOG entry added under Fixed (session 1336).
 | S | Can the share's wire encoding itself desync from what the pool re-validates? | ✅ Verified: nonce/ntime are `%08x` of the uint32 values (the Stratum convention — pool serializes back to header little-endian, matching `marshal`'s LE layout); `Share.NTime` is the post-roll header time (`h.Time` after ntimeRoll), not the job's original ntime, so a rolled share verifies against the header that was actually hashed; extranonce2 echoes the same hex bytes the pool issued. V1 submits carry no version field, so the notify's version is implicitly the share's version — consistent. |
 
 CHANGELOG entry added under Fixed (session 1337).
+
+## Session 1338 update — first-principles audit of "share stays creditable across set_extranonce" (Socratic pass 20)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | When the pool rotates extranonce mid-session (`mining.set_extranonce`), do in-flight jobs keep a coherent coinbase — or does the share's en2/en1 silently desync? | ✅ Verified: `completeV1Job` captures `en1`/`en2Size` at job-completion time — `j.ExtraNonce` and `j.CoinbaseTx` are frozen into the job, so the share echoes exactly what the job's template contains. In Stratum V1 extranonce2 is the *worker's* field (any bytes of the negotiated size are valid — the pool substitutes it into the job's recorded template), so a later rotation cannot retroactively invalidate an old job's en2. |
+| S | Could a *shrinking* en2 size make two jobs' en2 collide and produce duplicate coinbases? | ✅ Verified benign: with `sz < 8` only the counter's low `sz` bytes differ — collisions possible after 256^sz jobs — but a duplicate en2 across *different* jobs is harmless (different prevhash → different header and different pool-side template). Uniqueness exists only for our own job dedup/merkle consistency, not a wire requirement. |
+| S | Residual edge? | ⚠️ Noted: pools that reject straggler old-en1 shares after rotation are free to do so — mitigated in practice because extranonce rotation is conventionally paired with a clean_jobs notify that kills in-flight jobs. Also the Submit-time zero-padding fallback uses the *current* en2Size, which can desync after a rotation — but it is only reachable for jobs whose coinbase never completed (no parts), and those shares are already unverifiable pool-side. |
+
+CHANGELOG entry added under Fixed (session 1338).
