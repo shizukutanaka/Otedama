@@ -123,7 +123,7 @@ jobs:
     
     - name: Build binary
       run: |
-        go build -v -ldflags="-s -w -X 'main.Version=${{ github.ref_name }}' -X 'main.GitCommit=${{ github.sha }}'" -o otedama cmd/otedama/*.go
+        go build -v -ldflags="-s -w -X 'github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }}' -X 'github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}'" -o otedama ./cmd/otedama
     
     - name: Build for multiple platforms
       run: |

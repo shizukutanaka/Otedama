@@ -29,7 +29,7 @@ func appendStr0_255(b []byte, s string) ([]byte, error) {
 	if len(s) > 255 {
 		return nil, fmt.Errorf("stratum: string too long (%d > 255 bytes)", len(s))
 	}
-	b = append(b, byte(len(s)))
+	b = append(b, byte(len(s))) //nolint:gosec // length checked <=255 on the lines above
 	return append(b, s...), nil
 }
 
@@ -57,7 +57,7 @@ func appendB0_255(dst, v []byte) ([]byte, error) {
 	if len(v) > 255 {
 		return nil, fmt.Errorf("stratum: byte slice too long (%d > 255)", len(v))
 	}
-	dst = append(dst, byte(len(v)))
+	dst = append(dst, byte(len(v))) //nolint:gosec // length checked <=255 on the lines above
 	return append(dst, v...), nil
 }
 
@@ -93,7 +93,7 @@ func appendB0_32(dst, v []byte) ([]byte, error) {
 	if len(v) > 32 {
 		return nil, fmt.Errorf("stratum: byte slice too long for B0_32 (%d > 32)", len(v))
 	}
-	dst = append(dst, byte(len(v)))
+	dst = append(dst, byte(len(v))) //nolint:gosec // length checked <=32 on the lines above
 	return append(dst, v...), nil
 }
 

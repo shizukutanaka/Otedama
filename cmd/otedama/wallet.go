@@ -42,7 +42,7 @@ func cmdWallet(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdWalletVerify(args[1:], stdin, stdout, stderr)
 	case "change-passphrase":
 		return cmdWalletChangePassphrase(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case helpSubcommand, helpFlag, "-h":
 		// Same convention as `service`/`config`: an explicit help request
 		// goes to stdout with exit 0, not stderr + exitUsage — otherwise
 		// it looks identical to a mistake to scripts checking $?.
@@ -160,12 +160,12 @@ func cmdWalletVerify(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 // the wallet.fingerprint file written at creation (no decryption needed) and
 // falling back to unlocking wallet.dat with passphrase when the file is absent.
 func walletFingerprint(dataDir, passphrase string, wl *lightning.WordList) (string, error) {
-	if raw, err := os.ReadFile(lightning.FingerprintFilePath(dataDir)); err == nil {
+	if raw, err := os.ReadFile(lightning.FingerprintFilePath(dataDir)); err == nil { //nolint:gosec // path built from the user-owned datadir flag by design
 		return string(raw), nil
 	}
 	// Stat first: NewWalletManager's contract is "create when absent", which
 	// a verification command must never trigger.
-	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil {
+	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { //nolint:gosec // path built from the user-owned datadir flag by design
 		return "", fmt.Errorf("no wallet found under %s", dataDir)
 	}
 	if passphrase == "" {
@@ -192,7 +192,7 @@ func cmdWalletChangePassphrase(args []string, stdout, stderr io.Writer) int {
 	// Stat first: NewWalletManager creates a wallet when wallet.dat is
 	// absent, which would silently rotate a brand-new empty wallet instead
 	// of the user's real one.
-	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil {
+	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { //nolint:gosec // path built from the user-owned datadir flag by design
 		fmt.Fprintf(stderr, "otedama: no wallet found at %s\n",
 			lightning.WalletFilePath(dataDir))
 		return exitRuntime
