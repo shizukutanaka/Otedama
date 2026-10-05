@@ -7735,3 +7735,7 @@ Spec-side normative open set is unchanged: #236 (SetTarget ≤ max_target, activ
 ## Session 1474 update (ADR-009 ecosystem recheck)
 
 sv2-spec normative open set unchanged: #236 (SetTarget ≤ max_target), #234 (authority key management), #203 (coinbase-payout ext — output-cap debate continuing), #198 (coinbase_witness). Non-normative churn only: #232/#186 table formatting, #103 Proxy Annex WIP. SRI latest tag v1.12.0; sv2-apps latest v0.8.0 — both re-confirmed. No action needed; anchors stay as recorded.
+
+## Session 1475 update (Socratic pass 146)
+
+**Claim held:** SetNewPrevHash handling is honest on every branch. The new tip evicts every pending job except the one it names (spec-invalidates the rest); the named job's ntime is max(tip's NtimeStart, job's own ntime_start when flagged) so it never regresses; an unknown named job pauses ALL workers rather than hashing a wrong prev-hash — fail-safe, and `active = nil` makes the stale-share gate drop in-flight work too. A held job (HasNtimeStart but no prev-hash yet) is correctly armed once named — the `named.HasNtimeStart` guard prevents reading an unset NtimeStart. Non-future jobs arriving before the first SetNewPrevHash are held, not hashed (garbage prev_hash otherwise). prevNBits flows through TargetFromNBits fail-closed validation at dispatch.
