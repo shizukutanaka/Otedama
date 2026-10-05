@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,7 +83,7 @@ func TestCappedLogFile_BoundsTotalDisk(t *testing.T) {
 		t.Errorf("log disk %d exceeds bound %d", total, limit)
 	}
 	// Only one backup generation exists — no .old.old.
-	if _, err := os.Stat(path + ".old.old"); !os.IsNotExist(err) {
+	if _, err := os.Stat(path + ".old.old"); !errors.Is(err, os.ErrNotExist) {
 		t.Error("single-backup invariant violated")
 	}
 }
