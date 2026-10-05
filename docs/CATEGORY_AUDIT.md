@@ -1788,6 +1788,15 @@ All packages build, vet, and test green.
 | adr-007/008-parity | Both **Proposed** roadmap ADRs (B1–B10, `otedama lightning`/`otedama power` UX) — proposals not claims; internal/power/ absent consistent with unexecuted proposal | Clean |
 | runtime-collector | `RuntimeCollector()` exported but `RegisterCollector` has zero non-test callers — dead-export drift; output claim remains honest | ⚠️ Noted (s1076 tracked) |
 ---
+
+## Session 1245 — json-id-precision + any-assertion + raw-decode
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| json-id-precision | V1 `rpcMessage.ID any` decodes numbers as float64 — exact for the client's own `nextID` sequence; pool-sent non-matching ids fail closed at the pending-map lookup | Clean |
+| any-assertion | `arr[2].(float64)` for extranonce2_size feeds `min(..., maxExtranonce2Size)` — bounded before use (parse.go:299) | Clean |
+| raw-decode | `Params`/`Result`/`Error` stay `json.RawMessage`/`any` and are unmarshalled into concrete types per site — no float64 trap for struct fields | Clean |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
