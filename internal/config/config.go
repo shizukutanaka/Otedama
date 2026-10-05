@@ -416,7 +416,28 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	cfg := Defaults()
 	var o Origins
 
-	// Layer 1: config file overrides defaults where set.
+	applyFileLayer(&cfg, &o, fromFile)
+	applyEnvLayer(&cfg, &o, env)
+	applyFlagLayer(&cfg, &o, flags)
+
+	// Layer 4: OS-appropriate default when no higher-priority layer set an
+	// explicit DataDir. This is what actually implements the per-platform
+	// paths documented on Config.DataDir's doc comment; without it, a user
+	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
+	// DataDir, which silently disables Lightning wallet initialisation
+	// (engine.setupWallet treats "" as "no data dir configured" and skips
+	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
+	// stays OriginDefault (its zero value) in this case.
+	if cfg.DataDir == "" {
+		cfg.DataDir = DefaultDataDir()
+	}
+
+	return cfg, o
+}
+
+// applyFileLayer applies layer 1: config file values override defaults
+// where set.
+func applyFileLayer(cfg *Config, o *Origins, fromFile Config) {
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
 		o.BitcoinAddress = OriginFile
@@ -480,8 +501,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.HTTPAddr = fromFile.HTTPAddr
 		o.HTTPAddr = OriginFile
 	}
+}
 
-	// Layer 2: environment variables override config file.
+// applyEnvLayer applies layer 2: OTEDAMA_* environment variables override
+// config file values. A malformed numeric value is left for EnvWarnings to
+// surface; here it is simply not applied.
+func applyEnvLayer(cfg *Config, o *Origins, env map[string]string) {
 	getEnv := func(key string) string {
 		if env != nil {
 			return env[key]
@@ -520,11 +545,14 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		// A malformed value is left for EnvWarnings to surface; here it is
 		// simply not applied (the default/file/earlier-layer value stands).
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			spec.apply(&cfg, &o, f)
+			spec.apply(cfg, o, f)
 		}
 	}
+}
 
-	// Layer 3: flags override environment variables.
+// applyFlagLayer applies layer 3: command-line flags override environment
+// variables.
+func applyFlagLayer(cfg *Config, o *Origins, flags FlagValues) {
 	if flags.BitcoinAddress != "" {
 		cfg.BitcoinAddress = flags.BitcoinAddress
 		o.BitcoinAddress = OriginFlag
@@ -549,20 +577,6 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.HTTPAddr = flags.HTTPAddr
 		o.HTTPAddr = OriginFlag
 	}
-
-	// Layer 4: OS-appropriate default when no higher-priority layer set an
-	// explicit DataDir. This is what actually implements the per-platform
-	// paths documented on Config.DataDir's doc comment; without it, a user
-	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
-	// DataDir, which silently disables Lightning wallet initialisation
-	// (engine.setupWallet treats "" as "no data dir configured" and skips
-	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
-	// stays OriginDefault (its zero value) in this case.
-	if cfg.DataDir == "" {
-		cfg.DataDir = DefaultDataDir()
-	}
-
-	return cfg, o
 }
 
 // DefaultDataDir returns the OS-appropriate default directory for
@@ -610,7 +624,19 @@ func DefaultDataDir() string {
 // rather than one error per run.
 func (c Config) Validate() error {
 	var issues []string
+	issues = c.appendAddressIssues(issues)
+	issues = c.appendLogIssues(issues)
+	issues = c.appendPoolIssues(issues)
+	issues = c.appendNumericIssues(issues)
 
+	if len(issues) == 0 {
+		return nil
+	}
+	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
+}
+
+// appendAddressIssues reports missing or malformed payout addresses.
+func (c Config) appendAddressIssues(issues []string) []string {
 	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
 		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
 	} else if c.BitcoinAddress != "" {
@@ -627,7 +653,11 @@ func (c Config) Validate() error {
 			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] invalid: %v", i, err))
 		}
 	}
+	return issues
+}
 
+// appendLogIssues reports invalid log_level / log_format values.
+func (c Config) appendLogIssues(issues []string) []string {
 	switch c.LogLevel {
 	case "debug", logLevelInfo, "warn", "error":
 		// ok
@@ -646,7 +676,11 @@ func (c Config) Validate() error {
 	default:
 		issues = append(issues, fmt.Sprintf("log_format %q is not one of text, json", c.LogFormat))
 	}
+	return issues
+}
 
+// appendPoolIssues reports invalid pool URL and payout_scheme values.
+func (c Config) appendPoolIssues(issues []string) []string {
 	for i, p := range c.Pools {
 		if p.URL == "" {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
@@ -660,7 +694,11 @@ func (c Config) Validate() error {
 			issues = append(issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
 		}
 	}
+	return issues
+}
 
+// appendNumericIssues reports non-finite or out-of-range numeric fields.
+func (c Config) appendNumericIssues(issues []string) []string {
 	// NaN/±Inf must be rejected explicitly: comparisons like `x < 0` are
 	// false for NaN, so a non-finite value would otherwise sail through
 	// every range check and poison the arbitration math downstream.
@@ -703,11 +741,7 @@ func (c Config) Validate() error {
 			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh,
 		))
 	}
-
-	if len(issues) == 0 {
-		return nil
-	}
-	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
+	return issues
 }
 
 // validateBitcoinAddress validates a Bitcoin address at config load:
