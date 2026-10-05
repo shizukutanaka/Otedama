@@ -1740,3 +1740,11 @@ Quiet window continues; next recheck ~session 1370.
 - **sv2-apps:** latest release remains **v0.7.0**; open PRs include #908 (B08 type support in `bitcoin_core_sv2`, new), #904 (monitoring/config/release edge cases), #903 (buffer hardening) — hardening/maintenance wave continues, no protocol-surface changes.
 
 Quiet window continues; next recheck ~session 1393.
+
+### Session 1395 update
+
+- **sv2-spec:** normative open set unchanged — #203 (push-based non-custodial payouts: still open; `SEQ0_255` payout-cap debate continues — plebhash argues output-count limits are an unavoidable design constraint, so "any solution here will be a custodial/non-custodial hybrid, at best", exactly the V2-verifiability limitation Otedama discloses), #236 (`SetTarget.target` ≤ channel `max_target`: open since 2026-10-02, GitGab19 review cycle active — would close the same gap Otedama's s1269 audit flagged as bounded-by-design), #234 (authority key management docs: TheBlueMatt lgtm, converging), #198 (`coinbase_witness` in `NewTemplate`) still open/unmerged.
+- **SRI:** latest release remains **v1.11.1** (22 Jul 2026 — SV1 difficulty conversion no longer rounds up; matches Otedama's `DifficultyFromTarget` truncation semantics). No v1.12.x exists.
+- **sv2-apps:** latest release remains **v0.7.0** (24 Jul). v0.5.0's "Translation Proxy payout verification for SOLO mining" continues to independently converge with Otedama's s1318 coinbase-payout verification axis.
+
+Quiet window continues; next recheck ~session 1405.
