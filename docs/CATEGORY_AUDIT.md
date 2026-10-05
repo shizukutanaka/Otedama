@@ -6162,3 +6162,31 @@ All packages build, vet, and test green.
 | go-pins | `ci-cd.yml` `GO_VERSION: '1.21'` + matrix 1.20/1.21 | Tracked by open PR #1344 |
 
 All packages build, vet, and test green.
+## Session 1269 update — SetTarget bound audit (proactive, sv2-spec #236)
+
+Audited the engine's handling of server-sent share targets ahead of
+sv2-spec #236 (`SetTarget.target` MUST NOT exceed the channel's
+`max_target`), flagged in the session-1268 ecosystem update.
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| set-target-bound | `SetTarget` applied unconditionally at `run.go:1092` — no max_target bound | ⚠️ Noted — by design: `OpenMiningChannel` declares no max_target (handshake.go:156–161, deliberate — "accepts whatever share target the pool assigns"), so #236's bound would be vacuous for Otedama. Hostile ends already mitigated: target=0 → `DifficultyFromTarget` → +Inf → "income effectively zero" starvation warn; target=0xFF..FF → share flood → per-session submit rate cap; superseded-target rejects → retarget classification excludes them from reject rate (ESP-Miner #212). |
+| initial-target | `OpenMiningChannelSuccess.Target` used identically via `handshake()` return | ✅ Clean — same unbounded-by-design path, same mitigations |
+| foreign-channel | `SetTarget.ChannelID` enforced by `channelIDOf` frame guard (run.go:1638, 1028) | ✅ Clean — frames for foreign channels dropped |
+
+If #236 merges, Otedama could optionally adopt a clamp (e.g. bound
+share difficulty to a sane ceiling) but the starvation/flood
+mitigations already cover the reachable damage.
+
+All packages build, vet, and test green.
+
+## Session 1270 update — devin-direct-merge.yml + code-review.yml audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| conflict-comment | `/fix-conflict` comment told Devin to merge with `mainブランチ` — repo default branch is `master`, `main` does not exist | 🔧 Fixed (this PR) — comment now says `master` |
+| workflow-permissions | `devin-direct-merge.yml` had no `permissions:` block — token ran with broad defaults | 🔧 Fixed (this PR) — minimal `contents: read` + `pull-requests: write` |
+| mergeable-race | `gh pr view --json mergeable` can return `UNKNOWN` right after opened/synchronize → treated as non-conflicting, comment missed | ⚠️ Noted — cosmetic; next synchronize event rechecks |
+| node-deadweight | `code-review.yml` is Node-centric on a Go-only repo (no package.json): every PR gets a "No Node.js project detected" comment; common-issues greps only `*.js`/`*.json`; performance-check fully skipped. Only `dependency-review-action` does meaningful work (Go-module aware) | ⚠️ Noted — noise + wasted runner minutes; trimming is a workflow-design call for the maintainer |
+
+All packages build, vet, and test green.
