@@ -159,9 +159,20 @@ func (f *HashrateFetcher) Fetch(ctx context.Context) error {
 		return fmt.Errorf("rates: all %d hashrate sources failed", len(f.sources))
 	}
 	slices.Sort(vals)
+	n := len(vals)
+	// With exactly two sources the "median" is an average — and an
+	// average has no outlier rejection: one manipulated or malfunctioning
+	// endpoint returns an in-band reading that silently distorts the mean
+	// (the plausibility band bounds each reading, not their agreement).
+	// Two estimates of the same 1d network hashrate cannot legitimately
+	// disagree by 4x; when they do, distrust the pair rather than cache a
+	// value the provider will divide device hashrate by.
+	if n == 2 && vals[1] > vals[0]*4 {
+		return fmt.Errorf("rates: hashrate sources disagree %e vs %e — distrusting feed",
+			vals[0], vals[1])
+	}
 	// Median; for an even number of sources average the middle two,
 	// matching the price fetcher's convention.
-	n := len(vals)
 	h := vals[n/2]
 	if n%2 == 0 {
 		h = (vals[n/2-1] + vals[n/2]) / 2

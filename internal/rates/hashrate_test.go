@@ -109,6 +109,57 @@ func TestHashrateFetcher_MedianAndPlausibilityBand(t *testing.T) {
 	}
 }
 
+// Two wildly divergent in-band readings → the fetch is distrusted and
+// the cache is left untouched: an average has no outlier rejection, so
+// one manipulated endpoint cannot smuggle a distorted value through.
+func TestHashrateFetcher_DivergentSourcesDistrusted(t *testing.T) {
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(mempoolBody(9.3e20)))
+	}))
+	defer srvA.Close()
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(mempoolBody(9.3e22))) // 100x, still in-band
+	}))
+	defer srvB.Close()
+
+	extract := defaultHashrateSources[0].extract
+	f := hashFetcherWith(t, []HashrateSource{
+		{Name: "a", URL: srvA.URL, extract: extract},
+		{Name: "b", URL: srvB.URL, extract: extract},
+	})
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch succeeded with wildly divergent sources")
+	}
+	if h, fresh := f.CurrentHashrate(); h != 0 || fresh {
+		t.Errorf("CurrentHashrate = (%v, %v), want (0, false) — divergent feed must not be cached", h, fresh)
+	}
+}
+
+// Divergence under the 4x guard still averages — legitimate estimates
+// of the same metric may differ by method without being distrusted.
+func TestHashrateFetcher_AgreeingSourcesAveraged(t *testing.T) {
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(mempoolBody(9.0e20)))
+	}))
+	defer srvA.Close()
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(mempoolBody(9.6e20)))
+	}))
+	defer srvB.Close()
+
+	extract := defaultHashrateSources[0].extract
+	f := hashFetcherWith(t, []HashrateSource{
+		{Name: "a", URL: srvA.URL, extract: extract},
+		{Name: "b", URL: srvB.URL, extract: extract},
+	})
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if h, _ := f.CurrentHashrate(); h != 9.3e20 {
+		t.Errorf("hashrate = %e, want 9.3e20", h)
+	}
+}
+
 func TestHashrateFetcher_AllSourcesFail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

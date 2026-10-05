@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1392 — 乖離するハッシュレートソースの平均化を不信扱いへ)
+ネットワークハッシュレートフィードは2ソースの「中央値」を名乗るが実態は平均値であり、外れ値排除の効果はゼロ — 片側エンドポイントが妥当性帯域内の偽値を返すだけで採掘収益見積を最大 ~54x 歪められ、裁定が採掘を不当にアイドル化し得た。2ソースが 4x を超えて乖離する場合は平均せずフェッチをエラー扱いとし、キャッシュ（30分鮮度 → コンパイル時 ~1000 EH/s フォールバック）を汚染しないよう修正。
+
 ### Fixed (session 1391 — 重複・偽造 SubmitSharesError による reject 二重計上を閉塞)
 SV2 の SubmitSharesError は `seq > seqNum`（未送信 seq）のみ排除していたため、既に Success/前回 Error で決済済みの seq を再送したり、送信範囲内の偽造 seq を報告した敵対プールが `otedama_shares_rejected_total`・受理率・受理率警告を自在に水増しできた。SV2 は seq ごとに1応答のため、未決済（submitTimes に残存）でない seq のエラーはリプレイ/偽造/cap 退避として debug レベルで破棄するよう修正（Success 側は既に `settled` クランプ済み）。cap 退避済み seq の正当な遅延エラーも同様に破棄されるトレードオフ（>1024 件の in-flight が必要）は台帳に記録。
 
