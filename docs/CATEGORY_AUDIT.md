@@ -6303,3 +6303,11 @@ All packages build, vet, and test green.
 | R | PR #1293 invariant | ✓ Holds: every push/PR branch filter on synced master now includes `master` (ci/ci-cd/test/security `[main, master, develop]`, deploy `[main, master]`) — no workflow still targets only nonexistent branches |
 | R | Workflow YAML integrity | ✓ All 8 files (ci, ci-cd, code-review, deploy, devin-direct-merge, release, security, test) parse cleanly via `yaml.safe_load` |
 
+## Session 1291 update — make-target measured verification
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | `make build` | ✓ Measured green on synced master: `go build -trimpath -ldflags` injects `internal/version.{Version,Commit,BuildDate}` correctly — binary reports `otedama v3.0.0-alpha.1 (52daec25f) ... go1.27.1 darwin/arm64`, matching master HEAD exactly (the #1275 symbol-path fix verified end-to-end in practice) |
+| R | Target surface | ✓ 21 targets enumerated (help/setup/deps/build/build-all/install/test*/coverage/bench/fuzz/lint*/fmt/vet/security/licenses/validate) — all previously doc-verified; no undocumented or phantom entries |
+| R | Build hygiene | ✓ `bin/` output is gitignored (not tracked); -trimpath+stripped binary ~10.8MB |
+
