@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1555 — direct-coinbase スキームで pools[].user 指定時にコインベース支払い検証が静かに無効化されていた)
+
+`payout_scheme` が `tides`/`solo`（コインベース直接支払い=非カストディの核心検証）で `pools[].user` を明示設定した場合、`payoutAddr` が常に空となり s1318 のコインベース検証が警告なしで完全にスキップされていた — (a) `pools[].user` に BTC アドレスを直接書く正当な設定でも検証が動かず、(b) opaque なアカウント名では検証スキップが運用者に一切不可視だった。`payoutVerifyAddr` で「プールが認証・支払いする身分のアドレス=検証対象」に正規化: `pools[].user` から `"address"` および一般的な `"address.worker"` 形式の BTC アドレスを抽出して検証対象とし、アドレスを含まない場合は direct-coinbase スキーム限定で warn を出してスキップを明示（他スキームでは検証自体が不適用のため沈黙が正しい）。`directCoinbaseScheme` ヘルパーで scheme 判定を単一ソース化（:1494 側も共通化）。回帰ピン: `TestPayoutVerifyAddr_IdentityBound`（8 ケース）、`TestDirectCoinbaseScheme`。
+
 ### Fixed (session 1553 — V1 シェアが Version=0・PrevHash=ゼロのヘッダをハッシュしていた)
 
 V1 ジョブ適用時 (`applyJob`) が `miner.Work.Header` に `Version`/`PrevHash` を一切コピーしておらず、ワーカーは両フィールドがゼロのヘッダをハッシュしていた — プール側が通知値で再構成するプリイメージと一致しないため V1 の全シェアがプール側検証で拒否される構造欠陥（2026-06-04 から存在、V2 の `updateWork` は正しかった）。併せて `decodeNotifyJob` が prevhash のワイヤ形式（各4バイトワードのバイトスワップ）を正規化せず格納していた問題を修正 — デコード時にワードごと逆スワップし、`Job.PrevHash` はヘッダ直列化バイト列を保持する契約へ明文化（従来の「big-endian」記述は誤り）。エンジンは通知値をヘッダへコピーするよう修正。回帰ピン: `TestParseNotify_PrevHashWordSwap`（デコード変換）・`TestApplyJob_HeaderFieldsReachHashedShare`（稼働ワーカーが出すシェアのハッシュが宣言フィールド入りヘッダの再計算値と一致）。

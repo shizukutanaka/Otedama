@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/lightning"
@@ -432,6 +433,42 @@ func sessionUser(poolUser, addr, worker string) string {
 		return addr + "." + worker
 	}
 	return addr
+}
+
+// directCoinbaseScheme reports whether a pool payout_scheme pays the user's
+// locking script inside the coinbase itself — the only schemes whose payout
+// path is observable on the wire (see runSessionV1's per-job verification).
+func directCoinbaseScheme(scheme string) bool {
+	return scheme == "tides" || scheme == "solo"
+}
+
+// userAddress extracts a Bitcoin address from a session user identity, or
+// "" when the identity is an opaque account name. It accepts both the bare
+// "address" form and the common "address.worker" convention (everything
+// after the first '.' is the worker label the pool uses for per-rig stats).
+func userAddress(user string) string {
+	addr, _, _ := strings.Cut(user, ".")
+	if _, err := btccrypto.ScriptForAddress(addr); err != nil {
+		return ""
+	}
+	return addr
+}
+
+// payoutVerifyAddr returns the address a direct-coinbase scheme's per-job
+// coinbase check must find, or "" when this session carries no verifiable
+// address. With no pools[].user override the identity derives from the
+// failover address list; with one, pools[].user itself is the identity the
+// pool authenticates and pays — when it embeds an address that address is
+// what the coinbase must carry, and an opaque account name leaves the
+// payout path unobservable (the caller warns for direct-coinbase schemes).
+func payoutVerifyAddr(poolUser string, addrs []string, addrIdx int) string {
+	if poolUser != "" {
+		return userAddress(poolUser)
+	}
+	if addrIdx < len(addrs) {
+		return addrs[addrIdx]
+	}
+	return ""
 }
 
 // maskAddr renders a payout address for logs without printing it in full,

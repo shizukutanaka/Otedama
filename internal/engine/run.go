@@ -494,15 +494,18 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
 		// A direct-coinbase scheme (tides/solo) must place the user's locking
-		// script in the coinbase itself; that is only verifiable when the user
-		// identity derives from the configured address rather than an opaque
-		// pools[].user override.
+		// script in the coinbase itself — verifiable against whatever address
+		// the session identity carries (failover list, or an address embedded
+		// in pools[].user).
 		var payoutAddr, payoutScheme string
 		if poolIdx < len(r.opts.Config.Pools) {
 			payoutScheme = r.opts.Config.Pools[poolIdx].PayoutScheme
 		}
-		if poolUser == "" && addrIdx < len(addrs) {
-			payoutAddr = addrs[addrIdx]
+		payoutAddr = payoutVerifyAddr(poolUser, addrs, addrIdx)
+		if poolUser != "" && payoutAddr == "" && directCoinbaseScheme(payoutScheme) {
+			r.log("warn", fmt.Sprintf(
+				"engine: payout_scheme %q but pools[].user %q is not a bitcoin address — coinbase payout verification disabled; shares may fund the pool's wallet, not yours",
+				payoutScheme, poolproto.SanitizePoolText(poolUser)))
 		}
 		// The quote's net-fee factor must price the pool this session dials,
 		// not the pool configured at startup: failover across differently
@@ -1491,7 +1494,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// merkle_root, so no equivalent check exists there (the JDP extension,
 	// sv2-spec #203, is the protocol answer — tracked in ADR-009).
 	var payoutScript []byte
-	if (opts.payoutScheme == "tides" || opts.payoutScheme == "solo") && opts.payoutAddr != "" {
+	if directCoinbaseScheme(opts.payoutScheme) && opts.payoutAddr != "" {
 		if s, err := btccrypto.ScriptForAddress(opts.payoutAddr); err == nil {
 			payoutScript = s
 		} else {

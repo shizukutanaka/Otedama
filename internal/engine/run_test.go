@@ -1126,6 +1126,49 @@ func TestSessionUser_Precedence(t *testing.T) {
 	}
 }
 
+func TestPayoutVerifyAddr_IdentityBound(t *testing.T) {
+	// Genesis address — valid base58-check, so ScriptForAddress accepts it.
+	genesis := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+	addrs := []string{genesis}
+	cases := []struct {
+		name     string
+		poolUser string
+		addrs    []string
+		addrIdx  int
+		want     string
+	}{
+		{"no override uses failover address", "", addrs, 0, genesis},
+		{"failover index selects", "", []string{"", genesis}, 1, genesis},
+		{"failover index out of range", "", addrs, 1, ""},
+		{"pools[].user carrying an address", genesis, addrs, 0, genesis},
+		{"pools[].user address.worker form", genesis + ".rig-01", addrs, 0, genesis},
+		{"opaque pools[].user leaves verification off", "mypoolaccount", addrs, 0, ""},
+		{"empty user and no addresses", "", nil, 0, ""},
+		{"trailing-dot user still yields the address", genesis + ".", addrs, 0, genesis},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := payoutVerifyAddr(tc.poolUser, tc.addrs, tc.addrIdx); got != tc.want {
+				t.Errorf("payoutVerifyAddr(%q, %v, %d) = %q, want %q",
+					tc.poolUser, tc.addrs, tc.addrIdx, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDirectCoinbaseScheme(t *testing.T) {
+	for _, s := range []string{"tides", "solo"} {
+		if !directCoinbaseScheme(s) {
+			t.Errorf("directCoinbaseScheme(%q) = false, want true", s)
+		}
+	}
+	for _, s := range []string{"fpps", "pplns", "", "TIDES", "solo "} {
+		if directCoinbaseScheme(s) {
+			t.Errorf("directCoinbaseScheme(%q) = true, want false", s)
+		}
+	}
+}
+
 func TestPublishBTCRate_SetsGauge(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
