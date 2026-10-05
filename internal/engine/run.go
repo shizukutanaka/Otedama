@@ -1248,10 +1248,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// operator who explicitly set password: in their config gets that value
 	// instead. Previously this was hardcoded to "x" unconditionally, so a
 	// configured password silently had no effect (KNOWN_LIMITATIONS.md §10).
-	password := opts.poolPassword
-	if password == "" {
-		password = "x"
-	}
+	password := cmp.Or(opts.poolPassword, "x")
 	creds := poolproto.Credentials{
 		User:     opts.user,
 		Password: password,

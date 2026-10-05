@@ -6137,3 +6137,15 @@ Verification: `go build`, `go vet`, `go test` on the 6 touched packages
 pass; gosec 22 → 0. Remaining lint debt: gocyclo 15 (function
 decomposition — the largest class, next batch), plus the misspell 46 /
 goconst 6 already fixed in open #1392/#1393.
+
+## Session 1258 update — third-wave idiom modernization census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| M | Hand-rolled `if x == ""` / `if x == 0` first-nonzero fallbacks — equivalent to Go 1.22's `cmp.Or` (already adopted once at engine/run.go:191). | ✅ Fixed: 2 sites converted — pool password default `cmp.Or(opts.poolPassword, "x")` (engine/run.go) and hysteresis margin `cmp.Or(opts.hysteresisPct, defaultHysteresisPct)` (engine/arbitrate.go). Remaining `== ""`/`== 0` checks are early returns / continue guards / error paths, not assign-fallbacks. |
+| M | `for k := range m { s = append(s, k) }` key-collection loops — `slices.AppendSeq(make(...,0,len), maps.Keys(m))` is the 1.23 idiom, but **the module pins `go 1.22`** (`go.mod`), which lacks the iterator-based `maps.Keys`/`slices.AppendSeq`/`slices.Collect` API. Conversion fails to compile. | ⚠️ Noted: 4 production loops (poolproto.Available, btccrypto.Schemes, hal.Drivers, metrics.metricKey/renderLabels ×2) stay hand-rolled until the go.mod floor reaches 1.23 — `slices.Collect`/`AppendSeq`/`maps.Keys`/`maps.Values` are all version-gated; the `for range` channel-drain at rates/hashrate.go:155 is not a map loop at all. Version-floor note: revisit when go.mod moves to go1.23+. |
+| M | `sync.Once` fields used for memoized results — `sync.OnceValues`/`OnceFunc`/`OnceValue` (Go 1.21) replace the capture-a-local pattern. | ✅ Clean: all `sync.Once` sites are connection close/start idempotency (stratumv1/dialer.go:218, stratumv1.go:126, stratumv2/dialer.go:188,221) — they return nothing, so the `Once*` helpers don't apply. Zero memoization-by-Once sites. |
+
+All packages build, vet, and test green.
+
+---
