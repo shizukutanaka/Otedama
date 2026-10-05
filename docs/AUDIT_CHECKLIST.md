@@ -90,8 +90,10 @@ verify these are enforced by inspecting `.github/workflows/ci.yml`.
 **Correction (session 488):** the list below previously claimed standalone
 `go vet`, `staticcheck`, and `govulncheck` jobs — none exist in `ci.yml`.
 `govet` and `staticcheck` run only as linters inside `golangci-lint run`
-(a standalone `go vet` step exists only in `test.yml`); `govulncheck` is
-absent from all workflows (Makefile local target only). The accurate gate is:
+(a standalone `go vet` step exists only in `test.yml`). **Session 1267
+update:** `govulncheck` now runs in `security.yml` (Security Scanning job,
+after the Nancy scan) and a `Fuzz` job in `test.yml` runs `make fuzz`
+(30 s per target). The accurate gate is:
 
 - `golangci-lint run` (Lint job; includes `govet` + `staticcheck` via `.golangci.yml`)
 - `gosec` (Security Scan job, SARIF upload)
@@ -99,12 +101,11 @@ absent from all workflows (Makefile local target only). The accurate gate is:
 - `go test -v -timeout 10m -race ./...` on Linux/macOS; without `-race` on Windows
 - `go build` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 (Build job matrix)
 
-Nightly additional checks: **none exist.** `FuzzDecodeHeader` and
-`FuzzDecoder_ReadFrame` are real fuzz targets in
-`internal/stratum/frame_fuzz_test.go`, but no workflow schedules them —
-`make fuzz` is local-only. The Benchmark job runs benchmarks and uploads
-`benchmark.txt` (artifact `benchmark-results`); it does not compare against main
-or gate on a regression threshold.
+Nightly additional checks: **none exist.** Fuzz now runs per-PR in
+`test.yml`'s `Fuzz` job (`make fuzz`, 30 s per target across all targets —
+previously local-only with no workflow scheduling it). The Benchmark job
+runs benchmarks and uploads `benchmark.txt` (artifact `benchmark-results`);
+it does not compare against main or gate on a regression threshold.
 
 ---
 
