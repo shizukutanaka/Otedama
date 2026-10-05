@@ -6860,3 +6860,14 @@ All packages build, vet, and test green (engine tests incl. existing V1/V2 share
 | S | Do dropped shares corrupt sequence numbering? | ✅ Verified: drops happen after `seqNum++`, matching the rate-cap path — gaps in the sequence are already the model (pool sees dense submits only by design of the counter being per-channel). |
 
 All packages build, vet, and test green.
+
+## Session 1326 update — first-principles audit of the "device attribution is correct" claim (Socratic pass 8)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Does Share.DeviceID identify the device that found it? | ✅ Verified: one worker per SHA256d-capable device, `cfg.DeviceID = dev.Identity().ID`; share carries it verbatim to `otedama_device_shares_found_total{device}` (empty ID guarded, no empty-label series). |
+| S | Can arbitration pause the wrong device? | ✅ Verified: single namespace end-to-end — `devRefs` built from the same `devices` slice as workers; `reconcileArbPauses`/`pauseDevice`/`allArbPaused`/`HashrateFunc` all compare `w.DeviceID()` to `Assignment.DeviceID` (= `dev.Identity.ID`). Non-SHA256d devices correctly find no worker (no-op). |
+| S | Can a device's quote/yield be attributed to another? | ✅ Verified: providers emit `DeviceID = dev.Identity().ID`; `YieldPerDevice` keyed by the same ID and looked up via `YieldFor(dev.Identity.ID)` with DefaultYield fallback. |
+| S | What if two devices share an ID? | ⚠️ Noted: hal IDs unique by construction ("cpu-0", "gpu-renderD*"); `Decide` rejects duplicates fail-closed (arbitration freezes rather than misroutes — correct bias). `SetupConnection.DeviceID="cpu"` is a wire field in a different namespace, benign naming collision. |
+
+No code change required this round.
