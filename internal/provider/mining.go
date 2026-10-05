@@ -44,6 +44,15 @@ type MiningProvider struct {
 	// publish() prefers a fresh reading over the compile-time constant;
 	// nil or stale readings fall back to it (KNOWN_LIMITATIONS §7).
 	NetworkHashrateFunc func() (hps float64, fresh bool)
+
+	// PayoutScheme names the configured pool's payout_scheme
+	// (fpps/pplns/tides/solo; empty = unset). publish() uses it to pick
+	// the net-fee factor: under "solo" the coinbase pays the user's
+	// address directly and the reward is all-or-nothing — no pool-side
+	// cut exists in the reward itself, so the net yield carries no fee
+	// haircut. Any other scheme (or unset) keeps the 1% typical-fee
+	// haircut. Setting this field after Start is called is not safe.
+	PayoutScheme string
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
@@ -126,6 +135,11 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		btcPerSec := (deviceHashrate / networkHashrate) * blockRewardBTC / blockTimeSec
 		satsPerSec := btcPerSec * 1e8
 		netSatsPerSec := satsPerSec * 0.99 // 1% pool fee typical for Stratum V2
+		if p.PayoutScheme == "solo" {
+			// The coinbase pays the user's address directly — the reward
+			// is all-or-nothing with no pool-side cut in the reward itself.
+			netSatsPerSec = satsPerSec
+		}
 
 		q := Quote{
 			ProviderID:       p.id,

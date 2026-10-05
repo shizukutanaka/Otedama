@@ -132,6 +132,11 @@ func nominalMiningHashrate(devices []hal.Device, workers []*miner.Worker) float6
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
 func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provider.RateSource, hashSource provider.NetworkHashrateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+	// The quote's net-fee factor tracks the payout scheme of the pool the
+	// provider prices — pools[0], the same pool defaultPoolURL selects.
+	if len(cfg.Pools) > 0 {
+		miningProvider.PayoutScheme = cfg.Pools[0].PayoutScheme
+	}
 	if hashSource != nil {
 		miningProvider.NetworkHashrateFunc = hashSource.CurrentHashrate
 	}

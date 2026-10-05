@@ -554,3 +554,45 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 		t.Error("sendQuote returned true on a canceled context; should report failure")
 	}
 }
+
+func TestMiningProvider_SoloSchemeCarriesNoFeeHaircut(t *testing.T) {
+	// Under payout_scheme=solo the coinbase pays the user's address
+	// directly — all-or-nothing, no pool-side cut in the reward. The
+	// quote's net yield must equal gross; every pool-side scheme keeps
+	// the 1% typical-fee haircut.
+	devices := []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	readQuote := func(t *testing.T, p *MiningProvider) Quote {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := p.Start(ctx, devices); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		defer p.Stop()
+		select {
+		case q := <-p.Quotes():
+			return q
+		case <-ctx.Done():
+			t.Fatal("no quote within 2s")
+			return Quote{}
+		}
+	}
+
+	solo := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	solo.PayoutScheme = "solo"
+	soloQ := readQuote(t, solo)
+	if soloQ.Yield.NetSatsPerSecond != soloQ.Yield.SatsPerSecond {
+		t.Errorf("solo: net %v != gross %v — the coinbase pays the user directly, no pool cut", soloQ.Yield.NetSatsPerSecond, soloQ.Yield.SatsPerSecond)
+	}
+
+	for _, scheme := range []string{"fpps", "pplns", "tides", ""} {
+		pooled := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+		pooled.PayoutScheme = scheme
+		q := readQuote(t, pooled)
+		if q.Yield.NetSatsPerSecond != 0.99*q.Yield.SatsPerSecond {
+			t.Errorf("scheme %q: net %v, want 0.99×gross %v", scheme, q.Yield.NetSatsPerSecond, q.Yield.SatsPerSecond)
+		}
+	}
+}

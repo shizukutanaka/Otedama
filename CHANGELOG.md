@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1406 — solo payout_scheme のクォートが実在しないプール手数料を差し引いていた)
+
+採掘クォートの netSatsPerSec は `payout_scheme` に無関係な一律 1% 手数料を適用していた。`solo`（コインベースがユーザーアドレスへ直接支払われる全か無かの方式、session 1318 で構造検証済み）では報酬中にプール側の取り分が存在しないのに 1% 過小見積していた。MiningProvider.PayoutScheme（setup で pools[0] のスキームを注入）を導入し、solo 時は net=gross（fee なし）、その他スキーム・未設定は従来の 1% 目安を維持。回帰テストは solo=1.0×・fpps/pplns/tides/未設定=0.99×をピン。
+
 ### Fixed (session 1404 — 裁定が手数料控除後収益を見ていなかった)
 
 クォート→ストリーム合成（updateStream）が provider.Yield の gross `SatsPerSecond` のみを仲裁 Yield に写し、`NetSatsPerSecond`（手数料控除後）を破棄していた。provider.go は「arbitration compares net」と文書化し provider.Yield.Effective() も net 加重なのに、実際の Decide は gross 比較だった — Akash の 20% プラットフォーム手数料とプールの 1% 手数料が両方とも決定から消え、ネット収益では採掘優位の局面で AI へ不当配分し得た（~21% の相対歪み）。netSats（NetSatsPerSecond > 0 時、未設定なら gross へフォールバック）を写すよう修正し、net 契約をピンする回帰テストを更新。
