@@ -1959,6 +1959,16 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+## Session 1223 update — SPECIFICATION §2.1/§4/§5 claims census
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Exit-code contract (§2.1) | ✅ Clean — `exitUsage = 64`/`exitConfig = 78` in `cmd/otedama/main.go` match the documented contract; runtime path returns 1, clean shutdown 0. |
+| S | Lifecycle claims (§4) | ✅ Clean — ordered `poolURLs`/`payoutAddresses`, fast pool failover, known-good address protection, and `sessionUser` precedence (per-pool `User` → `address.worker` → `address`) all match `setup.go`/`run.go`; share-target-vs-block-target fallback matches the mining loop. |
+| M | Transport claims (§5) | ✅ Clean — 6-byte header, `MaxFrameSize` pre-allocation bound, Noise NX ChaCha20-Poly1305/SHA-256, P-256 DH caveat, u16-prefixed encrypted frames all match `internal/stratum` as previously deep-audited. |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
