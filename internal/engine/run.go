@@ -38,6 +38,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1294,6 +1295,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
+	if !strings.HasPrefix(opts.poolURL, "stratum+tls://") {
+		// Plaintext V1 carries the Stratum username — the payout address —
+		// and every submitted share unencrypted (the same exposure
+		// stratumv1/tls.go documents for the previous silent-downgrade bug).
+		// V2 warns identically in the v2:// path above.
+		opts.log("warn", "engine: plaintext Stratum V1 connection — shares and the payout address traverse in cleartext; prefer stratum+tls:// where the pool supports it")
+	}
 	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", poolproto.StripUserinfo(opts.poolURL)))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)
