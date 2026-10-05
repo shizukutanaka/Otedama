@@ -264,7 +264,7 @@ func arbitrationTick(opts *arbitrationLoopOpts, lastQuoteAt map[string]time.Time
 	// next pool job, so it must reflect the new Decide result even on
 	// the tick where the worker gets its one-shot SetWork(nil).
 	reconcileArbPauses(alloc, opts.paused)
-	applyAllocation(alloc, opts.workers, opts.log)
+	applyAllocation(alloc, opts.workers, opts.log, prevAlloc == nil)
 	return alloc
 }
 
@@ -394,7 +394,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 // applyAllocation applies a Decide result to the miner workers: pausing
 // SHA256d work on the specific device that was idled or switched to AI
 // inference, and logging every change of assignment.
-func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string)) {
+func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string), firstDecide bool) {
 	// pauseDevice stops only the worker whose DeviceID matches the
 	// assignment being processed. Correctness bug fixed session 247:
 	// this previously called SetWork(nil) on every element of workers,
@@ -449,7 +449,14 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			}
 
 		default:
-			// No change; assignment held per hysteresis.
+			// No change; assignment held per hysteresis. On the first
+			// Decide there is no previous allocation, so every routed
+			// device is itself a transition — log the initial routing
+			// once rather than staying silent about it.
+			if firstDecide && a.Stream != "" {
+				log("info", fmt.Sprintf("arbitration: %s → %s (%.0f sat/s)",
+					a.DeviceID, a.Stream, a.ExpectedYield))
+			}
 		}
 	}
 }

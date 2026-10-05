@@ -1985,7 +1985,7 @@ func TestApplyAllocation_EmptyAssignments(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) != 0 {
 		t.Errorf("empty allocation should log nothing; got %v", logged)
@@ -2002,7 +2002,7 @@ func TestApplyAllocation_IdleDevice(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, log, false)
 
 	if len(logged) == 0 {
 		t.Error("idle device should emit an info log")
@@ -2031,7 +2031,7 @@ func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
 			{DeviceID: "cpu-0", Stream: ""}, // empty Stream → Idle()
 		},
 	}
-	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {})
+	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {}, false)
 
 	if target.HasWork() {
 		t.Error("target device cpu-0 should have been paused (SetWork(nil))")
@@ -2055,7 +2055,7 @@ func TestApplyAllocation_MiningToAI(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, log, false)
 
 	if len(logged) == 0 {
 		t.Error("mining→AI switch should emit a log")
@@ -2078,7 +2078,7 @@ func TestApplyAllocation_AIToMining(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Error("AI→mining switch should emit a log")
@@ -2101,7 +2101,7 @@ func TestApplyAllocation_GenericStreamSwitch(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Error("generic stream switch should emit a log")
@@ -2118,7 +2118,7 @@ func TestApplyAllocation_NoChange(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) != 0 {
 		t.Errorf("no-change assignment should not log; got %v", logged)
@@ -2144,7 +2144,7 @@ func TestApplyAllocation_IdleDevice_FloorReason(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(logged) == 0 {
 		t.Fatal("floor-idle device should emit an info log")
@@ -3648,7 +3648,7 @@ func TestApplyAllocation_HeldIdle(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
 	w.SetWork(&miner.Work{JobID: 1})
 	var logged []string
-	applyAllocation(alloc, []*miner.Worker{w}, func(_, m string) { logged = append(logged, m) })
+	applyAllocation(alloc, []*miner.Worker{w}, func(_, m string) { logged = append(logged, m) }, false)
 
 	if len(logged) != 0 {
 		t.Errorf("HeldIdle assignment should not re-log idle; got %v", logged)

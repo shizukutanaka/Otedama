@@ -523,7 +523,7 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 		}},
 	}
 	var workers []*miner.Worker // nil-safe: SetWork on nil slice is a no-op
-	applyAllocation(alloc, workers, log)
+	applyAllocation(alloc, workers, log, false)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "ai.akash") && !strings.Contains(joined, "AI") {
@@ -541,7 +541,7 @@ func TestApplyAllocation_IdleAssignment(t *testing.T) {
 			{DeviceID: "gpu-0", Stream: ""}, // Idle() is true when Stream is ""
 		},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "idle") {
@@ -562,7 +562,7 @@ func TestApplyAllocation_NoChangeProducesNoLog(t *testing.T) {
 			// SwitchedFromID empty → no change
 		}},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, log, false)
 
 	if len(lines) != 0 {
 		t.Errorf("steady-state assignment should not log; got %v", lines)
@@ -1300,4 +1300,46 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func TestApplyAllocation_FirstDecideLogsInitialRouting(t *testing.T) {
+	// The very first Decide has no previous allocation, so every routed
+	// device is a transition — the initial routing must be logged once
+	// rather than staying silent.
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID:      "cpu-0",
+			Stream:        "mining.stratum",
+			ExpectedYield: 6000,
+		}},
+	}
+	applyAllocation(alloc, nil, log, true)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "cpu-0") || !strings.Contains(lines[0], "mining.stratum") {
+		t.Errorf("first Decide must log the initial routing once; got %v", lines)
+	}
+}
+
+func TestApplyAllocation_FirstDecideSkipsIdleDevices(t *testing.T) {
+	// Idle devices on the first Decide log via the idle branch
+	// (HeldIdle is false with no previous allocation), so the
+	// firstDecide routed-device line must not double-log them as
+	// switches.
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "gpu-0",
+			Stream:   "", // idle
+		}},
+	}
+	applyAllocation(alloc, nil, log, true)
+
+	if len(lines) != 1 || !strings.Contains(lines[0], "idle") {
+		t.Errorf("first-Decide idle device should log idle only; got %v", lines)
+	}
 }
