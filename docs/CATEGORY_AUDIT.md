@@ -7881,3 +7881,7 @@ Normative open set unchanged: sv2-spec #203 (coinbase payouts extension — the 
 ## Session 1507 update (Socratic pass 176 — real fix)
 
 **Claim falsified then fixed:** "the channelIDOf parity pin covers every channel-scoped decoder" — the switch itself is complete (s1506: 6/6), but its pin test `TestChannelIDOf` still listed only the five pre-s1495 types: `CloseChannel` (added pass 164) was decoded and guarded in production but absent from the parity table, so a future regression removing its case would fail no test. Added the missing case (`CloseChannel{ChannelID: 17}` → `(17, true)`); test green. The convention invariant from pass 175 is now test-enforced for all six current types.
+
+## Session 1508 update (Socratic pass 177 — recheck of pass 176)
+
+Same-lens recheck: `channelIDOf` has exactly six cases (NewMiningJob, SetNewPrevHash, SetTarget, SubmitSharesSuccess, SubmitSharesError, CloseChannel) and the parity table now has exactly six matching channel entries plus the two negative cases (Unknown, Empty). Cross-checked against the spec's client-facing channel-msg decoder set {0x15, 0x18, 0x1c, 0x1e, 0x20, 0x21} — six types, perfect correspondence on both sides. The invariant "every decoded channel-msg hits the foreign-channel guard AND is pinned by the parity table" now holds test-enforced for the full current set. No code change.
