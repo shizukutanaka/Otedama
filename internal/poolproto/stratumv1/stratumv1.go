@@ -154,6 +154,10 @@ type session struct {
 	// close a channel just as the replay sends on it (panic).
 	sendMu sync.Mutex
 	closed bool
+
+	// versionMaskWarned makes the ASICBoost diagnostic fire once per
+	// session; the pool may repeat set_version_mask on every retarget.
+	versionMaskWarned atomic.Bool
 }
 
 // Compile-time interface satisfaction checks.
@@ -271,7 +275,8 @@ func (s *session) dispatch(line []byte) {
 	// before we are authenticated.
 	switch msg.Method {
 	case "mining.notify", "mining.set_difficulty", "mining.set_extranonce",
-		"client.show_message", "client.reconnect", "mining.reconnect":
+		"client.show_message", "client.reconnect", "mining.reconnect",
+		"mining.set_version_mask":
 		if !s.authorized.Load() {
 			s.stashPreAuth(msg.Method, msg.Params)
 			return
@@ -298,6 +303,8 @@ func (s *session) dispatchPoolMsg(method string, params json.RawMessage) {
 		s.handleShowMessage(params)
 	case "client.reconnect", "mining.reconnect":
 		s.handleReconnect(params)
+	case "mining.set_version_mask":
+		s.handleVersionMask()
 	}
 }
 
@@ -419,6 +426,21 @@ func (s *session) handleShowMessage(params json.RawMessage) {
 		case s.noticeCh <- notice:
 		default:
 		}
+	}
+}
+
+func (s *session) handleVersionMask() {
+	if !s.versionMaskWarned.CompareAndSwap(false, true) {
+		return
+	}
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	if s.closed {
+		return
+	}
+	select {
+	case s.noticeCh <- "pool sent mining.set_version_mask (version rolling); Otedama does not roll versions - share rejects may follow":
+	default:
 	}
 }
 

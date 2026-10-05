@@ -7065,3 +7065,11 @@ Ledger only — verification round, no behavior-visible change.
 | S | The product definition promises arbitration across four streams (mining, AI inference, rendering, scientific compute) — does the code implement all four? | ✅ Verified honest: `internal/provider/` ships only `MiningProvider` (real Stratum V2/V1) and `AkashProvider` (simulated price feed — name rendered "(simulated)" everywhere, no live bids). README opens by disclosing exactly this boundary ("only two streams are actually implemented ... rendering and scientific computing are planned v4.0-scope"), KNOWN_LIMITATIONS §1 documents the simulation gap with a verifiability recipe, and CLAUDE.md prohibits speculative pre-v4.0 implementations. The claim's honesty rests on prominent disclosure, which holds. |
 
 Ledger only — verification round, no behavior-visible change.
+
+## Session 1349 update — first-principles audit of the V1 version-rolling gap (Socratic pass 31)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | `mining.set_version_mask` was silently ignored — is that honest? | 🔧 Fixed: ignoring it is *safe* (no state mutation) but silently dropping it is *dishonest* — on a mandate-rolling ASICBoost pool (e.g. a DATUM endpoint, KNOWN_LIMITATIONS §14) the operator sees an unexplained 100% reject rate with no hint why. `set_version_mask` now joins the gated methods and delivers a one-time-per-session diagnostic notice over `noticeCh` (which the engine surfaces as `engine: pool notice`), telling the operator we do not roll versions. The pre-existing "unknown notification ignored" test was re-pointed at `mining.suggest_difficulty`. |
+
+CHANGELOG entry added under Fixed (session 1349).

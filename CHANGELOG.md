@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1349 — version-rolling 要求を静かに捨てていたのを診断通知へ)
+`mining.set_version_mask`（ASICBoost）をサイレントに無視していたため、必須プールでは 100% reject になるだけで原因が分からなかった。セッションにつき1回の診断通知を `noticeCh` 経由でエンジンへ送り、エージェントが roll 非対応である旨を明示。
+
 ### Fixed (session 1343 — stash replay とチャンネル close の競合 panic を修正)
 `flushPreAuth` は Negotiate goroutine 上で jobsCh/diffCh/noticeCh に送信するが、ハンドシェイク中の接続断で read loop の defer close と競合し send-on-closed panic（プロセス全体が終了）になり得た。全送信を `sendMu`+`closed` で close と直列化 — close 前に着地するかスキップされるかの二択に。
 

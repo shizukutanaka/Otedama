@@ -1218,6 +1218,27 @@ func TestSession_PreAuthDifficultyAndExtranonce_GatedAndReplayed(t *testing.T) {
 	}
 }
 
+func TestSession_VersionMask_NoticeOnce(t *testing.T) {
+	sess := &session{
+		jobsCh:   make(chan poolproto.Job, 8),
+		diffCh:   make(chan float64, 1),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
+	}
+	sess.authorized.Store(true)
+	sess.dispatchPoolMsg("mining.set_version_mask", json.RawMessage(`["ffffffe0"]`))
+	sess.dispatchPoolMsg("mining.set_version_mask", json.RawMessage(`["ffffffe0"]`))
+	got := <-sess.noticeCh
+	if got == "" {
+		t.Fatal("expected a version-rolling diagnostic notice")
+	}
+	select {
+	case extra := <-sess.noticeCh:
+		t.Fatalf("diagnostic must fire once per session, got %q", extra)
+	default:
+	}
+}
+
 func TestSession_SendsAfterChannelClose_DoNotPanic(t *testing.T) {
 	// The stash replay (flushPreAuth) runs on the Negotiate goroutine and
 	// can race the read loop's deferred channel closes when the connection
@@ -2129,7 +2150,7 @@ func TestSession_PoolNotices_ImplementsInterface(t *testing.T) {
 func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	// Unknown method must not produce any job, notice, or error.
 	sess := makeBareSess()
-	sess.dispatch([]byte(`{"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	sess.dispatch([]byte(`{"method":"mining.suggest_difficulty","params":["1fffe000"]}`))
 	if len(sess.jobsCh) != 0 {
 		t.Error("unknown method enqueued a job")
 	}
