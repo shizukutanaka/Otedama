@@ -6926,3 +6926,12 @@ No code change required this round.
 | S | Is the accounting honest about what was lost? | ⚠️ Noted: `shares_submit_dropped` counts both superseded-job drops (s1323) and rate-cap drops — two distinct causes folded into one counter (each has a distinct debug log line; the metric itself can't tell them apart). Deliberate drop accounting is otherwise honest — capped shares are never counted as submitted or accepted. |
 
 No code change required this round.
+
+## Session 1333 update — first-principles audit of the "share accept/reject accounting is honest in both directions" claim (Socratic pass 15)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can the pool inflate accepts or inject rejects for shares never sent? | ✅ Verified: future-sequence accepts and rejects are both dropped as bogus (V2); batch `NewSubmitsAccepted` is clamped to locally observed settlements — never credited beyond what we sent. V1 responses bind by RPC id (late/bogus handled per earlier audits). Superseded-target rejects classify into `difficulty-transition` symmetrically on both paths — excluded from reject rate, kept in the per-reason breakdown. |
+| S | Can a contradictory pool double-respond (accept then re-reject a settled seq) to inflate rejects? | ⚠️ Noted: a `SubmitSharesError` for an already-settled sequence misses the `tracked` gate and counts as a real reject — bounded by sends and ambiguous by spec (SV2 assigns one response per seq, so the frame is genuinely contradictory). Failing toward flagging bad-pool behavior via the warn log is defensible; suppressing it would hide real contradictions. Recorded honestly rather than changed. |
+
+No code change required this round.
