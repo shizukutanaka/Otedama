@@ -86,7 +86,7 @@ func TestB0_255_RoundTrip(t *testing.T) {
 }
 
 func TestB0_255_RejectsTooLong(t *testing.T) {
-	if _, err := appendB0_255(nil, bytes.Repeat([]byte{0}, 256)); err == nil {
+	if _, err := appendB0_255(nil, make([]byte, 256)); err == nil {
 		t.Error("appendB0_255 should reject byte slices longer than 255")
 	}
 }
