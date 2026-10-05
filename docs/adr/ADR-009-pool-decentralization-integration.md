@@ -1766,3 +1766,10 @@ Normative open set confirmed: sv2-spec #203 (coinbase-payouts extension, last up
 - **SRI (`stratum-mining/stratum`):** latest is **v1.12.0** (tag e11881b, 2026-09-17 — CI now enforces version bumps of modified crates). The GitHub Releases index tops at v1.11.1; the tag is authoritative.
 - **sv2-apps:** latest is **v0.8.0** (2026-09-17) — verified via the tag page after the Releases index rendered stale (it listed v0.7.0 as top). Highlights: Loupe-audit security hardening across the stack; tProxy supports the **BIP323 version-rolling mask** with an `invalid-non-rollable-version-bit` reject code; late Sv1 shares are validated against their own job's target and extranonce; `SetupConnection` version ranges enforced; handshake is idempotent and `mining.extranonce.subscribe` honored. Several items independently converge with Otedama's own recent strengthening (set_version_mask surfacing s1349, stale-share validation s1323–25, SetupConnection flag rejection merged #1329).
 - **Action needed:** none — the spec blockers Otedama tracks (#203 payout verification, #236 target bound) remain open upstream.
+
+### Session 1423 update
+
+- **sv2-spec normative open set (unchanged):** #203 (non-custodial payouts extension) open — the SEQ0_255 output-cap debate continues and plebhash reconfirmed "custodial/non-custodial hybrid, at best" as the upstream consensus shape, matching Otedama's disclosed V1-only payout verification; #236 (SetTarget ≤ channel max_target) open; #234 (authority key management/rotation doc) open; #198 (`coinbase_witness` on `NewTemplate`) open.
+- **SRI (`stratum-mining/stratum`):** latest remains **v1.12.0** (tag e11881b, 2026-09-17 — confirmed top of the tags list; no newer tag exists).
+- **sv2-apps:** latest remains **v0.8.0** (2026-09-17) — confirmed authoritative via the tags API (v0.8.0 top, then v0.7.0/v0.6.0).
+- **Action needed:** none — the spec blockers Otedama tracks (#203 payout verification, #236 target bound) remain open upstream.
