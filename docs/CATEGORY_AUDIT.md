@@ -1865,6 +1865,20 @@ All packages build, vet, and test green.
 
 All packages build, vet, and test green.
 ---
+
+## Session 1235 update — competitive-analysis.md parity audit
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| default-pool | `config.DefaultPoolURL` = `stratum+v2://public.stratum.slushpool.com:3336` matches the doc's claim; the "single fallback, not a list" caveat is self-documented | Clean |
+| semgrep-claim | "自動静的解析（gosec・CodeQL・Semgrep）" — security.yml does run Semgrep (returntocorp/semgrep-action@v1) alongside gosec/CodeQL/trivy/nancy | Clean |
+| i18n-claim | "主要10言語ネイティブサポート" — 10 catalogs confirmed (s1216) | Clean |
+| failover-claim | "複数プールfailover設定" — `Pools[]` failover addresses exist and are validated | Clean |
+| wallet-claim | "AES-256-GCM + scrypt, non-custodial" — verified (seedstore scryptN=1<<17); ZKP correctly marked v4.0 | Clean |
+| golden-vectors | "SRI公式テストベクトルgolden file" appears only in the implementation-plan section; no testdata vectors exist (only fuzz seeds) | ⚠️ Noted — flagged as plan by the session-506 note itself, not a state claim |
+
+All packages build, vet, and test green.
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
