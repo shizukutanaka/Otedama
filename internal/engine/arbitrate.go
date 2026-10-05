@@ -410,7 +410,6 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 		for _, w := range workers {
 			if w.DeviceID() == deviceID {
 				w.SetWork(nil)
-				return
 			}
 		}
 	}
