@@ -1759,6 +1759,15 @@ All packages build, vet, and test green.
 |-----|---------|-------------|
 | handshake-echo-validation | `engine/run.go` live SV2 handshake skipped all three response checks: UsedVersion not range-checked (dialer-only fix in #1321), SetupConnectionSuccess.Flags unchecked (dialer-only in #1329), OpenMiningChannelSuccess.ReqID echo never verified (both paths) | **S: fixed** — all three checks added to `handshake()`; ReqID check also added to `dialer.go`; 3 engine tests + 1 dialer test |
 ---
+
+## Session 1243 — yield-overflow + negative-duration + select-fairness
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| yield-overflow | Yield math is float64 throughout on non-finite-guarded inputs (arbitration/engine.go:99,304,307; rates/fetcher.go:109) — no uint64 multiply in the money path | Clean |
+| negative-duration | No negative `time.Duration` literals; all derived durations bounded | Clean |
+| select-fairness | Every `select` pairs `ctx.Done()` with work channels; Go's pseudo-random ready-case pick means no starvation ordering dependency | Clean |
+---
 ## Session 1209 update — CLI help/completion parity census
 
 ## Session 725 update — sscan + user-home + XDG-config audit
