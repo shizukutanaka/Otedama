@@ -7607,3 +7607,7 @@ Ledger only — verification round, no behavior-visible change.
 ## Session 1443 update (Socratic pass 116)
 
 **Claim verified:** "Idle-state logging is transition-gated consistently" — now true end to end. The aggregate line (`SkippedDevice != prevSkipped`, arbitrate.go) was already transition-gated before s1442; the per-device line was the only re-logger and is now HeldIdle-gated to match — the s1442 fix aligns with the codebase's own pre-existing convention rather than inventing one. ⚠️ Honest residual: the aggregate compares idle *counts*, not device sets — a swap (device A exits idle while B enters, count unchanged 1→1) emits no aggregate line; the newly idle device still logs via the per-device line, and the resuming device is silent by design (resume = next-pool-job arm, disclosed s1366/s1400). devices_idle gauge and activity map reflect truth regardless. Cosmetic observability edge only.
+
+## Session 1444 update (Socratic pass 117)
+
+**Claim verified:** "A device-agnostic quote (DeviceID == \"\") occupies a well-formed map slot" — true. updateStream keys it `providerID:` (e.g. `ai.akash:`): distinct from any real device key (hardware IDs cannot contain `:`), pruned by the same freshness ledger, and merged into the shared StreamID by streamsSlice like per-device entries. The DefaultYield it writes stays the only device-agnostic yield (per-device quotes write only their own slot since s1396). No collision, no orphaning. Code unchanged.
