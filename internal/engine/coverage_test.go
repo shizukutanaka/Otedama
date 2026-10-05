@@ -1047,6 +1047,78 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}
 }
 
+func TestHandshake_VersionOutOfRange(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 3}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	if err == nil {
+		t.Error("handshake: expected error when pool negotiates version outside declared range")
+	}
+}
+
+func TestHandshake_UnhonoredSetupFlags(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2, Flags: 0x1}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	if err == nil {
+		t.Error("handshake: expected error when pool requires unoffered flags")
+	}
+}
+
+func TestHandshake_WrongChannelReqID(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: 99, ChannelID: 1}
+		payload2, _ := omcs.Encode()
+		f2, _ := stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload2)
+		data2, _ := stratum.EncodeFrame(f2)
+		serverConn.Write(data2) //nolint:errcheck
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	if err == nil {
+		t.Error("handshake: expected error when channel response echoes a foreign req_id")
+	}
+}
+
 // ============================================================================
 // run.go runReconnectLoop — pool-failover and address-failover paths
 // ============================================================================
