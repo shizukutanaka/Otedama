@@ -413,6 +413,60 @@ func TestDialer_Negotiate_PoolRejectsChannel(t *testing.T) {
 	}
 }
 
+func TestDialer_Negotiate_UnhonoredFlags(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		defer pool.conn.Close()
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		// Client offered no flags; pool demanding flag bit 0 can't be honored.
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2, Flags: 0x1})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Fatal("Negotiate should fail when pool requires unoffered flags")
+	}
+	if !errors.Is(err, poolproto.ErrHandshakeFailed) {
+		t.Fatalf("want ErrHandshakeFailed, got %v", err)
+	}
+}
+
+func TestDialer_Negotiate_WrongChannelReqID(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		defer pool.conn.Close()
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
+			stratum.OpenMiningChannelSuccess{ReqID: 99, ChannelID: 1})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", &poolproto.Credentials{User: "alice"})
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Error("Negotiate should fail when channel response echoes a foreign req_id")
+	}
+}
+
 // ============================================================================
 // Session tests
 // ============================================================================
