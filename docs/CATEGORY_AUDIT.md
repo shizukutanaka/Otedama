@@ -7299,3 +7299,9 @@ Ledger only — verification round, no behavior-visible change.
 | Cat | Finding | Disposition |
 |-----|---------|-------------|
 | S | Can a long-lived V1 session with `clean_jobs=false` accumulate unbounded pending jobs? | ✅ Verified: pending jobs live in a bounded channel (capacity 8), not an unbounded map — backlog is structurally impossible regardless of the flag. `clean_jobs=true` purges the whole queue before enqueueing (stale shares against a superseded block are the #1 reject cause), and `clean_jobs=false` drops the *oldest* queued job when the buffer is full so the newest always wins — an adversarial pool spamming notifies can at most churn the buffer, never grow memory. `sendJob` checks `closed` under `sendMu`, the same lock `closeChannels` holds while closing the channel, so a send racing session teardown lands before close or is skipped — no send-on-closed panic. |
+
+## Session 1385 update — first-principles audit of quote namespacing (Socratic pass 64)
+
+| Cat | Finding | Disposition |
+|-----|---------|-------------|
+| S | Can two providers' quotes cross-contaminate — one provider overwriting another's yield, or per-device yields being dropped when a provider serves N devices? | ✅ Verified: the streams map is keyed `"providerID:deviceID"`, so a quote can only ever overwrite its own provider's cells — cross-provider collision is structurally impossible, and `IsBitcoinMining`/`AcceptsFamilies` can't leak across providers since `ID` is namespaced by ProviderID. `streamsSlice` merges same-StreamID entries by unioning every device's `YieldPerDevice` into a deep-copied representative — no per-device yield is lost (a first-seen pick would have silently discarded N-1 devices' yields) and the copy severs aliasing so `Decide` can never mutate live stream state. Representative choice is nondeterministic only across entries that share the same ProviderID, hence equivalent — determinism preserved. |
