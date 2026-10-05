@@ -2187,3 +2187,12 @@ func TestSanitizeNotice_StripsC1AndDEL(t *testing.T) {
 		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }
+
+func TestSanitizeNotice_StripsFormatAndSeparators(t *testing.T) {
+	// Bidi overrides, line separators, tag chars — the Trojan Source
+	// class, which is Cf/Zl/Zp and slips past Cc-only filters.
+	got := sanitizeNotice("ok\u202Eevil\u202C\u2028forged\U000E0061x\u200By")
+	if got != "okevilforgedxy" {
+		t.Errorf("format/separator chars survived: %q", got)
+	}
+}

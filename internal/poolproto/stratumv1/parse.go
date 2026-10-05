@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -192,28 +191,17 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	return en1, sz, true
 }
 
-// maxNoticeRunes caps the length of a pool-sent notice. Notices end up
-// in the log (and potentially the TUI), so an unbounded pool string is a
+// maxNoticeRunes caps the length of a pool-sent notice, matching the
+// poolproto.SanitizePoolText cap. Notices end up in the log (and
+// potentially the TUI), so an unbounded pool string is a
 // log-flooding vector.
 const maxNoticeRunes = 256
 
-// sanitizeNotice removes control characters (C0, DEL, C1 — including
-// ANSI escape introducers) and truncates to maxNoticeRunes runes. The
-// text is pool-controlled; consumers write it to terminals and log
-// files, where escape sequences could manipulate the display or forge
-// log lines.
+// sanitizeNotice cleans pool-controlled notice text for log/TUI output
+// via poolproto.SanitizePoolText — control, format, and separator
+// characters out, 256-rune cap.
 func sanitizeNotice(s string) string {
-	clean := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
-	runes := []rune(clean)
-	if len(runes) > maxNoticeRunes {
-		clean = string(runes[:maxNoticeRunes])
-	}
-	return clean
+	return poolproto.SanitizePoolText(s)
 }
 
 // parseShowMessage decodes a client.show_message notification.

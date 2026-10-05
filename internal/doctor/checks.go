@@ -126,7 +126,7 @@ func checkBitcoinAddress(addr string) Check {
 
 // addressKind returns a short human-readable label for the payout address
 // type so `doctor` confirms it understood the address — in particular that a
-// bech32m Taproot (bc1p…) address is recognised, not just bech32 v0 (bc1q…).
+// bech32m Taproot (bc1p…) address is recognized, not just bech32 v0 (bc1q…).
 func addressKind(addr string) string {
 	switch btccrypto.ClassifyAddress(strings.TrimSpace(addr)) {
 	case btccrypto.AddressP2PKH:
@@ -244,7 +244,7 @@ const (
 	walletFingerprintFile = "wallet.fingerprint"
 )
 
-// checkWallet verifies that the Lightning wallet is initialised and surfaces
+// checkWallet verifies that the Lightning wallet is initialized and surfaces
 // its public fingerprint so operators can cross-check against a hardware
 // wallet without exposing the seed. The fingerprint is a best-effort
 // convenience — its absence is non-fatal (it regenerates on next run).
@@ -321,6 +321,17 @@ func checkWallet(dataDir string) Check {
 // very long pool list cannot turn doctor into a port scanner.
 const maxReachabilityProbes = 8
 
+// reachProbe is the outcome of a single TCP probe against one pool URL.
+// Exactly one of the fields describes the outcome: badURL when the URL
+// could not be reduced to a host:port, err when the dial failed, or
+// latency on success.
+type reachProbe struct {
+	host    string
+	latency time.Duration
+	err     error
+	badURL  string
+}
+
 func checkPoolReachability(cfg *config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
@@ -336,83 +347,94 @@ func checkPoolReachability(cfg *config.Config) Check {
 				urls = urls[:maxReachabilityProbes]
 			}
 
-			type probe struct {
-				host    string
-				latency time.Duration
-				err     error
-				badURL  string
-			}
-			results := make([]probe, len(urls))
-			var wg sync.WaitGroup
-			for i, u := range urls {
-				host := stripScheme(poolproto.StripUserinfo(u))
-				if host == "" {
-					results[i].badURL = poolproto.StripUserinfo(u)
-					continue
-				}
-				results[i].host = host
-				wg.Add(1)
-				go func(idx int) {
-					defer wg.Done()
-					d := net.Dialer{Timeout: 5 * time.Second}
-					start := time.Now()
-					conn, err := d.DialContext(ctx, "tcp", results[idx].host)
-					if err != nil {
-						results[idx].err = err
-						return
-					}
-					_ = conn.Close()
-					results[idx].latency = time.Since(start).Round(time.Millisecond)
-				}(i)
-			}
-			wg.Wait()
-
-			var reachable, unreachable, unparseable []string
-			for _, r := range results {
-				switch {
-				case r.badURL != "":
-					unparseable = append(unparseable, r.badURL)
-				case r.err != nil:
-					unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
-				default:
-					reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
-				}
-			}
-
-			switch {
-			case len(reachable) == 0 && len(unreachable) == 0:
-				return Result{
-					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
-					Fix:    "check the pool URL in config.yaml",
-				}
-			case len(reachable) == 0:
-				return Result{
-					Status: StatusFail,
-					Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
-					Fix:    "check internet connection or try a different pool",
-				}
-			case len(unreachable) > 0 || len(unparseable) > 0:
-				var parts []string
-				if len(unreachable) > 0 {
-					parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
-				}
-				if len(unparseable) > 0 {
-					parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
-				}
-				return Result{
-					Status: StatusWarn,
-					Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
-						len(reachable), len(urls), strings.Join(reachable, ", "), strings.Join(parts, "; ")),
-					Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
-				}
-			default:
-				return Result{
-					Status: StatusPass,
-					Detail: strings.Join(reachable, ", "),
-				}
-			}
+			results := probePools(ctx, urls)
+			reachable, unreachable, unparseable := classifyProbes(results)
+			return reachabilityResult(len(urls), reachable, unreachable, unparseable)
 		},
+	}
+}
+
+// probePools dials every URL's host:port in parallel with a 5s timeout and
+// returns one reachProbe per input URL, in order.
+func probePools(ctx context.Context, urls []string) []reachProbe {
+	results := make([]reachProbe, len(urls))
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		host := stripScheme(poolproto.StripUserinfo(u))
+		if host == "" {
+			results[i].badURL = poolproto.StripUserinfo(u)
+			continue
+		}
+		results[i].host = host
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			d := net.Dialer{Timeout: 5 * time.Second}
+			start := time.Now()
+			conn, err := d.DialContext(ctx, "tcp", results[idx].host)
+			if err != nil {
+				results[idx].err = err
+				return
+			}
+			_ = conn.Close()
+			results[idx].latency = time.Since(start).Round(time.Millisecond)
+		}(i)
+	}
+	wg.Wait()
+	return results
+}
+
+// classifyProbes buckets probe outcomes into display strings.
+func classifyProbes(results []reachProbe) (reachable, unreachable, unparseable []string) {
+	for _, r := range results {
+		switch {
+		case r.badURL != "":
+			unparseable = append(unparseable, r.badURL)
+		case r.err != nil:
+			unreachable = append(unreachable, fmt.Sprintf("%s (%v)", r.host, r.err))
+		default:
+			reachable = append(reachable, fmt.Sprintf("%s (%s)", r.host, r.latency))
+		}
+	}
+	return reachable, unreachable, unparseable
+}
+
+// reachabilityResult folds the classified probes into the check's Result:
+// Fail when nothing parses or nothing dials, Warn on partial success, Pass
+// when every probed pool answered.
+func reachabilityResult(total int, reachable, unreachable, unparseable []string) Result {
+	switch {
+	case len(reachable) == 0 && len(unreachable) == 0:
+		return Result{
+			Status: StatusFail,
+			Detail: fmt.Sprintf("cannot parse pool URL(s) %q", strings.Join(unparseable, ", ")),
+			Fix:    "check the pool URL in config.yaml",
+		}
+	case len(reachable) == 0:
+		return Result{
+			Status: StatusFail,
+			Detail: "no pool reachable: " + strings.Join(unreachable, "; "),
+			Fix:    "check internet connection or try a different pool",
+		}
+	case len(unreachable) > 0 || len(unparseable) > 0:
+		var parts []string
+		if len(unreachable) > 0 {
+			parts = append(parts, "unreachable: "+strings.Join(unreachable, "; "))
+		}
+		if len(unparseable) > 0 {
+			parts = append(parts, fmt.Sprintf("unparseable: %s", strings.Join(unparseable, ", ")))
+		}
+		return Result{
+			Status: StatusWarn,
+			Detail: fmt.Sprintf("%d/%d pool(s) reachable (%s) — %s",
+				len(reachable), total, strings.Join(reachable, ", "), strings.Join(parts, "; ")),
+			Fix: "a dead failover pool is invisible until the primary fails; fix or remove the listed pool(s)",
+		}
+	default:
+		return Result{
+			Status: StatusPass,
+			Detail: strings.Join(reachable, ", "),
+		}
 	}
 }
 
@@ -451,7 +473,7 @@ func checkPoolDiversity(cfg *config.Config) Check {
 
 // poolIPResolver resolves a host (or host:port) to its IP addresses.
 // Overridable in tests so checkPoolEndpointDiversity does not hit real DNS.
-// Defaults to the system resolver, honouring the check's context deadline.
+// Defaults to the system resolver, honoring the check's context deadline.
 var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
 	h := host
 	if hh, _, err := net.SplitHostPort(host); err == nil {
@@ -591,12 +613,12 @@ func checkPoolTLSCA(cfg *config.Config) Check {
 					continue
 				}
 				configured++
-				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
+				// tls_ca_file is only honored for stratum+tls:// (V1 over TLS);
 				// for any other scheme it is silently ignored at runtime.
 				if !strings.HasPrefix(p.URL, "stratum+tls://") {
 					return Result{
 						Status: StatusWarn,
-						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honors it; it will be ignored",
 							stripScheme(poolproto.StripUserinfo(p.URL))),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
@@ -929,7 +951,7 @@ func checkClockSkew() Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (threshold %.0f s)", skew, clockSkewFailSecs),
 					Fix: fmt.Sprintf(
-						"synchronise your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
+						"synchronize your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
 							"`w32tm /resync` on Windows). Skew >%.0f s breaks TLS certificate "+
 							"validation and mining nTime checks.", clockSkewFailSecs,
 					),
@@ -938,7 +960,7 @@ func checkClockSkew() Check {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (warn threshold %.0f s)", skew, clockSkewWarnSecs),
-					Fix:    "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
+					Fix:    "synchronize your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
 				}
 			default:
 				return Result{

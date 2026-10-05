@@ -50,7 +50,7 @@ help: ## Display this help message
 .PHONY: setup
 setup: ## Install development tools
 	@echo "Installing development tools..."
-	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 	$(GO) install github.com/securego/gosec/v2/cmd/gosec@latest
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
 	$(GO) install github.com/google/go-licenses@latest
