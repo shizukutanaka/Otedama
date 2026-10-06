@@ -3952,3 +3952,29 @@ func TestRunSessionV2_UnknownMsgTypeWarnedOnce(t *testing.T) {
 		t.Fatalf("unknown-type warn count = %d, want exactly 1 (pool sent the type twice)", count)
 	}
 }
+
+func TestJitteredBackoff(t *testing.T) {
+	// Degenerate bases pass through unchanged: there is no span to draw.
+	for _, d := range []time.Duration{0, time.Nanosecond} {
+		if got := jitteredBackoff(d); got != d {
+			t.Fatalf("jitteredBackoff(%v) = %v, want unchanged", d, got)
+		}
+	}
+	// Each sleep lands in [0.75d, 1.25d): the base doubles as scheduled
+	// while the actual delay spreads across the ±25% window.
+	for _, d := range []time.Duration{time.Second, 64 * time.Second} {
+		low := int64(d) * 3 / 4
+		high := int64(d) * 5 / 4
+		seen := make(map[time.Duration]struct{})
+		for i := 0; i < 400; i++ {
+			got := jitteredBackoff(d)
+			if v := int64(got); v < low || v >= high {
+				t.Fatalf("jitteredBackoff(%v) = %v, outside [%v, %v)", d, got, time.Duration(low), time.Duration(high))
+			}
+			seen[got] = struct{}{}
+		}
+		if len(seen) < 2 {
+			t.Fatalf("jitteredBackoff(%v) returned one value over 400 draws — jitter not applied", d)
+		}
+	}
+}
