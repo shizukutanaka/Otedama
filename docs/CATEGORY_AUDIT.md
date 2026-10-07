@@ -8950,3 +8950,15 @@ skipped; sig files unpublished → log+skip; sigs present but
 verify-blob fails → hard die). Correction: an earlier draft of this
 entry described missing sig files as a hard-die — that was wrong,
 missing sigs are a logged skip.
+
+## Session 1670 update (Socratic pass 335)
+
+Claim verified: every OTEDAMA_* env var honoured by the binary is
+documented, and no documented-but-unimplemented env var exists —
+TRUE. 15 vars referenced in internal/+cmd/ all appear in docs
+(config-reference/SPECIFICATION/README); the four odd names found in
+docs (OTEDAMA_DATABASE_*, OTEDAMA_BITCOIN_ADDRESSES, OTEDAMA_X,
+bare OTEDAMA_WALLET_) are audit-narrative or explicitly-labelled
+non-existent examples, not live config surface. No .env.example file
+exists to drift — env documentation lives in the config docs by
+design.
