@@ -968,6 +968,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// msg_types (forward-compat drops). Bounded at 256 by the uint8
 	// msg_type space — a pool cannot grow it past the type space.
 	seenUnknown := make(map[uint8]bool)
+	// seenMisplaced keys the same once-per-type warning for decoded but
+	// out-of-place types (handshake-phase and client→server messages a
+	// pool must never send mid-session).
+	seenMisplaced := make(map[uint8]bool)
 	limiterCtx, stopLimiter := context.WithCancel(ctx)
 	defer stopLimiter()
 	submits := newSubmitLimiter(limiterCtx)
@@ -1142,6 +1146,19 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				if !seenUnknown[pm.msg.Unknown.MsgType] {
 					seenUnknown[pm.msg.Unknown.MsgType] = true
 					opts.log("warn", fmt.Sprintf("engine: ignoring unrecognized SV2 msg_type 0x%02X (%d bytes)", pm.msg.Unknown.MsgType, len(pm.msg.Unknown.Payload)))
+				}
+				continue
+			}
+			// Handshake-phase and client→server types decoded
+			// mid-session are protocol violations: the setup/open
+			// sequence completed before this loop ran and
+			// SubmitSharesStandard is ours. They carry no channel_id,
+			// so the foreign-channel guard above passes them through;
+			// warn once per type like the unrecognized arm, then drop.
+			if mt, bad := misplacedMsgType(&pm.msg); bad {
+				if !seenMisplaced[mt] {
+					seenMisplaced[mt] = true
+					opts.log("warn", fmt.Sprintf("engine: ignoring out-of-place SV2 msg_type 0x%02X mid-session", mt))
 				}
 				continue
 			}
@@ -1943,6 +1960,31 @@ func channelIDOf(m *stratum.Message) (uint32, bool) {
 		return m.SubmitSharesError.ChannelID, true
 	case m.CloseChannel != nil:
 		return m.CloseChannel.ChannelID, true
+	}
+	return 0, false
+}
+
+// misplacedMsgType reports the wire msg_type of a decoded message that
+// is inapplicable in the steady-state loop: handshake-phase types
+// (SetupConnection and both channel-open responses — the setup/open
+// sequence finished before this loop ran) and SubmitSharesStandard,
+// which only the client may send.
+func misplacedMsgType(m *stratum.Message) (uint8, bool) {
+	switch {
+	case m.SetupConnection != nil:
+		return stratum.MsgSetupConnection, true
+	case m.SetupConnectionSuccess != nil:
+		return stratum.MsgSetupConnectionSuccess, true
+	case m.SetupConnectionError != nil:
+		return stratum.MsgSetupConnectionError, true
+	case m.OpenMiningChannel != nil:
+		return stratum.MsgOpenMiningChannel, true
+	case m.OpenMiningChannelSuccess != nil:
+		return stratum.MsgOpenMiningChannelSuccess, true
+	case m.OpenMiningChannelError != nil:
+		return stratum.MsgOpenMiningChannelError, true
+	case m.SubmitSharesStandard != nil:
+		return stratum.MsgSubmitSharesStandard, true
 	}
 	return 0, false
 }

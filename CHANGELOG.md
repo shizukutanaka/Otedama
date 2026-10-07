@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1624 — セッション中の SV2 不適切メッセージを可視化)
+
+V2 セッションの `pm.msg` ディスパッチは定常8種を消費し未認識 msg_type を once-per-type で警告していたが、デコード済みの不適切型7種 — ハンドシェイク専用 `SetupConnection`/`Success`/`Error`・`OpenMiningChannel`/`Success`/`Error`（setup/open 交換はリードループ開始前に同期的完了済み）およびクライアント→サーバ専用 `SubmitSharesStandard` — は channel_id を持たず foreign-channel ガードを素通りし、どの処理アームにも一致せず静かに棄却されていた。順序違反・方向逆転を喋るプールが運用者に不可視だった欠陥を、`misplacedMsgType`（不適切フィールド→ワイヤ msg_type 写像）＋256 上限の `seenMisplaced` による once-per-type 警告へ修正。回帰ピン: `TestRunSessionV2_MisplacedMsgTypeWarnedOnce`（0x02 をセッション中2回送出し警告1回＋CloseChannel まで生存を確認）。
+
 ### Fixed (session 1559 — docker 検証チェインの複合欠陥と security ワークフローの破損ステップ)
 
 `ci.yml` の docker 検証系は複数層の構造欠陥で決定論的に失敗していた: (a) `docker run <img> -version` が存在しないフラグを渡していた（実体は `version` サブコマンド、5箇所）。(b) 検証 grep が `"Git Commit: <sha>"` を探すが、`otedama version` の出力形式は `otedama <Ver> (<Commit>) built ...` — `(<sha>)` 括弧形式へ修正。(c) ビルド引数が `GIT_COMMIT=` だが Dockerfile の宣言 ARG は `COMMIT` — 全6箇所で静かに無視され Commit は常に `unknown` だった。(d) `docker-verify` が存在しない `scripts/verify-docker.sh` を、`docker-verify-windows` が存在しない `scripts/verify-docker.ps1` を参照（`scripts/` ディレクトリ自体が存在せず、Windows ランナーはそもそも Linux コンテナを実行できないためジョブは設計上到達不能 — ジョブごと削除し `release` の needs からも除去）。(e) ヘルスチェックが `/health` を叩くが実エンドポイントは `/healthz`、かつ HTTP サーバは既定で無効（`--http-addr` 空）— `run --data-dir /tmp/otedama --bitcoin-address <BIP-173検証ベクタ> --http-addr 127.0.0.1:8082` で実サーバを立てて `/healthz` をポーリングする形へ修正（read-only 硬化コンテナは datadir を tmpfs へ指定）。(f) `docker-verify-cgo0-postgres` は Postgres サービス＋`OTEDAMA_DATABASE_*` 環境変数を持つが製品に DB が存在しない — コピー元ボイラープレートとしてデッドだったためサービスと env を撤去。
