@@ -8976,3 +8976,15 @@ artifact, not a product defect (`cmd | tail` reports tail's exit
 status under $?; the correct check is $? on the direct command or
 PIPESTATUS[0]). The audit loop's own verification commands must be
 subjected to the same scrutiny as the code.
+
+## Session 1672 update (Socratic pass 337)
+
+Claim verified end-to-end on the built binary: `otedama doctor`
+renders all 17 checks with ✓/✗/!/− status glyphs, aggregates
+"4 passed, 2 failed, 4 warnings, 7 skipped", and exits 2 when any
+check fails (matching the documented status-dominance contract
+fail>warn>skip>pass) — TRUE. Live sanitization proof: a --data-dir
+containing raw ESC bytes prints with the control bytes stripped
+(`evil[31m[?25h` — the 0x1b bytes removed, leftover brackets inert
+literal text), confirming the s1659 SanitizePoolText boundary in a
+real invocation, not just a unit test.
