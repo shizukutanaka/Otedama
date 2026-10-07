@@ -19,6 +19,7 @@ func TestSystemdUnitPath_UsesUserConfig(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("systemd paths are Linux-specific")
 	}
+	stubSystemdSpecPath(t)
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	path, err := m.systemdUnitPath()
 	if err != nil {
@@ -39,6 +40,7 @@ func TestSystemdUnitPath_CreatesDirectory(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("systemd paths are Linux-specific")
 	}
+	stubSystemdSpecPath(t)
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	path, err := m.systemdUnitPath()
 	if err != nil {
@@ -62,6 +64,7 @@ func TestSystemdUnitPath_ErrorsWhenHomeUnset(t *testing.T) {
 	// os.UserHomeDir() fails on Unix when $HOME is empty (e.g. a minimal
 	// container or a systemd context with no HOME). systemdUnitPath must
 	// surface that error rather than building a path under "".
+	stubSystemdSpecPath(t)
 	t.Setenv("HOME", "")
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	if _, err := m.systemdUnitPath(); err == nil {

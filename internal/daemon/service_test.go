@@ -26,6 +26,28 @@ func mockRunCmd(t *testing.T, fn func(name string, args ...string) error) {
 	runCmd = fn
 }
 
+// mockSystemctlEnv installs a stub for the systemd user-manager environment
+// query and restores the original on test cleanup.
+func mockSystemctlEnv(t *testing.T, fn func() ([]byte, error)) {
+	t.Helper()
+	orig := systemctlShowEnvironment
+	t.Cleanup(func() { systemctlShowEnvironment = orig })
+	systemctlShowEnvironment = fn
+}
+
+// stubSystemdSpecPath forces systemdUnitPath onto the spec-resolution path:
+// the systemd user manager is unqueryable and the process env carries no
+// XDG_CONFIG_HOME, so the path is derived from $HOME alone. Without it, a
+// live systemd user session (e.g. a CI runner with a user manager) leaks
+// its real XDG_CONFIG_HOME into tests that stub $HOME.
+func stubSystemdSpecPath(t *testing.T) {
+	t.Helper()
+	mockSystemctlEnv(t, func() ([]byte, error) {
+		return nil, errors.New("systemctl unavailable")
+	})
+	t.Setenv("XDG_CONFIG_HOME", "")
+}
+
 // setGoos overrides goos for the duration of the test.
 func setGoos(t *testing.T, goosName string) {
 	t.Helper()
@@ -756,6 +778,7 @@ func blockLibraryDir(t *testing.T) {
 // ----- systemdUnitPath error branches -----
 
 func TestSystemdUnitPath_MkdirAllError(t *testing.T) {
+	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	m := &Manager{}
 	if _, err := m.systemdUnitPath(); err == nil {
@@ -766,6 +789,7 @@ func TestSystemdUnitPath_MkdirAllError(t *testing.T) {
 // ----- installSystemd unit-path error branch -----
 
 func TestInstallSystemd_UnitPathError(t *testing.T) {
+	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
@@ -777,6 +801,7 @@ func TestInstallSystemd_UnitPathError(t *testing.T) {
 // ----- uninstallSystemd unit-path error branch -----
 
 func TestUninstallSystemd_UnitPathError(t *testing.T) {
+	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
@@ -820,6 +845,7 @@ func TestUninstallLaunchd_PlistPathError(t *testing.T) {
 // ----- installSystemd WriteFile error branch -----
 
 func TestInstallSystemd_WriteFileError(t *testing.T) {
+	stubSystemdSpecPath(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	// Create a DIRECTORY where the unit FILE must go — os.WriteFile returns
