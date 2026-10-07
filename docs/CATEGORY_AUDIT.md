@@ -8798,3 +8798,19 @@ test alone:
 
 Residual: nothing further — the defense sits at the display boundary,
 so it holds for any future source, not only today's three layers.
+
+## Session 1662 update (Socratic pass 327)
+
+Claim verified: doctor's JSON output channel handles control chars
+correctly without the s1659 sanitizer — TRUE, verified empirically on
+the built binary.
+
+`otedama doctor --data-dir $'/tmp/evil\x1b[2Jdir' --json` emits
+`"detail": "/tmp/evil\u001b[2Jdir ..."` — the Go JSON encoder escapes
+the ESC byte as `\u001b`, so the file contains zero literal control
+bytes and parses cleanly. This confirms the correct per-channel
+contract: text `Print` strips control runes (rendering them is the
+hazard), while JSON preserves the true value escaped (machine
+consumers may need the actual path, and escaping is inert). The s1659
+fix therefore correctly touched only the channel that could render —
+no sanitization was needed on WriteJSON, and none was applied.
