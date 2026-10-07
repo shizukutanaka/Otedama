@@ -8855,3 +8855,18 @@ contract is unchanged. Honest residual: install.sh does not consume
 per-asset `.sha256` files itself (it needs no tarball path today);
 a future pass could teach it that fallback if the bare-binary set
 ever disappears.
+
+## Session 1665 update (Socratic pass 330)
+
+Claim fixed: ci-cd's checksums.txt no longer carries a self-falsifying
+entry for itself.
+
+`sha256sum * > checksums.txt` expanded the glob AFTER the shell had
+already created checksums.txt (empty) via the redirect — so the file
+listed its own hash as e3b0c44... (the empty-string hash). Any user
+running the natural `sha256sum -c checksums.txt` on the whole release
+got a bogus "FAILED" line. Changed to `sha256sum otedama-*` — every
+dist/ artifact is the otedama-* prefix by construction (the Build for
+multiple platforms step emits only otedama-<os>-<arch> names), so the
+coverage set is identical minus the self-reference. install.sh's
+bare-binary preference path is unaffected.
