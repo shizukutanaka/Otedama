@@ -9210,3 +9210,22 @@ Marker census + workflow permissions/deploy-lifecycle audit:
   product does not have) — enabling deployment requires authoring
   real manifests under docs/, tracked as remaining work rather than
   hidden by the dormant jobs.
+
+## Session 1690-1691 update (Socratic passes 356-357)
+
+- Makefile maintenance surface verified: `deps-upgrade` runs
+  `go get -u ./...` consistent with its own "latest minor/patch"
+  description (manual maintainer target, not CI); `tag` uses
+  `git tag -s` as the signed-release policy intends and correctly
+  echoes push as a separate step; `deps` mutates go.sum via
+  `mod tidy` under a "download and verify" name — minor wording
+  gap, recorded as note rather than defect.
+- Workflow timeout census: every job in ci.yml and code-review.yml
+  already declared `timeout-minutes`, but 25 jobs across test.yml,
+  deploy.yml, release.yml, security.yml, ci-cd.yml and
+  devin-direct-merge.yml had none — a hung job would ride GitHub's
+  360-minute default. Every job in the repository now has an
+  explicit timeout sized to the ci.yml conventions
+  (lint 15, security/test/build/benchmark/integration 30,
+  docker/binary builds 40, releases 20, deploys 20-25,
+  rollback 15, comment bot 10).

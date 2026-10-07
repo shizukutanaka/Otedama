@@ -8226,3 +8226,10 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   `~/.kube/config` へ書き出し `export` 不持続バグも解消。
 - `ci-cd.yml` `deploy` のブランチゲートを `main` → `master`（実ブランチ）へ
   修正し、同一の kubeconfig ゲートを付与。
+
+### Fixed (session 1691 — CI ジョブのタイムアウト欠落)
+
+- test/deploy/release/security/ci-cd/devin-direct-merge の 25 ジョブに
+  `timeout-minutes` が無く、ハング時は GitHub 既定の 360 分まで走り続けた —
+  ci.yml の慣行（lint 15・scan/test/build 30・docker/build-binaries 40・
+  release 20・deploy 20-25）に合わせて全ジョブへ設定。

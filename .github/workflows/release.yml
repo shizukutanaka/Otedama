@@ -12,6 +12,7 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
@@ -52,6 +53,7 @@ jobs:
   build-binaries:
     name: Build Binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs: create-release
     strategy:
       matrix:
@@ -118,6 +120,7 @@ jobs:
   build-packages:
     name: Build Distribution Packages
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: create-release
     steps:
     - name: Checkout code
@@ -199,6 +202,7 @@ jobs:
   update-homebrew:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [create-release, build-binaries]
     if: vars.HOMEBREW_TAP_REPO != ''
     steps:
