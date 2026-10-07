@@ -8814,3 +8814,27 @@ hazard), while JSON preserves the true value escaped (machine
 consumers may need the actual path, and escaping is inert). The s1659
 fix therefore correctly touched only the channel that could render —
 no sanitization was needed on WriteJSON, and none was applied.
+
+## Session 1663 update (Socratic pass 328)
+
+Claim verified: install.sh selects a checksum-verifiable asset on the
+real release — TRUE.
+
+Traced the actual tag-push outcome: `release.yml` and `ci-cd.yml` both
+fire on `v*` tags and union their assets on one release page —
+release.yml contributes `otedama-<os>-<arch>.tar.gz` + .deb/.rpm with
+NO checksums, ci-cd contributes bare binaries + `checksums.txt`
+listing only the bare names. install.sh's verified-asset preference
+loop (install.sh:167-181) iterates CANDIDATES and picks the first
+listed in checksums.txt — `otedama-linux-amd64` (bare) matches
+sha256sum's two-space format, downloads, verifies, installs via the
+non-archive path (install.sh:258-262). The .tar.gz candidates fall
+through unused. Verified the preference loop picks a covered asset
+rather than dying.
+
+Honest residual: release.yml's own tarballs remain unsigned — a manual
+downloader grabbing `otedama-<os>-<arch>.tar.gz` has no checksum to
+verify against (checksums.txt covers only ci-cd's bare binaries).
+install.sh users are protected; direct-URL users are not. Recording as
+a residual gap in the release pipeline, not an install.sh defect —
+release.yml could generate its own checksums alongside its archives.
