@@ -8962,3 +8962,17 @@ bare OTEDAMA_WALLET_) are audit-narrative or explicitly-labelled
 non-existent examples, not live config surface. No .env.example file
 exists to drift — env documentation lives in the config docs by
 design.
+
+## Session 1671 update (Socratic pass 336)
+
+Claim verified: the CLI exit-code contract reaches the process
+boundary honestly — TRUE. Live binary probe: `config validate`
+with a missing bitcoin_address prints the failure block and exits
+78 (EX_CONFIG); `version` exits 0; help and usage errors follow the
+64/78/1/0 mapping declared in main.go. Methodology note recorded
+for honesty: an earlier draft of this entry asserted a real defect
+("validate failed yet exited 0") — that was a measurement
+artifact, not a product defect (`cmd | tail` reports tail's exit
+status under $?; the correct check is $? on the direct command or
+PIPESTATUS[0]). The audit loop's own verification commands must be
+subjected to the same scrutiny as the code.
