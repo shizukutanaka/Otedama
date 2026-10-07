@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1666 — release 作成レースで tarball/package 喪失)
+
+`v*` タグ push で `release.yml` と `ci-cd.yml` が同時起動し、ci-cd の `action-gh-release` が先にリリースを作ると release.yml の `actions/create-release` が 422 で失敗 — `needs: create-release` 伝播で tarball・.deb/.rpm・Homebrew formula 更新の全ジョブが静かにスキップされ、リリースが bare binary だけになる競合があった。upsert 可能な `softprops/action-gh-release@v1` へ置換（`upload_url` 出力・version 契約は不変）。
+
 ### Fixed (session 1665 — checksums.txt が自身を列挙)
 
 `ci-cd.yml` の `sha256sum * > checksums.txt` はリダイレクトが先に空の checksums.txt を作るため glob がそれを取り込み、ファイル自身の「空文字列ハッシュ」行が残っていた — リリース全体への `sha256sum -c` が必ず FAILED 行を出す自己矛盾。`sha256sum otedama-*` へ修正（dist/ 内アーティファクトは命名上全て otedama-* なので網羅性は不変）。
