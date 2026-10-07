@@ -1799,3 +1799,13 @@ Normative open set unchanged: sv2-spec #203 (coinbase payouts extension — push
 ### Session 1630 recheck (ecosystem)
 
 sv2-spec open set changed: **#238 "feat: negotiate optional SetupConnection flags"** (Sjors, opened 2026-10-06) joined the normative set — it reserves bits 0-15 for required features and 16-31 for optional requests; `SetupConnectionSuccess` echoes only the *accepted* optional flags from the request, and errors report only unsupported required bits. Otedama's handshake gate (reject any echoed flag outside the offered set, `msg.Flags &^ sc.Flags != 0` → fatal, session-1329 fix) stays forward-compatible: under #238 a compliant server may only echo a subset of what was offered, so the subset check remains the correct validation — and if Otedama ever offers optional bits (16-31), the same check still applies. Tracking #238: if merged with additional normative language, revisit the check's required/optional split. Other open set stable: #203 (coinbase transaction payouts), #234 (authority key mgmt/rotation), #198 (coinbase_witness), plus non-normative #232/#186/#103. SRI release stream: **v1.12.0 remains latest** (2026-09-17) — a hardening-dominated release (channels_sv2 share-validate/min_ntime/nTime enforcement, bounded job storage on every axis, AES-256-GCM removed from noise_sv2 leaving ChaCha20-Poly1305 the sole cipher, codec/framing refactor). sv2-apps releases stream quiet since v0.8.0. No required changes this cycle beyond continued tracking of #238.
+
+### Session 1651 recheck (ecosystem)
+
+sv2-spec open normative set unchanged: #203 (coinbase payouts extension),
+#234 (authority key management/rotation), #198 (coinbase_witness field),
+#238 (negotiate optional SetupConnection flags — Sjors, opened 2026-10-06,
+splits flags into required bits 0-15 vs optional 16-31; Otedama's current
+subset-check verification remains forward-compatible). Non-normative open:
+#232/#186 (markdown style), #103 (WIP Proxy Annex). SRI latest tag v1.12.0,
+sv2-apps latest v0.8.0 — both unchanged. No action required.
