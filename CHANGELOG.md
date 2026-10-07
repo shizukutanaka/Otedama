@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1669 — install.sh が macOS で必ず失敗)
+
+`require sha256sum || require shasum` — require() 内部の die() がスクリプト全体を exit させるため `||` の右辺へ到達せず、sha256sum を持たない macOS では前提チェックで常に死んで後続の `shasum -a 256` フォールバックが死にコードだった。明示的な「どちらか一方存在」チェックへ置換（どちらも無い場合のみ die）。
+
 ### Fixed (session 1667 — devin-merge 競合検出の取りこぼし)
 
 `devin-direct-merge.yml` が `mergeable` を一度だけ読み、初回の `UNKNOWN`（GitHub の非同期計算）を「競合なし」と誤認して本当の競合への /fix-conflict 起動を取りこぼしていた → 3回×5秒リトライ。併せてフォーク PR（書込トークン降格でコメント必ず失敗）ではコメント step をスキップするゲートを追加。

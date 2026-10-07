@@ -8945,7 +8945,8 @@ Verified same file: `set -euo pipefail`, TMPDIR+trap EXIT ordering,
 die() exit-1 / usage exit-64 contract, the two-step archive/checksum
 download split, the `grep -q " ${ARCHIVE}$"` membership gate (fails
 closed when the release didn't publish this archive), and the
-cosign verify-blob path being optional (missing cosign → skip with
-log, missing signature files → hard die per user-requested strict
-mode only when cosign IS installed — honest asymmetry now mirrored
-in the ledger).
+cosign verify-blob path semantics (cosign absent → whole block
+skipped; sig files unpublished → log+skip; sigs present but
+verify-blob fails → hard die). Correction: an earlier draft of this
+entry described missing sig files as a hard-die — that was wrong,
+missing sigs are a logged skip.
