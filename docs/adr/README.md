@@ -34,7 +34,7 @@ a new ADR that supersedes the old one; do not edit the old one.
 |-----|-------|--------|
 | [001](ADR-001-non-custodial-wallet.md) | Non-custodial wallet model | Accepted |
 | [002](ADR-002-stratum-v2-only.md) | Stratum V2 as the exclusive pool protocol | Accepted (partially superseded by ADR-006) |
-| [003](ADR-003-zero-runtime-dependencies.md) | Zero runtime dependencies beyond stdlib + x/crypto + yaml | Accepted |
+| [003](ADR-003-zero-runtime-dependencies.md) | Zero runtime dependencies beyond stdlib + x/crypto + x/sys + yaml | Accepted |
 | [004](ADR-004-terminal-ui-custom-ansi.md) | Custom ANSI TUI instead of BubbleTea | Accepted |
 | [005](ADR-005-prometheus-format-no-client.md) | Prometheus exposition without the official client library | Accepted |
 | [006](ADR-006-protocol-abstraction.md) | Abstract every cryptographic scheme and wire protocol behind interfaces | Accepted |

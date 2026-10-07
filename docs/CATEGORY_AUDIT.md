@@ -9155,3 +9155,22 @@ Doc-referenced command parity — clean twice over:
   v3.0.0-alpha.1, in-code default v3.0.0-alpha.1-dev, all five
   release paths inject via ldflags — the -dev marker honestly
   distinguishes raw builds from released ones.
+
+## Session 1685-1686 update (Socratic passes 351-352)
+
+Doc-graph integrity verified with one stale cell fixed:
+- All relative `](path)` links in every repo .md resolve to real
+  files — the only grep hit was the audit ledger's own literal
+  `](path)` marker inside a table cell, not a link.
+- ADR set is complete and coherent: files 001–011 all exist, all
+  are referenced, docs/adr/README.md indexes all 11 with statuses,
+  and ADR-011's "Accepted" is correctly a *decision* record
+  (secp256k1 dependency accepted, implementation scheduled for
+  v3.1.0 per noise.go's header — go.mod carries no btcec yet, as
+  designed).
+- Fixed: the ADR index's ADR-003 summary cell still read "stdlib +
+  x/crypto + yaml" although ADR-003 itself records the x/sys
+  erratum and go.mod directly requires x/sys — index now lists
+  "stdlib + x/crypto + x/sys + yaml". ADR-011's "4th dependency"
+  count remains consistent (x/sys is quasi-stdlib, not counted in
+  the dependency budget).
