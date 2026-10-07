@@ -473,157 +473,86 @@ every line after it; content longer than `cols` is now truncated to fit.
 
 ---
 
-## 13. Several CI workflows are non-functional or misdescribed (`deploy.yml`, `ci.yml`, `ci-cd.yml`, `security.yml`, `code-review.yml`, part of `release.yml`)
+## 13. Several CI workflows remain non-functional or misdescribed (revised session 1658)
 
-**What:** Six of the seven `.github/workflows/*.yml` files have real
-problems, ranging from "fails deterministically" to "silently a
-no-op":
+**Status after the session-1404/1649 repair pass:** the worst latches are
+fixed — `deploy.yml`'s `test` job now runs real `go build`/`vet`/`test`
+(replacing an `npm ci`/`npm test` job that failed deterministically on a
+repo with no `package.json`), `code-review.yml`'s `setup-node` is gated on
+the `has_node` detection that precedes it, `security.yml`'s hollow
+`security-tests` job (which ran `go test ./tests/security/...` against a
+`tests/` directory that does not exist) was deleted and a real
+`govulncheck` job added, `test.yml` gained the fuzz job CLAUDE.md's map
+already described, and `deploy.yml`'s registry push is gated so fork PRs
+no longer fail it. `ci.yml`'s docker-verify jobs now launch the real
+container with `--bitcoin-address`/`--http-addr` and poll `/healthz` —
+the phantom `scripts/verify-docker.*` invocations and the `postgres:15`
+service feeding `OTEDAMA_DATABASE_*` env vars for a database feature that
+does not exist are gone (the job's `docker-verify-cgo0-postgres` name is a
+cosmetic leftover).
 
-- **`deploy.yml`** runs an `npm ci`/`npm test` job on every push to
-  `main`/`develop` and every PR to `main` — but this is a Go project
-  with no `package.json` anywhere in the repository, so that job fails
-  immediately every time it runs. Its later `deploy-staging`/
-  `deploy-production` jobs run `helm upgrade --install … ./kubernetes/helm/otedama`,
-  but no `kubernetes/` or `helm/` directory exists in the repo
-  (CLAUDE.md's architecture map explicitly documents that `k8s/` does
-  not exist and is represented only by the YAML examples in
-  `docs/DEPLOYMENT.md`).
-- **`release.yml`**'s `build-packages` job (`.deb`/`.rpm` via `fpm`)
-  references `scripts/post-install.sh`, `scripts/pre-remove.sh`,
-  `scripts/otedama.service`, and a root-level `config.yaml` — none of
-  which exist (`scripts/` is not a directory in this repo; there is no
-  root `config.yaml`, only `config.yaml.example`). This job would also
-  fail if it ran (it currently only runs on a `v*` tag push).
-- **`ci.yml`**'s `docker-verify`/`docker-verify-windows` jobs run
-  `scripts/verify-docker.sh`/`.ps1` (same nonexistent `scripts/`
-  directory) and poll `http://localhost:8082/health` — but the actual
-  server only exposes `/healthz`/`/readyz` (`internal/httpserver`), and
-  the containers are started with no `--bitcoin-address`/`--http-addr`,
-  so (per the Dockerfile's default `CMD ["run", "--help"]`) they just
-  print help and exit — nothing is ever listening on 8082 regardless
-  of the path. A separate `docker-verify-cgo0-postgres` job spins up a
-  real `postgres:15` service and passes
-  `OTEDAMA_DATABASE_DRIVER`/`OTEDAMA_DATABASE_CONNECTION_STRING` env
-  vars — Otedama has no database layer and no such config fields exist
-  anywhere in `internal/config`; this job tests a feature that does
-  not exist. `ci.yml` also has its own `deploy-staging`/
-  `deploy-production` jobs applying `k8s/*.yaml`, the same nonexistent/
-  forbidden path as `deploy.yml`.
-- **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
-  (same workflow name as `ci.yml`) that appears to be superseded dead
-  weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
-  matrix, both below `go.mod`'s `go 1.22` minimum (so those legs cannot
-  even satisfy the module declaration), and it applies
-  `k8s/deployment.yaml` — the same nonexistent path again.
-- **`security.yml`**'s `security-tests` job runs
-  `go test -tags=security ./tests/security/...` and
-  `go test -tags=load -run TestDDoSProtection ./tests/load/...` —
-  there is no `tests/` directory anywhere in the repo; both steps fail
-  with "matched no packages." (Its `compliance-check` job's hardcoded-IP
-  grep, a second deterministic failure in the same file caused by
-  legitimate loopback/example addresses in this codebase's own flag
-  help text and doctor checks, was fixed session 247 — see below.)
-- **`code-review.yml`** is written entirely around a Node.js/npm
-  toolchain (ESLint via reviewdog, `npx complexity-report`,
-  `npx size-limit`, a `scripts/code-review/generate-comment.js` that
-  doesn't exist) gated behind a `has_node` check that is always false
-  for this Go-only repo — except its "Setup Node.js" step runs
-  unconditionally. Net effect: the workflow never reviews any Go code
-  (no golangci-lint/gosec-based inline comments); it only ever posts a
-  static "no Node.js project detected" comment.
-- **CLAUDE.md's own architecture map** describes `test.yml` as
-  `test.yml (fuzz+benchmark)`, but the file's actual jobs are `test`,
-  `lint`, `security`, `build`, `integration`, `benchmark` — there is no
-  fuzz job. A real fuzz target exists (`internal/stratum/frame_fuzz_test.go`,
-  `make fuzz`), but no workflow invokes it.
-- **Go-version mismatch breaks EVERY Go job at `go.mod` parse time
-  (confirmed live on PR CI, session 252).** Every workflow pins an old
-  Go: `ci.yml`/`test.yml`/`release.yml` use `1.23.x`, `ci-cd.yml`/
-  `security.yml` use `1.21`, all with `GOTOOLCHAIN=local`. But `go.mod`
-  declares `toolchain go1.24.0` and — decisively — a `godebug` block
-  containing `tlsmlkem=1`, which is a **Go 1.24** knob (X25519MLKEM768,
-  standardized in 1.24). Go 1.23/1.21 with `GOTOOLCHAIN=local` refuses
-  to download the newer toolchain and fails immediately with
-  `go.mod:16: unknown godebug "tlsmlkem"` at the very first `go mod
-  download` step — so the Test, Build, Lint, Benchmark, and gosec jobs
-  never even compile the code. This is not a code defect; the module is
-  internally consistent for Go 1.24+ (it builds and passes all 24
-  packages' tests locally on Go 1.24.7). It is purely that CI pins a Go
-  older than the module's own `tlsmlkem` godebug requires. Note the
-  latent tension it exposes: GODEBUG_NOTES.md says the `go 1.22` /
-  `toolchain go1.24.0` split exists so "older toolchains can still
-  build Otedama," but the `tlsmlkem=1` godebug (a 1.24 knob) already
-  makes `go.mod` unparseable by any toolchain < 1.24 — so that stated
-  intent is not actually achievable as long as the godebug is pinned.
-- **golangci-lint is pinned at two different stale versions, both ≥1
-  major release behind upstream.** `ci.yml` curl-installs `v1.55.2`;
-  `test.yml`/`ci-cd.yml` use `golangci-lint-action@v3` (a v1.x-era
-  action); local tooling is v1.64.8. Upstream is at v2.13.x — v2.13.0
-  (2026-08-19) added go1.27 support, which is also what the local
-  go1.27.1 toolchain needs (v1.64.8's typecheck cannot decode go1.27
-  export data; run it under `GOTOOLCHAIN=go1.26.8`). v2 additionally
-  uses a new `version: "2"` config format, so upgrading the linter
-  implies migrating `.golangci.yml` and bumping both CI pin sites
-  together — a maintainer decision, since the workflow files are the
-  pin owners.
+**What remains broken (verified session 1658):**
 
-**Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
-status red on ordinary development pushes/PRs for reasons unrelated to
-code quality — false-negative signals an operator or contributor could
-mistake for a real regression. Most severely, the Go-version mismatch
-above means the flagship **Test/Build/Lint jobs are red on every PR**
-before a single test runs — so CI provides no real signal on Go code
-health at all right now, even though the code itself is green on a
-correct (Go 1.24+) toolchain. `release.yml`'s packaging job and
-`security.yml`'s `security-tests` job would fail if actually triggered.
-`code-review.yml` gives the appearance of automated Go code review
-while doing none. The `test.yml`/CLAUDE.md mismatch means fuzzing —
-required by CLAUDE.md's own testing policy for parser/protocol code —
-is not actually running in CI despite the architecture map implying it
-is.
+- **Go-version pins below `go.mod`'s floor fail every Go job before a
+  single test compiles.** `test.yml` (`GO_VERSION: 1.23.x`, matrix
+  1.20–1.23.x), `ci.yml` (`1.23.x` + matrix), `ci-cd.yml` (`1.21`,
+  matrix 1.20/1.21), `security.yml` (`go-version: '1.21'`), and
+  `release.yml` (`1.23.x`) all pin Go below the module's
+  `toolchain go1.24.0`, which also carries the `tlsmlkem=1` godebug (a
+  Go 1.24 knob). `ci.yml`/`test.yml` set `GOTOOLCHAIN=local`, so the
+  runners refuse to fetch a newer toolchain and die at
+  `go mod download` — Test/Lint/Fuzz/Build are red on every PR for a
+  reason unrelated to the code, which is green on Go 1.24+. Fix is one
+  line per file: pin `1.24.x` (or drop `GOTOOLCHAIN=local`). A PR doing
+  this was closed without merge — treated here as a pending maintainer
+  decision about the pin policy, not as an open bug to re-deliver.
+- **`deploy.yml` `deploy-staging`/`deploy-production`** still run
+  `helm upgrade --install … ./kubernetes/helm/otedama` against a chart
+  path that does not exist (no `kubernetes/` directory; CLAUDE.md's map
+  documents `k8s/` as represented only by `docs/DEPLOYMENT.md` YAML
+  examples), with no `KUBECONFIG` configured — unreachable by design.
+- **`ci.yml` `deploy-staging`/`deploy-production`** still
+  `kubectl apply -f k8s/01-namespace.yaml` … `08-ingress.yaml` — the
+  same nonexistent `k8s/` directory.
+- **`release.yml` `build-packages`** (fpm `.deb`/`.rpm`, runs only on
+  `v*` tags) references `scripts/post-install.sh`,
+  `scripts/pre-remove.sh`, `scripts/otedama.service`, and a root
+  `config.yaml` — none exist (no `scripts/` directory; only
+  `config.yaml.example`). The job would fail if a tag were cut.
+- **`ci-cd.yml` as a whole** remains dead duplicate weight: a second
+  pipeline that hardcodes `GO_VERSION: '1.21'`, a `1.20`/`1.21` matrix
+  below `go.mod`'s minimum, and `kubectl apply -f k8s/deployment.yaml`
+  — nonexistent path. Deleting the file is the obvious resolution;
+  whether the duplicate pipeline exists at all is the maintainer's call.
+- **golangci-lint is pinned at three different versions.** `ci.yml`
+  curl-installs `v1.55.2`; `test.yml`/`ci-cd.yml` use
+  `golangci-lint-action@v3`; the Makefile pins `v1.64.8`. Upstream is on
+  v2 (a new `version: "2"` config schema), so upgrading requires
+  migrating `.golangci.yml` plus all pin sites together — a maintainer
+  decision, recorded after a v2-migration PR was closed unmerged.
+- **The Dependency Review job fails for every PR** until Dependency
+  graph is enabled for the repository (Settings → Code security and
+  analysis → Dependency graph). This is a repository-setting change no
+  code edit can make.
 
-**Corrected so far:** `release.yml`'s smaller factual errors (session
-245: wrong `MIT` license string vs. the project's actual Apache-2.0;
-a "P2P Mining Pool Software" description CLAUDE.md explicitly forbids
-as mischaracterizing Otedama as a pool operator; a broken deployment-
-guide link) and `security.yml`'s `compliance-check` hardcoded-IP check
-(session 247: changed from a hard failure to a non-fatal `::warning::`,
-since the pattern matches this repo's own legitimate loopback/example
-addresses — `127.0.0.1` in flag help text, `1.1.1.1` in doctor's DNS
-reachability check — not just genuine leaks).
+**Impact:** The Go-pin class alone means the flagship Test/Lint/Fuzz
+jobs give no signal on Go code health — red before compiling — while
+`Test Changed Packages (PR)` (which uses a current toolchain) is green.
+The `helm`/`kubectl`/`fpm` jobs cannot succeed under any configuration
+because their target assets don't exist in the tree. `ci-cd.yml` adds
+only noise: every job it would run is also covered (better) elsewhere.
 
-**Not fixed:** everything above lives in `.github/workflows/`, which
-the automation making these corrections cannot push to (the GitHub App
-lacks the `workflows` permission — verified repeatedly this session).
-Each item also carries a maintainer decision:
+**Workaround:** Read `Test Changed Packages (PR)` and the local gate
+(`go build ./... && go vet ./... && go test ./...` on Go ≥1.24) as the
+real signal; ignore the Go-pin red. Do not cut a `v*` tag expecting
+`build-packages` to produce `.deb`/`.rpm`, and do not treat the
+`deploy-*` jobs as deployable infrastructure.
 
-- **The Go-version mismatch is the one-line, highest-value fix:** set
-  every workflow's Go version to **`1.24.x`** (matching `go.mod`'s
-  `toolchain go1.24.0`), or drop `GOTOOLCHAIN=local` so the runner is
-  allowed to fetch the 1.24 toolchain the module already declares. That
-  single change turns the Test/Build/Lint jobs from "red before
-  compiling" to actually exercising the (already-green) code. The
-  deeper question — whether to keep the `tlsmlkem=1` godebug pin (which
-  forecloses GODEBUG_NOTES.md's "old toolchains can build" intent) or
-  relax it — is a security-posture call for the maintainer, informed by
-  GODEBUG_NOTES.md's reasoning; it should not be changed unilaterally.
-- The rest: author the missing `scripts/`/`config.yaml`/
-  `tests/security`/`tests/load` assets and a real Kubernetes/Helm
-  deployment target vs. remove the non-functional jobs entirely; decide
-  whether `ci-cd.yml` is still needed or should be deleted; decide
-  whether to replace `code-review.yml` with a Go-native reviewdog/
-  golangci-lint pipeline; decide whether to add a scheduled fuzz job to
-  `test.yml` or correct CLAUDE.md's description.
-
-**Workaround:** Ignore `deploy.yml`/`ci-cd.yml` CI status; neither
-reflects code health. Do not attempt `.deb`/`.rpm` packaging via
-`release.yml`, rely on `code-review.yml`'s output as a Go code review,
-or assume fuzz testing runs in CI until these are addressed.
-
-**Target:** No committed target; tracked here pending a maintainer
-decision on CI/CD strategy.
-
----
+**Target:** No committed target; each remaining item is a maintainer
+decision — the Go-pin policy (#1344-class fix previously closed), the
+missing k8s/helm/scripts assets vs. deleting the jobs, the fate of
+`ci-cd.yml`, the v2 lint migration, and the Dependency-graph repo
+setting.
 
 ## 14. DATUM is a reserved URL scheme, not an implemented protocol
 

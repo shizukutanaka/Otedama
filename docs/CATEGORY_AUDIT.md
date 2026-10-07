@@ -8702,3 +8702,42 @@ package doc claims. TRUE — full cmd surface now verified this cycle.
 
 cmd/otedama complete this cycle: run.go (s1654), wallet/config (s1655
 fix), main/service/logfile/completion/configfile/doctor/version (s1657).
+
+## Session 1658 update (Socratic pass 324)
+
+Claim verified: every open entry in KNOWN_LIMITATIONS.md still matches
+the code — FALSE for §13, fixed.
+
+- §1/§2/§4/§5/§6/§8/§14 re-verified TRUE against current code:
+  AkashProvider still quotes the fixed midpoint (no live REST), the
+  engine's live stratum+v2:// path still never calls noise* (P-256
+  stub, x-only fallback, discarded k, unauthenticated responder),
+  v2tls is real crypto/tls with a plaintext warning, GPUs are
+  Linux-only + SHA256d=false, PQ schemes are registered stubs
+  returning ErrSchemeNotImplemented, WalletManager's surface is
+  seed/fingerprint/mnemonic/passphrase only (confirmed by this cycle's
+  wallet.go read), no ASIC driver exists, datum:// has no registered
+  dialer.
+- §13 was materially STALE — rewritten to current state. Fixed since it
+  was written (verified against workflows today): deploy.yml npm test
+  job → Go build/vet/test; code-review setup-node → has_node gate;
+  security.yml hollow tests/ job → deleted + real govulncheck added;
+  test.yml fuzz job exists; ci.yml docker-verify launches the real
+  container on /healthz (phantom scripts/ + postgres service +
+  OTEDAMA_DATABASE_* gone — only the misleading job name remains);
+  deploy.yml registry push fork-gated. Its claim that "automation
+  cannot push .github/workflows/" was also false.
+- Still broken (verified today, all maintainer decisions not code
+  defects): Go-version pins 1.20–1.23 vs go.mod toolchain 1.24 +
+  tlsmlkem godebug across test/ci/ci-cd/security/release (#1344-class,
+  closed unmerged — recorded, not re-delivered); deploy.yml helm +
+  ci.yml kubectl targets (k8s/, kubernetes/ absent — unreachable);
+  release.yml build-packages referencing absent scripts/+config.yaml
+  (v* tag only); ci-cd.yml whole-file dead duplicate; golangci-lint at
+  three divergent pins (v1.55.2/action@v3/v1.64.8) vs upstream v2
+  (migration closed unmerged); Dependency Review failing until the
+  repo's Dependency graph setting is enabled.
+
+Ledger doc itself is now honest again — the file that exists to
+separate "designed this way" from "not finished" no longer claims
+fixed items are broken.
