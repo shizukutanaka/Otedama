@@ -156,13 +156,21 @@ jobs:
       
       - name: Run security tests
         run: |
-          go test -v -tags=security ./tests/security/...
+          if [ -d ./tests/security ]; then
+            go test -v -tags=security ./tests/security/...
+          else
+            echo "::warning file=.github/workflows/security.yml::No ./tests/security tree exists; security test suite skipped."
+          fi
         env:
           SECURITY_TEST: true
       
       - name: Run load tests for DDoS protection
         run: |
-          go test -v -tags=load -run TestDDoSProtection ./tests/load/...
+          if [ -d ./tests/load ]; then
+            go test -v -tags=load -run TestDDoSProtection ./tests/load/...
+          else
+            echo "::warning file=.github/workflows/security.yml::No ./tests/load tree exists; load test suite skipped."
+          fi
         env:
           LOAD_TEST: true
 
@@ -201,6 +209,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [security-scan, container-scan, security-tests, compliance-check]
     if: always()
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     
     steps:
       - name: Download artifacts

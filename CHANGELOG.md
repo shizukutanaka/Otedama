@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1559 — docker 検証チェインの複合欠陥と security ワークフローの破損ステップ)
+
+`ci.yml` の docker 検証系は複数層の構造欠陥で決定論的に失敗していた: (a) `docker run <img> -version` が存在しないフラグを渡していた（実体は `version` サブコマンド、5箇所）。(b) 検証 grep が `"Git Commit: <sha>"` を探すが、`otedama version` の出力形式は `otedama <Ver> (<Commit>) built ...` — `(<sha>)` 括弧形式へ修正。(c) ビルド引数が `GIT_COMMIT=` だが Dockerfile の宣言 ARG は `COMMIT` — 全6箇所で静かに無視され Commit は常に `unknown` だった。(d) `docker-verify` が存在しない `scripts/verify-docker.sh` を、`docker-verify-windows` が存在しない `scripts/verify-docker.ps1` を参照（`scripts/` ディレクトリ自体が存在せず、Windows ランナーはそもそも Linux コンテナを実行できないためジョブは設計上到達不能 — ジョブごと削除し `release` の needs からも除去）。(e) ヘルスチェックが `/health` を叩くが実エンドポイントは `/healthz`、かつ HTTP サーバは既定で無効（`--http-addr` 空）— `run --data-dir /tmp/otedama --bitcoin-address <BIP-173検証ベクタ> --http-addr 127.0.0.1:8082` で実サーバを立てて `/healthz` をポーリングする形へ修正（read-only 硬化コンテナは datadir を tmpfs へ指定）。(f) `docker-verify-cgo0-postgres` は Postgres サービス＋`OTEDAMA_DATABASE_*` 環境変数を持つが製品に DB が存在しない — コピー元ボイラープレートとしてデッドだったためサービスと env を撤去。
+
+`security.yml` の `security-report` ジョブはワークフロー権限が `contents: read, security-events: write` のため、`github-script` による PR コメント投稿が 403 で失敗 — ジョブ単位の `issues: write, pull-requests: write` を付与。`security-tests` ジョブは存在しない `./tests/security/`・`./tests/load/` ディレクトリを参照 — ディレクトリ存在ガードを付け、未存在時は `::warning::` で明示してスキップ（テストツリーが将来追加されれば自動で実行される設計）。
+
+`docker-verify` (Health) ジョブも同じ cgo0 パターンで自己完結化 — 未存在だった `otedama:ci-verify-<sha>` をジョブ内ローカル build で生成するステップを追加。`CGO_ENABLED=` build-arg も宣言 ARG 不在で無視されていたが、コードに cgo が存在せず `golang:alpine` ビルダーに gcc がない以上 CGO=1/0 の区別自体がボイラープレート — dead arg 6箇所を全て除去（build-args に残るのは `COMMIT` のみ、`-cgo0` タグ区別は維持）。
+
+誠実残件: `Lint`/`Fuzz`/`Test(1.20)` は go.mod が要求する Go 1.24 未満のピン留め（#1344 で却下済みの領域のため手付かず）。`Security Scanning` (gosec) は 40 件の検出（`//nolint:gosec` は golangci-lint 構文で standalone gosec には `#nosec` が必要 — 大型トリアージのため残件）。`Dependency Review` はリポジトリ設定で Dependency graph 無効のためユーザー操作が必要。
+
 ### Fixed (session 1558 — Go リポで Node.js ジョブが決定論的に失敗していた)
 
 `deploy.yml` の `test` ジョブ（`build` のゲート）は package.json の存在しない Go リポで `setup-node cache: 'npm'` → `npm ci` → `npm test` → `npm run lint` → lcov カバレッジアップロードを実行しており、存在しない lockfile で毎回失敗していた — つまりデプロイパイプライン全体が `needs: test` を通じて不通だった（PR #1403 の失敗ログで実測確認）。Go ツールチェーンの build/vet/test へ置き換え、存在しない lcov を参照していた codecov アップロードは撤去。併せて `code-review.yml` の Automated Code Review ジョブが `has_node` 検出の直後に `setup-node cache: 'npm'` を無条件実行していたため同じ lockfile 不在で落ちていた問題を、performance-check ジョブと同じ `has_node` ゲートを setup-node に付加して解消 — フォールバック経路（"No Node.js project detected."）が設計通り動くようになった。残件: Dependency Review ジョブの失敗はリポジトリ設定で Dependency graph が無効なためであり、コードでは修正不可（Settings → Code security で有効化が必要）。

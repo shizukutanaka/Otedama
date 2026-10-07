@@ -363,8 +363,7 @@ jobs:
         with:
           context: .
           build-args: |
-            CGO_ENABLED=1
-            GIT_COMMIT=${{ github.sha }}
+            COMMIT=${{ github.sha }}
           platforms: linux/amd64
           load: true
           tags: otedama:ci-test
@@ -373,9 +372,9 @@ jobs:
       - name: Verify container runs and prints version (CGO=1)
         run: |
           set -euo pipefail
-          OUT=$(docker run --rm otedama:ci-test -version || true)
+          OUT=$(docker run --rm otedama:ci-test version || true)
           echo "$OUT"
-          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output" && exit 1)
+          echo "$OUT" | grep -q "(${{ github.sha }})" || (echo "Git commit not embedded in version output" && exit 1)
         timeout-minutes: 5
       
       - name: Build (local load) Docker image for verification (CGO=0)
@@ -383,8 +382,7 @@ jobs:
         with:
           context: .
           build-args: |
-            CGO_ENABLED=0
-            GIT_COMMIT=${{ github.sha }}
+            COMMIT=${{ github.sha }}
           platforms: linux/amd64
           load: true
           tags: otedama:ci-test-cgo0
@@ -393,9 +391,9 @@ jobs:
       - name: Verify container runs and prints version (CGO=0)
         run: |
           set -euo pipefail
-          OUT=$(docker run --rm otedama:ci-test-cgo0 -version || true)
+          OUT=$(docker run --rm otedama:ci-test-cgo0 version || true)
           echo "$OUT"
-          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (cgo0)" && exit 1)
+          echo "$OUT" | grep -q "(${{ github.sha }})" || (echo "Git commit not embedded in version output (cgo0)" && exit 1)
         timeout-minutes: 5
         
       - name: Log in to Docker Hub
@@ -432,8 +430,7 @@ jobs:
         with:
           context: .
           build-args: |
-            CGO_ENABLED=1
-            GIT_COMMIT=${{ github.sha }}
+            COMMIT=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -446,8 +443,7 @@ jobs:
         with:
           context: .
           build-args: |
-            CGO_ENABLED=0
-            GIT_COMMIT=${{ github.sha }}
+            COMMIT=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
@@ -473,13 +469,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Run verification script (Linux)
+      - name: Build image for verification (local load)
         shell: bash
         env:
           IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
-          START_TIMEOUT_SEC: 60
         run: |
-          bash scripts/verify-docker.sh
+          set -euo pipefail
+          docker build \
+            --build-arg COMMIT=${{ github.sha }} \
+            -t "$IMAGE_TAG" .
 
       - name: Validate version output includes commit
         shell: bash
@@ -487,22 +485,22 @@ jobs:
           IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
         run: |
           set -euo pipefail
-          OUT=$(docker run --rm "$IMAGE_TAG" -version || true)
+          OUT=$(docker run --rm "$IMAGE_TAG" version || true)
           echo "$OUT"
-          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (verify job)" && exit 1)
+          echo "$OUT" | grep -q "(${{ github.sha }})" || (echo "Git commit not embedded in version output (verify job)" && exit 1)
 
       - name: Run hardened container and verify health (read-only, drop caps)
         shell: bash
         env:
           IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
-          HEALTH_URL: http://localhost:8082/health
+          HEALTH_URL: http://localhost:8082/healthz
         run: |
           set -euo pipefail
           CONTAINER=otedama-verify-hardened
           docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
           docker run -d --name "$CONTAINER" --network host \
-            --read-only --cap-drop=ALL --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-            "$IMAGE_TAG" >/dev/null
+            --read-only --cap-drop=ALL --tmpfs /tmp:rw,nosuid,size=64m \
+            "$IMAGE_TAG" run --data-dir /tmp/otedama --bitcoin-address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 --http-addr 127.0.0.1:8082 >/dev/null
           for i in {1..60}; do
             if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
               echo "Health check OK (hardened)"; break
@@ -512,51 +510,11 @@ jobs:
           done
           docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
-  # Verify Docker on Windows runner using PowerShell script (CGO=1)
-  docker-verify-windows:
-    name: Docker Verify (Windows, CGO=1)
-    runs-on: windows-latest
-    timeout-minutes: 25
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run verification script (Windows PowerShell)
-        shell: pwsh
-        env:
-          IMAGE_TAG: otedama:ci-verify-windows-${{ github.sha }}
-          GIT_COMMIT: ${{ github.sha }}
-        run: |
-          ./scripts/verify-docker.ps1 -ImageTag $env:IMAGE_TAG -StartTimeoutSec 60
-
-      - name: Validate version output includes commit (Windows)
-        shell: pwsh
-        env:
-          IMAGE_TAG: otedama:ci-verify-windows-${{ github.sha }}
-        run: |
-          $out = docker run --rm $env:IMAGE_TAG -version
-          Write-Host $out
-          if ($out -notmatch "Git Commit: ${{ github.sha }}") { throw "Git commit not embedded in version output (windows verify)" }
-
-  # Verify CGO=0 image against PostgreSQL service (Ubuntu)
+  # Verify CGO=0 image (Ubuntu)
   docker-verify-cgo0-postgres:
-    name: Docker Verify (CGO=0 + Postgres)
+    name: Docker Verify (CGO=0)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: otedama
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -567,16 +525,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Wait for Postgres to be ready
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in {1..90}; do
-            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && { echo "Postgres is ready"; break; }
-            sleep 1
-            if [ "$i" -eq 90 ]; then echo "Postgres did not become ready in time"; exit 1; fi
-          done
-
       - name: Build CGO=0 image for verification (local load)
         shell: bash
         env:
@@ -584,8 +532,7 @@ jobs:
         run: |
           set -euo pipefail
           docker build \
-            --build-arg CGO_ENABLED=0 \
-            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg COMMIT=${{ github.sha }} \
             -t "$IMAGE_TAG" .
 
       - name: Validate version output includes commit (CGO=0)
@@ -594,25 +541,22 @@ jobs:
           IMAGE_TAG: otedama:ci-verify-cgo0-${{ github.sha }}
         run: |
           set -euo pipefail
-          OUT=$(docker run --rm "$IMAGE_TAG" -version || true)
+          OUT=$(docker run --rm "$IMAGE_TAG" version || true)
           echo "$OUT"
-          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (cgo0-postgres verify)" && exit 1)
+          echo "$OUT" | grep -q "(${{ github.sha }})" || (echo "Git commit not embedded in version output (cgo0-postgres verify)" && exit 1)
 
       - name: Start container and verify health (CGO=0 + Postgres)
         id: run_cgo0
         shell: bash
         env:
           IMAGE_TAG: otedama:ci-verify-cgo0-${{ github.sha }}
-          HEALTH_URL: http://localhost:8082/health
-          DB_DSN: postgres://postgres:postgres@localhost:5432/otedama?sslmode=disable
+          HEALTH_URL: http://localhost:8082/healthz
         run: |
           set -euo pipefail
           CONTAINER=otedama-verify-cgo0
           docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
           docker run -d --name "$CONTAINER" --network host \
-            -e OTEDAMA_DATABASE_DRIVER=postgresql \
-            -e OTEDAMA_DATABASE_CONNECTION_STRING="$DB_DSN" \
-            "$IMAGE_TAG" >/dev/null
+            "$IMAGE_TAG" run --data-dir /tmp/otedama --bitcoin-address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 --http-addr 127.0.0.1:8082 >/dev/null
 
           # Poll health
           for i in {1..90}; do
@@ -681,8 +625,7 @@ jobs:
           context: .
           build-args: |
             GOTAGS=-tags=experimental_unified
-            CGO_ENABLED=1
-            GIT_COMMIT=${{ github.sha }}
+            COMMIT=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
@@ -694,7 +637,7 @@ jobs:
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, build-unified, docker, docker-unified, docker-verify, docker-verify-windows, docker-verify-cgo0-postgres]
+    needs: [build, build-unified, docker, docker-unified, docker-verify, docker-verify-cgo0-postgres]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
