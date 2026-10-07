@@ -9138,3 +9138,20 @@ Two defects fixed, one claim re-verified:
    builds from raw `go build` — every release path (Makefile,
    ci-cd, ci.yml, release.yml, goreleaser) injects Version, and
    .goreleaser.yaml parses cleanly.
+
+## Session 1683-1684 update (Socratic passes 349-350)
+
+Doc-referenced command parity — clean twice over:
+- Every `make <target>` cited in README/CONTRIBUTING/docs/skills/
+  VERIFY/SECURITY exists as a real Makefile target; remaining
+  grep hits were English prose, not invocations. `make test-e2e`
+  mentions are all documented session-483 errata (suite does not
+  exist; the reference itself carries the correction).
+- Every `otedama <subcommand>` cited in docs/skills resolves to a
+  real dispatch entry; `otedama migrate-from-v2` hits are the
+  documented session-483 phantom erratum (v2→v3 is a docs guide,
+  not a CLI subcommand); `otedama help` verified live — prints
+  usage and exits 0. Release/dev-split re-verified: VERSION file
+  v3.0.0-alpha.1, in-code default v3.0.0-alpha.1-dev, all five
+  release paths inject via ldflags — the -dev marker honestly
+  distinguishes raw builds from released ones.
