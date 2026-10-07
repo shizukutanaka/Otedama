@@ -499,7 +499,7 @@ jobs:
           CONTAINER=otedama-verify-hardened
           docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
           docker run -d --name "$CONTAINER" --network host \
-            --read-only --cap-drop=ALL --tmpfs /tmp:rw,nosuid,size=64m \
+            --read-only --cap-drop=ALL --tmpfs /tmp:rw,noexec,nosuid,size=64m \
             "$IMAGE_TAG" run --data-dir /tmp/otedama --bitcoin-address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 --http-addr 127.0.0.1:8082 >/dev/null
           for i in {1..60}; do
             if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then

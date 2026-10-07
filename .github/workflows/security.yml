@@ -140,40 +140,6 @@ jobs:
           fail-build: true
           severity-cutoff: high
 
-  security-tests:
-    name: Security Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache: true
-      
-      - name: Run security tests
-        run: |
-          if [ -d ./tests/security ]; then
-            go test -v -tags=security ./tests/security/...
-          else
-            echo "::warning file=.github/workflows/security.yml::No ./tests/security tree exists; security test suite skipped."
-          fi
-        env:
-          SECURITY_TEST: true
-      
-      - name: Run load tests for DDoS protection
-        run: |
-          if [ -d ./tests/load ]; then
-            go test -v -tags=load -run TestDDoSProtection ./tests/load/...
-          else
-            echo "::warning file=.github/workflows/security.yml::No ./tests/load tree exists; load test suite skipped."
-          fi
-        env:
-          LOAD_TEST: true
-
   compliance-check:
     name: Compliance Check
     runs-on: ubuntu-latest
@@ -207,7 +173,7 @@ jobs:
   security-report:
     name: Security Report
     runs-on: ubuntu-latest
-    needs: [security-scan, container-scan, security-tests, compliance-check]
+    needs: [security-scan, container-scan, compliance-check]
     if: always()
     permissions:
       contents: read
@@ -231,7 +197,6 @@ jobs:
           echo "## Scan Results" >> security-report.md
           echo "- Static Analysis: ${{ needs.security-scan.result }}" >> security-report.md
           echo "- Container Scan: ${{ needs.container-scan.result }}" >> security-report.md
-          echo "- Security Tests: ${{ needs.security-tests.result }}" >> security-report.md
           echo "- Compliance: ${{ needs.compliance-check.result }}" >> security-report.md
       
       - name: Upload security report
@@ -251,7 +216,6 @@ jobs:
             |-------|--------|
             | Static Analysis | ${{ needs.security-scan.result }} |
             | Container Security | ${{ needs.container-scan.result }} |
-            | Security Tests | ${{ needs.security-tests.result }} |
             | Compliance | ${{ needs.compliance-check.result }} |
             
             View detailed results in the [Actions tab](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;

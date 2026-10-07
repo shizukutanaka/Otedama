@@ -8453,3 +8453,35 @@ Verified assumption: "the V2 read pump feeds inCh in wire order, terminates the 
 ## Session 1648 update (Socratic pass 314 — doctor/checks.go complete)
 
 **Claim verified: endpoint diversity detects illusory failover honestly, address/fingerprint helpers hold their documented contracts, and the 17-check composition is deterministic — TRUE.** `checkPoolEndpointDiversity` resolves every configured host via the injectable `poolIPResolver` (host stripped of port, ctx-honored): unresolvable hosts are skipped (the reachability check owns that verdict — no double-reporting), `resolved < 2` degrades to Skip ("could not resolve enough") rather than a fake offline pass, and a shared resolved IP warns that failover is illusory — the check honestly scopes its own claim ("proper ASN/operator analysis needs a dataset we don't bundle; a shared IP is the strong dependency-free signal for the common CNAME/round-robin misconfig"). `checkPoolDiversity` warns on 0 pools (built-in default is real but single-point) and on exactly 1, passing only at ≥2. `isLikelyBitcoinAddress` is an honestly-named cheap pre-check (charset+length matching `config.validateAddress` bounds) before the real `btccrypto.ValidateAddress` checksum — it never claims "valid". `isFingerprint` enforces the exact 8-hex shape the wallet writes. `stripScheme` fails closed: any unknown scheme returns "" → callers treat it as unparseable, never mis-parsed. `DefaultChecks` composes exactly the 17 checks CLAUDE.md promises in a curated order that `Runner.Run` preserves via index-slot writes — deterministic output regardless of goroutine scheduling. Residual noted: `maskAddress` style (6+3·s+4) diverges cosmetically from engine `maskAddr` (6+…+4) — same masking semantics, presentation only. **doctor/checks.go fully verdict-clean.** No defect.
+
+## Session 1649 update (Socratic pass 315)
+
+Claim verified: a doctor check that panics cannot lose the other 16 verdicts — FIXED.
+
+`Runner.Run` fans the 17 checks out as per-check goroutines writing disjoint
+result slots (doctor.go:226-243). The shared `ctx` and the own-slot write are
+race-free, but the goroutine had no `recover()`: a single panicking check
+(nil-map write, future unchecked index, malformed external file parsed by a
+new code path) crashed the entire `otedama doctor` process — the diagnostic
+tool dying precisely when its output is needed most. Repo-wide census
+confirmed zero production `recover()` sites; the fix wraps each check
+goroutine in a recover that converts a panic into a named `StatusFail`
+result (`check panicked: <v>`, Fix: report as internal error) so the other
+verdicts survive and the failure is loud rather than silent. Regression pin:
+`TestRunner_PanickingCheckBecomesFailResult` — sibling results preserved,
+panic surfaces as Fail with the panic value echoed.
+
+Follow-on (Devin Review on merged #1404, 3 findings — all substantiated):
+- deploy.yml: unconditional `push: true` + login on `pull_request` events —
+  a fork's GITHUB_TOKEN is read-only regardless of requested permissions, so
+  image publishing would deterministically fail on any fork PR now that the
+  `test` gate actually runs. Fixed: registry login and `push:` gated on
+  `github.event_name != 'pull_request'`; `security-scan` (and the whole
+  needs-chain) skips on PRs — PRs keep build-only Dockerfile validation.
+- security.yml: the `tests/security` and `tests/load` trees have never
+  existed; the `-d` guards made "skipped" report as success, hiding the
+  coverage gap. Honest resolution = remove the hollow `security-tests` job
+  and its security-report needs/table lines rather than fail forever on a
+  suite that was never written.
+- ci.yml: hardened docker-verify tmpfs had `noexec` dropped in #1404 — the
+  container only writes data under /tmp, so `noexec` restored.
