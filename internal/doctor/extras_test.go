@@ -1966,3 +1966,31 @@ func TestIsFingerprint(t *testing.T) {
 		}
 	}
 }
+
+func TestRunner_PanickingCheckBecomesFailResult(t *testing.T) {
+	r := &Runner{Checks: []Check{
+		{Name: "ok", Run: func(context.Context) Result {
+			return Result{Status: StatusPass, Detail: "fine"}
+		}},
+		{Name: "boom", Run: func(context.Context) Result {
+			panic("simulated check crash")
+		}},
+	}}
+	rep := r.Run(context.Background())
+	if len(rep.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(rep.Results))
+	}
+	if rep.Results[0].Status != StatusPass {
+		t.Fatalf("healthy check lost: %v", rep.Results[0].Status)
+	}
+	res := rep.Results[1]
+	if res.Status != StatusFail {
+		t.Fatalf("panicking check status = %v, want StatusFail", res.Status)
+	}
+	if res.Name != "boom" {
+		t.Fatalf("panicking check name = %q, want boom", res.Name)
+	}
+	if !strings.Contains(res.Detail, "panicked") {
+		t.Fatalf("detail %q does not report the panic", res.Detail)
+	}
+}

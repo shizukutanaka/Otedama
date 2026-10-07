@@ -233,6 +233,19 @@ func (r *Runner) Run(ctx context.Context) *Report {
 		go func(idx int, chk Check) {
 			defer wg.Done()
 			t0 := time.Now()
+			defer func() {
+				// A panicking check must not take the whole diagnostic down:
+				// convert it into a named Fail so the other results survive.
+				if rec := recover(); rec != nil {
+					results[idx] = Result{
+						Name:    chk.Name,
+						Status:  StatusFail,
+						Detail:  fmt.Sprintf("check panicked: %v", rec),
+						Fix:     "this is an internal error; report it",
+						Elapsed: time.Since(t0),
+					}
+				}
+			}()
 			res := chk.Run(ctx)
 			res.Name = chk.Name
 			res.Elapsed = time.Since(t0)
