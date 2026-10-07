@@ -8661,3 +8661,44 @@ TRUE; one real defect found and fixed.
 cmd/otedama is now verdict-clean (run.go s1654, wallet/config s1655,
 plus logfile/service/completion/main/version/doctor/configfile covered
 by prior passes).
+
+## Session 1657 update (Socratic pass 323)
+
+Claim verified: the remaining cmd/otedama leaf files (main, service,
+logfile, completion, configfile, doctor, version) are as honest as the
+package doc claims. TRUE — full cmd surface now verified this cycle.
+
+- main.go: sysexits-style exit codes (0/1/64/78 + doctor's 0/1/2)
+  documented identically in package godoc and printUsage; the dispatch
+  switch and knownSubcommands mirror each other (all 8 entries);
+  levenshtein is a textbook rolling-row DP — transposition costs 2
+  edits exactly as documented; suggestSubcommand caps at distance 2
+  and strips leading dashes. Honest residual: `--worker-name --help`
+  parses --help as the flag's VALUE (flag pkg consumes the next token)
+  while hasHelpFlag still routes output to stdout — worst case a
+  confusing worker name, never a wrong exit code.
+- service.go: injectable seams (newDaemonManager/manager{Install,
+  Uninstall,Status}) declared for tests; help convention identical to
+  config/wallet; errors consistently exitRuntime. Cosmetic residual:
+  uninstall/status accept no FlagSet, so a trailing --config is
+  silently ignored (flags were never defined for those verbs).
+- logfile.go: mutex-guarded capped writer — rotate at size+len > 32MiB
+  to a single .old, failure falls back to continuing the current file
+  (never loses writes), c.size seeded from Stat so the cap survives
+  restarts. A single write > cap on an empty file lands once before
+  the next-write rotation — bounded by line size.
+- completion.go: all three static script verb lists (bash/zsh/fish)
+  match the run() dispatch exactly — config{show,validate},
+  service{install,uninstall,status}, completion{bash,zsh,fish},
+  wallet{verify,change-passphrase} — completion_test.go pins parity.
+- configfile.go: --config → OTEDAMA_CONFIG → XDG_CONFIG_HOME →
+  ~/.config precedence; missing file is silent (defaults), unreadable/
+  unparseable warns + defaults, EOF = defaults, KnownFields(true)
+  rejects unknown keys. Recorded-rejected residual: an explicitly
+  user-named --config path that doesn't exist is silently ignored
+  (that warning was #551, closed unmerged — do not re-deliver).
+- doctor.go/version.go: thin dispatchers — Resolve→30s ctx→Runner→
+  ExitCode, and --json-or-plain version.Get(). Nothing to fault.
+
+cmd/otedama complete this cycle: run.go (s1654), wallet/config (s1655
+fix), main/service/logfile/completion/configfile/doctor/version (s1657).
