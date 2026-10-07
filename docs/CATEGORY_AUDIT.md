@@ -8927,3 +8927,25 @@ solo-operations.md still describes goreleaser as the release build
 tool in two example sections — that file's s488 correction already
 discloses it as dead code, but the surrounding how-to prose reads as
 if live; left as recorded debt (docs style, not correctness-critical).
+
+## Session 1669 update (Socratic pass 334)
+
+Fixed real defect in install.sh: `require sha256sum || require shasum`
+could never reach the right-hand side — require() calls die() which
+runs `exit 1` INSIDE the function, terminating the whole script on
+the first failure. On macOS (no sha256sum, shasum built-in) the
+installer therefore always died at the prerequisites line, making
+the `shasum -a 256` fallback in the verification block unreachable
+dead code. Reproduced empirically by shadowing sha256sum out of PATH:
+pre-fix the script exited 1 at the require line; post-fix it proceeds.
+Replaced with an explicit either-ok check that dies only when NEITHER
+tool exists.
+
+Verified same file: `set -euo pipefail`, TMPDIR+trap EXIT ordering,
+die() exit-1 / usage exit-64 contract, the two-step archive/checksum
+download split, the `grep -q " ${ARCHIVE}$"` membership gate (fails
+closed when the release didn't publish this archive), and the
+cosign verify-blob path being optional (missing cosign → skip with
+log, missing signature files → hard die per user-requested strict
+mode only when cosign IS installed — honest asymmetry now mirrored
+in the ledger).

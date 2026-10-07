@@ -61,7 +61,11 @@ require() {
 
 require curl
 require tar
-require sha256sum || require shasum
+# Either is fine — verification below falls back to `shasum -a 256`.
+# (die() inside require() exits the script, so `require A || require B`
+# would never evaluate the right-hand side.)
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
+    || die "missing required command: sha256sum or shasum"
 
 # ---------- OS + arch detection ----------
 
