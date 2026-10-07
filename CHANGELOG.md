@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 さらに `test` ジョブが緑になったことで、その先の `build` ジョブ（`needs: test` — 過去一度も実行されたことのないラッチ3件目）の潜伏欠陥も露呈: docker metadata の `type=sha,prefix={{branch}}-` が PR イベントで `{{branch}}` が空に解決され `:-319d419` 形式の invalid reference を生成していた。ブランチ非依存の `type=sha,prefix=sha-` へ修正。
 
-`build` が緑になったことでラッチ4件目 `security-scan`（`needs: build`、過去一度も未到達）の潜伏欠陥も露呈: `image-ref` に docker metadata の複数行タグリスト（`:pr-1404\n:sha-0472d2f`）がそのまま渡り単一参照として解釈不能だった。ダイジェスト参照（`$IMAGE_NAME@$image-digest`）へ変更し、ghcr パッケージが private の場合にも備えて `docker/login-action` ステップを追加。誠実残件: `deploy-staging`/`deploy-production` の `--set image.tag=` にも同じ複数行出力が渡るが、PR イベントでは到達不能のため台帳に残件として記録。
+`build` が緑になったことでラッチ4件目 `security-scan`（`needs: build`、過去一度も未到達）の潜伏欠陥も露呈: `image-ref` に docker metadata の複数行タグリスト（`:pr-1404\n:sha-0472d2f`）がそのまま渡り単一参照として解釈不能だった。ダイジェスト参照（`$IMAGE_NAME@$image-digest`）へ変更し、ghcr パッケージが private の場合にも備えて `docker/login-action` ステップを追加。誠実残件: `deploy-staging`/`deploy-production` の `--set image.tag=` にも同じ複数行出力が渡り、さらに helm 先の `./kubernetes/helm/otedama` チャート自体がリポジトリに存在しない（PR イベントでは到達不能・KUBECONFIG 未設定時はスキップのため実行機会なし）。新規インフラ整備の範疇のため台帳に残件として記録。
 
 さらにダイジェスト参照でも失敗 — `IMAGE_NAME` が `Otedama`（大文字含む）で docker のリポジトリ名規則違反（metadata-action はプッシュ時に小文字化するため、実イメージは `otedama` 配下）。スキャン対象参照を `tr` による小文字化解決へ修正し、実際にプッシュされた名前と一致させた。
 
