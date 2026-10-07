@@ -8838,3 +8838,20 @@ verify against (checksums.txt covers only ci-cd's bare binaries).
 install.sh users are protected; direct-URL users are not. Recording as
 a residual gap in the release pipeline, not an install.sh defect —
 release.yml could generate its own checksums alongside its archives.
+
+## Session 1664 update (Socratic pass 329)
+
+Claim fixed: release.yml's tarballs now ship their own checksums —
+the s1663 residual closed.
+
+Added a per-asset `sha256sum` step in build-binaries plus a matching
+upload, so every `otedama-<os>-<arch>.tar.gz` on a release now has a
+sibling `.tar.gz.sha256` a manual downloader can verify with
+`sha256sum -c`. Per-asset files rather than an aggregate because the
+five matrix legs upload independently — an aggregate would race.
+install.sh is untouched: it still prefers the ci-cd bare binary
+covered by checksums.txt (verified in s1663), so its verified-install
+contract is unchanged. Honest residual: install.sh does not consume
+per-asset `.sha256` files itself (it needs no tarball path today);
+a future pass could teach it that fallback if the bare-binary set
+ever disappears.
