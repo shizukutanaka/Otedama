@@ -1809,3 +1809,24 @@ splits flags into required bits 0-15 vs optional 16-31; Otedama's current
 subset-check verification remains forward-compatible). Non-normative open:
 #232/#186 (markdown style), #103 (WIP Proxy Annex). SRI latest tag v1.12.0,
 sv2-apps latest v0.8.0 — both unchanged. No action required.
+
+### Session 1656 recheck (ecosystem)
+
+- sv2-spec open PR set (normative): #238 negotiate optional
+  SetupConnection flags (opened 2026-10-06, Sjors) — still open; our
+  subset-flags validation stays forward-compatible (recorded s1630).
+  #234 authority key management and rotation, #203 coinbase-transaction
+  payouts extension, #198 coinbase_witness in NewTemplate — all still
+  open, no merges since the s1651 recheck.
+- Non-normative: #232 (table style), #186 (markdown cells), #103
+  (Proxy Annex draft, untouched since 2024-10).
+- SRI latest: v1.12.0 (2026-09-17) — unchanged. sv2-apps latest:
+  v0.8.0 (2026-09-17) — unchanged.
+- Worth noting from the v0.8.0 changelog for our own gap ledger:
+  the Translator Proxy now honors `mining.extranonce.subscribe` and
+  applies extranonce-prefix changes without recreating channels —
+  the same semantics Otedama's V1 client already implements
+  (s1563 verified) — and adds a BIP323 version-rolling mask on the
+  downstream side. The ecosystem keeps converging on version rolling
+  (tProxy ships the mask); Otedama's V1 client still cannot request
+  it — the recorded P0 throughput gap stands and gains evidence.
