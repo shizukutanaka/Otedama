@@ -9075,3 +9075,18 @@ context (go.mod/go.sum/cmd/internal/LICENSE/NOTICE) provably
 covers `go build`; the `!LICENSE`/`!NOTICE` exceptions are
 belt-and-suspenders (the names don't match `*.md` anyway);
 tzada/nonroot/VOLUME comments all match shipped behavior.
+
+## Session 1680 update (Socratic pass 346)
+
+Empirical exit-code contract re-verified on the built binary —
+two-layer contract confirmed live: `run --bitcoin-address
+notanaddress` fails config.Validate → exit 78 (EX_CONFIG) with
+the field-level error printed; `run --pool bad-url` fails
+flag-value parsing → usage + exit 64 (EX_USAGE). Semantics are
+consistent: syntactically-invalid flag input is a usage error,
+well-formed-but-invalid configuration is a config error.
+Methodology note reaffirmed for the third time: piping through
+`tail` masks the exit code — both readings above initially
+returned 0; only ${PIPESTATUS[0]} or direct invocation is
+valid. Ledger and CHANGELOG now both carry every fix through
+session 1679.
