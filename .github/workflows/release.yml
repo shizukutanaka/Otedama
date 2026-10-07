@@ -41,7 +41,7 @@ jobs:
 
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -51,7 +51,7 @@ jobs:
           ${{ steps.changelog.outputs.changelog }}
           
           ## Installation
-          See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT_GUIDE.md) for installation instructions.
+          See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT.md) for installation instructions.
         draft: false
         prerelease: false
 
@@ -103,24 +103,14 @@ jobs:
       run: sha256sum "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" > "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256"
 
     - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
-        asset_name: otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
-        asset_content_type: application/gzip
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" --clobber
 
     - name: Upload Release Checksum
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
-        asset_name: otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
-        asset_content_type: text/plain
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256" --clobber
 
   build-packages:
     name: Build Distribution Packages
@@ -155,54 +145,42 @@ jobs:
         VERSION=${{ needs.create-release.outputs.version }}
         fpm -s dir -t deb \
           -n otedama \
-          -v $VERSION \
+          -v "${VERSION#v}" \
           --description "Otedama - P2P Mining Pool Software" \
           --url "https://github.com/shizukutanaka/Otedama" \
           --maintainer "Otedama Project" \
           --license "MIT" \
           --vendor "Otedama Project" \
-          --after-install scripts/post-install.sh \
-          --before-remove scripts/pre-remove.sh \
           ./otedama=/usr/bin/otedama \
-          ./scripts/otedama.service=/etc/systemd/system/otedama.service \
-          ./config.yaml=/etc/otedama/config.yaml
+          ./config.yaml.example=/etc/otedama/config.yaml
 
     - name: Create RPM package
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
         fpm -s dir -t rpm \
           -n otedama \
-          -v $VERSION \
+          -v "${VERSION#v}" \
           --description "Otedama - P2P Mining Pool Software" \
           --url "https://github.com/shizukutanaka/Otedama" \
           --maintainer "Otedama Project" \
           --license "MIT" \
           --vendor "Otedama Project" \
-          --after-install scripts/post-install.sh \
-          --before-remove scripts/pre-remove.sh \
           ./otedama=/usr/bin/otedama \
-          ./scripts/otedama.service=/etc/systemd/system/otedama.service \
-          ./config.yaml=/etc/otedama/config.yaml
+          ./config.yaml.example=/etc/otedama/config.yaml
 
     - name: Upload DEB package
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama_${{ needs.create-release.outputs.version }}_amd64.deb
-        asset_name: otedama_${{ needs.create-release.outputs.version }}_amd64.deb
-        asset_content_type: application/vnd.debian.binary-package
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=${{ needs.create-release.outputs.version }}
+        gh release upload "${{ github.ref_name }}" "otedama_${VERSION#v}_amd64.deb" --clobber
 
     - name: Upload RPM package
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-        asset_name: otedama-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-        asset_content_type: application/x-rpm
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=${{ needs.create-release.outputs.version }}
+        gh release upload "${{ github.ref_name }}" "otedama-${VERSION#v}-1.x86_64.rpm" --clobber
 
   update-homebrew:
     name: Update Homebrew Formula

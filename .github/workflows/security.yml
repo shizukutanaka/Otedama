@@ -49,13 +49,13 @@ jobs:
       # Dependency vulnerability scanning
       - name: Run Nancy vulnerability scanner
         run: |
-          go install github.com/sonatype-nexus-community/nancy@latest
+          go install github.com/sonatype-nexus-community/nancy/v2@v2.1.0
           go list -json -deps ./... | nancy sleuth
       
       # Go vulnerability database scan (the CLAUDE.md three-layer requirement)
       - name: Run govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
       
       # CodeQL Analysis
@@ -96,17 +96,14 @@ jobs:
       # License compliance
       - name: Check licenses
         run: |
-          go install github.com/google/go-licenses@latest
+          go install github.com/google/go-licenses/v2@v2.0.1
           go-licenses check ./...
       
-      # SAST with Semgrep
+      # SAST with Semgrep (pinned release; archived returntocorp action removed)
       - name: Semgrep scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/security-audit
-            p/golang
-            p/owasp-top-ten
+        run: |
+          python3 -m pip install --quiet semgrep==1.178.0
+          semgrep scan --config p/security-audit --config p/golang --config p/owasp-top-ten --sarif --output semgrep.sarif
       
       - name: Upload Semgrep results
         if: always() && hashFiles('semgrep.sarif') != ''

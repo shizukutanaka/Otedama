@@ -8242,3 +8242,18 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 - ci/ci-cd/test/security へ `concurrency` キャンセルを追加（同一 ref の
   旧ランを自動キャンセル）、deploy/release は `cancel-in-progress: false`
   で直列化（実行中リリースを殺さない）。
+### Fixed (session 1693 — ワークフローツールのドリフトとアーカイブ参照)
+
+- security.yml の `go install …@latest` 3件を固定バージョンへピン
+  （nancy/v2@v2.1.0・govulncheck@v1.1.4・go-licenses/v2@v2.0.1）。
+- ci-cd.yml の `upload-sarif@v2` を `@v3` へ統一。
+- アーカイブ済み `actions/upload-release-asset@v1`（4箇所）を
+  `gh release upload --clobber` へ置換、`softprops/action-gh-release` を
+  v1→v3 へ更新。
+- アーカイブ済み `returntocorp/semgrep-action@v1` をピン留めした
+  semgrep CLI（1.178.0）の `semgrep scan` へ置換。
+- release.yml: リリース本文の死んだ `DEPLOYMENT_GUIDE.md` リンクを
+  `DEPLOYMENT.md` へ修正。`build-packages` の fpm 入力は全て非存在
+  （scripts/・config.yaml）で同ジョブは必ず失敗していた —
+  maintainer-script と unit 参照を除去し config.yaml.example を同梱、
+  deb/rpm 規約に合わせバージョン先頭の `v` を除去。

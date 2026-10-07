@@ -9250,3 +9250,25 @@ Action-pinning + concurrency audit — two real defects fixed:
   deploy/release — the latter serialize same-ref runs so a manual
   dispatch or tag release can never be killed mid-flight by a later
   trigger.
+
+## Session 1693 update (Socratic pass 359)
+
+Claim verified: "the workflows' tool pinning is now consistent — every security/release tool resolves at a declared version." **FALSE — five residual drift classes found and fixed.**
+
+Verified the inverse of pass 358's supply-chain invariant: action `uses:` refs are pinned, but the *tooling invoked inside steps* still floated or pointed at dead projects:
+
+1. **`go install …@latest` ×3 in security.yml** — `nancy@latest` (l.52), `govulncheck@latest` (l.58), `go-licenses@latest` (l.99) resolved whatever upstream tagged latest at run time, the same supply-chain class pass 358 removed from `uses:`. Pinned: `nancy/v2@v2.1.0` (2026-05-21, /v2 module path verified), `govulncheck@v1.1.4`, `go-licenses/v2@v2.0.1` (2025-09-08). Each requires a newer Go than the job's declared 1.21 — resolved by the go toolchain auto-fetch; the version-pin class stays rejected territory (#1344).
+
+2. **`upload-sarif@v2` ×2 in ci-cd.yml** — the only `@v2` left in the tree; every other codeql-action ref was `@v3`. Bumped to `@v3` for parity.
+
+3. **`actions/upload-release-asset@v1` ×4 in release.yml** — action archived in 2021; each release asset upload ran code that cannot receive fixes. Replaced with `gh release upload "<tag>" <file> --clobber` (gh CLI is preinstalled on ubuntu-latest; `--clobber` preserves the upsert semantics pass 1666 established).
+
+4. **`softprops/action-gh-release@v1` → `@v3`** — v3 is the maintained major (v3.0.3, 2026-08-30); the `upload_url` output interface is unchanged.
+
+5. **`returntocorp/semgrep-action@v1`** — the returntocorp org was renamed to `semgrep` and the action itself is archived. Replaced with a pinned CLI invocation: `pip install semgrep==1.178.0` (2026-09-23, ≥7-day rule) + `semgrep scan --config p/security-audit --config p/golang --config p/owasp-top-ten --sarif --output semgrep.sarif`. Report-only semantics preserved (no `--error`, so findings land in the SARIF upload rather than gating the job — matching the prior behavior).
+
+**Two further structural defects found while reading the same file:**
+- release.yml's release body linked `docs/DEPLOYMENT_GUIDE.md` — the file is `docs/DEPLOYMENT.md`; every past release published a dead link (CLAUDE.md's nonexistent-URL prohibition). Fixed.
+- `build-packages` fpm inputs were all nonexistent paths — `scripts/post-install.sh`, `scripts/pre-remove.sh`, `scripts/otedama.service` (scripts/ is a CLAUDE.md-forbidden path and does not exist), and `./config.yaml` (only `config.yaml.example` exists) — the DEB/RPM job could never have succeeded. Dropped the maintainer-script flags and the unit file (a unit is produced at runtime by `otedama service install`), pointed config at `config.yaml.example`, and stripped the leading `v` from the fpm version (`${VERSION#v}` — Debian policy requires the version to start with a digit).
+
+Honest residuals: `go install` pins follow the tag, not a content hash — same integrity class as the `@vN` action pins (documented non-goal per GOVERNANCE.md). Semgrep's pinned version ages until this file is next edited; dependabot does not track pip pins in workflows.
