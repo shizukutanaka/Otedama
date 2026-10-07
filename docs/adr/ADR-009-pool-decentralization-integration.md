@@ -1830,3 +1830,22 @@ sv2-apps latest v0.8.0 — both unchanged. No action required.
   downstream side. The ecosystem keeps converging on version rolling
   (tProxy ships the mask); Otedama's V1 client still cannot request
   it — the recorded P0 throughput gap stands and gains evidence.
+
+### Session 1661 recheck (ecosystem)
+
+- **sv2-spec normative open set unchanged**: #238 (negotiate optional
+  SetupConnection flags — bits 0-15 required / 16-31 optional, proposed
+  2026-10-06, spawned from #225 discussion), #234 (authority key
+  management/rotation docs — last push 09-25, two reviews in), #203
+  (non-custodial payouts), #198. Non-normative: #232, #186, #103 (WIP).
+  No action required for Otedama — the flags-subset check already
+  rejects undefined required bits the way #238 proposes to formalize.
+- **Correction**: prior entries recorded "sv2-apps v0.8.0" as latest —
+  the releases page lists **v0.7.0** (2026-07-24) as newest and no
+  v0.8.0 exists there. The substance attributed to it remains verified
+  under v0.7.0's own notes: tProxy builds `UserIdentity` TLVs only
+  after extension 0x0002 negotiates, payout verification handles split
+  coinbase scriptSigs, and downstream shares validate against the
+  advertised power-of-two difficulty. Treat "v0.8.0" in earlier
+  sessions as a misread tag/unreleased reference.
+- SRI (Stratum V2 Reference Implementation) at v1.12.0, unchanged.
