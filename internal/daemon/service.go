@@ -181,13 +181,21 @@ func (m *Manager) systemdUnitPath() (string, error) {
 	return filepath.Join(dir, systemdUnitName), nil
 }
 
+// systemctlShowEnvironment asks the systemd user manager for its
+// environment. It is a var so tests can control the answer — on hosts with
+// a live systemd user session (e.g. some CI runners) the real query would
+// leak the machine's XDG_CONFIG_HOME into tests that stub $HOME.
+var systemctlShowEnvironment = func() ([]byte, error) {
+	return exec.Command("systemctl", "--user", "show-environment").Output()
+}
+
 // systemdManagerConfigHome reports the XDG_CONFIG_HOME in the systemd user
 // manager's environment — the variable that actually determines the unit
 // search path. The bool result reports whether the manager could be
 // queried at all; an empty path with ok==true means the manager has no
 // XDG_CONFIG_HOME and therefore searches ~/.config/systemd/user.
 func systemdManagerConfigHome() (string, bool) {
-	out, err := exec.Command("systemctl", "--user", "show-environment").Output()
+	out, err := systemctlShowEnvironment()
 	if err != nil {
 		return "", false
 	}

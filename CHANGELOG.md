@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1625 — 正常終了をプール接続失敗として誤計上)
+
+`otedama_pool_connect_failures_total` が `sessionErr != nil` のみでインクリメントされていたが、セッションはクリーンな ctx キャンセル終了時にも必ず非 nil（"pool closed connection" または `ctx.Err()`）を返すため、正常停止1回ごとに失敗カウンタが+1 されていた。運用者の SIGTERM による停止を実際のプール障害と混同する計上欠陥を、`ctx.Err() == nil` ゲートで修正。回帰ピン: `TestEngine_Integration_HandshakeSucceeds` がクリーンキャンセル後のカウンタ=0 を検証。
+
+### Fixed (session 1624 — セッション中の SV2 不適切メッセージを可視化)
+
+V2 セッションの `pm.msg` ディスパッチは定常8種を消費し未認識 msg_type を once-per-type で警告していたが、デコード済みの不適切型7種 — ハンドシェイク専用 `SetupConnection`/`Success`/`Error`・`OpenMiningChannel`/`Success`/`Error`（setup/open 交換はリードループ開始前に同期的完了済み）およびクライアント→サーバ専用 `SubmitSharesStandard` — は channel_id を持たず foreign-channel ガードを素通りし、どの処理アームにも一致せず静かに棄却されていた。順序違反・方向逆転を喋るプールが運用者に不可視だった欠陥を、`misplacedMsgType`（不適切フィールド→ワイヤ msg_type 写像）＋256 上限の `seenMisplaced` による once-per-type 警告へ修正。回帰ピン: `TestRunSessionV2_MisplacedMsgTypeWarnedOnce`（0x02 をセッション中2回送出し警告1回＋CloseChannel まで生存を確認）。
+
+### Fixed (session 1559 — docker 検証チェインの複合欠陥と security ワークフローの破損ステップ)
+
+`ci.yml` の docker 検証系は複数層の構造欠陥で決定論的に失敗していた: (a) `docker run <img> -version` が存在しないフラグを渡していた（実体は `version` サブコマンド、5箇所）。(b) 検証 grep が `"Git Commit: <sha>"` を探すが、`otedama version` の出力形式は `otedama <Ver> (<Commit>) built ...` — `(<sha>)` 括弧形式へ修正。(c) ビルド引数が `GIT_COMMIT=` だが Dockerfile の宣言 ARG は `COMMIT` — 全6箇所で静かに無視され Commit は常に `unknown` だった。(d) `docker-verify` が存在しない `scripts/verify-docker.sh` を、`docker-verify-windows` が存在しない `scripts/verify-docker.ps1` を参照（`scripts/` ディレクトリ自体が存在せず、Windows ランナーはそもそも Linux コンテナを実行できないためジョブは設計上到達不能 — ジョブごと削除し `release` の needs からも除去）。(e) ヘルスチェックが `/health` を叩くが実エンドポイントは `/healthz`、かつ HTTP サーバは既定で無効（`--http-addr` 空）— `run --data-dir /tmp/otedama --bitcoin-address <BIP-173検証ベクタ> --http-addr 127.0.0.1:8082` で実サーバを立てて `/healthz` をポーリングする形へ修正（read-only 硬化コンテナは datadir を tmpfs へ指定）。(f) `docker-verify-cgo0-postgres` は Postgres サービス＋`OTEDAMA_DATABASE_*` 環境変数を持つが製品に DB が存在しない — コピー元ボイラープレートとしてデッドだったためサービスと env を撤去。
+
+`security.yml` の `security-report` ジョブはワークフロー権限が `contents: read, security-events: write` のため、`github-script` による PR コメント投稿が 403 で失敗 — ジョブ単位の `issues: write, pull-requests: write` を付与。`security-tests` ジョブは存在しない `./tests/security/`・`./tests/load/` ディレクトリを参照 — ディレクトリ存在ガードを付け、未存在時は `::warning::` で明示してスキップ（テストツリーが将来追加されれば自動で実行される設計）。
+
+`docker-verify` (Health) ジョブも同じ cgo0 パターンで自己完結化 — 未存在だった `otedama:ci-verify-<sha>` をジョブ内ローカル build で生成するステップを追加。`CGO_ENABLED=` build-arg も宣言 ARG 不在で無視されていたが、コードに cgo が存在せず `golang:alpine` ビルダーに gcc がない以上 CGO=1/0 の区別自体がボイラープレート — dead arg 6箇所を全て除去（build-args に残るのは `COMMIT` のみ、`-cgo0` タグ区別は維持）。
+
+同一 PR の `Lint` ジョブ失敗を構成解析 — golangci-lint の gosec が報告した未抑制 G115（整数オーバーフロー変換）7件が唯一のエラー。`internal/btccrypto/script.go`（5件: `readCompactSize` の境界チェックで有界済みの `uint64`/`int` 変換）、`internal/engine/setup.go`（Threads×デバイス数、同一行で ≤2^31 ガード済み）、`internal/miner/sha256d.go`（`uint(8*(exp-3))`、exp は nBits>>24 で 0-255 かつ ≥3 を上で強制済み）の7箇所へ、リポジトリ規約の justified `//nolint:gosec` を付与 — 全て実害なし（付近のチェックで範囲保証済み）を理由付きで明記。再実行で G115 の `##[error]` は全消去を確認。なお Lint ジョブ自体は依然赤: golangci は警告級でも非ゼロ終了するため、master 由来の既存 lint 債務（hugeParam/gocyclo/misspell/dogsled/goconst 等の警告群 — #1391〜1398 で一部マージされたものの大規模クリーンアップは却下済み領域）が残存。また `ci.yml` 独自の `Lint` ジョブ（v1.55.2 + `GOTOOLCHAIN=local` go1.23.x）は go.mod ロード段階で不通 — こちらも Go ピン領域。
+
+誠実残件: `Fuzz`/`Test(1.20)` は go.mod が要求する Go 1.24 未満のピン留め（#1344 で却下済みの領域のため手付かず）。`Security Scanning` (gosec) は 40 件の検出（`//nolint:gosec` は golangci-lint 構文で standalone gosec には `#nosec` が必要 — 大型トリアージのため残件）。`Dependency Review` はリポジトリ設定で Dependency graph 無効のためユーザー操作が必要。
+
+### Fixed (session 1558 — Go リポで Node.js ジョブが決定論的に失敗していた)
+
+`deploy.yml` の `test` ジョブ（`build` のゲート）は package.json の存在しない Go リポで `setup-node cache: 'npm'` → `npm ci` → `npm test` → `npm run lint` → lcov カバレッジアップロードを実行しており、存在しない lockfile で毎回失敗していた — つまりデプロイパイプライン全体が `needs: test` を通じて不通だった（PR #1403 の失敗ログで実測確認）。Go ツールチェーンの build/vet/test へ置き換え、存在しない lcov を参照していた codecov アップロードは撤去。併せて `code-review.yml` の Automated Code Review ジョブが `has_node` 検出の直後に `setup-node cache: 'npm'` を無条件実行していたため同じ lockfile 不在で落ちていた問題を、performance-check ジョブと同じ `has_node` ゲートを setup-node に付加して解消 — フォールバック経路（"No Node.js project detected."）が設計通り動くようになった。残件: Dependency Review ジョブの失敗はリポジトリ設定で Dependency graph が無効なためであり、コードでは修正不可（Settings → Code security で有効化が必要）。
+
+修復した `test` ジョブが初めて Linux CI 上で `go test ./...` を実走したところ、`internal/daemon` の潜伏した環境依存テスト欠陥が露呈 — systemd ユーザーセッションが有効なランナーでは `systemdManagerConfigHome()`（`runCmd` モックシームを迂回する直 `exec.Command`）がマシン実環境の `XDG_CONFIG_HOME` を返し、`$HOME` をスタブしたエラー分岐テスト5件が期待するエラーを得られなかった。`systemctlShowEnvironment` 注入用変数＋仕様解決パスへ固定する `stubSystemdSpecPath` テストヘルパーを追加し、$HOME 依存の systemd パステスト全7件を決定的にした。
+
+さらに `test` ジョブが緑になったことで、その先の `build` ジョブ（`needs: test` — 過去一度も実行されたことのないラッチ3件目）の潜伏欠陥も露呈: docker metadata の `type=sha,prefix={{branch}}-` が PR イベントで `{{branch}}` が空に解決され `:-319d419` 形式の invalid reference を生成していた。ブランチ非依存の `type=sha,prefix=sha-` へ修正。
+
+`build` が緑になったことでラッチ4件目 `security-scan`（`needs: build`、過去一度も未到達）の潜伏欠陥も露呈: `image-ref` に docker metadata の複数行タグリスト（`:pr-1404\n:sha-0472d2f`）がそのまま渡り単一参照として解釈不能だった。ダイジェスト参照（`$IMAGE_NAME@$image-digest`）へ変更し、ghcr パッケージが private の場合にも備えて `docker/login-action` ステップを追加。誠実残件: `deploy-staging`/`deploy-production` の `--set image.tag=` にも同じ複数行出力が渡り、さらに helm 先の `./kubernetes/helm/otedama` チャート自体がリポジトリに存在しない（PR イベントでは到達不能・KUBECONFIG 未設定時はスキップのため実行機会なし）。新規インフラ整備の範疇のため台帳に残件として記録。
+
+さらにダイジェスト参照でも失敗 — `IMAGE_NAME` が `Otedama`（大文字含む）で docker のリポジトリ名規則違反（metadata-action はプッシュ時に小文字化するため、実イメージは `otedama` 配下）。スキャン対象参照を `tr` による小文字化解決へ修正し、実際にプッシュされた名前と一致させた。
+
 ### Fixed (session 1557 — 再接続バックオフが決定論的でサンダリングハードが起こり得た)
 
 再接続スリープが指数ベースそのまま（1s→64s 上限）だったため、同一プール障害で一斉に切断されたクライアント群が同一時刻に再接続を試みロックステップ状態になり得た（改善マップ P1 項目・台帳の誠実残余として記録済み）。`jitteredBackoff` が各スリープへ crypto/rand の一様 ±25% ジッターを付加 — 指数ベースは従来通り（確立セッション後にリセット・連続失敗で倍加）のまま、実スリープのみが窓内へ分散する。3箇所の warn ログは名目ベースではなく実際に引かれた値を記録するため、ログの正直性も維持。crypto/rand 失敗・縮退ベースは無ジッター値へフォールバック（分散は劣化するがタイミングは正しい）。回帰ピン: `TestJitteredBackoff`（400回の試行が [0.75d, 1.25d) 内かつ複数値を生成）、`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` を ±25% 窓内検証へ更新。

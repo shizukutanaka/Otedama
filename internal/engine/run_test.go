@@ -2544,6 +2544,10 @@ type responsivePool struct {
 	// activation — the engine must drop it forward-compatibly and
 	// warn once per type, not die or flood the log.
 	unknownFrame bool
+	// misplacedFrame emits a SetupConnectionError — a handshake-phase
+	// msg_type that is a protocol violation mid-session — twice. The
+	// engine must drop it and warn once per type, like unknown types.
+	misplacedFrame bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2731,6 +2735,17 @@ func (fp *responsivePool) serve() {
 		// once-per-type log bound.
 		for range 2 {
 			fp.emit(conn, 0x40, false, []byte{1, 2, 3})
+		}
+	}
+
+	if fp.misplacedFrame {
+		// 0x02 SetupConnectionError — legal only during negotiate,
+		// which already completed: an out-of-place protocol violation
+		// mid-session. Sent twice to pin the once-per-type log bound.
+		se := stratum.SetupConnectionError{Flags: 0, Error: "too late"}
+		payload, _ = se.Encode()
+		for range 2 {
+			fp.emit(conn, stratum.MsgSetupConnectionError, false, payload)
 		}
 	}
 
@@ -3950,6 +3965,62 @@ func TestRunSessionV2_UnknownMsgTypeWarnedOnce(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("unknown-type warn count = %d, want exactly 1 (pool sent the type twice)", count)
+	}
+}
+
+// TestRunSessionV2_MisplacedMsgTypeWarnedOnce pins the out-of-place
+// message path: a handshake-phase type decoded mid-session is a
+// protocol violation — dropped without killing the session, warned
+// once per type so an operator can see the violation.
+func TestRunSessionV2_MisplacedMsgTypeWarnedOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolCloseChannel(t)
+	fp.misplacedFrame = true // emits 0x02 twice before the CloseChannel
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var logMu sync.Mutex
+	var logged []string
+	err := runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logged = append(logged, msg)
+			logMu.Unlock()
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool closed channel") {
+		t.Fatalf("runSession error = %v, want the session to survive the misplaced frame and die on CloseChannel", err)
+	}
+	logMu.Lock()
+	defer logMu.Unlock()
+	count := 0
+	for _, line := range logged {
+		if strings.Contains(line, "out-of-place SV2 msg_type 0x02") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("out-of-place warn count = %d, want exactly 1 (pool sent the type twice)", count)
 	}
 }
 

@@ -35,12 +35,13 @@ jobs:
           if [ -f package.json ]; then echo "has_node=true" >> $GITHUB_OUTPUT; else echo "has_node=false" >> $GITHUB_OUTPUT; fi
           
       - name: Setup Node.js
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
-          
+
       - name: Install dependencies
         if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: npm ci
