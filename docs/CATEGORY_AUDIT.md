@@ -8531,3 +8531,38 @@ Honest residuals (recorded, not fixed):
   still reports Running. Status-precision nit only.
 - ServiceStatus.PID is never populated by any status probe — dead field,
   cosmetic.
+
+## Session 1652 update (Socratic pass 318)
+
+Claim verified: internal/miner implements SHA-256d PoW honestly — every guard
+rejects impossible work and the worker lifecycle cannot leak goroutines.
+Mostly TRUE; one real defect found and fixed.
+
+- sha256d.go: `TargetFromNBits` rejects negative-mantissa bit, exponent < 3,
+  zero mantissa (impossible target = silent dead end) and >256-bit overflow;
+  LE byte order (MSB at index 31) is consistent between target and raw hash
+  so `Hash.LessOrEqual` compares directly. `TargetFromDifficulty` rejects
+  NaN (`!(d > 0)` catches it), ±Inf, non-positive and overflowing targets,
+  and `q.Int(nil)` truncates the target toward zero — the strict direction,
+  never an inflated share. `DifficultyFromTarget` maps a zero target to
+  +Inf per its documented contract. `NBitsFromTarget` round-trips modulo
+  the same compact-form lossiness Bitcoin itself has.
+- worker.go: residue-class nonce partitioning (offset + threadID, step =
+  Threads by default) is documented and self-consistent; on uint32 nonce
+  wrap the header ntime rolls FORWARD (`h.Time = base + ntimeRoll`) so a
+  thread never re-hashes identical headers — the pool never sees duplicate
+  work. Share accounting is complete: SharesFound counts valid hashes,
+  SharesDropped counts consumer-full discards, so found = delivered +
+  dropped with nothing silently lost. `Start` CAS-guards a second call
+  loudly. `SetWork` bumps workVer so a pointer-equality coincidence can't
+  mask a job update.
+- DEFECT FIXED (lifecycle): `Start` assigned `w.cancel` without the mutex
+  while `Stop` read it under `w.mu` — a Stop racing Start could read a nil
+  cancel, return immediately, and leave the grind goroutines running
+  (caller believes the worker stopped). Now Start publishes the cancel
+  under `w.mu` and closes a `cancelReady` channel; Stop checks `started`,
+  waits on `cancelReady` when Start is mid-flight, then cancels and waits
+  on `done`. Second Start still panics at the CAS before touching any
+  shared state. Verified: `TestWorker_StartTwicePanics` (regressed to a
+  10-minute deadlock under an intermediate guard, now green), full package
+  under `-race` green.
