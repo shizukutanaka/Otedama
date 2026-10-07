@@ -8909,3 +8909,21 @@ the comment for real conflicts; now retries up to 3×5s. (b) On fork
 PRs the write token is downgraded, so `gh pr comment` always failed
 and painted the check red — gated the comment step on
 `head.repo.full_name == github.repository`.
+
+## Session 1668 update (Socratic pass 333)
+
+Claim verified: .goreleaser.yaml's dormancy means its drift cannot
+affect released artifacts — TRUE. No workflow, Makefile target, or doc
+invokes goreleaser (exhaustive grep across .github/, Makefile, docs/,
+skills/, *.md roots); all release assets come from release.yml +
+ci-cd.yml. The config's internal consistency was already verified in
+the s1232 pass (extra_files + SBOM/cosign templates).
+
+Found stale doc claim introduced by the s1664 fix: VERIFY.md's header
+still said release.yml "does not produce checksums.txt" — updated to
+note the per-asset .sha256 sidecars now shipped, while restating that
+aggregate checksums/signatures/SBOM remain absent. Residual (honest):
+solo-operations.md still describes goreleaser as the release build
+tool in two example sections — that file's s488 correction already
+discloses it as dead code, but the surrounding how-to prose reads as
+if live; left as recorded debt (docs style, not correctness-critical).
