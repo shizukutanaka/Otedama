@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 修復した `test` ジョブが初めて Linux CI 上で `go test ./...` を実走したところ、`internal/daemon` の潜伏した環境依存テスト欠陥が露呈 — systemd ユーザーセッションが有効なランナーでは `systemdManagerConfigHome()`（`runCmd` モックシームを迂回する直 `exec.Command`）がマシン実環境の `XDG_CONFIG_HOME` を返し、`$HOME` をスタブしたエラー分岐テスト5件が期待するエラーを得られなかった。`systemctlShowEnvironment` 注入用変数＋仕様解決パスへ固定する `stubSystemdSpecPath` テストヘルパーを追加し、$HOME 依存の systemd パステスト全7件を決定的にした。
 
+さらに `test` ジョブが緑になったことで、その先の `build` ジョブ（`needs: test` — 過去一度も実行されたことのないラッチ3件目）の潜伏欠陥も露呈: docker metadata の `type=sha,prefix={{branch}}-` が PR イベントで `{{branch}}` が空に解決され `:-319d419` 形式の invalid reference を生成していた。ブランチ非依存の `type=sha,prefix=sha-` へ修正。
+
 ### Fixed (session 1557 — 再接続バックオフが決定論的でサンダリングハードが起こり得た)
 
 再接続スリープが指数ベースそのまま（1s→64s 上限）だったため、同一プール障害で一斉に切断されたクライアント群が同一時刻に再接続を試みロックステップ状態になり得た（改善マップ P1 項目・台帳の誠実残余として記録済み）。`jitteredBackoff` が各スリープへ crypto/rand の一様 ±25% ジッターを付加 — 指数ベースは従来通り（確立セッション後にリセット・連続失敗で倍加）のまま、実スリープのみが窓内へ分散する。3箇所の warn ログは名目ベースではなく実際に引かれた値を記録するため、ログの正直性も維持。crypto/rand 失敗・縮退ベースは無ジッター値へフォールバック（分散は劣化するがタイミングは正しい）。回帰ピン: `TestJitteredBackoff`（400回の試行が [0.75d, 1.25d) 内かつ複数値を生成）、`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` を ±25% 窓内検証へ更新。
