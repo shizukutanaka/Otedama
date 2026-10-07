@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1625 — 正常終了をプール接続失敗として誤計上)
+
+`otedama_pool_connect_failures_total` が `sessionErr != nil` のみでインクリメントされていたが、セッションはクリーンな ctx キャンセル終了時にも必ず非 nil（"pool closed connection" または `ctx.Err()`）を返すため、正常停止1回ごとに失敗カウンタが+1 されていた。運用者の SIGTERM による停止を実際のプール障害と混同する計上欠陥を、`ctx.Err() == nil` ゲートで修正。回帰ピン: `TestEngine_Integration_HandshakeSucceeds` がクリーンキャンセル後のカウンタ=0 を検証。
+
 ### Fixed (session 1624 — セッション中の SV2 不適切メッセージを可視化)
 
 V2 セッションの `pm.msg` ディスパッチは定常8種を消費し未認識 msg_type を once-per-type で警告していたが、デコード済みの不適切型7種 — ハンドシェイク専用 `SetupConnection`/`Success`/`Error`・`OpenMiningChannel`/`Success`/`Error`（setup/open 交換はリードループ開始前に同期的完了済み）およびクライアント→サーバ専用 `SubmitSharesStandard` — は channel_id を持たず foreign-channel ガードを素通りし、どの処理アームにも一致せず静かに棄却されていた。順序違反・方向逆転を喋るプールが運用者に不可視だった欠陥を、`misplacedMsgType`（不適切フィールド→ワイヤ msg_type 写像）＋256 上限の `seenMisplaced` による once-per-type 警告へ修正。回帰ピン: `TestRunSessionV2_MisplacedMsgTypeWarnedOnce`（0x02 をセッション中2回送出し警告1回＋CloseChannel まで生存を確認）。

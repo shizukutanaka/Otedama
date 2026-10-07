@@ -286,6 +286,14 @@ func TestEngine_Integration_HandshakeSucceeds(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("engine.Run did not return within 2s of cancel")
 	}
+
+	// A graceful ctx shutdown is not a pool-connection failure: the session
+	// always returns a non-nil error (channel-close or ctx.Err()), so the
+	// counter must be gated on ctx still being alive.
+	connFailures := reg.NewCounter("otedama_pool_connect_failures_total", "", nil)
+	if v := connFailures.Value(); v != 0 {
+		t.Errorf("pool connect failures = %d, want 0 on clean shutdown", v)
+	}
 }
 
 func TestEngine_Integration_ReconnectsOnPoolFailure(t *testing.T) {

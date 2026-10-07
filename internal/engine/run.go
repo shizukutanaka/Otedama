@@ -584,7 +584,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 				}
 			},
 		})
-		if sessionErr != nil {
+		// sessionErr is non-nil on every session exit — including a clean
+		// ctx-cancelled shutdown, where it is "pool closed connection" or
+		// ctx.Err(). A graceful stop is not a connect failure; only count
+		// exits that happened while the engine still intended to run.
+		if sessionErr != nil && ctx.Err() == nil {
 			r.metrics.poolConnectFailures.Inc()
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
