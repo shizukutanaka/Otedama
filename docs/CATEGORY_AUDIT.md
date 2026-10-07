@@ -8566,3 +8566,38 @@ Mostly TRUE; one real defect found and fixed.
   shared state. Verified: `TestWorker_StartTwicePanics` (regressed to a
   10-minute deadlock under an intermediate guard, now green), full package
   under `-race` green.
+
+## Session 1653 update (Socratic pass 319)
+
+Claim verified: internal/config's four-layer resolution (defaults → file →
+env → flags) is self-consistent, validates everything it accepts, and
+rejects everything dangerous. TRUE — full 813-line read.
+
+- `numericEnvVars` is the single source for the five float envs: both
+  applyEnvLayer and EnvWarnings iterate it, so the parsed set and the
+  warned set can never drift. Malformed values are skipped (prior layer
+  stands) and surfaced by EnvWarnings — never silently applied.
+- `strconv.ParseFloat` accepts "NaN"/"Inf" literals, but the poisoned
+  value still dies at `Validate()`'s NaN/Inf sweep — fail-closed end to
+  end. Range checks: hysteresis [0,1), the four price/power floors ≥0.
+- `validateBitcoinAddress` enforces mainnet prefixes plus full checksum
+  via btccrypto.ValidateAddress on the primary AND every failover
+  address; `validatePoolTarget` requires bare host:port — userinfo,
+  path/query, whitespace, and non-numeric/out-of-range ports all rejected
+  at load, matching poolproto.StripScheme's verbatim-dial contract.
+- `DefaultDataDir` follows per-platform conventions and returns ""
+  honestly when undeterminable (wallet init then skips — documented).
+
+Honest residuals (previously documented or confirmed benign, no fix):
+- The file layer cannot express an explicit 0 for the numeric fields
+  (zero reads as "unset"); the documented escape is the env var — the
+  caveat is written into applyFileLayer itself.
+- `TLSCAFile` is not stat-ed at Validate; a bad path only surfaces at
+  first dial, where the CA-load failure warns and falls back to system
+  roots (verified in the V2 dial-path audit).
+- `Workers.Name` goes on the wire verbatim; JSON-RPC escaping prevents
+  protocol corruption, so a hostile name degrades to cosmetic garbage.
+- No `OTEDAMA_BITCOIN_ADDRESSES` env exists — failover addresses are
+  file-only, matching the documented env surface.
+
+internal/config is now verdict-clean.
