@@ -479,7 +479,7 @@ type reconnectOpts struct {
 // failure or a degenerate base falls back to d — degraded spread, still
 // correct timing.
 func jitteredBackoff(d time.Duration) time.Duration {
-	span := int64(d) / 2 // ±25% of d ⇒ uniform range d/2 wide centered on d
+	span := int64(d) * 2 * reconnectBackoffJitterPct / 100 // uniform range centered on d
 	if span <= 0 {
 		return d
 	}
@@ -487,7 +487,7 @@ func jitteredBackoff(d time.Duration) time.Duration {
 	if err != nil {
 		return d
 	}
-	return d - d/4 + time.Duration(n.Int64())
+	return d - time.Duration(int64(d)*reconnectBackoffJitterPct/100) + time.Duration(n.Int64())
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
