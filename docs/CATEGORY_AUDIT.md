@@ -8988,3 +8988,15 @@ containing raw ESC bytes prints with the control bytes stripped
 (`evil[31m[?25h` — the 0x1b bytes removed, leftover brackets inert
 literal text), confirming the s1659 SanitizePoolText boundary in a
 real invocation, not just a unit test.
+
+## Session 1673 update (Socratic pass 338)
+
+Claim verified end-to-end on a live wallet: `run` creates wallet.dat
+(mode 0600) + wallet.fingerprint BEFORE the first pool dial (a dead
+DNS pool still leaves a valid wallet), the 24-word mnemonic prints
+once with a `Fingerprint:` line and is not persisted; `wallet
+verify` fed the same phrase exits 0 with the matching fingerprint
+69ff97f6, and rejects a 3-word phrase with a clean
+"must be 12/15/18/21/24" error — TRUE at the shell boundary.
+`wallet verify` does not take --wallet-passphrase (compare against
+fingerprint only, no decryption needed — a defensible minimization).
