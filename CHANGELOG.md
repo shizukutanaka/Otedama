@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1665 — checksums.txt が自身を列挙)
+
+`ci-cd.yml` の `sha256sum * > checksums.txt` はリダイレクトが先に空の checksums.txt を作るため glob がそれを取り込み、ファイル自身の「空文字列ハッシュ」行が残っていた — リリース全体への `sha256sum -c` が必ず FAILED 行を出す自己矛盾。`sha256sum otedama-*` へ修正（dist/ 内アーティファクトは命名上全て otedama-* なので網羅性は不変）。
+
 ### Fixed (session 1664 — release tarball に checksum 無し)
 
 `release.yml` が `otedama-<os>-<arch>.tar.gz` を一切のチェックサムなしで公開しており、直接ダウンロードした利用者が検証不可能だった（checksums.txt は ci-cd 側の bare binary のみを列挙）。各マトリクス脚で `sha256sum` を生成し `<name>.tar.gz.sha256` として同梱アップロードする形へ修正 — 5脚が並列で独立アップロードするため集約ファイルはレースする。install.sh は変更不要（ci-cd の検証済み bare binary を選ぶ経路は s1663 で実証済み）。
