@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1652 — Start/Stop 競合でワーカーが止まらない)
+
+`Worker.Start` は `w.cancel` を mutex 外で代入していたのに対し `Stop` は `w.mu` 下で読んでいたため、Start/Stop が競合すると `Stop` が `cancel==nil` を読んで即時リターンし、grind goroutine が生き続ける可能性があった（呼出し側は停止済みと誤認）。`started` CAS の後に cancel を `w.mu` 下で公開し `cancelReady` チャネルを close する形へ修正 — 途中の `Stop` は publish 完了を待ってから cancel し `done` で終了を待つ。2回目の Start は CAS で panic し共有状態に触れない。回帰検証: `TestWorker_StartTwicePanics` ＋パッケージ全体 `-race` 緑。
+
+### Fixed (session 1649 — doctor の1チェック panic が全結果を喪失)
+
+`internal/doctor` の Runner は各チェックを個別 goroutine で並行実行するが、1件でも panic するとプロセス全体が終了し全17チェックの診断結果が失われていた。goroutine 内に `recover` を追加し、panic を他結果を損なわない `StatusFail` 結果（`check panicked: <value>`）へ変換 — 診断の部分出力が必ず得られる。回帰ピン: `TestRunner_PanickingCheckBecomesFailResult`。
+
 ### Fixed (session 1625 — 正常終了をプール接続失敗として誤計上)
 
 `otedama_pool_connect_failures_total` が `sessionErr != nil` のみでインクリメントされていたが、セッションはクリーンな ctx キャンセル終了時にも必ず非 nil（"pool closed connection" または `ctx.Err()`）を返すため、正常停止1回ごとに失敗カウンタが+1 されていた。運用者の SIGTERM による停止を実際のプール障害と混同する計上欠陥を、`ctx.Err() == nil` ゲートで修正。回帰ピン: `TestEngine_Integration_HandshakeSucceeds` がクリーンキャンセル後のカウンタ=0 を検証。

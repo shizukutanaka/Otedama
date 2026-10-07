@@ -8601,3 +8601,31 @@ Honest residuals (previously documented or confirmed benign, no fix):
   file-only, matching the documented env surface.
 
 internal/config is now verdict-clean.
+
+## Session 1654 update (Socratic pass 320)
+
+Claim verified: cmd/otedama/run.go wires flags → env → config → engine
+honestly, never leaks secrets into config display, and degrades every
+optional surface toward safety. TRUE — full 377-line read.
+
+- Wallet secrets are deliberately kept out of config.Config, so they can
+  never round-trip through `config show` or land in config.yaml;
+  applyRunEnvFallbacks honors flags > env precedence, and the
+  argv-visibility warning fires only when the flag was explicitly given
+  (fs.Visit set), not for the env-provided path.
+- TUI auto-disable narrows toward the safe default only: non-*os.File or
+  non-character-device stdout → plain logs; there is intentionally no
+  flag to force the TUI onto a redirected stream.
+- buildLogger's sink matrix matches its doc exactly (TUI drops logs to
+  Discard unless --log-file provides the audit trail); a file that
+  cannot be opened warns and runs on — never fatal.
+- startHTTPServer returns the live metrics registry even when the listen
+  itself fails (engine still gets counters), warns on non-loopback
+  binds, and isLoopbackAddr fails toward MORE warnings: empty host
+  (":9090" = all interfaces), IPv6 zones, and unresolvable names all
+  warn rather than stay silent.
+- engine.Run's error path distinguishes context.Canceled (clean
+  shutdown → exitOK) from real failures (exitRuntime with the error on
+  both the structured and plain channels).
+
+No defects. cmd/otedama run-path verified end to end.
