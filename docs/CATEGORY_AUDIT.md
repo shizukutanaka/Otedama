@@ -9000,3 +9000,13 @@ verify` fed the same phrase exits 0 with the matching fingerprint
 "must be 12/15/18/21/24" error — TRUE at the shell boundary.
 `wallet verify` does not take --wallet-passphrase (compare against
 fingerprint only, no decryption needed — a defensible minimization).
+
+## Session 1674 update (Socratic pass 339)
+
+Claim verified: `wallet verify` fails closed and INFORMATIVELY on a
+valid-but-wrong phrase — TRUE. The canonical BIP-39 vector
+("abandon"×23 + "art") parses and derives fingerprint 0bd63d20,
+which mismatches the wallet's 69ff97f6 → prints both fingerprints
+(fingerprints are non-secret public checksums by design) and exits
+1. Distinct exit codes confirmed: 0 match, 1 mismatch, 64 usage /
+invalid phrase shape.
