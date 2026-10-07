@@ -252,6 +252,11 @@ docker-build: ## Build Docker image
 
 .PHONY: docker-run
 docker-run: ## Run Otedama in Docker
+	@test -f config.yaml || ( \
+		echo "config.yaml not found — copy config.yaml.example and set your"; \
+		echo "pools/address first. (Without it Docker bind-mounts an empty"; \
+		echo "DIRECTORY at /etc/otedama/config.yaml and config load fails.)"; \
+		exit 1)
 	docker run --rm -it \
 		-v $(PWD)/config.yaml:/etc/otedama/config.yaml:ro \
 		$(PROJECT):latest

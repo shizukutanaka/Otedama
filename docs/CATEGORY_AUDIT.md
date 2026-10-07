@@ -9061,3 +9061,17 @@ docs/api-reference.txt — a generated artifact that was neither
 tracked nor gitignored, dirtying every subsequent working tree;
 now ignored. `make help` verified live; `audit` target's 8 steps
 re-verified (no TODO/FIXME/XXX markers in non-test code).
+
+## Session 1679 update (Socratic pass 345)
+
+Fixed real defect: `make docker-run` bind-mounted $(PWD)/config.yaml
+unconditionally — on a fresh checkout the file doesn't exist, so
+Docker creates an empty DIRECTORY at /etc/otedama/config.yaml and
+the in-container config load fails with a cryptic "is a directory"
+style error. Added a fail-fast guard pointing at
+config.yaml.example. Docker/.dockerignore parity re-verified
+clean: no go:embed directives exist anywhere, so the minimal
+context (go.mod/go.sum/cmd/internal/LICENSE/NOTICE) provably
+covers `go build`; the `!LICENSE`/`!NOTICE` exceptions are
+belt-and-suspenders (the names don't match `*.md` anyway);
+tzada/nonroot/VOLUME comments all match shipped behavior.
