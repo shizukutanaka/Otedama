@@ -86,6 +86,7 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 		// (worker, thread) pair owns a residue class forever.
 		// total can never exceed the nonce space: stride stays a power
 		// of two ≤ 2^31 and every offset is < total.
+		//nolint:gosec // Threads and the device count are small positives; total is bound-checked on the same line
 		if total := uint64(cfg.Threads) * uint64(len(sha256d)); len(sha256d) > 1 && total > 0 && total <= 1<<31 {
 			stride := uint32(1)
 			for uint64(stride) < total {

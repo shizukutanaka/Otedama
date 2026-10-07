@@ -18,7 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 `docker-verify` (Health) ジョブも同じ cgo0 パターンで自己完結化 — 未存在だった `otedama:ci-verify-<sha>` をジョブ内ローカル build で生成するステップを追加。`CGO_ENABLED=` build-arg も宣言 ARG 不在で無視されていたが、コードに cgo が存在せず `golang:alpine` ビルダーに gcc がない以上 CGO=1/0 の区別自体がボイラープレート — dead arg 6箇所を全て除去（build-args に残るのは `COMMIT` のみ、`-cgo0` タグ区別は維持）。
 
-誠実残件: `Lint`/`Fuzz`/`Test(1.20)` は go.mod が要求する Go 1.24 未満のピン留め（#1344 で却下済みの領域のため手付かず）。`Security Scanning` (gosec) は 40 件の検出（`//nolint:gosec` は golangci-lint 構文で standalone gosec には `#nosec` が必要 — 大型トリアージのため残件）。`Dependency Review` はリポジトリ設定で Dependency graph 無効のためユーザー操作が必要。
+同一 PR の `Lint` ジョブ失敗を構成解析 — golangci-lint の gosec が報告した未抑制 G115（整数オーバーフロー変換）7件が唯一のエラー。`internal/btccrypto/script.go`（5件: `readCompactSize` の境界チェックで有界済みの `uint64`/`int` 変換）、`internal/engine/setup.go`（Threads×デバイス数、同一行で ≤2^31 ガード済み）、`internal/miner/sha256d.go`（`uint(8*(exp-3))`、exp は nBits>>24 で 0-255 かつ ≥3 を上で強制済み）の7箇所へ、リポジトリ規約の justified `//nolint:gosec` を付与 — 全て実害なし（付近のチェックで範囲保証済み）を理由付きで明記。
+
+誠実残件: `Fuzz`/`Test(1.20)` は go.mod が要求する Go 1.24 未満のピン留め（#1344 で却下済みの領域のため手付かず）。`Security Scanning` (gosec) は 40 件の検出（`//nolint:gosec` は golangci-lint 構文で standalone gosec には `#nosec` が必要 — 大型トリアージのため残件）。`Dependency Review` はリポジトリ設定で Dependency graph 無効のためユーザー操作が必要。
 
 ### Fixed (session 1558 — Go リポで Node.js ジョブが決定論的に失敗していた)
 

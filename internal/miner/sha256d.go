@@ -153,7 +153,7 @@ func TargetFromNBits(nBits uint32) (Hash, error) {
 
 	// Build a *big.Int: mantissa * 2^(8*(exp-3))
 	v := new(big.Int).SetUint64(uint64(mant))
-	shift := uint(8 * (exp - 3))
+	shift := uint(8 * (exp - 3)) //nolint:gosec // exp is nBits>>24 (0-255) with exp >= 3 enforced above
 	v.Lsh(v, shift)
 
 	// v.Bytes() is the big-endian magnitude. Place it big-endian first,
