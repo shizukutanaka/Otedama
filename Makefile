@@ -288,11 +288,18 @@ release-check: validate ## Verify readiness for release
 		(echo "CHANGELOG.md does not contain entry for $(VERSION)" && exit 1)
 	@echo "Release checks passed."
 
+# macOS ships `shasum -a 256`, not GNU sha256sum — resolve whichever exists.
+SHA256SUM := $(shell command -v sha256sum 2>/dev/null || \
+	(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256"))
+
 .PHONY: release-build
 release-build: release-check build-all ## Build release artifacts
 	@mkdir -p $(DIST_DIR)
+	@if [ -z "$(SHA256SUM)" ]; then \
+		echo "No sha256 tool found (need sha256sum or shasum)" && exit 1; \
+	fi
 	@echo "Creating checksums..."
-	@cd $(DIST_DIR) && sha256sum $(PROJECT)-* > checksums.txt
+	@cd $(DIST_DIR) && $(SHA256SUM) $(PROJECT)-* > checksums.txt
 	@echo "Release artifacts in $(DIST_DIR)/"
 
 .PHONY: tag

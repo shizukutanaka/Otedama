@@ -9046,3 +9046,18 @@ s1669→335 (334), s1670→336 (335), s1671→337 (336), s1672→338 (337),
 s1673→339 (338), s1674→340 (339), s1675→341 (340), s1676→342 (341).
 The session numbers and verdicts themselves are unaffected; only the
 secondary pass label drifted. This entry resumes the formula at 343.
+
+## Session 1678 update (Socratic pass 344)
+
+Fixed two real Makefile defects found auditing target validity:
+(1) `release-build` hard-coded `sha256sum`, which does not exist on
+stock macOS — the maintainer-facing release path would die at the
+checksum step on the platform install.sh itself had to work around
+(session 1669). Now resolves `sha256sum || shasum -a 256` at parse
+time and fails with a clear message when neither exists; the
+`$(PROJECT)-*` glob provably excludes checksums.txt (ran the line
+twice, output identical). (2) `make docs` writes
+docs/api-reference.txt — a generated artifact that was neither
+tracked nor gitignored, dirtying every subsequent working tree;
+now ignored. `make help` verified live; `audit` target's 8 steps
+re-verified (no TODO/FIXME/XXX markers in non-test code).
