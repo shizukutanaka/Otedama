@@ -52,6 +52,12 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
+	// Malformed numeric env vars resolve silently; surface them here too —
+	// `config show` is exactly where an operator looks when an env override
+	// "isn't taking effect".
+	for _, w := range config.EnvWarnings(nil) {
+		fmt.Fprintf(stderr, "config: warning: %s\n", w)
+	}
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
 
 	if f.jsonOut {

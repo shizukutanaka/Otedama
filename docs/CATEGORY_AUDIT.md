@@ -9010,3 +9010,15 @@ which mismatches the wallet's 69ff97f6 → prints both fingerprints
 (fingerprints are non-secret public checksums by design) and exits
 1. Distinct exit codes confirmed: 0 match, 1 mismatch, 64 usage /
 invalid phrase shape.
+
+## Session 1675 update (Socratic pass 340)
+
+Fixed real defect: `otedama config show` never called
+config.EnvWarnings — a malformed numeric env (e.g.
+OTEDAMA_POWER_WATTS=abc) resolved silently to the default with no
+hint on stdout OR stderr, hiding exactly the cause an operator runs
+`config show` to find. Verified live: warning absent pre-fix,
+present post-fix ("OTEDAMA_POWER_WATTS=abc is not a valid number;
+ignoring it and using the default"). Same EnvWarnings loop
+`config validate` already ran; pinned by
+TestConfigShow_SurfacesMalformedEnvWarning.
