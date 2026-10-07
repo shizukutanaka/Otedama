@@ -1791,3 +1791,7 @@ Normative open set confirmed unchanged: sv2-spec #203 (coinbase-payouts extensio
 ### Session 1595 recheck (ecosystem)
 
 Normative open set confirmed: sv2-spec #203 (non-custodial JDP payouts — open, latest push-based iteration under review; the "custodial/non-custodial hybrid at best" consensus stands, matching Otedama's disclosed V1-only payout verification), #202 (competing payout proposal — open). Recent spec merges are maintenance-class, not normative: #201 (diagram cleanup), #194 (error-code automation, 2026-06-16), #197 (SHORT_TX_ID removal, 2026-06-09). No wire-level requirement changes since #236 (SetTarget ≤ channel max_target — merged). **Releases:** SRI latest **v1.12.0**; sv2-apps latest **v0.8.0**. No action required.
+
+### Session 1615 recheck (ecosystem)
+
+Normative open set unchanged: sv2-spec #203 (coinbase payouts extension — push-based, still open, last updated 2026-09-15), #234 (authority key management & rotation docs — clarification only, ready-for-review, 2026-09-25), #198 (coinbase_witness field on NewTemplate — open, 2026-09-23). #236 (SetTarget ≤ channel max_target) merged 2026-10-05 — Otedama's `MaxTargetUnconstrained` declaration stays conformant as previously recorded. Tags re-verified: SRI latest v1.12.0, sv2-apps latest v0.8.0 (release notes published through v0.7.0; the v0.8.0 tag exists without release notes). No Otedama action required.
