@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1667 — devin-merge 競合検出の取りこぼし)
+
+`devin-direct-merge.yml` が `mergeable` を一度だけ読み、初回の `UNKNOWN`（GitHub の非同期計算）を「競合なし」と誤認して本当の競合への /fix-conflict 起動を取りこぼしていた → 3回×5秒リトライ。併せてフォーク PR（書込トークン降格でコメント必ず失敗）ではコメント step をスキップするゲートを追加。
+
 ### Fixed (session 1666 — release 作成レースで tarball/package 喪失)
 
 `v*` タグ push で `release.yml` と `ci-cd.yml` が同時起動し、ci-cd の `action-gh-release` が先にリリースを作ると release.yml の `actions/create-release` が 422 で失敗 — `needs: create-release` 伝播で tarball・.deb/.rpm・Homebrew formula 更新の全ジョブが静かにスキップされ、リリースが bare binary だけになる競合があった。upsert 可能な `softprops/action-gh-release@v1` へ置換（`upload_url` 出力・version 契約は不変）。
