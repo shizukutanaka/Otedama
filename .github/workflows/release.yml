@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  # One run per tag; never cancel an in-flight release.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GO_VERSION: '1.23.x'
 

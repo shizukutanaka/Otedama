@@ -8233,3 +8233,12 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   `timeout-minutes` が無く、ハング時は GitHub 既定の 360 分まで走り続けた —
   ci.yml の慣行（lint 15・scan/test/build 30・docker/build-binaries 40・
   release 20・deploy 20-25）に合わせて全ジョブへ設定。
+
+### Fixed (session 1692 — アクションの mutable HEAD 参照と CI 重複実行)
+
+- `gosec@master`/`trivy-action@master`/`trufflehog@main` の9参照を最新安定
+  タグ（v2.29.0 / v0.36.0 / v3.97.9）へピン — 上流 default ブランチの
+  未レビューコードを GITHUB_TOKEN 保有ジョブで毎回実行していた。
+- ci/ci-cd/test/security へ `concurrency` キャンセルを追加（同一 ref の
+  旧ランを自動キャンセル）、deploy/release は `cancel-in-progress: false`
+  で直列化（実行中リリースを殺さない）。

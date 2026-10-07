@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GO_VERSION: 1.23.x
   GIT_TERMINAL_PROMPT: 0
@@ -112,7 +116,7 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         
     - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
+      uses: securego/gosec@v2.29.0
       with:
         args: '-fmt json -out security-report.json ./...'
         

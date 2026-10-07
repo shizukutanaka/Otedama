@@ -24,6 +24,11 @@ on:
           - staging
           - production
 
+concurrency:
+  # Serializes same-ref deploys without canceling an in-flight release.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -129,7 +134,7 @@ jobs:
         run: echo "IMAGE_REF=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')@${{ needs.build.outputs.image-digest }}" >> $GITHUB_ENV
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_REF }}
           format: 'sarif'

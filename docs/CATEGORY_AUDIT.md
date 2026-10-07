@@ -9229,3 +9229,24 @@ Marker census + workflow permissions/deploy-lifecycle audit:
   (lint 15, security/test/build/benchmark/integration 30,
   docker/binary builds 40, releases 20, deploys 20-25,
   rollback 15, comment bot 10).
+
+## Session 1692 update (Socratic pass 358)
+
+Action-pinning + concurrency audit — two real defects fixed:
+- 9 `uses:` references pointed at mutable HEADs — securego/gosec@master
+  (4 sites), aquasecurity/trivy-action@master (5), trufflehog@main (1).
+  Every CI run executed whatever those repos' default branches
+  contained at that moment; a compromised upstream commit would ship
+  unreviewed code into a job holding a GITHUB_TOKEN. Pinned to the
+  latest releases older than 7 days: gosec@v2.29.0,
+  trivy-action@v0.36.0, trufflehog@v3.97.9. Remaining uses are already
+  version-tagged (@v1–@v5); full SHA pinning stays the documented
+  non-goal per GOVERNANCE.md.
+- Only code-review.yml declared `concurrency:` — every other push to
+  the same ref stacked full duplicate runs (the 28-check queue
+  saturation recorded earlier is partly self-inflicted). Added
+  `group: <workflow>-${{ github.ref }}` + `cancel-in-progress: true`
+  to ci/ci-cd/test/security, and `cancel-in-progress: false` to
+  deploy/release — the latter serialize same-ref runs so a manual
+  dispatch or tag release can never be killed mid-flight by a later
+  trigger.
