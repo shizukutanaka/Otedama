@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1682 — install.sh が実在しない otedama.io を usage 例として記載)
+
+`install.sh` の usage ヘッダが `curl -sSL https://otedama.io/install.sh` を
+案内していたが、otedama.io は DNS 未登録で解決不能（CLAUDE.md「存在しない URL の
+記載禁止」違反）。過去の除去作業（skills・RESEARCH_IMPROVEMENTS に記録）は
+他ファイルのみ対象で、最も露出の大きい当該スクリプト自身には残存していた。
+README が記載する正規経路 `raw.githubusercontent.com/.../master/install.sh`
+へ2箇所を置換。`--version`/`--prefix`/`--skip-verify` の各例は実装済みフラグと
+一致することを grep で確認済み。
+
 ### Fixed (session 1678 — release-build が macOS で必ず失敗＋生成物未ignore)
 
 `make release-build` が `sha256sum` を直書きしており、stock macOS（`shasum` のみ）ではチェックサム工程で必ず失敗 — install.sh が session 1669 で workaround したのと同じ落とし穴が Makefile に残っていた。`sha256sum || shasum -a 256` の解決へ変更（両方無い場合は明確なエラーで停止）。併せて `make docs` の生成物 `docs/api-reference.txt` が未追跡かつ .gitignore 未収録で作業ツリーを汚していたため ignore へ追加。

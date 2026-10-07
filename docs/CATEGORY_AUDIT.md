@@ -9118,3 +9118,23 @@ Ecosystem recheck (ADR-009 cadence):
   recorded-rejected territory (#1391–1398). A global gosec config
   exclusion would hide future real G703/G101 findings, so it is
   not a safe alternative; the red gate stays honest.
+
+## Session 1682 update (Socratic pass 348)
+
+Two defects fixed, one claim re-verified:
+1. install.sh usage header pointed at `https://otedama.io/install.sh`
+   — the domain does not resolve (DNS NXDOMAIN). Prior removal
+   sweeps covered docs/skills only; the single highest-exposure
+   file (the script a user would curl into bash) kept the phantom
+   URL. Replaced both occurrences with the README-canonical
+   raw.githubusercontent.com master path. The flagged options
+   (--version/--prefix/--skip-verify) all exist — grep-verified
+   against the flag parser, no doc drift there.
+2. Bonus verdicts recorded while probing: `.sweep.sh` does not
+   exist (stale note); install.sh is the repo's only shell script
+   and is intentionally mode 100644 (curl|bash usage — exec bit
+   not required); the `-dev` suffix in internal/version is the
+   deliberate marker distinguishing ldflags-injected release
+   builds from raw `go build` — every release path (Makefile,
+   ci-cd, ci.yml, release.yml, goreleaser) injects Version, and
+   .goreleaser.yaml parses cleanly.
