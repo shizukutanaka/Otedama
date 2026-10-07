@@ -8773,3 +8773,28 @@ config-show fix and the #460–465 pool-text boundary fixes:
 
 Terminal-echo surface is now uniformly sanitized at every boundary:
 config show, doctor Print, and all pool-controlled log paths.
+
+## Session 1660 update (Socratic pass 326)
+
+Claim verified: the s1659 doctor sanitization is exercised by a real
+input path — TRUE, but the stated vector was wrong; corrected here.
+
+Empirically exercised the built binary rather than trusting the unit
+test alone:
+
+- `otedama doctor --data-dir $'/tmp/evil\x1b[2Jdir\u202ex'` prints
+  `/tmp/evil[2Jdirx` — ESC and the bidi override are stripped at the
+  Print boundary. Same for `OTEDAMA_DATA_DIR=$'...\x1b[31m...'`.
+- **Threat-model correction**: a *config file* could never carry the
+  payload — `loadConfigFile` fails at decode with "yaml: control
+  characters are not allowed" (verified live), so the file vector was
+  already closed before s1659. The live vectors are the flag and
+  environment layers, which bypass YAML entirely and flow raw into
+  check Detail strings. The s1659 fix is exactly right for those;
+  only the ledger's stated vector was inaccurate, which this entry
+  corrects. The same correction applies to s1655's config-show fix:
+  file-vector dead at decode, env-vector (`OTEDAMA_LOG_LEVEL` etc.)
+  live and now sanitized.
+
+Residual: nothing further — the defense sits at the display boundary,
+so it holds for any future source, not only today's three layers.
