@@ -702,11 +702,17 @@ jobs:
           version: 'latest'
           
       - name: Configure kubectl
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG_STAGING }}
+        if: env.KUBECONFIG_B64 != ''
         run: |
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
           
       - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG_STAGING }}
+        if: env.KUBECONFIG_B64 != ''
         run: |
           kubectl apply -f k8s/01-namespace.yaml
           kubectl apply -f k8s/02-configmap.yaml
@@ -738,11 +744,17 @@ jobs:
           version: 'latest'
           
       - name: Configure kubectl
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+        if: env.KUBECONFIG_B64 != ''
         run: |
-          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
           
       - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+        if: env.KUBECONFIG_B64 != ''
         run: |
           kubectl apply -f k8s/01-namespace.yaml
           kubectl apply -f k8s/02-configmap.yaml
@@ -757,6 +769,9 @@ jobs:
           kubectl rollout status deployment/otedama -n otedama
           
       - name: Verify deployment
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+        if: env.KUBECONFIG_B64 != ''
         run: |
           kubectl get pods -n otedama-production
           kubectl get svc -n otedama-production

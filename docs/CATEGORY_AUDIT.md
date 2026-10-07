@@ -9174,3 +9174,39 @@ Doc-graph integrity verified with one stale cell fixed:
   "stdlib + x/crypto + x/sys + yaml". ADR-011's "4th dependency"
   count remains consistent (x/sys is quasi-stdlib, not counted in
   the dependency budget).
+
+## Session 1687-1689 update (Socratic passes 353-355)
+
+Marker census + workflow permissions/deploy-lifecycle audit:
+- TODO/FIXME/XXX/HACK census across all production Go: zero real
+  markers (single grep hit is the word DEBUG inside a comment).
+- Permissions census: every workflow job either inherits an explicit
+  top-level block or declares its own minimal set (contents:read,
+  packages:write only where pushes occur, issues:write where the job
+  posts comments). Least-privilege posture verified.
+- Fixed: `update-homebrew` in release.yml fired on every release but
+  checked out `otedama/homebrew-tap` — a repo that does not exist
+  under either org — with `GITHUB_TOKEN`, which cannot reach
+  cross-repo checkouts anyway. The job was a deterministic failure on
+  every tag. It is now opt-in: gated on `vars.HOMEBREW_TAP_REPO` and
+  parameterized on `secrets.HOMEBREW_TAP_TOKEN` so a tap repo + PAT
+  provision enables it.
+- Fixed: ci.yml `deploy-production` fired on every `v*` tag and would
+  have run `kubectl apply` against a kubeconfig decoded from an unset
+  secret plus `k8s/*.yaml` manifests that cannot exist (k8s/ is a
+  forbidden path — docs/DEPLOYMENT.md is the declared substitute).
+  Both deploy-staging and deploy-production kubectl steps are now
+  gated on `env.KUBECONFIG_B64 != ''` (the convention deploy.yml
+  already uses), and the kubeconfig is written to `~/.kube/config`
+  instead of a shell-local `export` that never persisted across
+  steps anyway.
+- Fixed: ci-cd.yml `deploy` was gated on `refs/heads/main` — a
+  branch that never existed (default branch is master), silently
+  masking the dead job. Gate corrected to `refs/heads/master` with
+  the same kubeconfig opt-in applied to its kubectl steps.
+- Honest residuals recorded: when the secrets are provisioned, the
+  k8s/*.yaml / helm-chart targets these jobs apply still do not exist
+  (and reference postgres/redis/monitoring/ingress components the
+  product does not have) — enabling deployment requires authoring
+  real manifests under docs/, tracked as remaining work rather than
+  hidden by the dormant jobs.

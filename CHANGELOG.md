@@ -8215,3 +8215,14 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Fixed (session 1655 — config show が制御文字を端末へ垂れ流す)
 
 `otedama config show` は Validate を通さないため、制御文字入りの `log_level`/`log_format` を持つ設定ファイルを開くと、その値が生の `%s` で端末へ出力され ANSI エスケープ注入になり得た（検査対象のファイルを調べるツール自体が注入経路）。他の全文字列フィールドと同じく `safeDisplay` 経由へ統一。回帰ピン: `TestConfigShow_SanitizesLogFields`（`\x1b` を含む設定ファイルで stdout に ESC が出ないことを検証）。
+### Fixed (session 1689 — deploy/homebrew ワークフローの決定論的失敗をゲート)
+
+- `release.yml` の `update-homebrew` が存在しない `otedama/homebrew-tap` を
+  `GITHUB_TOKEN` でチェックアウトし毎リリース失敗していた — `vars.HOMEBREW_TAP_REPO`
+  + `secrets.HOMEBREW_TAP_TOKEN` によるオプトインへ変更。
+- `ci.yml` `deploy-production` が `v*` タグ毎に空 kubeconfig と非存在 `k8s/` を
+  apply し決定論的に失敗していた — kubeconfig 未プロビジョン時はスキップ
+  （deploy.yml と同じ `env.KUBECONFIG_B64` 規約）、kubeconfig は
+  `~/.kube/config` へ書き出し `export` 不持続バグも解消。
+- `ci-cd.yml` `deploy` のブランチゲートを `main` → `master`（実ブランチ）へ
+  修正し、同一の kubeconfig ゲートを付与。
