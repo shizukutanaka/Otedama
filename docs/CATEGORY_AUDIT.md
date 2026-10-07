@@ -9272,3 +9272,13 @@ Verified the inverse of pass 358's supply-chain invariant: action `uses:` refs a
 - `build-packages` fpm inputs were all nonexistent paths — `scripts/post-install.sh`, `scripts/pre-remove.sh`, `scripts/otedama.service` (scripts/ is a CLAUDE.md-forbidden path and does not exist), and `./config.yaml` (only `config.yaml.example` exists) — the DEB/RPM job could never have succeeded. Dropped the maintainer-script flags and the unit file (a unit is produced at runtime by `otedama service install`), pointed config at `config.yaml.example`, and stripped the leading `v` from the fpm version (`${VERSION#v}` — Debian policy requires the version to start with a digit).
 
 Honest residuals: `go install` pins follow the tag, not a content hash — same integrity class as the `@vN` action pins (documented non-goal per GOVERNANCE.md). Semgrep's pinned version ages until this file is next edited; dependabot does not track pip pins in workflows.
+
+## Session 1694 update (Socratic pass 360)
+
+Claim verified: "Dependabot monitors every dependency ecosystem that can drift." **TRUE with one boundary and one residual defect (fixed).**
+
+- `.github/dependabot.yml` covers all three ecosystems with manifest files: `gomod` (go.mod), `github-actions` (workflows — the mechanism that would have flagged `@v1`/`@v2`/`@master` refs found in passes 358–359), and `docker` (Dockerfile `golang:1.24-alpine` + `gcr.io/distroless/static:nonroot` FROM lines are both dependabot-trackable).
+- **Boundary:** dependabot cannot see *inline* tool installs inside `run:` steps — `go install …@vX`, `pip install …==X` are plain text to it. Those pins age silently until a human (or an audit pass) edits them; the file has no requirements.txt/Gemfile to hang tracking on.
+- **Residual defect (fixed):** `sudo gem install fpm` in release.yml was the last unpinned tool install in the tree — every release rebuilt packages with whatever fpm was current at tag time, including breaking changes. Pinned `fpm -v 1.18.0` (2026-08-26, satisfies the ≥7-day rule). `apt-get install` lists are excluded from the drift class by construction — they resolve from the runner image's pinned Ubuntu repos, refreshed per image release.
+
+Honest residual: dependabot PRs only propose version bumps; nothing enforces that the inline pins are revisited (same class as the semgrep pip pin noted in pass 359 — recorded as a standing limitation, not a fixable defect without a forbidden-dir manifest file).

@@ -131,7 +131,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y rpm ruby ruby-dev build-essential
-        sudo gem install fpm
+        sudo gem install fpm -v 1.18.0
 
     - name: Build Linux binary
       env:

@@ -8257,3 +8257,8 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   （scripts/・config.yaml）で同ジョブは必ず失敗していた —
   maintainer-script と unit 参照を除去し config.yaml.example を同梱、
   deb/rpm 規約に合わせバージョン先頭の `v` を除去。
+### Fixed (session 1694 — fpm ツール未ピン)
+
+- release.yml の `gem install fpm` を `fpm -v 1.18.0` へピン — ツリーの
+  最後の未ピン install で、リリース毎に当時最新の fpm で DEB/RPM を
+  構築していた（上流破壊的変更をそのまま吸収する経路）。
