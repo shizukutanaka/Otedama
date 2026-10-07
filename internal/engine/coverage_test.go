@@ -2925,8 +2925,11 @@ func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
 	for _, m := range logs {
 		if strings.Contains(m, "reconnecting in") {
 			reconnects++
-			if !strings.Contains(m, "reconnecting in 1s") {
-				t.Fatalf("backoff did not reset after an established session: %q (all: %v)", m, logs)
+			// The logged delay is the jittered sleep: base backoff must have
+			// reset to 1s (its ±25% window), never grown to 2s+.
+			d, err := time.ParseDuration(m[strings.LastIndex(m, " ")+1:])
+			if err != nil || d < 750*time.Millisecond || d >= 1250*time.Millisecond {
+				t.Fatalf("backoff did not reset to the 1s ±25%% window: %q (all: %v)", m, logs)
 			}
 		}
 	}

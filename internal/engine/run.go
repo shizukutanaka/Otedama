@@ -30,11 +30,13 @@ package engine
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -66,6 +68,13 @@ const (
 
 	// reconnectBackoffMax caps the exponential reconnect backoff.
 	reconnectBackoffMax = 64 * time.Second
+
+	// reconnectBackoffJitterPct is the uniform ±percentage applied to each
+	// backoff sleep. The exponential base still doubles on schedule, but the
+	// actual sleep is spread across the window so a fleet of miners
+	// reconnecting after a shared outage does not hammer the pool in
+	// lockstep (thundering herd).
+	reconnectBackoffJitterPct = 25
 )
 
 // arbitrationInterval is how often the engine re-evaluates the
@@ -463,6 +472,24 @@ type reconnectOpts struct {
 	activity   map[string]float64
 }
 
+// jitteredBackoff perturbs d by a uniform ±reconnectBackoffJitterPct drawn
+// from crypto/rand. The reconnect loop sleeps this value while tracking the
+// un-jittered exponential base, so consecutive failures still double on
+// schedule while concurrent attempts spread across the window. A crypto/rand
+// failure or a degenerate base falls back to d — degraded spread, still
+// correct timing.
+func jitteredBackoff(d time.Duration) time.Duration {
+	span := int64(d) * 2 * reconnectBackoffJitterPct / 100 // uniform range centered on d
+	if span <= 0 {
+		return d
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(span))
+	if err != nil {
+		return d
+	}
+	return d - time.Duration(int64(d)*reconnectBackoffJitterPct/100) + time.Duration(n.Int64())
+}
+
 // runReconnectLoop dials the pool, runs a session, and reconnects with
 // exponential backoff (capped at reconnectBackoffMax) until ctx is canceled, a fatal
 // error occurs, or MaxReconnectAttempts is exceeded.
@@ -613,6 +640,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// transient pool/network failures are handled by pool failover and
 		// backoff above — so an outage can never silently redirect earnings
 		// to a different address (no session establishes during an outage).
+		//
+		// Draw the jittered sleep once here so the log lines below report
+		// the actual delay, not the nominal exponential base.
+		sleep := jitteredBackoff(backoff)
 		switch {
 		case !addrConnected && len(addrs) > 1:
 			prev := addrIdx
@@ -632,19 +663,19 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			addrConnected = false
 			r.log("warn", fmt.Sprintf(
 				"engine: none of the %d configured payout addresses could connect; "+
-					"backing off %v and retrying from the primary", len(addrs), backoff,
+					"backing off %v and retrying from the primary", len(addrs), sleep,
 			))
 		case len(pools) > 1:
-			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
+			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), sleep))
 		default:
-			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
+			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, sleep))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
 		// canceled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
-		timer := time.NewTimer(backoff)
+		timer := time.NewTimer(sleep)
 		select {
 		case <-timer.C:
 		case <-ctx.Done():

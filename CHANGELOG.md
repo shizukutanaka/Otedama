@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1557 — 再接続バックオフが決定論的でサンダリングハードが起こり得た)
+
+再接続スリープが指数ベースそのまま（1s→64s 上限）だったため、同一プール障害で一斉に切断されたクライアント群が同一時刻に再接続を試みロックステップ状態になり得た（改善マップ P1 項目・台帳の誠実残余として記録済み）。`jitteredBackoff` が各スリープへ crypto/rand の一様 ±25% ジッターを付加 — 指数ベースは従来通り（確立セッション後にリセット・連続失敗で倍加）のまま、実スリープのみが窓内へ分散する。3箇所の warn ログは名目ベースではなく実際に引かれた値を記録するため、ログの正直性も維持。crypto/rand 失敗・縮退ベースは無ジッター値へフォールバック（分散は劣化するがタイミングは正しい）。回帰ピン: `TestJitteredBackoff`（400回の試行が [0.75d, 1.25d) 内かつ複数値を生成）、`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` を ±25% 窓内検証へ更新。
+
 ### Fixed (session 1553 — V1 シェアが Version=0・PrevHash=ゼロのヘッダをハッシュしていた)
 
 V1 ジョブ適用時 (`applyJob`) が `miner.Work.Header` に `Version`/`PrevHash` を一切コピーしておらず、ワーカーは両フィールドがゼロのヘッダをハッシュしていた — プール側が通知値で再構成するプリイメージと一致しないため V1 の全シェアがプール側検証で拒否される構造欠陥（2026-06-04 から存在、V2 の `updateWork` は正しかった）。併せて `decodeNotifyJob` が prevhash のワイヤ形式（各4バイトワードのバイトスワップ）を正規化せず格納していた問題を修正 — デコード時にワードごと逆スワップし、`Job.PrevHash` はヘッダ直列化バイト列を保持する契約へ明文化（従来の「big-endian」記述は誤り）。エンジンは通知値をヘッダへコピーするよう修正。回帰ピン: `TestParseNotify_PrevHashWordSwap`（デコード変換）・`TestApplyJob_HeaderFieldsReachHashedShare`（稼働ワーカーが出すシェアのハッシュが宣言フィールド入りヘッダの再計算値と一致）。
