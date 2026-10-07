@@ -8889,3 +8889,23 @@ bare binaries and checksums.txt. Swapped to
 tag's release instead of failing, still emits `upload_url` for the
 `actions/upload-release-asset` steps, and the job-level
 `get_version` output contract is unchanged.
+
+## Session 1667 update (Socratic pass 332)
+
+Claim verified + fixed: devin-direct-merge.yml's permission design is
+correct, but two real defects fixed.
+
+Verified TRUE: `pull_request` (not pull_request_target) → the workflow
+definition comes from the base branch, never attacker-controlled; for
+fork PRs GitHub downgrades GITHUB_TOKEN to read-only so nothing
+privileged is exposed; permissions are minimal (contents:read,
+pull-requests:write); the posted comment body is static text with no
+interpolated attacker input.
+
+Fixed: (a) GitHub computes `mergeable` asynchronously — the first
+query right after `opened`/`synchronize` frequently returns UNKNOWN,
+which the old single-read treated as "no conflict", silently skipping
+the comment for real conflicts; now retries up to 3×5s. (b) On fork
+PRs the write token is downgraded, so `gh pr comment` always failed
+and painted the check red — gated the comment step on
+`head.repo.full_name == github.repository`.

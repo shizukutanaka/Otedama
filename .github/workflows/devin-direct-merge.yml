@@ -24,14 +24,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub標準のトークン（Devin用ではない）
         run: |
           PR_NUM=${{ github.event.pull_request.number }}
-          STATUS=$(gh pr view $PR_NUM --json mergeable --jq .mergeable)
+          # mergeable は GitHub が非同期計算 — 初回 UNKNOWN を競合なしと誤認しないよう短くリトライ
+          STATUS=""
+          for i in 1 2 3; do
+            STATUS=$(gh pr view $PR_NUM --json mergeable --jq .mergeable)
+            [ "$STATUS" != "UNKNOWN" ] && break
+            sleep 5
+          done
           if [ "$STATUS" = "CONFLICTING" ]; then
             echo "conflict=true" >> $GITHUB_OUTPUT
           fi
 
       # コンフリクトがある場合、PRにコメントを投稿してDevinのSessionを起動
+      # （フォークPRでは書込トークンが降格してコメント不可のため同一リポのPRのみ）
       - name: Comment to Trigger Devin
-        if: steps.check_conflict.outputs.conflict == 'true'
+        if: steps.check_conflict.outputs.conflict == 'true' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
