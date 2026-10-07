@@ -1849,3 +1849,26 @@ sv2-apps latest v0.8.0 — both unchanged. No action required.
   advertised power-of-two difficulty. Treat "v0.8.0" in earlier
   sessions as a misread tag/unreleased reference.
 - SRI (Stratum V2 Reference Implementation) at v1.12.0, unchanged.
+
+### Session 1681 recheck (ecosystem)
+
+- **sv2-spec normative open set unchanged**: #238 (optional-flag
+  negotiation — opened 2026-10-06, still open), #234 (authority key
+  management/rotation docs — two reviews in), #203 (non-custodial
+  payouts extension), #198 (coinbase_witness). Non-normative: #186,
+  #103. No action required.
+- **Correction to the s1661 correction**: `releases/latest` for
+  sv2-apps resolves to **v0.8.0** (published 2026-09-17). The s1661
+  entry recorded v0.7.0 as newest — whether v0.8.0 was tagged after
+  that fetch or the fetch itself missed it, the authoritative latest
+  is now v0.8.0. Its contents match the hardening wave previously
+  attributed to it: Loupe-audit fixes across the stack, tProxy
+  BIP323 version-rolling mask + `mining.extranonce.subscribe`
+  handling, typestate runtimes for JDC/tProxy/Pool, bounded
+  extranonce allocators, min_ntime share-validation enforcement
+  (the enforcement Otedama already performs), `max_past_jobs` cap,
+  and version-range enforcement on SetupConnection.
+- SRI latest: v1.12.0 (2026-09-17) — unchanged.
+- The P0 gap stands and gains evidence again: tProxy ships the
+  BIP323 version-rolling mask to downstream miners; Otedama's V1
+  client still sends no `mining.configure` and cannot request one.
