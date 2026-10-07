@@ -8485,3 +8485,49 @@ Follow-on (Devin Review on merged #1404, 3 findings — all substantiated):
   suite that was never written.
 - ci.yml: hardened docker-verify tmpfs had `noexec` dropped in #1404 — the
   container only writes data under /tmp, so `noexec` restored.
+
+## Session 1650 update (Socratic pass 316)
+
+Claim verified: the daemon service manager is honest and injection-safe on
+all three platforms — TRUE (one residual belongs to rejected territory).
+
+`internal/daemon/service.go` (527 lines) verified end to end:
+
+- NewManager resolves `os.Executable()` through `EvalSymlinks` so the
+  installed service points at the real binary, not a retargetable link.
+- `systemdUnitPath` asks the systemd user manager for ITS XDG_CONFIG_HOME
+  (`systemctl --user show-environment`) — the variable that actually
+  determines the unit search path — and only falls back to the process's
+  own resolution when the manager cannot be queried. An `("", true)`
+  result correctly means "manager has no XDG → ~/.config/systemd/user".
+- installSystemd writes the unit 0o600, reloads, `enable --now`;
+  uninstall ignores the disable error (service may not be loaded) and
+  removes the file; status gates Running on `is-active == "active"` only
+  (activating/inactive/failed all report not-running — strict, honest).
+- systemdUnit: ProtectHome=read-only with a ReadWritePaths carve-out for
+  the effective data dir (mirrors `config.DefaultDataDir()` when unset —
+  the same resolution `otedama run` performs) so the wallet stays
+  writable; NoNewPrivileges + PrivateTmp; ExecStart tokens pass through
+  `quoteToken` — whitespace/quote/control chars get strconv.Quote, which
+  keeps a newline-bearing value on one line and blocks unit-file
+  directive injection (unicode.IsControl covers C0+C1, s342/s809 lineage).
+- launchdPlist builds ProgramArguments from the canonical argv SLICE with
+  each element xmlEscape'd — a path containing spaces survives as one
+  <string> rather than being split. Log destinations moved from
+  world-readable /tmp to ~/Library/Logs with a degrade-gracefully
+  fallback. Windows binPath wraps the binary in literal quotes — `"`
+  cannot appear in an NTFS path, so the simpler form is sufficient there.
+- statusWindowsService treats `sc.exe query` failure as "not installed",
+  matching statusLaunchd's launchctl-failure semantics.
+
+Honest residuals (recorded, not fixed):
+- StandardOutPath/StandardErrorPath interpolate `launchdLogPath` results
+  unescaped — a home dir containing `&` would emit malformed plist XML.
+  This is the fix PR #548 attempted and it was closed unmerged: recorded
+  as rejected territory, not re-delivered.
+- statusLaunchd reports job-LOADED rather than process-alive (`launchctl
+  list` success, not PID parsing). For the KeepAlive=true job installed
+  here the two coincide in practice; a permanently crashing service
+  still reports Running. Status-precision nit only.
+- ServiceStatus.PID is never populated by any status probe — dead field,
+  cosmetic.
