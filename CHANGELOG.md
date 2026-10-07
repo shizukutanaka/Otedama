@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1558 — Go リポで Node.js ジョブが決定論的に失敗していた)
+
+`deploy.yml` の `test` ジョブ（`build` のゲート）は package.json の存在しない Go リポで `setup-node cache: 'npm'` → `npm ci` → `npm test` → `npm run lint` → lcov カバレッジアップロードを実行しており、存在しない lockfile で毎回失敗していた — つまりデプロイパイプライン全体が `needs: test` を通じて不通だった（PR #1403 の失敗ログで実測確認）。Go ツールチェーンの build/vet/test へ置き換え、存在しない lcov を参照していた codecov アップロードは撤去。併せて `code-review.yml` の Automated Code Review ジョブが `has_node` 検出の直後に `setup-node cache: 'npm'` を無条件実行していたため同じ lockfile 不在で落ちていた問題を、performance-check ジョブと同じ `has_node` ゲートを setup-node に付加して解消 — フォールバック経路（"No Node.js project detected."）が設計通り動くようになった。残件: Dependency Review ジョブの失敗はリポジトリ設定で Dependency graph が無効なためであり、コードでは修正不可（Settings → Code security で有効化が必要）。
+
 ### Fixed (session 1557 — 再接続バックオフが決定論的でサンダリングハードが起こり得た)
 
 再接続スリープが指数ベースそのまま（1s→64s 上限）だったため、同一プール障害で一斉に切断されたクライアント群が同一時刻に再接続を試みロックステップ状態になり得た（改善マップ P1 項目・台帳の誠実残余として記録済み）。`jitteredBackoff` が各スリープへ crypto/rand の一様 ±25% ジッターを付加 — 指数ベースは従来通り（確立セッション後にリセット・連続失敗で倍加）のまま、実スリープのみが窓内へ分散する。3箇所の warn ログは名目ベースではなく実際に引かれた値を記録するため、ログの正直性も維持。crypto/rand 失敗・縮退ベースは無ジッター値へフォールバック（分散は劣化するがタイミングは正しい）。回帰ピン: `TestJitteredBackoff`（400回の試行が [0.75d, 1.25d) 内かつ複数値を生成）、`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` を ±25% 窓内検証へ更新。
