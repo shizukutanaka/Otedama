@@ -9034,3 +9034,15 @@ report, not an error); `doctor --json` emits a valid JSON document
 (summary + per-check array) and exits 2 — identical dominance
 semantics to text mode. (`completion | tail` once again returned
 tail's 0 — direct invocation is mandatory for exit-code evidence.)
+
+## Session 1677 update (Socratic pass 343) — numbering erratum
+
+Correction, recorded honestly: the "Socratic pass NNN" labels in the
+entries headed "Session 1663" through "Session 1676" each carry a
+number one LESS than the standing formula (pass = session − 1334).
+Correct values are: s1663→329 (wrote 328), s1664→330 (329),
+s1665→331 (330), s1666→332 (331), s1667→333 (332), s1668→334 (333),
+s1669→335 (334), s1670→336 (335), s1671→337 (336), s1672→338 (337),
+s1673→339 (338), s1674→340 (339), s1675→341 (340), s1676→342 (341).
+The session numbers and verdicts themselves are unaffected; only the
+secondary pass label drifted. This entry resumes the formula at 343.
