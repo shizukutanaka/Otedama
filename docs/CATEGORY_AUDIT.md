@@ -8741,3 +8741,35 @@ the code — FALSE for §13, fixed.
 Ledger doc itself is now honest again — the file that exists to
 separate "designed this way" from "not finished" no longer claims
 fixed items are broken.
+
+## Session 1659 update (Socratic pass 325)
+
+Claim verified: every user- or pool-controlled string reaching a
+terminal is sanitized at the display boundary — FALSE for one surface,
+fixed.
+
+Swept every Fprintf/Fprintln %s site in cmd/, engine/, doctor/ for raw
+echoes of config- or pool-controlled text after the s1655
+config-show fix and the #460–465 pool-text boundary fixes:
+
+- `doctor`'s `Print` wrote `res.Detail`/`res.Fix` raw. Those strings
+  carry config-controlled paths (data-dir, config path, wallet path —
+  checks.go 203/209/216/226/233/268/274/287) and the same class fixed
+  in s1655 applied: a config file naming a data-dir containing ANSI
+  escapes would be echoed verbatim by the diagnostic tool itself.
+  Fixed at the single boundary — `Print` now runs
+  `poolproto.SanitizePoolText` on Detail and Fix (existing helper,
+  already imported by the package; JSON output unchanged, it escapes
+  controls itself). Regression pin:
+  `TestReport_Print_SanitizesControlChars`.
+- Verified clean: `EnvWarnings` quotes env values with %q; `Validate`
+  issues %q-quote log_level/log_format/payout_scheme/addr; pool dial
+  errors `dial %s`/`negotiate %s` only ever see Validate-passed URLs
+  (userinfo and control chars rejected at config.go validation, so no
+  credential leak); `plain("error", err.Error())` echoes Validate's
+  already-quoted issue text; completion shell list, service state,
+  fingerprints, counts, and durations are internally generated or
+  static.
+
+Terminal-echo surface is now uniformly sanitized at every boundary:
+config show, doctor Print, and all pool-controlled log paths.

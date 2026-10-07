@@ -37,6 +37,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // Status is the outcome of a single check.
@@ -132,9 +134,9 @@ func (r *Report) ExitCode() int {
 func (r *Report) Print(w io.Writer) {
 	var passed, warned, failed, skipped int
 	for _, res := range r.Results {
-		fmt.Fprintf(w, "[%s] %s: %s\n", res.Status.symbol(), res.Name, res.Detail)
+		fmt.Fprintf(w, "[%s] %s: %s\n", res.Status.symbol(), res.Name, poolproto.SanitizePoolText(res.Detail))
 		if res.Fix != "" {
-			fmt.Fprintf(w, "    → fix: %s\n", res.Fix)
+			fmt.Fprintf(w, "    → fix: %s\n", poolproto.SanitizePoolText(res.Fix))
 		}
 		switch res.Status {
 		case StatusPass:
