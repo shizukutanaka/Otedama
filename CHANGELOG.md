@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1678 — release-build が macOS で必ず失敗＋生成物未ignore)
+
+`make release-build` が `sha256sum` を直書きしており、stock macOS（`shasum` のみ）ではチェックサム工程で必ず失敗 — install.sh が session 1669 で workaround したのと同じ落とし穴が Makefile に残っていた。`sha256sum || shasum -a 256` の解決へ変更（両方無い場合は明確なエラーで停止）。併せて `make docs` の生成物 `docs/api-reference.txt` が未追跡かつ .gitignore 未収録で作業ツリーを汚していたため ignore へ追加。
+
+### Fixed (session 1675 — config show が不正 env を静かに無視)
+
+`otedama config show` が `config.EnvWarnings` を呼ばず、`OTEDAMA_POWER_WATTS=abc` のようなパース不能な数値 env が警告なくデフォルト値へ落ちていた — env が効かない原因を調べるためのコマンド自体が原因情報を隠していた。`config validate` と同じ警告ループを追加。
+
 ### Fixed (session 1669 — install.sh が macOS で必ず失敗)
 
 `require sha256sum || require shasum` — require() 内部の die() がスクリプト全体を exit させるため `||` の右辺へ到達せず、sha256sum を持たない macOS では前提チェックで常に死んで後続の `shasum -a 256` フォールバックが死にコードだった。明示的な「どちらか一方存在」チェックへ置換（どちらも無い場合のみ die）。
