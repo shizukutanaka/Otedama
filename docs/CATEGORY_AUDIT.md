@@ -8870,3 +8870,22 @@ dist/ artifact is the otedama-* prefix by construction (the Build for
 multiple platforms step emits only otedama-<os>-<arch> names), so the
 coverage set is identical minus the self-reference. install.sh's
 bare-binary preference path is unaffected.
+
+## Session 1666 update (Socratic pass 331)
+
+Claim fixed: release.yml's entire artifact set no longer depends on
+winning a release-creation race against ci-cd.yml.
+
+Both workflows fire on `v*` tag pushes. release.yml's create-release
+job used `actions/create-release@v1`, which fails with 422
+"release already exists" when a release for the tag already exists —
+and ci-cd's `softprops/action-gh-release` job could easily land first
+(it runs a shorter chain: build → checksums → release). On that
+ordering, the create-release step error propagated through
+`needs: create-release`, silently skipping build-binaries, build-packages,
+and the Homebrew formula update — the release would carry only ci-cd's
+bare binaries and checksums.txt. Swapped to
+`softprops/action-gh-release@v1` (proven in ci-cd.yml): it upserts the
+tag's release instead of failing, still emits `upload_url` for the
+`actions/upload-release-asset` steps, and the job-level
+`get_version` output contract is unchanged.
