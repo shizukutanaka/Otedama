@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 1659 — doctor 出力の制御文字混入)
+
+`otedama doctor` の `Print` が各チェックの `Detail`/`Fix` 文字列を無加工で端末へ出力していた — これらには設定ファイル由来のパス（data-dir・config・wallet）が含まれ、制御文字を含む設定値が ANSI エスケープを注入し得た。s1655 の config show と同一クラスを `Print` 単一境界で `poolproto.SanitizePoolText` 経由へ修正（JSON 出力はエンコーダがエスケープ済みのため不変）。回帰ピン: `TestReport_Print_SanitizesControlChars`。
+
 ### Fixed (session 1652 — Start/Stop 競合でワーカーが止まらない)
 
 `Worker.Start` は `w.cancel` を mutex 外で代入していたのに対し `Stop` は `w.mu` 下で読んでいたため、Start/Stop が競合すると `Stop` が `cancel==nil` を読んで即時リターンし、grind goroutine が生き続ける可能性があった（呼出し側は停止済みと誤認）。`started` CAS の後に cancel を `w.mu` 下で公開し `cancelReady` チャネルを close する形へ修正 — 途中の `Stop` は publish 完了を待ってから cancel し `done` で終了を待つ。2回目の Start は CAS で panic し共有状態に触れない。回帰検証: `TestWorker_StartTwicePanics` ＋パッケージ全体 `-race` 緑。
