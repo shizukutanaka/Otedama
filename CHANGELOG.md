@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1664 — release tarball に checksum 無し)
+
+`release.yml` が `otedama-<os>-<arch>.tar.gz` を一切のチェックサムなしで公開しており、直接ダウンロードした利用者が検証不可能だった（checksums.txt は ci-cd 側の bare binary のみを列挙）。各マトリクス脚で `sha256sum` を生成し `<name>.tar.gz.sha256` として同梱アップロードする形へ修正 — 5脚が並列で独立アップロードするため集約ファイルはレースする。install.sh は変更不要（ci-cd の検証済み bare binary を選ぶ経路は s1663 で実証済み）。
+
 ### Security (session 1659 — doctor 出力の制御文字混入)
 
 `otedama doctor` の `Print` が各チェックの `Detail`/`Fix` 文字列を無加工で端末へ出力していた — これらには設定ファイル由来のパス（data-dir・config・wallet）が含まれ、制御文字を含む設定値が ANSI エスケープを注入し得た。s1655 の config show と同一クラスを `Print` 単一境界で `poolproto.SanitizePoolText` 経由へ修正（JSON 出力はエンコーダがエスケープ済みのため不変）。回帰ピン: `TestReport_Print_SanitizesControlChars`。
