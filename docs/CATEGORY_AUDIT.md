@@ -9090,3 +9090,31 @@ Methodology note reaffirmed for the third time: piping through
 returned 0; only ${PIPESTATUS[0]} or direct invocation is
 valid. Ledger and CHANGELOG now both carry every fix through
 session 1679.
+
+## Session 1681 update (Socratic pass 347)
+
+Ecosystem recheck (ADR-009 cadence):
+- sv2-spec normative open set unchanged: #238 (optional-flag
+  negotiation — new Oct 6, still open), #234 (authority key
+  management/rotation documentation), #203 (non-custodial payouts
+  extension), #198 (coinbase_witness on NewTemplate). Non-normative:
+  #186, #103.
+- SRI: v1.12.0 remains latest (2026-09-17).
+- CORRECTION: sv2-apps latest IS v0.8.0 (2026-09-17), not v0.7.0
+  as recorded in s1661 — v0.8.0 was published that same week and
+  releases/latest resolves to it; the earlier "misread" erratum
+  was itself mistaken. v0.8.0 = Loupe-audit hardening wave:
+  tProxy BIP323 version-rolling mask (strengthens the recorded P0
+  gap — Otedama still sends no mining.configure), typestate
+  runtimes, extranonce-exhaustion fixes, share-validation min_ntime
+  enforcement (SRI enforces what Otedama already does).
+- Note on CI failures observed this pass: the three classes are
+  all recorded — (a) Go-pin 1.20–1.23 vs go.mod >=1.24 (pin
+  updates rejected via #1344); (b) Dependency Review (Dependency
+  graph disabled in repo Settings — user action required); (c)
+  standalone gosec in security.yml reports 40 findings because it
+  honors ONLY #nosec, not the golangci-lint `//nolint:gosec`
+  annotations the codebase uses — mass #nosec annotation is
+  recorded-rejected territory (#1391–1398). A global gosec config
+  exclusion would hide future real G703/G101 findings, so it is
+  not a safe alternative; the red gate stays honest.
