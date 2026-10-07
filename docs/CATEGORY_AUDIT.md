@@ -8629,3 +8629,35 @@ optional surface toward safety. TRUE — full 377-line read.
   both the structured and plain channels).
 
 No defects. cmd/otedama run-path verified end to end.
+
+## Session 1655 update (Socratic pass 321)
+
+Claim verified: cmd/otedama's wallet and config subcommands keep secrets
+off argv and sanitize config text before it reaches a terminal. Mostly
+TRUE; one real defect found and fixed.
+
+- wallet.go: passphrases only ever arrive via OTEDAMA_* env vars (never
+  argv — process lists leak them); the recovery phrase is read from
+  stdin with the prompt suppressed for pipes. `wallet verify` compares
+  fingerprints via constant-time compare and checksum-validates the
+  phrase first so a transcription slip reports "invalid phrase" rather
+  than a mismatch. Both verbs stat wallet.dat BEFORE NewWalletManager
+  whose contract is create-when-absent — `verify`/`change-passphrase`
+  can never silently create or rotate a brand-new empty wallet.
+- config.go (cmd): `config show` skips Validate by design — it is the
+  tool used to inspect a possibly-malformed config — so every string
+  field it prints must go through safeDisplay (Cc/Cf/Zl/Zp stripped).
+  The JSON view needs no sanitisation (encoder escapes controls) and
+  StripUserinfo keeps pool credentials out of both views.
+- DEFECT FIXED (output sanitisation): `log_level` and `log_format` were
+  printed raw (%s) — every other string field was already wrapped.
+  A config file with control characters in either value would inject
+  ANSI escapes into the operator's terminal through the very tool meant
+  to inspect that file. Both now go through safeDisplay. Regression pin:
+  TestConfigShow_SanitizesLogFields writes a config.yaml whose
+  log_level/log_format decode to real ESC bytes and asserts none reach
+  stdout.
+
+cmd/otedama is now verdict-clean (run.go s1654, wallet/config s1655,
+plus logfile/service/completion/main/version/doctor/configfile covered
+by prior passes).
