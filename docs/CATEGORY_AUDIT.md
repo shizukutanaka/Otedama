@@ -9022,3 +9022,15 @@ present post-fix ("OTEDAMA_POWER_WATTS=abc is not a valid number;
 ignoring it and using the default"). Same EnvWarnings loop
 `config validate` already ran; pinned by
 TestConfigShow_SurfacesMalformedEnvWarning.
+
+## Session 1676 update (Socratic pass 341)
+
+Claim verified on the live binary: the exit-code contract is
+consistent across output formats and subcommands — TRUE. Direct
+invocation (no pipe): `completion powershell` prints a clean
+"unsupported shell" and exits 64 (EX_USAGE); `service status` on a
+host with no service prints "not installed" and exits 0 (a status
+report, not an error); `doctor --json` emits a valid JSON document
+(summary + per-check array) and exits 2 — identical dominance
+semantics to text mode. (`completion | tail` once again returned
+tail's 0 — direct invocation is mandatory for exit-code evidence.)
