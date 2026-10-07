@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 `build` が緑になったことでラッチ4件目 `security-scan`（`needs: build`、過去一度も未到達）の潜伏欠陥も露呈: `image-ref` に docker metadata の複数行タグリスト（`:pr-1404\n:sha-0472d2f`）がそのまま渡り単一参照として解釈不能だった。ダイジェスト参照（`$IMAGE_NAME@$image-digest`）へ変更し、ghcr パッケージが private の場合にも備えて `docker/login-action` ステップを追加。誠実残件: `deploy-staging`/`deploy-production` の `--set image.tag=` にも同じ複数行出力が渡るが、PR イベントでは到達不能のため台帳に残件として記録。
 
+さらにダイジェスト参照でも失敗 — `IMAGE_NAME` が `Otedama`（大文字含む）で docker のリポジトリ名規則違反（metadata-action はプッシュ時に小文字化するため、実イメージは `otedama` 配下）。スキャン対象参照を `tr` による小文字化解決へ修正し、実際にプッシュされた名前と一致させた。
+
 ### Fixed (session 1557 — 再接続バックオフが決定論的でサンダリングハードが起こり得た)
 
 再接続スリープが指数ベースそのまま（1s→64s 上限）だったため、同一プール障害で一斉に切断されたクライアント群が同一時刻に再接続を試みロックステップ状態になり得た（改善マップ P1 項目・台帳の誠実残余として記録済み）。`jitteredBackoff` が各スリープへ crypto/rand の一様 ±25% ジッターを付加 — 指数ベースは従来通り（確立セッション後にリセット・連続失敗で倍加）のまま、実スリープのみが窓内へ分散する。3箇所の warn ログは名目ベースではなく実際に引かれた値を記録するため、ログの正直性も維持。crypto/rand 失敗・縮退ベースは無ジッター値へフォールバック（分散は劣化するがタイミングは正しい）。回帰ピン: `TestJitteredBackoff`（400回の試行が [0.75d, 1.25d) 内かつ複数値を生成）、`TestRunReconnectLoop_BackoffResetsAfterConnectedSession` を ±25% 窓内検証へ更新。
