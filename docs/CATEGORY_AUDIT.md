@@ -11790,3 +11790,7 @@ Claim verified: milestone pass 960 — local gate re-run and green: `gofmt -l in
 ## Session 2295 update (Socratic pass 961 — TTY/stdout contract)
 
 Claim verified: the TUI owns stdout only when stdout is a real terminal — isTerminal uses os.ModeCharDevice (stdlib-only, correct on every platform), run.go:161 auto-sets noTUI on pipes/files/service-manager captures, and there is deliberately no flag to force TUI on non-TTY. During TUI the logger never writes to stdout (sink matrix: discard / file only); each frame is a single io.WriteString(d.w, sb) so frames can't interleave byte-wise. TRUE.
+
+## Session 2296 update (Socratic pass 962 — recover-placement re-verification)
+
+Claim verified: the sole production recover() is correctly placed — doctor.go:241 defers it inside each per-check goroutine where panic→named-Fail conversion preserves the other 16 results; registration order is correct (LIFO: recover defer runs before wg.Done). The reachability probe goroutines (checks.go:370) carry no recover by construction — nothing inside can panic on remote input (DialContext errors, never panics). TRUE.
