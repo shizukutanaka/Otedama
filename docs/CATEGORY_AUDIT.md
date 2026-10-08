@@ -37470,3 +37470,180 @@ census:
   cookies.
 
 Verdict: TRUE.
+
+## Session 3162 update (Socratic pass 1826 — crypto + tls + x509 detail ledger)
+
+Claim under test: the
+crypto
+surface
+is
+SHA-256/
+SHA-512/
+AES-GCM/
+HMAC/
+crypto-
+rand/
+ecdh
+stub —
+no
+weak
+ciphers,
+no
+cert
+minting,
+TLS
+verification
+always
+on.
+
+Verification —
+census:
+
+- `sha256.Sum256`×11 +
+  `sha256.New`×8 —
+  the
+  double-
+  SHA
+  engine
+  plus
+  checksum
+  sites.
+- `crypto/rand.Reader`×11 +
+  `rand.Int`×2 —
+  every
+  random
+  draw
+  cryptographic.
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `cipher.AEAD`×2 —
+  the
+  wallet
+  AES-256-GCM
+  pair
+  (`seedstore.go`).
+- `hmac.New`×1 —
+  pooled
+  HMAC-
+  SHA256
+  constructor.
+- `sha512.New`×1 —
+  BIP-39
+  PBKDF2
+  HMAC-
+  SHA512
+  inner
+  hash.
+- `subtle.ConstantTimeCompare`×1 —
+  `wallet.go`
+  fingerprint/
+  passphrase
+  compare.
+- `ecdh.P256`×3 +
+  `ecdh.PublicKey`×1 +
+  `ecdh.PrivateKey`×1 —
+  the
+  Noise
+  P-256
+  stub
+  (honest
+  self-
+  documented
+  scaffolding).
+- ZERO
+  `md5`,
+  `sha1`,
+  `des`,
+  `rc4`,
+  `dsa`,
+  `rsa`,
+  `ed25519`,
+  `elliptic`,
+  `ecdsa.Sign`,
+  `ecdsa.Verify`,
+  `cipher.NewCBCEncrypter`,
+  `NewCBCDecrypter`,
+  `NewCTR`,
+  `NewCFBEncrypter`,
+  `NewCFBDecrypter`,
+  `NewOFB`,
+  `subtle.ConstantTimeByteEq`,
+  `ConstantTimeSelect`,
+  `ConstantTimeCopy`,
+  `ConstantTimeLessOrEq`,
+  `rand.Perm`,
+  `rand.NormFloat64`,
+  `rand.Shuffle`,
+  `rand.New`,
+  `rand.NewSource`,
+  `rand.Seed` —
+  no
+  weak
+  ciphers,
+  no
+  non-
+  crypto
+  rand,
+  no
+  homebrew
+  comparisons.
+- `tls.Config`×12 +
+  `tls.Dialer`×4 +
+  `tls.VersionTLS12`×4 —
+  every
+  TLS
+  client
+  pins
+  MinVersion
+  TLS1.2;
+  `tls.Dial`×1
+  is
+  a
+  doc
+  comment.
+- `x509.NewCertPool`×3 +
+  `x509.SystemCertPool`×2 +
+  `x509.CertPool`×1 —
+  CA
+  loading
+  for
+  `tls_ca_file`.
+- ZERO
+  `tls.Server`,
+  `tls.Listen`,
+  `NewListener`,
+  `LoadX509KeyPair`,
+  `X509KeyPair`,
+  `Certificate`,
+  `ClientAuth`,
+  `Renegotiation`,
+  `SessionTicketsDisabled`,
+  `SessionTicketKey`,
+  `CipherSuites`,
+  `CurvePreferences`,
+  `ClientSessionCache`,
+  `InsecureSkipVerify`,
+  `VerifyPeerCertificate`,
+  `GetCertificate`,
+  `x509.ParseCertificate`,
+  `ParsePKCS*`,
+  `Marshal*`,
+  `CreateCertificate`,
+  `VerifyHostname`,
+  `EncryptPEMBlock`,
+  `DecryptPEMBlock`,
+  `IsEncryptedPEMBlock` —
+  client-
+  only
+  TLS,
+  no
+  server
+  termination,
+  no
+  cert
+  minting,
+  no
+  verification
+  bypass.
+
+Verdict: TRUE.
