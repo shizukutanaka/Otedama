@@ -11794,3 +11794,7 @@ Claim verified: the TUI owns stdout only when stdout is a real terminal — isTe
 ## Session 2296 update (Socratic pass 962 — recover-placement re-verification)
 
 Claim verified: the sole production recover() is correctly placed — doctor.go:241 defers it inside each per-check goroutine where panic→named-Fail conversion preserves the other 16 results; registration order is correct (LIFO: recover defer runs before wg.Done). The reachability probe goroutines (checks.go:370) carry no recover by construction — nothing inside can panic on remote input (DialContext errors, never panics). TRUE.
+
+## Session 2297 update (Socratic pass 963 — WaitGroup pairing re-verification)
+
+Claim verified: every WaitGroup satisfies Add-before-spawn / Done-deferred / Wait-after-all-adds — hashrate.go:145, hal/registry.go:152, doctor checks.go:361 and doctor.go:234 use the identical loop pattern where no Add can outlive the loop; fanin.go:33 adds a wait-then-close goroutine; tui dashboard.go and provider/polling.go pair Add/Done/Wait across lifecycle with the recreated-after-Wait contract honored in provider Start/Stop. No negative-counter or Add-after-Wait hazard. TRUE.
