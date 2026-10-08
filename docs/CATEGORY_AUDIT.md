@@ -19331,3 +19331,35 @@ Verification:
 
 Verdict: TRUE — all errors API
 usage is canonical.
+
+## Session 2945 update (Socratic pass 1610 — sync/atomic census)
+
+Claim under test: all atomic access
+goes through the typed `atomic.*`
+API (Uint64/Bool/Pointer/Int64) —
+no bare `atomic.AddUint64` free
+functions or mixed mutex+atomic.
+
+Verification (31 sites, 11 files):
+
+- Every atomic op is a typed field:
+  `atomic.Uint64` (counters,
+  en2Counter, difficulty bits),
+  `atomic.Int64` (startTime),
+  `atomic.Bool` (started,
+  authorized, versionMaskWarned),
+  `atomic.Pointer[T]` (reconnect
+  directive, extranoncePair,
+  authorizedUser).
+- Zero `atomic.AddUint64`,
+  `LoadUint64`, `StoreUint64` bare
+  functions — the typed API makes
+  access-path violations a compile
+  error, not a data race.
+- The `difficulty` field stores
+  float64 bits as Uint64 — a
+  deliberate atomic float64 idiom,
+  documented at stratumv1.go:113.
+
+Verdict: TRUE — typed atomic only;
+no torn or mixed access.
