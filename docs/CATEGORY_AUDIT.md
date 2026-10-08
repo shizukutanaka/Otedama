@@ -22167,3 +22167,47 @@ Verification:
 Verdict: TRUE — branch
 remains mergeable and
 payload-pure.
+
+## Session 3006 update (Socratic pass 1670 — text/* ledger)
+
+Claim under test: text/*
+usage is the single
+trusted i18n template —
+nothing else.
+
+Verification — census:
+
+- `text/template` — ONE
+  import (i18n/message.go:
+  48), ONE `template.New`
+  site rendering the
+  in-tree message
+  catalogs (trusted
+  bundle only — no
+  external template
+  source; verified).
+- ZERO text/tabwriter —
+  TUI draws its own ANSI
+  layout (verified
+  visible-width padding).
+- ZERO text/scanner —
+  all parsing is
+  hand-rolled fixed-width
+  (stratum wire) or
+  encoding/json+yaml.
+- ZERO text/parse or
+  template.HTML/
+  HTMLAttr/JSStr
+  injection-type bypasses.
+- html/template absent
+  (nothing renders user-
+  controlled HTML).
+- The four Content-Type
+  literals in httpserver
+  (text/plain ×2,
+  version=0.0.4 exposition,
+  text/html index) are
+  constant strings — not
+  the text/ package.
+
+Verdict: TRUE.
