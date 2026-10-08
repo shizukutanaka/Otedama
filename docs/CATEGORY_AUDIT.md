@@ -10174,3 +10174,7 @@ Claim verified: ResolveWithOrigins applies strictly ordered layers defaults→fi
 ## Session 1896 update (Socratic pass 562 — completion-shell parity)
 
 Claim verified: `otedama completion` supports exactly bash/zsh/fish (completion.go:17, switch :30–37 rejects anything else), matching API.md:152–159 which documents the same three with identical install paths. No phantom shells. TRUE.
+
+## Session 1897 update (Socratic pass 563 — doctor check-count parity)
+
+Claim verified: CLAUDE.md's "17 並行ヘルスチェック" matches reality — checks.go registers exactly 17 named checks. TRUE.
