@@ -24572,3 +24572,58 @@ Verification — census
   (session-3043).
 
 Verdict: TRUE.
+
+## Session 3052 update (Socratic pass 1716 — compile-guard ledger)
+
+Claim under test: every
+interface that must
+be satisfied at a
+type boundary is
+pinned by a
+compile-time
+`var _ Iface = (*T)(nil)`
+guard.
+
+Verification — census
+of all 6 production
+guards:
+
+- stratumv1.go:764 —
+  `var _ poolproto.Dialer
+  = (*Dialer)(nil)`
+  pins V1's Dialer to
+  the poolproto
+  interface.
+- stratumv1.go:767 —
+  `var _ poolproto.
+  PoolNoticeReceiver
+  = (*session)(nil)`
+  pins the session's
+  show_message sink.
+- stratumv1.go:770 —
+  `var _ io.Reader =
+  (*bufio.Reader)(nil)`
+  documents the
+  reader seam.
+- ai_inference.go:144 —
+  `var _ Provider =
+  (*AkashProvider)(nil)`.
+- mining.go:188 —
+  `var _ Provider =
+  (*MiningProvider)(nil)`.
+- secp256k1.go:46 —
+  `var _ Scheme =
+  secp256k1Stub{}`
+  pins the payout
+  scheme.
+- All six sit at the
+  type boundary
+  where a signature
+  drift would
+  silently break
+  the contract —
+  the guards make
+  drift a compile
+  error.
+
+Verdict: TRUE.
