@@ -12706,3 +12706,7 @@ Claim verified: scanning the branch's full diff for secret-material patterns (PE
 ## Session 2525 update (Socratic pass 1191 — fuzz-target inventory re-count)
 
 Claim checked: the ledger's recorded fuzz count (21 targets across 13 files, s1058/s1298) is now stale — this branch's `internal/stratum/encryptedframe_fuzz_test.go` adds two targets, bringing the tree to 23 `Fuzz*` entrypoints across 14 files in 11 packages (cmd, arbitration, btccrypto, config, lightning×2, miner×3, stratumv1×6, rates, stratum×5). `.github/oss-fuzz-integration.md` claims no fixed count (only "add more as written"), so no doc fix needed — the drift is confined to this ledger's own historical entries; corrected here per honest-ledger protocol. The two names the oss-fuzz build script bakes in (FuzzDecodeHeader, FuzzDecoder_ReadFrame) still exist in internal/stratum. TRUE-with-correction.
+
+## Session 2526 update (Socratic pass 1192 — per-package test-presence census)
+
+Claim verified: every directory under internal/ and cmd/ that contains non-test .go files also contains at least one *_test.go — zero test-less packages in the tree (CLAUDE.md's 90%-coverage posture is structurally represented, not just numerically). The fuzz census at s2525 complements: 11 of those packages additionally carry property-level Fuzz targets at every wire/parse boundary. TRUE.
