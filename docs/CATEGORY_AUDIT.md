@@ -18524,3 +18524,22 @@ Verification:
 
 Verdict: TRUE — no `path`-on-filesystem
 confusion; every path op is filepath.
+
+## Session 2915 update (Socratic pass 1580 — reflect census)
+
+Claim under test: `reflect` is absent
+from production code — type dispatch is
+compile-time.
+
+Verification:
+
+- `rg 'reflect\.'` on `internal/` +
+  `cmd/` → **zero** (exit 1, no hits).
+- `reflect` is only in test helpers
+  (`*_test.go` is excluded).
+- All type dispatch is via interface +
+  generic calls (`slices`, `maps`,
+  `min`/`max`) — compile-time.
+
+Verdict: TRUE — zero runtime reflection
+in production code.
