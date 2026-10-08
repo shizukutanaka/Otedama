@@ -10386,3 +10386,7 @@ Claim verified: DialURL fails closed on unknown schemes before any network I/O, 
 ## Session 1949 update (Socratic pass 615 — numeric env single-source)
 
 Claim verified: numericEnvVars is the one slice both ResolveWithOrigins (applies) and EnvWarnings (warns) iterate — the parsed set and the validated set are structurally incapable of drifting apart; a malformed value produces an explicit "ignored, using default" warning so an operator typo can never vanish silently; each application stamps OriginEnv for config-show attribution; the layer-4 DataDir default keeps OriginDefault honest. TRUE.
+
+## Session 1950 update (Socratic pass 616 — milestone checkpoint)
+
+Claim verified: branch green — build=0, vet=0; rates/httpserver/i18n/poolproto/config test packages all PASS (rates exercises the live-fetch pipeline for real, 1.8s). 616 passes into the cycle; the pass-600 series has surfaced zero new real defects so far — the remaining claim surface is documentation residuals and closed-PR territory, not code. TRUE.
