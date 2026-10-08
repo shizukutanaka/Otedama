@@ -31347,3 +31347,184 @@ census:
   ceiling).
 
 Verdict: TRUE.
+
+## Session 3125 update (Socratic pass 1789 — net/http complete ledger)
+
+Claim under test: the
+http surface is
+a bounded client
+(Get + 10s client)
+plus the private
+mux server — with
+DefaultServeMux,
+every convenience
+getter, and the
+transport
+plumbing absent.
+
+Verification —
+census:
+
+- `http.Client`×6 +
+  `http.NewRequestWithContext`×3 +
+  `http.MethodGet`×3 +
+  `http.NoBody`×3 —
+  the
+  outbound
+  class
+  (rates×3
+  feeds +
+  doctor
+  probes +
+  V2
+  TLS
+  CA
+  fetch?
+  —
+  all
+  Timeout-
+  pinned,
+  redirect-
+  refusing).
+- `http.Server`×2 +
+  `http.NewServeMux`×1 +
+  `http.ServeMux`×1 +
+  `http.Request`×10 +
+  `http.ResponseWriter`×4 +
+  `http.StatusOK`×5 +
+  `http.StatusServiceUnavailable`×1 +
+  `http.StatusInternalServerError`×1 +
+  `http.NotFound`×1 +
+  `http.Error`×1 +
+  `http.ErrServerClosed`×1 +
+  `http.ParseTime`×3 —
+  the
+  admin
+  server
+  (readyz/
+  healthz/
+  metrics/
+  index/
+  pprof
+  on
+  a
+  private
+  mux).
+- `http.DefaultServeMux` —
+  COMMENT-
+  only
+  at
+  `server.go:44`
+  documenting
+  why
+  a
+  private
+  mux
+  is
+  used
+  (pprof
+  import
+  would
+  otherwise
+  register
+  globally).
+- ZERO
+  `http.Get`,
+  `http.Head`,
+  `http.Post`,
+  `http.PostForm`,
+  `http.Do`,
+  `http.Handle`,
+  `http.HandleFunc`,
+  `http.ListenAndServe`,
+  `http.ListenAndServeTLS`,
+  `http.Serve`,
+  `http.ServeTLS`,
+  `http.ServeListener`,
+  `http.FS`,
+  `http.FileServer`,
+  `http.Dir`,
+  `http.Flusher`,
+  `http.Hijacker`,
+  `http.Pusher`,
+  `http.CloseNotifier`,
+  `http.ResponseController`,
+  `http.Transport`,
+  `http.RoundTripper`,
+  `http.Header`×type,
+  `http.Cookie`,
+  `http.SameSite`,
+  `http.CookieJar`,
+  `http.MaxBytesReader`,
+  `http.NewRequest`,
+  `http.ReadRequest`,
+  `http.ReadResponse`,
+  `http.WriteRequest`,
+  `http.WriteResponse`,
+  `http.DetectContentType`,
+  `http.Redirect`,
+  `http.RedirectHandler`,
+  `http.ServeContent`,
+  `http.ServeFile`,
+  `http.ServeFileFS`,
+  `http.TimeoutHandler`,
+  `http.HandlerFunc`,
+  `http.Handler`×type,
+  `http.StripPrefix`,
+  `http.FileSystem`,
+  `http.CanonicalHeaderKey`,
+  `http.TrailerPrefix`,
+  `http.DefaultTransport`,
+  `http.DefaultClient`,
+  `http.AllowQuerySemicolons`,
+  `http.LocalAddrContextKey`,
+  `http.ServerContextKey`,
+  `http.MaxBytesHandler`,
+  `http.Pattern`,
+  `http.MethodPost`,
+  `http.MethodPut`,
+  `http.MethodDelete`,
+  `http.MethodHead`,
+  `http.MethodOptions`,
+  `http.MethodConnect`,
+  `http.MethodTrace`,
+  `http.MethodPatch`,
+  `http.ErrBodyNotAllowed`,
+  `http.ErrBodyReadAfterClose`,
+  `http.ErrClosed`,
+  `http.ErrContentLength`,
+  `http.ErrHandlerTimeout`,
+  `http.ErrHijacked`,
+  `http.ErrLineTooLong`,
+  `http.ErrMissingContentLength`,
+  `http.ErrNoLocation`,
+  `http.ErrNotSupported`,
+  `http.ErrSchemeMismatch`,
+  `http.ErrSkipAltProtocol`,
+  `http.ErrUnexpectedTrailer`,
+  `http.ErrUseLastResponse`,
+  `http.ErrWriteAfterFlush` —
+  the
+  server-
+  sugar,
+  file
+  serving,
+  cookie,
+  hijack/
+  push/
+  flush,
+  and
+  error
+  sentinel
+  classes
+  all
+  absent.
+- ZERO
+  `httputil` —
+  the
+  whole
+  httputil
+  package
+  absent.
+
+Verdict: TRUE.
