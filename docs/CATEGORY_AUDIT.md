@@ -12841,3 +12841,7 @@ Claim verified: the branch-updated NOTICE is accurate against go.mod — `golang
 ## Session 2557 update (Socratic pass 1223 — oss-fuzz doc count drift)
 
 Claim verified: `.github/oss-fuzz-integration.md` stated "met: 21 targets" but the census is now 23 `Fuzz*` functions in 14 files across 9 packages (the two encrypted-frame fuzzers this branch added pushed the count). REAL FIX applied: updated the criterion count 21 → 23. All other doc claims (not-yet-submitted status, upstream-PR requirement, readiness criteria) verified still accurate.
+
+## Session 2558 update (Socratic pass 1224 — .goreleaser.yaml honesty recheck)
+
+Claim verified: the branch-corrected .goreleaser.yaml header is accurate — release.yml confirmed to use plain `go build` + `gh release upload` (lines 106/115/120/150/185/192), so goreleaser is indeed the manual/alternative path requiring operator-provided cosign/cyclonedx-gomod/syft/git-cliff; the signs comment correctly scopes cosign to the checksums trust root; ldflags inject real `internal/version` symbols (matching #1275); name templates consistent with install.sh expectations (#487). TRUE — release-path docs are honest.
