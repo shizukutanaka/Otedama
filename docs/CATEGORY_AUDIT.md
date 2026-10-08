@@ -21379,3 +21379,56 @@ Verification — census:
   directly (fmt census).
 
 Verdict: TRUE.
+
+## Session 2991 update (Socratic pass 1655 — strconv ledger)
+
+Claim under test: every
+`strconv` parse carries an
+explicit bitSize/radix, and
+every discarded error is a
+documented contract.
+
+Verification:
+
+- `ParseUint` ×7 — all
+  explicit (radix,bitSize):
+  (10,32) job IDs ×2,
+  (16,32) V1 versionHex/
+  nbitsHex/ntimeHex ×3,
+  (10,64) at stratumv1:690.
+- The ONE error-ignored
+  parse — dialer.go:436
+  `parseJobID` — documents
+  its contract: garbage
+  yields 0, matching the
+  legacy adapter path the
+  engine does not call (it
+  emits SubmitSharesStandard
+  inline). nolint:gosec
+  justified by the 32-bit
+  parse bound.
+- `ParseFloat` ×6 — all
+  bitSize 64; fetcher.go:105
+  and config.go:405/549
+  feed into the NaN/Inf
+  guards verified earlier;
+  fetcher.go:52 comment
+  records the deliberate
+  Sscanf rejection.
+- `Atoi` ×2 — port fields;
+  both range-checked
+  after parse.
+- `FormatUint` ×10 +
+  `Itoa` ×1 — replaces
+  fmt %d reflection on
+  formatting paths.
+- `Quote` ×1 — daemon
+  service-argv token
+  quoting.
+- Zero `ParseInt` on
+  unsigned wire fields,
+  zero radix-0 parses
+  (which would accept
+  0x/0o prefixes).
+
+Verdict: TRUE.
