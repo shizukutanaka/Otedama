@@ -13024,3 +13024,7 @@ Census re-run: 51 `otedama_*` literal names in the tree vs 46 documented in API.
 ## Session 2598 update (Socratic pass 1264 — workflow inventory parity)
 
 Census: 9 workflow files on disk (ci, ci-cd, code-review, deploy, devin-direct-merge, release, scorecard, security, test) = exactly the 9 named in CLAUDE.md's architecture map — including scorecard.yml which the #1248-era inventory lacked. No orphan or phantom entries. TRUE.
+
+## Session 2599 update (Socratic pass 1265 — test-file coverage census)
+
+Census: all 21 Go package directories contain at least one _test.go file (71 test files total; leaf packages clock/httpserver/i18n/messages/metrics/poolproto/stratumv2/version at 1, stratum at 12, engine+cmd at 7 each). Zero production directories untested. Combined with the ~97%-median measured coverage (s2553), the ≥90% requirement is structurally plausible and empirically confirmed. TRUE.
