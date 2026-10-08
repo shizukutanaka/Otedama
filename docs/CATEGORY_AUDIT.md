@@ -10824,3 +10824,7 @@ Claim verified: validation reports every problem, not just the first — issues 
 ## Session 2057 update (Socratic pass 723 — pool URL boundary)
 
 Claim verified: a malformed pool URL fails at config load, not at first dial — the scheme set is closed (stratum+tcp / +tls / +v2 / +v2tls — any other scheme errors with the valid list); the post-scheme target must be host:port with no userinfo, path, query, or whitespace (a credential-embedded or path-carrying URL can't reach the dialer verbatim); the port must parse to 1–65535; and every constraint is checked at config time because Otedama passes the target verbatim to StripScheme + dial with no default port. config package fully re-verified this stretch. TRUE.
+
+## Session 2058 update (Socratic pass 724 — systemd unit-path correctness)
+
+Claim verified: the unit lands where the manager actually looks — systemdUnitPath queries the systemd USER MANAGER's own environment for XDG_CONFIG_HOME first, because the manager resolves its unit search path from its env, not the shell's (a shell-only export would install the unit where `systemctl --user` never looks); it falls back to spec resolution only when the manager can't be queried; an empty-but-queried value means "~/.config/systemd/user" per the manager's own semantics; the unit file is written 0600; and Status reports Installed from the file's existence independently of is-active, so a removed unit can't masquerade as installed. TRUE.
