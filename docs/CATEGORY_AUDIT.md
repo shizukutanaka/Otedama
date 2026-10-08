@@ -10366,3 +10366,7 @@ Claim verified: fanIn's buffer is bounded (bufFactor×N capped at 64, min 1); ev
 ## Session 1944 update (Socratic pass 610 — httpserver lifecycle)
 
 Claim verified: the HTTP surface carries a full timeout stack (ReadHeader 5s slowloris, Read/Write 10s, Idle 60s); the bound address is published atomically so port-0 callers learn the ephemeral port; a background Serve failure is captured in serveErr for supervisor polling instead of vanishing; Stop drains in-flight requests with a 5s budget and fires on ctx cancel; /readyz honestly 503s until the engine calls SetReady; pprof registers only when opted in; /metrics 500s when no registry was configured. TRUE.
+
+## Session 1945 update (Socratic pass 611 — i18n render pipeline)
+
+Claim verified: RenderWith renders through Render (requested-lang → English fallback), parses the raw string as a template only when `{{` appears and data is non-nil, and on parse/execute error returns the RAW message plus the error — degraded but intact, never an empty string. MissingTranslations powers the CI completeness gate across the 10 priority languages. Honest residual: missing template data keys render as Go template's zero value (missingkey=default) rather than a loud failure — #540's strict-mode proposal was closed unmerged. TRUE.
