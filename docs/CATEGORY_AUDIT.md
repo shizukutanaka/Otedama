@@ -27964,3 +27964,104 @@ filtered):
   minimal.
 
 Verdict: TRUE.
+
+## Session 3097 update (Socratic pass 1761 — fmt complete ledger)
+
+Claim under test: the
+fmt surface is
+Errorf/Sprintf/
+Fprintf/Fprintln/
+Fprint — formatted
+output through
+writer seams —
+with Sscanf absent.
+
+Verification —
+census:
+
+- `fmt.Errorf`×260 —
+  the
+  error
+  construction
+  surface
+  (verified
+  error
+  style
+  class).
+- `fmt.Sprintf`×211 —
+  the
+  string
+  building.
+- `fmt.Fprintf`×74 +
+  `Fprintln`×16 +
+  `Fprint`×10 —
+  all
+  writer-
+  directed
+  output
+  (verified
+  writer-
+  bypass
+  class:
+  stdio
+  never
+  touched
+  directly).
+- `fmt.Sscanf`×1 —
+  a
+  comment
+  on
+  `internal/
+  engine/
+  run.go`
+  documenting
+  why it is
+  not used —
+  doc
+  mention,
+  not
+  code.
+- ZERO
+  `fmt.Printf`,
+  `Println`,
+  `Print`,
+  `Scanln`,
+  `Scan`,
+  `Scanf` —
+  stdout
+  is
+  never
+  printed
+  directly;
+  the
+  writer
+  seams
+  own
+  output.
+- ZERO
+  `fmt.Sscan`,
+  `Sscanln`,
+  `Fscanf`,
+  `GoStringer`,
+  `State`,
+  `Formatter`,
+  `Stringer`
+  custom —
+  no
+  exotic
+  fmt
+  surface.
+- ZERO
+  manual
+  `%`
+  string
+  interpolation
+  without
+  fmt —
+  all
+  format
+  calls
+  are
+  routed.
+
+Verdict: TRUE.
