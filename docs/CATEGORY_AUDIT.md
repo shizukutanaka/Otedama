@@ -12785,3 +12785,7 @@ Corrected state (append-only, history not rewritten):
 ## Session 2543 update (Socratic pass 1209 — workflow secret-gating census)
 
 Claim verified: every non-GITHUB_TOKEN secret reference in workflows is condition-gated or design-intended — deploy.yml's STAGING_KUBECONFIG/PRODUCTION_KUBECONFIG/SLACK_WEBHOOK steps all carry `if: env.* != ''` guards (s2542); release.yml's HOMEBREW_TAP_TOKEN job is wholly behind `if: vars.HOMEBREW_TAP_REPO != ''`; ci.yml's two Docker Hub logins are PR-gated only (`if: github.event_name != 'pull_request'`), which assumes the owner repo provisions DOCKER_USERNAME/DOCKER_PASSWORD — a standard owner-repo assumption, not a defect (jobs fail only if the owner never configured Docker Hub, in which case the failure is the intended signal). GITHUB_TOKEN is ambient. TRUE — no unguarded optional-secret path that could silently fail.
+
+## Session 2544 update (Socratic pass 1210 — docs/ inventory vs README/CLAUDE.md references)
+
+Claim verified: docs/ holds 14 topical files + 12 ADR files (11 ADRs + index README); every `docs/*.md` path referenced by README.md and CLAUDE.md (DEPLOYMENT.md, KNOWN_LIMITATIONS.md, MIGRATING-FROM-V2.md, architecture.md) exists — the earlier link census (s2532) covered link syntax, this covers the top-level file inventory itself. TRUE — doc surface complete and self-consistent.
