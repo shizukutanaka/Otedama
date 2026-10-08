@@ -12714,3 +12714,7 @@ Claim verified: every directory under internal/ and cmd/ that contains non-test 
 ## Session 2527 update (Socratic pass 1193 — platform-suffix + build-tag parity census)
 
 Claim verified: the tree has exactly three platform-suffixed sources — hal/gpu_linux.go (`//go:build linux`), tui/width_unix.go (`//go:build unix`), tui/width_windows.go (`//go:build windows`); each carries an explicit tag matching its filename suffix (redundant-but-explicit, keeps the constraint visible in editors/diffs), and the unix|windows pair covers the whole width-detection matrix with no overlap gap. TRUE — cross-platform build hygiene holds; no orphan constraint files, no contradictory tags.
+
+## Session 2528 update (Socratic pass 1194 — architecture-map conformance census)
+
+Claim verified: the branch's file-level diff against master touches only mapped locations — the two additions are `.github/workflows/scorecard.yml` (inside the enumerated workflows dir) and `internal/stratum/encryptedframe_fuzz_test.go` (inside allowed internal/stratum/); every other entry is a modification. Zero additions in the forbidden set (internal/providers/ plural, internal/auth/, internal/render/, internal/scientific/, internal/observability/, internal/security/, pkg/, web/, k8s/, cmd/otedamad/). TRUE — CLAUDE.md's architecture-map rule is fully honored on the branch.
