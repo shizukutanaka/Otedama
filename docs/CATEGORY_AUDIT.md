@@ -10394,3 +10394,7 @@ Claim verified: branch green — build=0, vet=0; rates/httpserver/i18n/poolproto
 ## Session 1951 update (Socratic pass 617 — miner hot loop)
 
 Claim verified: the grind loop stamps each share with the issue-time Target (the epoch key transitionReject needs), sends non-blocking with dropCount accounting (a found share is counted before the drop decision, so found ≥ sent+dropped stays auditable), rolls ntime forward when the nonce space wraps, and partitions threads by NonceOffset+threadID stepped by NonceStep. TRUE.
+
+## Session 1952 update (Socratic pass 618 — SV2 share settlement)
+
+Claim verified: SubmitSharesSuccess with a future LastSequenceNumber is dropped; batch settles record per-share latency for every seq ≤ last; NewSubmitsAccepted is clamped to the locally-observed settled count (a pool can never credit shares we didn't send); SubmitSharesError for a future or already-settled seq is dropped (reject-rate inflation guard), while a valid reject settles latency and cleans both the submitTimes and submitTargets entries. TRUE.
