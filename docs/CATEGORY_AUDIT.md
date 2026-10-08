@@ -10864,3 +10864,7 @@ Claim verified: dialing can't stall failover or degrade transport — the whole 
 ## Session 2067 update (Socratic pass 733 — SV2 adapter job assembler)
 
 Claim verified: the dormant adapter mirrors the live path's semantics — readLoop spawns exactly once (startOnce) and closes jobsCh on exit; a job is emittable only once BOTH NewMiningJob and SetNewPrevHash are known (future jobs wait for their tip); pending jobs are FIFO-bounded by pendingCap; on a tip change the pending map is flushed except the named job — a stale future job can never resurrect under a new tip; the emitted ntime is max(job's own ntime_start, the tip's) matching the engine's rule; Submit sets the channel_msg bit (the divergence with the engine path is fixed) and honestly documents its Accepted result as provisional — the authoritative verdict arrives asynchronously via SubmitSharesSuccess/Error. TRUE.
+
+## Session 2068 update (Socratic pass 734 — milestone gate)
+
+Milestone gate re-run: gofmt clean (no files listed), `go build ./...` clean, `go vet ./...` clean, and `go test` green across the packages re-verified this stretch — internal/config, daemon, hal, lightning, poolproto (+stratumv1/stratumv2), btccrypto. This stretch's 12 verdict-only commits touched docs/CATEGORY_AUDIT.md only, so the green confirms the tree stayed build-clean throughout.
