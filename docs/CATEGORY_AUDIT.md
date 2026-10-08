@@ -9740,3 +9740,7 @@ Defect found and fixed: the `rollback` job's if-gate was `failure() && (github.r
 ## Session 1790 update (Socratic pass 456 — deploy.yml raced release.yml's release creation)
 
 Defect found and fixed: `deploy-production`'s final step ran archived `actions/create-release@v1` on every `v*` tag push — and unlike every kubectl step in the job it had no kubeconfig gate, so it executed today, racing release.yml's canonical `Create Release` (softprops/action-gh-release@v3 upsert) for the same tag. Whichever ran second could fail or clobber the other's release body (create-release@v1 errors on already-exists, and is archived/unmaintained). Removed the step with a pointer comment; release.yml remains the single release-creation path. Residual: prod deploy still needs KUBECONFIG + the helm chart (recorded residual); rollback semantics verified correct in s1789.
+
+## Session 1791 update (Socratic pass 457 — deploy smoke tests probed a nonexistent endpoint)
+
+Defect found and fixed: deploy.yml's staging and production smoke/verify steps curled `http://otedama-{staging-,}api:8080/health` — but `internal/httpserver` registers `/healthz` (server.go:89), `/readyz`, `/metrics`, `/` and nothing else; `/health` returns 404 so `curl -f` fails, marking every real deploy failed at the final step even when the rollout succeeded. Corrected both to `/healthz`, matching ci.yml's HEALTH_URLs (ci.yml:505,562). Same defect class as the recorded ci.yml `/health`-probe residual.

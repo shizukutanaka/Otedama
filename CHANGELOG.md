@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1791 — deploy.yml)
+- Smoke/verify curls now hit `/healthz` — they targeted `/health`, which the HTTP server does not register (only `/healthz`, `/readyz`, `/metrics`, `/`), so every real deploy would end in a 404-failed smoke test
 ### Fixed (session 1790 — deploy.yml)
 - Removed the ungated archived `actions/create-release@v1` step from `deploy-production` — it raced release.yml's release creation on every `v*` tag push; release.yml remains the single owner
 ### Fixed (session 1789 — deploy.yml)
