@@ -10462,3 +10462,7 @@ Claim verified: the tracker is a mutex-guarded ring buffer of fixed capacity (bo
 ## Session 1968 update (Socratic pass 634 — submitLimiter flood bound)
 
 Claim verified: the share-submission path is bounded by a token bucket (8/s refill, burst 32) whose take() never blocks — a difficulty-collapse flood (hostile or broken set_difficulty → 0) drops shares instead of queueing goroutines and wire frames; the bucket starts full so an honest trickle never waits; the refill goroutine is scoped to the session ctx and dies with it. TRUE.
+
+## Session 1969 update (Socratic pass 635 — submit-path gate ordering)
+
+Claim verified: both the V2 and V1 share paths run the superseded-job gate BEFORE spending a rate-limit token — leftover shares from a dead session are dropped for free and can never starve live shares out of the token bucket; drop accounting distinguishes the stale gate from the rate cap in the debug log; V2 records (seq→time,target) bounded by submitTimesCap eviction; V1 counts sharesSubmitted at transmit-attempt (identical semantics to V2) and still records latency on Submit error — a disconnect-induced p99 spike is surfaced, not hidden. TRUE.
