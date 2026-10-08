@@ -1,7 +1,10 @@
 # .goreleaser.yaml — Otedama release configuration.
 #
 # Run locally with: goreleaser release --snapshot --clean
-# Production run is triggered by the release.yml GitHub Action on tag push.
+# NOTE: release.yml does NOT invoke goreleaser (it builds with plain
+# `go build` + `gh release upload`). This file is the manual/alternative
+# release path — a full `goreleaser release` requires the operator to
+# provide cosign, cyclonedx-gomod, syft, and git-cliff binaries.
 #
 # References:
 #   https://goreleaser.com/customization/

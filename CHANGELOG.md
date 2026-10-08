@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Docs (session 1725 — .goreleaser.yaml ヘッダコメント訂正)
+
+- 「本番実行は release.yml がタグプッシュで起動」という誤記を訂正 — release.yml
+  は goreleaser を呼ばず `go build` + `gh release upload` で構築する。本ファイルは
+  手動の代替経路（cosign/cyclonedx-gomod/syft/git-cliff 必須）。
+
 ### Fixed (session 1723 — ci.yml 単一ファイルビルド)
 
 - `build`/`build-unified` ジョブが `go build ... cmd/otedama/main.go`（10ファイル
