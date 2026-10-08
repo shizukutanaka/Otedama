@@ -11938,3 +11938,7 @@ Claim verified: Decide is byte-deterministic — input devices are copied then s
 ## Session 2332 update (Socratic pass 998 — numeric-env SSOT honesty)
 
 Claim verified: numericEnvVars (config.go:357–381) is a single source of truth driving BOTH applyEnvLayer (:538–547) and EnvWarnings (:398–407) — so a set-but-unparseable OTEDAMA_* float can never vanish silently: it's ignored in resolution AND always reported by the warning path (printed by both config validate and config show). Layer order file<env<flags<datadir-default holds. TRUE.
+
+## Session 2333 update (Socratic pass 999 — TUI lifecycle idempotence)
+
+Claim verified: Dashboard lifecycle is fully idempotent — Start CAS(false,true) (:138) prevents double-spawn; Stop CAS(true,false) (:154) makes Stop-before-Start and repeated Stop safe single-shots (doneCh closed once, no panic); Stop waits on d.wg before writing to the shared non-concurrency-safe writer (:161–165), so teardown can't race an in-flight render. Update is non-blocking drop-oldest. TRUE.
