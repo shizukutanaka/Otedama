@@ -11090,3 +11090,7 @@ Claim verified: the Noise cipher can't reuse a nonce, leak key material early, o
 ## Session 2123 update (Socratic pass 789 — GPU sysfs enumeration)
 
 Claim verified: a malformed sysfs GPU can't register or misrepresent itself — parseGPUDevice runs the constructed Identity through Identity.Validate() and returns nil (skip, logged) on failure rather than registering a broken device; vendor/model inference degrades honestly (unknown vendor ID → "Unknown GPU vendor", missing PCI_ID → vendor+" GPU" — never a fabricated model string); readSysFile fails to "" so a missing attribute can't smuggle raw content into an ID; and the capability bitmap sets SHA256d=false on every GPU — a GPU can never be routed Bitcoin work — while GeneralCompute=true is informational-only (no worker threads spawn, so no oversubscription hazard). TRUE.
+
+## Session 2124 update (Socratic pass 790 — device identity gate)
+
+Claim verified: a device identity can't be empty, non-familial, or path-breakable — Validate() rejects empty ID, rejects a Family outside the enum (a garbage family string can't reach arbitration), and rejects whitespace OR '/' inside the ID rune-by-rune (the s512 fix to unicode.IsSpace confirmed live — CJK/NBSP/slash all rejected, so an ID can never act as a path or split a log line). The gate is applied at construction in the GPU and CPU drivers alike. TRUE.
