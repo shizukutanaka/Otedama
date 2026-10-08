@@ -12756,3 +12756,7 @@ Claim verified: `go test -race -count=1` passes on the boundary packages stratum
 Claim verified: the Makefile `fuzz` target (fixed at #489) discovers every fuzzer dynamically — `grep -rln 'func Fuzz' internal cmd` + `dirname` enumeration matches the full inventory exactly, including the branch-added `internal/stratum/encryptedframe_fuzz_test.go`; running the target exercises all 23 fuzzers at 30s each. TRUE — no fuzz target can be added without the Makefile picking it up.
 
 Ledger self-correction (honest-ledger protocol): the s2525 entry recorded "23 Fuzz* entrypoints across 14 files in 11 packages" — the entrypoint count (23) and file count (14) are correct, but the package count is wrong: fuzzers live in 9 directories/packages (cmd/otedama, arbitration, btccrypto, config, lightning, miner, poolproto/stratumv1, rates, stratum). Corrected here in a new entry; history not rewritten.
+
+## Session 2538 update (Socratic pass 1204 — CI fuzz-job delegation check)
+
+Claim verified: `test.yml`'s fuzz job (added at #1347) delegates to `make fuzz`, so it inherits the dynamic target discovery verified at pass 1203 — no hardcoded list to drift; 23 targets × 30s ≈ 11.5 min fits inside the job's 20-min timeout-minutes cap with headroom for package setup. TRUE — CI runs every fuzzer the tree defines, bounded.
