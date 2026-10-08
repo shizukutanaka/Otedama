@@ -16658,3 +16658,29 @@ Verification — the complete enum set:
 Verdict: TRUE — zero is a real value where used,
 documented empty where "unset" is needed; no
 valid/unset collision.
+
+## Session 2831 update (Socratic pass 1497 — shared-index race census)
+
+Claim under test: no loop variable or cursor is read
+by a spawned goroutine while the loop keeps mutating
+it — the classic capture race.
+
+Verification — every loop-parallel spawn:
+
+- doctor/checks.go:370, doctor/doctor.go:235 —
+  `go func(idx int)` — the index is passed as a
+  parameter (per-iteration copy), never captured.
+- rates/fetcher.go:297, hashrate.go:148,
+  hal/registry.go:155 — `go func(s Source)` /
+  `go func(dr Driver)` — loop element passed by
+  value.
+- Non-loop spawns (dashboard renderLoop, V1/V2
+  readLoop, polling loop) are method calls with no
+  loop variable in scope.
+- (Belt: go.mod is go1.24 — Go 1.22+ gives each
+  iteration its own variable anyway; the param-pass
+  convention makes it robust under older toolchains
+  too.)
+
+Verdict: TRUE — every loop-parallel spawn copies its
+iteration state explicitly.
