@@ -12837,3 +12837,7 @@ Claim verified: invariants from the merged fix wave are all present on `origin/m
 ## Session 2556 update (Socratic pass 1222 — NOTICE attribution parity)
 
 Claim verified: the branch-updated NOTICE is accurate against go.mod — `golang.org/x/sys` correctly reclassified from "indirect, via x/crypto" to "direct, used by internal/tui for terminal-width syscalls (TIOCGWINSZ/GetConsoleScreenBufferInfo)", and `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` migration (#444) reflected with the maintained-continuation note; all four deps (x/crypto, x/sys, yaml, stdlib) plus BIP-39 public-domain wordlist and trademark/AI-assistance disclaimers present. TRUE — attribution complete and consistent with the actual dependency tree.
+
+## Session 2557 update (Socratic pass 1223 — oss-fuzz doc count drift)
+
+Claim verified: `.github/oss-fuzz-integration.md` stated "met: 21 targets" but the census is now 23 `Fuzz*` functions in 14 files across 9 packages (the two encrypted-frame fuzzers this branch added pushed the count). REAL FIX applied: updated the criterion count 21 → 23. All other doc claims (not-yet-submitted status, upstream-PR requirement, readiness criteria) verified still accurate.
