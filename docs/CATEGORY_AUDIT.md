@@ -21831,3 +21831,56 @@ Verification — census:
   — system roots only.
 
 Verdict: TRUE.
+
+## Session 2999 update (Socratic pass 1663 — crypto primitives ledger)
+
+Claim under test: every
+crypto primitive is
+stdlib, every randomness
+is crypto/rand, and no
+homegrown cipher exists.
+
+Verification — census:
+
+- `sha256.Sum` ×11 +
+  `sha256.New` ×8 —
+  mining double-SHA,
+  wallet fingerprint,
+  Noise HKDF inner/outer.
+- `rand.Reader` ×11 +
+  `rand.Int` ×2 — ALL
+  randomness is
+  crypto/rand (jitter,
+  seeds, entropy); zero
+  math/rand in production.
+- `aes.NewCipher` ×2 +
+  `cipher.NewGCM` ×2 +
+  `cipher.AEAD` — wallet
+  AES-256-GCM (lightning,
+  maintainer area —
+  verdict only).
+- `ecdh.P` ×3 +
+  PublicKey/PrivateKey —
+  Noise NX handshake
+  keys (CODEOWNERS —
+  verdict only).
+- `hmac.New` ×1 — the
+  unpooled HMAC kept as
+  the test reference;
+  production uses the
+  hand-rolled-but-verified
+  hmacSHA256Pooled
+  (s2983).
+- Zero ecdsa/ed25519/rsa/
+  des/rc4/md5/sha1 — no
+  legacy or unapproved
+  primitives.
+- Zero crypto/aes modes
+  other than GCM (no
+  ECB/CBC anywhere).
+- subtle.
+  ConstantTimeCompare
+  verified separately —
+  every secret compare.
+
+Verdict: TRUE.
