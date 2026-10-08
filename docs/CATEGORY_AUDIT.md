@@ -14386,3 +14386,20 @@ Verification: HEAD reads.
 
 Verdict: TRUE — both merged fixes remain; the Node-dead-job zone is
 Go-only now.
+
+## Session 2740 update (Socratic pass 1406 — milestone checkpoint)
+
+Claim under test: the accumulated audit surface (passes 1370–1405)
+still compiles, vets, and passes the scoped test suite at HEAD.
+
+Verification: mechanical gate re-run at HEAD.
+
+- `gofmt -l internal cmd` — clean.
+- `go build ./...` — ok.
+- `go vet ./internal/... ./cmd/...` — ok.
+- `go test -count=1` on engine, arbitration, miner, stratum,
+  poolproto (+stratumv1/stratumv2), config, doctor, cmd — 10 legs
+  all PASS.
+
+Verdict: TRUE — ~1,400 Socratic passes recorded; mechanical gates
+green at HEAD.
