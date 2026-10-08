@@ -17094,3 +17094,21 @@ Verification (govulncheck over ./...):
 
 Verdict: TRUE — zero reachable vulns on the
 current tree.
+
+## Session 2851 update (Socratic pass 1516 — remaining-package test sweep)
+
+Claim under test: the packages not covered in the
+s2839 milestone leg remain green — the full suite
+now spans every package.
+
+Verification: `go test -count=1` on tui, doctor,
+hal, daemon, httpserver, i18n, clock, version,
+logger, lightning, btccrypto, provider, and
+cmd/otedama — **13 legs, all PASS** (no FAIL, no
+suspicious skips).
+
+Combined with s2839's 10 legs, the entire module's
+test suite is green on the current tree: 23 legs
+covering all packages.
+
+Verdict: TRUE — full-suite green verified.
