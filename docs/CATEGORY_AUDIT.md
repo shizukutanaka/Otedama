@@ -9704,3 +9704,7 @@ Claim verified: the image's health and probe surfaces are structurally coherent 
 ## Session 1781 update (Socratic pass 447 — dead checkout removed from devin-direct-merge.yml)
 
 Defect found and fixed: the workflow cloned the entire repository history (`actions/checkout@v4` + `fetch-depth: 0`) on every PR open/synchronize, yet neither downstream step reads a repo file — both only call the GitHub API via `gh` (mergeable poll, comment post). Removed the checkout entirely: every conflict-comment run now skips a full clone. Verified the remaining structure is sound: `pull_request`-scoped token + same-repo gate keeps fork PRs from hitting the read-only-token wall; mergeable UNKNOWN retried 3×5s before failing silent; concurrency group prevents duplicate /fix-conflict comments.
+
+## Session 1782 update (Socratic pass 448 — make docs always failed; fixed)
+
+Defect found and fixed: `make docs` ran `go doc -all ./...` which `go doc` refuses — patterns naming more than one package exit 1 with "does not specify a single package" — so the target failed deterministically on every repo state and wrote a zero-byte api-reference.txt before dying. The target now iterates `go list ./...` and emits `go doc -all <pkg>` per package, failing closed on any package error. Verified live: `make docs` produces a 4,736-line api-reference.txt (gitignored since s1678).

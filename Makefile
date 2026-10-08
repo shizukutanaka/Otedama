@@ -274,7 +274,9 @@ docker-push: ## Push Docker image to registry
 
 .PHONY: docs
 docs: ## Generate documentation
-	$(GO) doc -all ./... > $(DOCS_DIR)/api-reference.txt
+	@$(GO) list ./... | while read -r pkg; do \
+		$(GO) doc -all "$$pkg" || exit 1; \
+	done > $(DOCS_DIR)/api-reference.txt
 	@echo "Documentation generated at $(DOCS_DIR)/"
 
 .PHONY: docs-serve
