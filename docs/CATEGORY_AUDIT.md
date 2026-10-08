@@ -9982,3 +9982,7 @@ Claim verified: 52 unique `otedama_*` literals exist in code; the 5 absent from 
 ## Session 1848 update (Socratic pass 514 — govulncheck evergreen recheck)
 
 Claim verified: `govulncheck ./...` (v1.1.4, current DB) reports **0 reachable vulnerabilities** — 18 vulnerabilities exist in required modules but no code path reaches them. The security.yml step and THREAT_MODEL's "0 reachable" claim remain accurate. TRUE — RESEARCH_IMPROVEMENTS :951/:962 evergreen rows re-confirmed.
+
+## Session 1849 update (Socratic pass 515 — README install-path consistency)
+
+Claim verified: README.md:54's `curl ... raw.githubusercontent.com/master/install.sh | bash` matches install.sh's own documented usage (header :6/:9); the inline correction note (session 493) accurately explains install.sh is fetched from the repo, not from release assets (releases/latest/download/install.sh would 404 — only otedama-<os>-<arch>.tar.gz is published). The documented install path is reachable and the residual KL §17 caveat is cross-referenced honestly. TRUE.
