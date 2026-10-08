@@ -17922,3 +17922,26 @@ Verification:
 
 Verdict: TRUE — wrapped-error discipline
 holds; no `==` sentinel comparison survives.
+
+## Session 2891 update (Socratic pass 1556 — escape-hatch census)
+
+Claim under test: no unsafe/reflect/cgo/
+linkname escape hatch exists; `runtime` and
+`syscall` imports are benign introspection/
+signal use only.
+
+Verification (`rg` over production):
+
+- `unsafe` → zero; `reflect` → zero;
+  `go:linkname` → zero; cgo → zero.
+- `runtime` uses — all introspection:
+  NumCPU (worker sizing, doctor probes),
+  GOOS/GOARCH (platform dispatch, version
+  metadata), Version (version cmd), one
+  `goos` var seam in daemon for tests.
+- `syscall` — cmd/otedama/run.go only, for
+  signal constants (SIGINT/SIGTERM handling).
+
+Verdict: TRUE — the binary uses no unsafe or
+reflection machinery; platform surfaces are
+pure introspection.
