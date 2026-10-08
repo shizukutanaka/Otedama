@@ -16348,3 +16348,28 @@ Verification:
 
 Verdict: TRUE — the class is absent; zero recursive
 functions in production.
+
+## Session 2818 update (Socratic pass 1484 — atomic read-modify-write census)
+
+Claim under test: no atomic Load→Store sequence races —
+every read-modify-write either uses CAS or lives inside
+a single-writer goroutine.
+
+Verification — two candidates surfaced, both clean:
+
+- logger.go:207-210 — CompareAndSwap nil→l is the CAS
+  itself (the Load() in the miss branch is the standard
+  winner-read pattern, correct).
+- run.go:320-324 — `curtailGate.Load()` feeds
+  curtailDecision and `curtailGate.Store(next)` commits;
+  the ONLY Store site in the tree sits inside the
+  single curtail-tick goroutine (run.go:293 declares,
+  :324 stores; all other sites are readers loading
+  the gate for grind dispatch) — a single-writer
+  atomic, so load→decide→store cannot interleave.
+- metrics.Counter has no Load-then-Add patterns —
+  Add() is the only mutation (monotonic); Gauge fields
+  use mutex protection (verified s2781 pass).
+
+Verdict: TRUE — no racy atomic read-modify-write; the
+two patterns present are CAS and single-writer.
