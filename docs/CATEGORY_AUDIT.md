@@ -15856,3 +15856,27 @@ Verification:
 
 Verdict: TRUE — selects see only live channels; the
 nil-channel hazard class is structurally absent.
+
+## Session 2798 update (Socratic pass 1463 — hex-decode census)
+
+Claim under test: every wire-side hex.DecodeString checks
+the error AND verifies the decoded byte length matches the
+protocol's fixed-width field.
+
+Verification — all 6 sites (stratumv1 is the only hex wire):
+
+- parse.go:85 merkle_branch — `err != nil || len(b) != 32`
+  per element: exact 32-byte hash enforced, malformed
+  rejects the job.
+- parse.go:75/:80 coinb1/coinb2 — err checked; coinb2 also
+  requires non-empty.
+- parse.go:107 prevhash — `err == nil && len(b) == 32`.
+- parse.go:206 extranonce1 validity predicate —
+  `err == nil && len(b) > 0` (hex + non-empty, matching the
+  documented en1 contract).
+- stratumv1.go:525 session extranonce1 — err checked; the
+  en2 buffer is sized by ep.size which is bounded (#428:
+  pool-controlled extranonce2_size capped).
+
+Verdict: TRUE — no silently-truncated or nil wire field;
+every decode enforces both error and byte length.
