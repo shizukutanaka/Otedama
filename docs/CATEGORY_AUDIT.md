@@ -10628,3 +10628,7 @@ Claim verified: the recovery phrase is written to the output writer, never the s
 ## Session 2009 update (Socratic pass 675 — engine metric series invariants)
 
 Claim verified: every lazily-created series (per-reason reject counter, per-reason last-reject gauge, per-device shares-found) is created under its own mutex then updated outside it — no double-registration race; otedama_payout_info upholds the exactly-one-1 invariant (previous masked address is zeroed before the new one is set, no-op fast path when unchanged, series bounded to the configured failover list); shares_unaccounted is clamped at zero because a stats tick can legitimately observe judged>found mid-burst and a negative "unaccounted" would be meaningless; zero judged shares yields zero rates rather than NaN. TRUE.
+
+## Session 2010 update (Socratic pass 676 — V1 TLS dialer + bound dial)
+
+Claim verified: the stratum+tls:// dialer shares the identical honest-TLS contract as the v2tls path — system-root verification at TLS ≥1.2, ServerName filled from the dialed host, extra CAs extend trust without ever disabling verification, invalid PEM is an error, and there is no plaintext fallback; each dial attempt is bounded at 15 s (TCP connect plus the TLS handshake) so a blackhole endpoint cannot stall failover at the OS SYN-retry default, and the 30 s handshake bound covers subscribe+authorize+extranonce.subscribe; both bounds are test-overridable vars by design. TRUE.
