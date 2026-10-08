@@ -56,6 +56,8 @@ GitHub Actionsを以下の原則で設計する：
 | CHANGELOG生成 | git-cliff | tag push時 |
 | SBOMの生成 | syft | tag push時 |
 
+**訂正 (session 2652)**：上表は設計目標であり、現行リリースパイプラインとは一致しない。実際の `release.yml` は goreleaser を一切呼ばず、tar + sha256sum + `gh release upload` の素朴な構成で、署名 (cosign)・git-cliff・syft SBOM のいずれもワークフローに存在しない（いずれも目標として記述されている）。現行スキャナー在庫は security.yml の gosec ×14・codeql ×12・trivy ×13・semgrep ×5・trufflehog ×2 であり、表中の「gosec, govulncheck, CodeQL push毎」は security.yml の push トリガと一致する。GHCR push は tag push ではなく push 駆動（ci.yml `DOCKER_REGISTRY: ghcr.io`）。Dependabot は週次、`govulncheck` は push 駆動で実用十分。
+
 **goreleaser設定例：**
 ```yaml
 # .goreleaser.yaml の核心部分
@@ -673,7 +675,7 @@ LDKに重大な脆弱性が発見された場合、
 前述のtj-actions事件のように、使用するGitHub Actionsへの攻撃。
 
 対策：
-- 全ActionをSHAピン留め（ci.ymlで実施済み）
+- 全ActionをSHAピン留め（ci.ymlで実施済み）**訂正 (session 2652)**: 「実施済み」は誤り — ci.yml を含む全ワークフローの `uses:` は `@v3`〜`@v6` のメジャーバージョンタグで、SHA ピンは一件も存在しない（docs/AUDIT_CHECKLIST.md の行でも gap として記録済み）。tj-actions 型の耐性としては本表記が目標状態のままである。
 - `Dependabot for Actions` を有効化して自動更新
 - SBOMを全リリースに同梱
 
