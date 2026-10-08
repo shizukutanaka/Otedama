@@ -17759,3 +17759,31 @@ Verification (`rg` over internal/ + cmd/):
 
 Verdict: TRUE — uniform no-redirect + bounded
 posture across every HTTP surface.
+
+## Session 2884 update (Socratic pass 1549 — panic-site census)
+
+Claim under test: every panic in production is
+a construction/registration-time invariant
+guard, never reachable from untrusted input.
+
+Verification (`rg '\bpanic\('`, tests excluded):
+
+- 12 sites, all invariant guards:
+  - miner/worker.go:155 — Worker.Start twice
+    (programmer error).
+  - poolproto/poolproto.go:371,375,380 — nil
+    Dialer / ProtocolUnknown / duplicate id at
+    Register (init-time).
+  - btccrypto.go:187 — scheme registered twice
+    (init-time).
+  - lightning/english_wordlist.go:38,42 —
+    BIP-39 wordlist length + SHA-256 integrity
+    (init-time).
+  - metrics.go:155,166,182,204,216 — invalid
+    name/label or counter↔gauge type collision
+    at registration (init-time).
+- None sits on a network-input or config-input
+  path — all are static invariants.
+
+Verdict: TRUE — panic surface is exactly the
+fail-fast construction guards.
