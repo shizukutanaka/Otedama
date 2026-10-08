@@ -19754,3 +19754,45 @@ Verdict: TRUE — big-number use is
 limited to share math, base58
 decode, and uniform sampling,
 each with documented precision.
+
+## Session 2956 update (Socratic pass 1621 — os-package census)
+
+Claim under test: `os` is used
+read-only — env vars and file I/O
+injected at the cmd boundary,
+never mutated at runtime.
+
+Verification:
+
+- `os.Getenv` — every env var is
+  read once at the cmd layer
+  (OTEDAMA_WALLET_PASSPHRASE,
+  OTEDAMA_WALLET_MNEMONIC_PASSPHRASE,
+  OTEDAMA_WALLET_NEW_PASSPHRASE,
+  OTEDAMA_CONFIG, XDG_CONFIG_HOME)
+  and passed as an argument
+  downstream. No leaf-package
+  env reads.
+- `os.Exit` — one site
+  (main.go:110). Already
+  documented s2915.
+- `os.Interrupt` + SIGTERM — one
+  `signal.NotifyContext`
+  (run.go:196) s2917.
+- `os.Stdout`/`Stderr`/`Stdin` —
+  passed as io.Writer/io.Reader
+  args; tests inject buffers.
+- File I/O — audited at s2892
+  (perm 0600/0700, atomic
+  rename, no TOCTOU).
+- Zero `os.Setenv`, `Unsetenv`,
+  `Clearenv`, `Getuid`, `Getgid`,
+  `Getwd`, `Chdir`, `Hostname`,
+  `Geteuid`, `Getegid` — the
+  binary never mutates its own
+  environment or queries its
+  identity at runtime.
+
+Verdict: TRUE — os is read-only;
+env mutation, identity lookup,
+and chdir are all absent.
