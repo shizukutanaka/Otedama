@@ -24419,3 +24419,53 @@ Verification — census:
   no bulk env dumps.
 
 Verdict: TRUE.
+
+## Session 3049 update (Socratic pass 1713 — text/* + bufio ledger)
+
+Claim under test: text
+packages are limited
+to the trusted i18n
+template and bufio is
+confined to the pool
+line-reader seam.
+
+Verification:
+
+- `text/template` —
+  single production
+  import at
+  i18n/message.go:48
+  (message catalog
+  rendering; the
+  trusted-bundle
+  class verified —
+  templates come
+  from embedded
+  catalogs, not
+  user input).
+- ZERO `html/template`
+  — no HTML output.
+- ZERO `text/scanner`
+  — no tokenizing.
+- ZERO `text/tabwriter`
+  — the TUI renders
+  with its own
+  visible-width
+  padding (verified).
+- `bufio` — the V1
+  line-reader seam:
+  bufio.Reader×4,
+  NewReader×2,
+  ErrBufferFull×2
+  (the 64KiB line
+  ceiling
+  architecture),
+  NewReaderSize×1.
+- ZERO bufio.Writer
+  — pool writes are
+  direct conn writes
+  under writeMu with
+  the 10s deadline
+  (verified).
+
+Verdict: TRUE.
