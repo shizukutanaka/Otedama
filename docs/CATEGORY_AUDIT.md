@@ -10406,3 +10406,7 @@ Claim verified: workers grind to the pool-assigned shareTarget from OpenMiningCh
 ## Session 1954 update (Socratic pass 620 — arbitration pause lifecycle)
 
 Claim verified: pauseSet is a sync.Map with a single writer (the arbitration loop) and lock-free readers (updateWork); reconcileArbPauses rewrites the set to exactly mirror the latest Allocation after every Decide, so a pause can never outlive the assignment that created it; streamStaleTimeout (3 min ≈ 3–6× the 30–60 s quote cadence) prunes dead providers from routing; powerFloor computes the power-breakeven yield in sats/sec only when watts+price+devices are all configured. TRUE.
+
+## Session 1955 update (Socratic pass 621 — arbitration tick)
+
+Claim verified: Decide runs on the 30 s ticker only — a fast-quoting provider cannot drive re-allocation churn; stale streams are pruned before each Decide; a failed Decide returns prevAlloc so hysteresis is never reset by a transient error; the effective floor is max(config min-yield, power-breakeven); the shared pause set is rewritten before applyAllocation so a new pause survives the next pool job; idle transitions log once on change. TRUE.
