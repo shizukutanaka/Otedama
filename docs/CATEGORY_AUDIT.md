@@ -12945,3 +12945,7 @@ Claim verified: the CHANGELOG's newest `[Unreleased]` entries each map to a real
 ## Session 2582 update (Socratic pass 1248 — dependency freshness vs floor)
 
 Claim verified: `go mod verify` clean. Freshness check shows upstream moved (x/crypto v0.48→v0.57, x/sys v0.41→v0.48) — BUT every newer release declares `go 1.25.0`+ (v0.56+/v0.48+ need `go 1.26.0`). The pins are already at the maximum versions honouring the `go 1.24.0` module floor; any bump necessarily raises the language minimum — a maintainer toolchain-policy decision per GODEBUG_NOTES (same class as the rejected #1344 CI-pin change, which touched the inverse direction). No action available without that decision. TRUE.
+
+## Session 2583 update (Socratic pass 1249 — metric-name doc parity census)
+
+Claim verified: census of all `"otedama_*"` literals in internal/+cmd/ yields 51 names; the only absences from docs/API.md are four test fixtures (`otedama_test_total`, `otedama_x/y/z`, `otedama_hashrate_hps` — metrics_test.go only; the production metric is `otedama_hashrate_hashes_per_second`, documented). Every production metric name appears in the API table; no doc-only names exist. TRUE.
