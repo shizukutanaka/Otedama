@@ -37254,3 +37254,219 @@ census:
   stack).
 
 Verdict: TRUE.
+
+## Session 3161 update (Socratic pass 1825 — net + net/http detail ledger)
+
+Claim under test: `net`
+is
+Conn/
+Dialer/
+hostport
+helpers
+with
+exactly
+one
+real
+`net.Listen`
+and
+one
+resolver
+hit;
+`http`
+is
+the
+admin
+mux
+plus
+three
+outbound
+clients.
+
+Verification —
+census:
+
+- `net.Conn`×14 —
+  the
+  transport
+  interface
+  across
+  dialers/
+  adapters/
+  session
+  plumbing.
+- `net.Dialer`×6 —
+  all
+  TCP
+  dial
+  paths
+  (Timeout
+  field,
+  never
+  bare
+  `net.Dial`).
+- `net.SplitHostPort`×3 —
+  config
+  pool-URL
+  validation.
+- `net.Listen`×1 —
+  `server.go:111`
+  synchronous
+  admin
+  listener.
+- `net.DefaultResolver`×1 —
+  `checks.go:482`
+  doctor
+  DNS
+  probe
+  (`LookupHost`
+  under
+  ctx).
+- `net.ParseIP`×1 —
+  address
+  family
+  check.
+- `net.Pipe`×1
+  is
+  a
+  doc
+  comment
+  (`dialer.go:37`
+  explains
+  the
+  injectable
+  seam).
+- ZERO
+  `net.Dial`,
+  `DialTCP`,
+  `DialUDP`,
+  `ListenTCP`,
+  `ListenUDP`,
+  `ListenPacket`,
+  `Pipe`,
+  `TCPListener`,
+  `UDPConn`,
+  `Interface`,
+  `Interfaces`,
+  `LookupIP`,
+  `LookupAddr`,
+  `ResolveTCPAddr`,
+  `JoinHostPort`,
+  `ParseCIDR`,
+  `IPNet`,
+  `Prefix`,
+  `AddrPort`,
+  `CIDRMask`,
+  `Multicast`,
+  `Loopback`,
+  `Private`,
+  `Unspecified`,
+  `DialContext`,
+  `Serve`,
+  `URL`,
+  `OpError`,
+  `DNSError`,
+  `ErrClosed`,
+  `IPv4`,
+  `IPv6`,
+  `PacketConn`,
+  `ResolveIPAddr`,
+  `Zone` —
+  the
+  whole
+  UDP/
+  listener/
+  resolver
+  surface
+  is
+  absent.
+- `http.Client`×6 +
+  `http.Request`×10 +
+  `NewRequestWithContext`×3 +
+  `MethodGet`×3 +
+  `ParseTime`×3 +
+  `StatusOK`×5 —
+  the
+  three
+  outbound
+  price/
+  hashrate
+  clients
+  (Timeout
+  +
+  redirect-
+  reject,
+  verified).
+- `http.Server`×2 +
+  `ServeMux`/`NewServeMux`×2 +
+  `ResponseWriter`×4 +
+  `Error`×1 +
+  `NotFound`×1 +
+  `ErrServerClosed`×1 +
+  `StatusServiceUnavailable`/`StatusInternalServerError`×1 —
+  the
+  private
+  admin
+  mux
+  with
+  404
+  gate.
+- `http.DefaultServeMux`×1
+  is
+  a
+  comment
+  (`server.go:44`
+  documents
+  the
+  deliberate
+  private-mux
+  choice).
+- ZERO
+  `http.Get`,
+  `Post`,
+  `Head`,
+  `Do`
+  package
+  funcs,
+  `DefaultClient`,
+  `DefaultTransport`,
+  `Handle`,
+  `HandleFunc`,
+  `ListenAndServe`,
+  `ListenAndServeTLS`,
+  `FileServer`,
+  `ServeContent`,
+  `ServeFile`,
+  `Redirect`,
+  `RedirectHandler`,
+  `StripPrefix`,
+  `TimeoutHandler`,
+  `MaxBytesReader`,
+  `Cookie`,
+  `CookieJar`,
+  `SetCookie`,
+  `Hijack`,
+  `Flusher`,
+  `Pusher`,
+  `Trailers`,
+  `ReadResponse`,
+  `MultipartReader`,
+  `DetectContentType`,
+  `ParseMediaType`,
+  `URL`,
+  `Userinfo`,
+  `ParseRequestURI`,
+  `ProxyFromEnvironment`,
+  `Transport` —
+  no
+  package-
+  level
+  convenience
+  calls,
+  no
+  static
+  file
+  serving,
+  no
+  cookies.
+
+Verdict: TRUE.
