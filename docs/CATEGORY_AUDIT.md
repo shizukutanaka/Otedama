@@ -19397,3 +19397,40 @@ Verification (23 sites):
 
 Verdict: TRUE — every network read
 is LimitReader-bounded.
+
+## Session 2947 update (Socratic pass 1612 — strconv census)
+
+Claim under test: every `strconv`
+parse uses the correct `bitSize` —
+wire fields at 32 bits, float
+fields at 64, no unconstrained
+`Atoi`.
+
+Verification:
+
+- `ParseUint(..., 10, 32)` — every
+  wire-numeric parse (jobID at
+  run.go:2168, V2 job_id at
+  dialer.go:436, versionHex at
+  parse.go:94) is 32-bit bounded.
+- `ParseFloat(v, 64)` — config
+  and hashrate-feed floats parse
+  at full precision.
+- `strconv.Atoi(port)` at
+  config.go:810 — the port
+  string is already validated
+  by net.SplitHostPort + the
+  1-65535 range check, so Atoi's
+  default int size can't overflow.
+- `strconv.Quote` at service.go:502 —
+  service argv quoting (paired
+  with unicode.IsControl).
+- `FormatUint`/`FormatInt`/`Itoa`
+  — output formatting only; no
+  parse semantic at risk.
+- Zero `ParseBool`, `ParseInt`
+  misuse — all numeric fields are
+  unsigned on the wire.
+
+Verdict: TRUE — bitSize is correct
+at every parse site.
