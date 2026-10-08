@@ -10022,3 +10022,7 @@ Claim verified: AkashProvider still quotes the fixed MinUSDPerHour/MaxUSDPerHour
 ## Session 1858 update (Socratic pass 524 — ADR-009 ecosystem recheck + self-correction)
 
 Re-verified live: **sv2-apps latest is v0.8.0** (2026-09-17, Loupe-audit hardening release — tProxy lifecycle overhaul incl. BIP323 version-rolling mask, typestate runtimes, SetupConnection version enforcement, stratum-core 0.6.0). Self-correction: the s1839 pass entry recorded "latest = v0.7.0" — that was a stale misstatement; ADR-009 itself had tracked v0.8.0 correctly since its release (entries at :1116/:1584/s1730). sv2-spec #203 (push-based non-custodial payouts) still open with the SEQ0_255-vs-64K output-bound debate unresolved; normative set otherwise unchanged. No action required — Otedama's subset-flag validation and version-range handling stay forward-compatible.
+
+## Session 1859 update (Socratic pass 525 — skills/ inventory parity)
+
+Defects found and fixed: CLAUDE.md's architecture map enumerated `skills/` as four files (tdd/code-review/security-audit/release-procedure) but the directory actually holds six — `quality-pass-opus.md` and `quality-pass-sonnet.md` (the quality-pass continuation instructions) were undocumented. The map's enumerated comments are meant to be complete inventories; added the two files to the listing. No other skills/ or top-level inventory drift found.
