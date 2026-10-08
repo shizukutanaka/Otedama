@@ -18499,3 +18499,28 @@ Verification (arbitrate.go:87-115):
 
 Verdict: TRUE — canonical set-membership
 usage, race-free.
+
+## Session 2914 update (Socratic pass 1579 — path-package census)
+
+Claim under test: all filesystem path
+construction goes through `filepath`,
+never `path` (which is for URLs and
+would mangle Windows drives).
+
+Verification:
+
+- All `path.Join`-shaped hits are
+  `filepath.Join` (~30 sites) — the
+  substring match returns them, but the
+  package actually imported is
+  `path/filepath`.
+- `rg '"path"'` on production Go →
+  **zero** imports of the `path`
+  package.
+- Zero non-filepath `path.Join/Dir/Base/
+  Clean/Abs/IsAbs` calls.
+- Only `path/filepath`/`filepath.Glob`
+  in the tree.
+
+Verdict: TRUE — no `path`-on-filesystem
+confusion; every path op is filepath.
