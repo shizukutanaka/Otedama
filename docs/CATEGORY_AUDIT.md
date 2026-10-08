@@ -13104,3 +13104,7 @@ Spec §3.1's tls_ca_file row ("honoured for stratum+tls:// and stratum+v2tls://"
 ## Session 2618 update (Socratic pass 1284 — SPECIFICATION §2.1 exit-code contract)
 
 TRUE: doctor.go:109-119 implements exactly the spec'd graded set — 0 when every check is Pass or Skip, 1 on any Warn, 2 on any Fail (Warn/Fail dominance via loop order). The 0/1/64/78 run contract verified across earlier passes (exitOK/exitUsage/exitConfig/exitRuntime sentinels).
+
+## Session 2619 update (Socratic pass 1285 — DEPLOYMENT.md deep parity)
+
+All verified TRUE: OTEDAMA_BITCOIN_ADDRESS / OTEDAMA_WALLET_PASSPHRASE env names (cmd run.go), /healthz /readyz /metrics endpoints, `wallet verify` stdin→fingerprint contract, wallet.fingerprint sidecar auto-recreation, uid 65532 triple-consistency (Docker/k8s/doc), all four SLO metric names exist in the 46-series registry, `service install --config` argv plumbed, mnemonic-as-canonical-backup semantics (BIP-39 deterministic, forward-compatible), non-TLS tls_ca_file honest "no effect" (s2616 fix consistent), previously-annotated corrections (session 485: no checksums/cosign today, deploy-image-pin note) remain accurate.
