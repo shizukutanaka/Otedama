@@ -10298,3 +10298,7 @@ Claim verified: Runner.Run fans all 17 checks out concurrently into indexed resu
 ## Session 1927 update (Socratic pass 593 — doctor exit-code dominance)
 
 Claim verified: Report.ExitCode implements strict status dominance — any StatusFail → 2, else any StatusWarn → 1, else 0 — so a failing check is never masked by warnings, and Skip never contributes. Matches the documented 0/1/2 contract in SPECIFICATION §2 (clarified s1883). TRUE.
+
+## Session 1928 update (Socratic pass 594 — doctor path/address checks)
+
+Claim verified: checkFailoverAddresses runs the same btccrypto.ValidateAddress checksum verification on every failover address as the primary (masked display, "typo sends earnings to strangers" fix); checkDataDir mirrors the real OS-default resolution (XDG/AppSupport/%APPDATA%), warns-not-fails on a not-yet-created dir, fails on stat errors and not-a-dir, and warns on group/other-readable perms because the wallet lives there. TRUE.
