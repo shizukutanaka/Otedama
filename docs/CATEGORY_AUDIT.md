@@ -13132,3 +13132,7 @@ All TRUE: README index lists all 11 ADRs; file statuses match the index exactly 
 ## Session 2625 update (Socratic pass 1291 — ADR-011 + Noise stub parity)
 
 All TRUE: ADR-011's Accepted status vs go.mod — neither dcrec/secp256k1 nor btcec/v2 is a dependency yet (3 direct deps unchanged), consistent with "decision accepted, wiring pending" + KNOWN_LIMITATIONS §2. noise.go self-documents the P-256 stub honestly (:27-32 rationale, :107 v3.1.0 replacement note, :146-152 encoding caveat). Errata correctly consolidate to btcec/v2 ellswift (XElligatorSwift/V2Ecdh) and preserve the CODEOWNERS maintainer-review boundary. Verified against live code, not re-touched (maintainer territory — verdict only).
+
+## Session 2626 update (Socratic pass 1292 — ADR-001/004/005/006 implementation parity)
+
+All TRUE: ADR-004 (custom ANSI TUI, zero framework deps) — internal/tui imports only stdlib + x/sys/{unix,windows}; ADR-005 (Prometheus exposition, no client lib) — internal/metrics is pure stdlib; ADR-006 (protocol abstraction) — poolproto Register/DialURL registry live; ADR-001 (non-custodial) — AES-256-GCM seedstore + btccrypto coinbase payout verification hold. CI re-verified: only unfixable classes fail (Go 1.20/1.21 pin vs go.mod≥1.24 [#1344 rejected]; Dependency Review repo setting); 1.23.x jobs pending queue, not failures.
