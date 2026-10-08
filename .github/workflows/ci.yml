@@ -652,7 +652,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+        with:
+          # git describe --tags needs full history for the release notes.
+          fetch-depth: 0
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:

@@ -9296,3 +9296,15 @@ Method: full `permissions:`/`pull_request_target` census across all 8 workflows.
 **Incidental finding (same pass):** two more `softprops/action-gh-release@v1` stragglers survived pass 359's pin sweep — ci-cd.yml:227 and ci.yml:681 (release.yml's @v3 pinned in s1693 was the only correct one). Bumped both to `@v3`.
 
 Residuals (standing, recorded not fixed): `update-homebrew` uses `secrets.HOMEBREW_TAP_TOKEN` (PAT, opt-in — by design). `Dependency Review` requires repo Settings enablement. The Go 1.20–1.23 matrix pins vs go.mod ≥1.24 remain the known rejected-territory failure class. `pull_request` jobs that run `go test` on fork code still execute that code — unavoidable by design, but read-only token + no secrets bound is the correct posture.
+
+## Session 1696 update (Socratic pass 362)
+
+**Claim verified: "every job that reads git history declares fetch-depth: 0" — FALSE, one defect fixed.**
+
+Method: cross-checked every `git log`/`git describe`/`git tag` call site in all workflows against its job's `actions/checkout` configuration.
+
+**Defect found and fixed:** ci.yml `release` job generates `RELEASE_NOTES.md` via `git log $(git describe --tags --abbrev=0 HEAD^)..HEAD` but its checkout used the default `fetch-depth: 1` — no tag objects are fetched, so `git describe` fails, the range collapses to `HEAD..HEAD`, and the release ships a "What's Changed" section that is *silently empty* rather than failing. Added `fetch-depth: 0` (matching release.yml's create-release job, which already declares it). The `HEAD^` anchor is itself correct — on a tag-push, `HEAD` *is* the new tag, so describing `HEAD^` yields the previous release boundary.
+
+**Already true:** release.yml create-release, code-review.yml, devin-direct-merge.yml, and security.yml already declare `fetch-depth: 0`; all other checkouts only build/test the pushed tree and need no history.
+
+Residuals: none new.
