@@ -21193,3 +21193,33 @@ Verification:
   stringer-leak verdict).
 
 Verdict: TRUE.
+
+## Session 2987 update (Socratic pass 1651 — milestone checkpoint)
+
+Milestone gate re-run after
+the stdlib-surface
+dependency census
+(s2961–s2986):
+
+- `gofmt -l .` — clean.
+- `go build ./...` — clean.
+- `go vet ./...` — clean.
+- `go test -count=1` — all
+  24 legs PASS (engine
+  25.5s, lightning 13.0s,
+  doctor 7.2s, httpserver
+  6.1s; rest sub-second).
+
+Census recap: every stdlib
+package family accounted
+for — flag, filepath,
+text/template, encoding,
+net/*, crypto/*, hash/*,
+math/*, fmt — and the 15
+absent families
+(compress/archive/image/
+database/plugin/expvar/
+net-rpc/smtp/cgi/mime/
+multipart/scanner/parser/
+ast/html) confirmed
+absent. No strays found.
