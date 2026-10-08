@@ -11742,3 +11742,7 @@ Claim verified: no output depends on map range order — the metrics exposition 
 ## Session 2283 update (Socratic pass 949 — atomic-consistency census)
 
 Claim verified: every atomic-typed field is accessed only through its atomic methods — worker.startTime (atomic.Int64) and worker.hashCount (atomic counters) have .Store/.Load/.Add exclusively, httpserver ready is atomic.Bool with .Store/.Load only, logger's defaultPtr is atomic.Pointer[Logger] CAS-only — no mixed atomic/plain access exists on any shared field (the remaining shared fields all sit behind documented mutexes: workVer/work under w.mu, pending under pendingMu, streams under streamsMu). TRUE.
+
+## Session 2284 update (Socratic pass 950 — decoded-discriminant census)
+
+Claim verified: every switch on a wire-decoded discriminant is strict, never silently tolerated — NewMiningJob's OPTION count accepts exactly 0 (absent) or 1 (present, length pre-checked) and rejects counts >1 with a sized error; unexpected MsgType values during SetupConnection/OpenMiningChannel are hard handshake errors (`unexpected msg 0x%02X during setup/channel open`); the session-layer dispatch keeps forward-compat at the frame layer (unknown types dropped per spec) while every semantic handler decodes strictly. No `default:` swallows a protocol violation. TRUE.
