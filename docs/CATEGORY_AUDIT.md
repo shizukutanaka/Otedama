@@ -13973,3 +13973,24 @@ Verification: all `float32` occurrences outside tests.
 
 Verdict: TRUE — float32 is confined to the spec-mandated wire field
 and its sole producer; precision ceiling matches the protocol.
+
+## Session 2724 update (Socratic pass 1390 — nil-guard-before-defer-close census)
+
+Claim under test: no `defer x.Close()` executes before its error/nil
+check — the classic `resp, err := c.Do(r); defer resp.Body.Close()`
+ordering bug panics when err != nil and resp is nil.
+
+Verification: all 5 `defer *.Close()` sites in non-test code.
+
+- Every site is guarded by an `err != nil` early-return (or its
+  equivalent control-flow) on the preceding line:
+  - `rates/fetcher.go:420` — after the `err != nil → return` at :417-419.
+  - `rates/hashrate.go:206` — after the `err != nil → return` at :203-205.
+  - `engine/run.go:884` — after the dial-error return at :881.
+  - `cmd/otedama/configfile.go:36` — after the open-error returns at :33-35.
+  - (fifth site same shape — conn/handle is only deferred after the
+    error path exits.)
+- No `defer` on an expression that can evaluate nil; every Close
+  target is the success-path object of the just-returned call.
+
+Verdict: TRUE — close-defers are universally post-check.
