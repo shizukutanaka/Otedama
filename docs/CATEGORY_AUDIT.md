@@ -12282,3 +12282,7 @@ Claim verified — every WithCancel/WithTimeout is paired with its cancel: seven
 ## Session 2418 update (Socratic pass 1084 — error-equality census)
 
 Claim verified: a census for `err == <sentinel>` (io.EOF, os.Err*, context.*) returns ZERO hits — the codebase never unwraps a wrapped sentinel with `==` (which would falsely report a wrapped error as different); 23 sites use errors.Is/As for real sentinel comparisons. The only `==` on errors are `err == nil` boolean-style "did this optional op succeed" probes inside compound conditions (e.g. wallet.go:274 stat-age gate, fetcher.go:427 ParseTime, config.go:547 ParseFloat, parse.go:107 hex-decode+len, stratumv1/parse.go:207) — correct idiom where the error is consumed by the boolean, not compared to a sentinel. TRUE.
+
+## Session 2419 update (Socratic pass 1085 — line-read bound census)
+
+Claim verified: the V1 read path is structurally bounded — bufio.NewReaderSize(conn.raw, maxLineBytes=64KiB) + readLine uses ReadSlice('\n'), which returns bufio.ErrBufferFull once the buffer fills with no delimiter, so a pool streaming bytes without a newline can never grow memory (unlike ReadBytes which would accumulate); the comment honestly documents the contract and the returned slice is copied out of the aliased bufio buffer (stratumv1.go:72–76,:189,:235–250). The only other bufio reads are on user-controlled stdin — engine/setup.go:342 reader.ReadString('\n') for the backup word re-entry and cmd/otedama/wallet.go:237 ReadString('\n') — line length bounded by what the user types, not an attacker surface. TRUE.
