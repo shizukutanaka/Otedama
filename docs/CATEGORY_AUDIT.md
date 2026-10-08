@@ -9899,3 +9899,7 @@ Claim verified: the OTEDAMA_* env surface is 1:1 — every env var named in user
 ## Session 1829 update (Socratic pass 495 — CLI flag implemented-vs-documented parity)
 
 Claim verified: the CLI flag surface is 1:1 — 15 flags enumerated across all registration forms (`fs.{String,Bool,...}Var` in run.go + `fs.{String,Bool}` in doctor.go/service.go) exactly match the documented flag set in docs/API.md (bitcoin-address, config, data-dir, dry-run, http-addr, json, language, log-file, log-format, log-level, no-tui, origin, pprof, wallet-mnemonic-passphrase, wallet-passphrase). No undocumented flags, no phantom doc entries. TRUE.
+
+## Session 1830 update (Socratic pass 496 — config.yaml.example field coverage)
+
+Claim verified: config.yaml.example covers **every** yaml field of the Config struct — all 14 top-level fields (bitcoin_address, bitcoin_addresses, pools, workers, language, log_level, log_format, data_dir, arbitration_hysteresis_pct, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, http_addr) plus all 6 nested fields (url, user, password, payout_scheme, tls_ca_file, name) appear, with optional ones documented as commented examples with semantics. Precedence header (flags > env > file > defaults) matches the verified 4-layer resolver. TRUE — no orphan fields, no phantom keys.
