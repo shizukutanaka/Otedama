@@ -18838,3 +18838,33 @@ Verification (~30 sites):
 
 Verdict: TRUE — every decode target is
 fresh per call; no unmarshal-reuse.
+
+## Session 2927 update (Socratic pass 1592 — host-prefix census)
+
+Claim under test: no URL/host
+"security check" uses `Contains` or a
+substring match that a hostile host
+could satisfy by embedding a trusted
+name.
+
+Verification:
+
+- All prefix checks are on **leading
+  literals**, not substrings:
+  `HasPrefix(p.URL, "stratum+tls://")`,
+  `stratum+tcp://`, `stratum+v2tls://`
+  — the scheme can't be embedded deeper.
+- Address prefixes (`bc1p`, `bc1q`,
+  `1`, `3`) are **type discriminators**
+  — a BTC address literally encodes
+  its type in the leading chars.
+- `poolproto.go:102` iterates a
+  fixed registry of scheme prefixes —
+  `HasPrefix(url, s.prefix)` is correct
+  for scheme dispatch.
+- Zero `Contains(url, "...")` used as
+  a host trust check.
+
+Verdict: TRUE — all prefix checks are
+leading-literal scheme/address-type
+discriminators, not host substrings.
