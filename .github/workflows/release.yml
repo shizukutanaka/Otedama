@@ -191,6 +191,26 @@ jobs:
         VERSION=${{ needs.create-release.outputs.version }}
         gh release upload "${{ github.ref_name }}" "otedama-${VERSION#v}-1.x86_64.rpm" --clobber
 
+  checksums:
+    name: Publish combined checksums.txt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-binaries
+    permissions:
+      contents: write
+    steps:
+      # install.sh probes "checksums.txt" first; per-asset .sha256 files
+      # alone can't be verified by it. Hash the published assets themselves.
+      - name: Build combined checksums file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ github.ref_name }}" -p "otedama-*.tar.gz" -D assets --clobber
+          cd assets
+          sha256sum otedama-*.tar.gz > checksums.txt
+          gh release upload "${{ github.ref_name }}" checksums.txt --clobber
+
   update-homebrew:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest

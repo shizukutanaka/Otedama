@@ -9333,3 +9333,13 @@ Defects found in the release job's archive/checksum steps:
 Smoke-tested the new loop in /tmp: produces `otedama-linux-amd64.tar.gz` containing `./otedama-linux-amd64` at top level and a `checksums.txt` whose entry matches install.sh's ` ${ARCHIVE}$` grep.
 
 Residuals: release.yml publishes only per-asset `.sha256` files (not a combined checksums.txt), so install.sh still cannot verify release.yml-produced assets without --skip-verify — recorded as a standing limitation, candidate for a future pass.
+
+## Session 1699 update (Socratic pass 365)
+
+**Claim verified: "release.yml-produced releases can be checksum-verified by install.sh" — FALSE, fixed.**
+
+install.sh's verification loop probes `checksums.txt` then `otedama_<ver>_checksums.txt` (the GoReleaser name). release.yml uploaded only per-asset `.sha256` files, which match neither probe → every release.yml release forced `--skip-verify` (or an unverified install on releases where install.sh's fetch-error guard didn't trip). Added a `checksums` job (`needs: build-binaries`, `contents: write`) that downloads the *published* `otedama-*.tar.gz` assets via `gh release download -p`, writes `sha256sum` output to `checksums.txt`, and re-uploads it — hashing the actual shipped bytes, so a corrupted upload also breaks the checksum legibly rather than silently.
+
+**Also verified:** release.yml's tarballs are already flat (`tar czf X.tar.gz otedama-X README.md LICENSE` — binary at top level), so install.sh's extraction path works for them; only the checksum side was missing.
+
+Residuals: `checksums.txt` is created after `build-binaries` finishes, so there is a short window on tag-push where the release exists but the checksum file does not — install.sh run in that window correctly refuses unverified install (fail-closed).

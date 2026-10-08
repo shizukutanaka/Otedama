@@ -8279,3 +8279,7 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Fixed (session 1698 — ci.yml リリース資産の構造欠陥)
 
 - ci.yml release: tarball をディレクトリ丸ごと包んでいた問題をフラット化（install.sh が展開可能に）、同名 SHA256SUMS の basename 衝突を単一 `checksums.txt` へ集約、coverage/benchmark アーティファクトがリリースへ混入する問題を `otedama-*/` 限定で解消
+
+### Fixed (session 1699 — release.yml チェックサム検証不能)
+
+- release.yml に `checksums` ジョブ追加 — 公開済み `otedama-*.tar.gz` をハッシュした集約 `checksums.txt` を公開し、install.sh の検証プローブが一致（従来は per-asset `.sha256` のみで検証不能だった）
