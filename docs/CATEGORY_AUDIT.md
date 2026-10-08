@@ -15231,3 +15231,28 @@ wire codecs), so neither user-influenced catastrophic
 backtracking nor per-call compilation exists.
 
 Verdict: TRUE — surface absent.
+
+## Session 2774 update (Socratic pass 1440 — bare-send census)
+
+Claim under test: no unguarded `ch <- v` can block forever — each
+is either capacity-matched or preceded by a drain.
+
+Verification: 5 bare sends outside select/ctx guards.
+
+- fetcher.go:299, hashrate.go:155, registry.go:158 — fan-out
+  sends into channels created `make(chan T, len(sources))` /
+  `len(drivers)`: capacity ≥ max producers, one send each —
+  structurally non-blocking.
+- stratumv1.go:369 — `ch <- rpcResponse` into a cap-1 buffered
+  channel removed from the pending map before send: the only
+  send the channel ever receives.
+- run.go:2228 — token fill loop sends exactly `submitBurst`
+  items into `make(chan struct{}, submitBurst)` — exact fit.
+- Producer→consumer channels (jobsCh=8, diffCh=1, noticeCh=8,
+  inCh=32): sends happen inside read loops that drain-first or
+  select on ctx/close — verified in the s2756/s2765 exits, not
+  bare.
+
+Verdict: TRUE — every bare send is capacity-matched to its
+maximum possible producer count; nothing can wedge on a full
+channel.
