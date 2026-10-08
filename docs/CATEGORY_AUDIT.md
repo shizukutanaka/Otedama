@@ -13383,3 +13383,8 @@ convention correction: docs/adr/README.md:26-27 mandates immutable accepted ADRs
 
 claim corrected ×2 (via erratum): (a) "same Pool interface" — no `Pool` type exists; the seam is poolproto's Connection/Session/Dialer trio + optional PoolNoticeReceiver/ReconnectWaiter/DifficultyWatcher; (b) Related's `docs/research/` — phantom path; the research doc is docs/SUSTAINABILITY.md.
 claim verified: Scheme/SignerScheme stubs + SchemeForAddressType (btccrypto.go:283), Hash256/TaggedHash (:352/:364), V1+V2 behind one seam, SHA-256d unabstracted in internal/miner/sha256d.go, session-248 erratum still accurate — TRUE.
+
+## Session 2688 update (Socratic pass 1354 — docs/adr/ADR-007 full pass)
+
+claim corrected ×2 (via erratum): (a) Decision preamble's "eleven features (B1–B11)" — accepted set is ten (B1–B10); B11/B12 are the rejected items per the rejection section and cost table; (b) "45% of available budget" — 575/1,040 ≈ 55% consumed (~45% remaining); fraction inverted or wording ambiguous.
+claim verified: cost table total 575h, min-viable B1+B2+B7 = 125h, B11/B12 rejection consistency, seedstore AES-256-GCM (internal/lightning/seedstore.go), WalletManager = seed/mnemonic surface (KNOWN_LIMITATIONS §6), ldk-node ≥v0.7.0 target, ADR-009's cross-referenced 575h — TRUE.
