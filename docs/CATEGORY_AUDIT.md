@@ -10178,3 +10178,7 @@ Claim verified: `otedama completion` supports exactly bash/zsh/fish (completion.
 ## Session 1897 update (Socratic pass 563 — doctor check-count parity)
 
 Claim verified: CLAUDE.md's "17 並行ヘルスチェック" matches reality — checks.go registers exactly 17 named checks. TRUE.
+
+## Session 1898 update (Socratic pass 564 — ADR index re-verification)
+
+Claim verified: docs/adr/ holds exactly ADR-001…011 and the README index lists all 11 with matching filenames and statuses (Accepted ×7, Proposed ×3, superseded-note on 002). No drift since the s1218 pass. TRUE.
