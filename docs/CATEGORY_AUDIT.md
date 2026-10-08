@@ -19926,3 +19926,25 @@ Verification:
 Verdict: TRUE — encoding surface
 is binary + hex + json only;
 all text formats absent.
+
+## Session 2960 update (Socratic pass 1625 — milestone re-check)
+
+Milestone re-check after the
+stdlib-census run (s2951-s2959).
+
+Verification:
+
+- `gofmt -l .` — zero output
+  (no unformatted files).
+- `go build ./...` — clean.
+- `go vet ./...` — clean.
+- `go test -count=1` on
+  internal/miner, internal/stratum,
+  internal/poolproto (v1+v2),
+  internal/config — all green
+  (6 legs).
+
+Verdict: TRUE — gate suite green
+on devin/1791411357-audit-cycle-2
+after 9 additional ledger-only
+passes.
