@@ -22211,3 +22211,52 @@ Verification — census:
   the text/ package.
 
 Verdict: TRUE.
+
+## Session 3007 update (Socratic pass 1671 — unicode/utf8 ledger)
+
+Claim under test: the
+Unicode surface is
+exactly the sanitize/
+validate boundaries —
+no manual rune math.
+
+Verification — census:
+
+- `unicode.Cc`/`Cf`/
+  `Zl`/`Zp` ×2 each +
+  `unicode.In` ×2 — the
+  two sanitizer
+  boundaries (poolproto
+  pool-text + cmd
+  safeDisplay) extended
+  by #1341 from Cc-only
+  to the full
+  control+format+separator
+  set.
+- `unicode.IsSpace` ×1 —
+  hal Identity.Validate
+  (#594 fix: full Unicode
+  whitespace, not just
+  ASCII).
+- `unicode.IsControl` ×1
+  — daemon quoteToken
+  (#809 fix: covers C1
+  controls, not only
+  \n\t\r).
+- `utf8.ValidString` ×1 —
+  BIP-39 wordlist
+  integrity gate.
+- ZERO utf16 — nothing
+  round-trips UTF-16.
+- ZERO manual rune
+  decode (no []rune
+  iteration doing byte-
+  math), ZERO
+  RuneError masking
+  sites.
+- Trojan-Source/BIDI
+  defense rides the Cf
+  strip (verified
+  separately).
+
+Verdict: TRUE.
