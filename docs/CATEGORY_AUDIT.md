@@ -13488,3 +13488,14 @@ All 32 rows re-verified against live state; every claim passes:
 - CI gate summary block: still accurate — Lint (golangci-lint incl. govet+staticcheck), Security Scan (gosec), Security Scanning (govulncheck), Test race matrix, Fuzz job (make fuzz), Benchmark artifact job. The Go 1.20–1.23 test-leg failures are the recorded #1344-class pin divergence, not a gate regression.
 
 No corrections needed — the file's own correction annotations are all still true.
+
+## Session 2698 update (Socratic pass 1364 — root artifacts: architecture.md, .goreleaser.yaml, Dockerfile, install.sh)
+
+All verified TRUE:
+
+- **docs/architecture.md**: every divergence between the aspirational body and shipped code is already covered by the session-243/487/1233 disclaimer block — plural `internal/providers/` + sub-packages, HAL driver roster (asic/cuda/rocm/cpu), LDK/Lightning channels, `internal/observability/`, gRPC/REST API layer, `internal/plugin/`+`internal/auth/`, the inverted "SRI Go bindings" rationale, and the aspirational `hal.Device`/`provider.Provider` method sketches. TRUE.
+- **.goreleaser.yaml**: header honestly discloses release.yml does NOT invoke goreleaser and that a run requires operator-provided cosign/cyclonedx-gomod/syft/git-cliff; ldflags use the real `internal/version.{Version,Commit,BuildDate}` symbols (session-1193 fix); archive file list (README/CHANGELOG/LICENSE/NOTICE/VERIFY.md) all exist; checksum name `otedama_<ver>_checksums.txt` matches install.sh's probe list; brews `skip_upload: "true"` with an honest nonexistent-tap comment; docker manifests `skip_push` on prerelease; `GOOS=freebsd GOARCH=amd64 go build ./cmd/otedama` compiles clean (the declared freebsd target is real); `go generate ./...` is a no-op (zero `//go:generate` directives — benign). TRUE.
+- **Dockerfile**: builder `golang:1.24-alpine` matches the go.mod 1.24 floor; runtime `gcr.io/distroless/static:nonroot` + `USER nonroot:nonroot`; VERSION/COMMIT/BUILD_DATE ARGs match .goreleaser's build args; the no-EXPOSE comment correctly explains `--http-addr` is user-chosen. TRUE.
+- **install.sh**: CANDIDATES cover all three asset-naming conventions — verified against release.yml (`otedama-<os>-<arch>.tar.gz` + per-asset `.sha256` + combined `checksums.txt` it probes first), ci-cd bare binaries, and the goreleaser underscore form; sha256sum/shasum fallback; non-404 checksum fetch errors abort unless `--skip-verify`; cosign verification optional and honest; `--help` sed range covers the usage block; success message uses real commands (`otedama doctor`, `otedama run --bitcoin-address`, `otedama service install`). TRUE.
+
+Note: install.sh's quick-start still suggests `--wallet-passphrase "..."` on argv — the flag exists and works (runtime now warns per session-372/#493); usage hint is accurate, no correction needed.
