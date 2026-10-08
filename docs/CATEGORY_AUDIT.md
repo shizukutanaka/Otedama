@@ -11758,3 +11758,7 @@ Claim verified: zero `fmt.Scan`/`Sscanf`/`Fscanf`/`binary.Read` decoders exist i
 ## Session 2287 update (Socratic pass 953 — descriptor-leak census)
 
 Claim verified: no file/socket descriptor leaks on any error path — the wallet's atomic save closes+removes the temp file on every failure branch (Write/Sync/Close/Chmod/Rename); the doctor reachability probe closes conn immediately after a successful dial; configfile.Open defers f.Close(); the engine dial defers conn.Close(); tls.Dialer results are owned by the session lifecycle. No early-return path drops an open descriptor. TRUE.
+
+## Session 2288 update (Socratic pass 954 — randomness-provenance census)
+
+Claim verified: every randomness consumer uses crypto/rand — wallet/seed/seedstore nonce+entropy draws read rand.Reader; the Noise ephemeral key is P-256 over crypto/rand; even the reconnect-jitter draw (run.go:486) and worker nonce partition (setup.go:297) use rand.Int(crypto/rand). Zero math/rand imports in production — no security-relevant value derives from a predictable PRNG. TRUE.
