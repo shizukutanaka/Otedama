@@ -41201,3 +41201,159 @@ gate:
   surface).
 
 Verdict: TRUE.
+
+## Session 3191 update (Socratic pass 1855 — text/unicode/Go-1.24-new ledger)
+
+Claim under test:
+text
+rendering
+is
+one
+trusted-
+catalog
+`text/template`
+site;
+Unicode
+is
+category-
+table
+sanitize
+only;
+Go
+1.24
+new
+packages
+(`unique`,
+`weak`,
+`structs`,
+`iter`,
+`netip`)
+are
+deliberately
+unadopted.
+
+Verification —
+census:
+
+- `text/template`:
+  `template.New`×2
+  —
+  the
+  i18n
+  bundle's
+  trusted-
+  catalog
+  parser
+  (only
+  site;
+  `html/template`
+  ZERO).
+  ZERO:
+  `tabwriter`,
+  `text/scanner`,
+  `template/parse`,
+  `sprig`-
+  style
+  FuncMap
+  (FuncMap
+  is
+  the
+  single
+  `!`
+  placeholder
+  helper
+  per
+  earlier
+  audit).
+- `unicode`:
+  `Cc`/`Cf`/`Zl`/`Zp`
+  ×2
+  each
+  (sanitizer
+  category
+  tables,
+  #1341
+  boundary),
+  `In`×2,
+  `IsSpace`×1,
+  `IsControl`×1
+  (daemon
+  `quoteToken`,
+  #809).
+  ZERO:
+  `unicode.IsLetter`/`IsDigit`/`IsPrint`/
+  `To`/`ToUpper`/`ToLower`,
+  `unicode/utf16`,
+  `SimpleFold`,
+  `SpecialCase` —
+  category
+  predicates
+  only,
+  no
+  case
+  folding
+  (case
+  work
+  is
+  `strings.EqualFold`).
+- `unicode/utf8`:
+  `ValidString`×1
+  —
+  BIP-39
+  wordlist
+  integrity
+  check.
+  ZERO:
+  `utf8.Valid`/`RuneLen`/`DecodeRune`/
+  `RuneCount`/`EncodeRune`
+  (rune
+  iteration
+  via
+  `range`).
+- Go
+  1.24
+  new
+  packages:
+  ZERO
+  imports —
+  `unique`
+  (interning),
+  `weak`
+  (weak
+  pointers),
+  `structs`
+  (HostLayout),
+  `iter`
+  (iterator
+  protocol),
+  `net/netip`.
+  Deliberate:
+  net
+  address
+  work
+  is
+  `net`/`strconv`
+  host:port
+  parsing;
+  no
+  iterator
+  or
+  interning
+  need.
+- ZERO
+  packages:
+  `expvar`,
+  `arena`,
+  `go/types`/`go/ast`/`go/parser`,
+  `plugin`,
+  `archive/*`,
+  `image/*`,
+  `database/*`,
+  `embed`-
+  (verified
+  earlier),
+  `vendor`/
+  `cmd/go`
+  internals.
+
+Verdict: TRUE.
