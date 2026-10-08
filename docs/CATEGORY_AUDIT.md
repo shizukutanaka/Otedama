@@ -11810,3 +11810,7 @@ Claim verified: PR #1405 still merges cleanly — `git merge-tree --write-tree o
 ## Session 2300 update (Socratic pass 966 — coverage checkpoint)
 
 Milestone: the ledger now holds 1,468 session entries; ~630 carry an explicit TRUE verdict across ~80 cross-cutting census classes plus the full internal/ surface, all merged on PR #1405 as documentation. Real fixes in this cycle: doctor panic-proof fan-out (s1649), hashrate-fetcher redirect refusal (s2251), stale-comment fix (s2264), plus the s1655/s1659 display-sanitize and s1664–s1692 release/CI pipeline repairs delivered in earlier batches on this branch. Zero unverifiable claims remain on the audited surface.
+
+## Session 2301 update (Socratic pass 967 — gauge-input finiteness)
+
+Claim verified: no NaN/Inf can reach the metrics exposition — every Gauge.Set input is finite by construction: shareAcceptanceRate is accepted/judged ∈ [0,1] with total==0 → 1.0; rejectRate/staleRate only divide when judged>0; hashrate is a finite counter-derived window rate; powerCostUSDPerHour comes from config floats already validated finite (s473); the network-rates path rejects non-finite readings upstream (s437/s478). TRUE.
