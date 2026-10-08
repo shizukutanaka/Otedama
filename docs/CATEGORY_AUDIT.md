@@ -13394,3 +13394,9 @@ claim verified: cost table total 575h, min-viable B1+B2+B7 = 125h, B11/B12 rejec
 claim corrected ×1 (via erratum): Risks §2's "go-nvml is BSD-licensed" — upstream LICENSE is Apache-2.0 (verified); conclusion unchanged (permissive + dlopen).
 note ×2: cross-ADR budget-convention inconsistency (this doc's 4-week-month 720h vs ADR-007's calendar-week 1,040h — each internally consistent); Scenario C "$3.10/day" loose ($2.80–3.03 at $48–52/PH/day).
 claim verified: cost table 595h sum, all scenario arithmetic (A −$7.01/−$6.20, B +$110.40→+$127.30, ~$6,096/yr uplift), cluster graph, halving block 1,050,000, cut thresholds, internal/power absent (proposal) — TRUE.
+
+## Session 2690 update (Socratic pass 1356 — docs/adr/ADR-009 full pass)
+
+claim corrected ×1 (via erratum): "88% over budget" — (1,940−1,040)/1,040 ≈ 86.5% (1.5pp rounding slip).
+note: same 4-week-month vs calendar-week budget-convention drift as ADR-008 (cross-referenced).
+claim verified: scenario arithmetic A ($2.69→$2.86, +6.3%, ~$310/5yr) and B ($131.04→$137.58, +$2,352/yr), cost table 480h, combined 1,940h incl. ADR-010's 290h cross-check, adjusted 1,450h/40%-over, min-viable 715h, cluster pairs, rejection list — TRUE.

@@ -787,6 +787,25 @@ does not apply; verified no analogous round-up in `TargetFromDifficulty`.
 
 ---
 
+## Erratum (added session 2690, does not alter the proposal)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; corrections and notes:
+
+1. "88% over budget" — the combined 1,940h vs 1,040h arithmetic gives
+   (1,940−1,040)/1,040 ≈ **86.5% over** (a ~1.5pp rounding slip).
+2. Same budget-convention note as ADR-008's erratum: this document's
+   "18 months → 720h available" uses 4-week months, while the combined
+   table's "24 months → 1,040h" uses calendar weeks. Internally
+   consistent per figure, but the two denominators coexist on this page.
+
+Verified consistent alongside: Scenario A net $2.69 → $2.86 (+6.3%
+margin, ~$310/5yr), Scenario B net $131.04 → $137.58 (+$2,352/yr via
+monthly delta), cost table total 480h (80+30+150+120+60+40), combined
+total 1,940h (290+575+595+480 — ADR-010's 290h cross-checked against
+its own cost table), adjusted 1,450h → ~40% over, minimum-viable 715h,
+all cluster pairs, and the non-custodial rejection list.
+
 ## Status
 
 **Proposed.** This ADR introduces a fourth feature-deepening track to the v3.5–v4.0 roadmap, completing the strategic picture: arbitration intelligence (ADR-010), Lightning capability (ADR-007), hardware/power awareness (ADR-008), and now pool decentralization (ADR-009).
