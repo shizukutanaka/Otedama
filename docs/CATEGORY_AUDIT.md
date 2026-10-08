@@ -12933,3 +12933,7 @@ Claim verified: CHANGELOG.md is a pure +296-line append (zero content deletions)
 ## Session 2579 update (Socratic pass 1245 — branch + forbidden-path invariant recheck)
 
 Claim verified: `origin/master` still at `40da2e51` (unchanged this stretch); the branch is a strict descendant (942 commits ahead, clean fast-forward merge). The forbidden-path census over the full diff confirms ZERO files under `internal/providers/`, `internal/auth/`, `internal/render/`, `internal/scientific/`, `internal/observability/`, `internal/security/`, `pkg/`, `web/`, `k8s/`, or `cmd/otedamad/` — the architecture map holds. TRUE.
+
+## Session 2580 update (Socratic pass 1246 — x/sys usage + uid consistency)
+
+Claim verified: `golang.org/x/sys` is imported by exactly two files — `internal/tui/width_unix.go` (`x/sys/unix` terminal-size ioctl) and `internal/tui/width_windows.go` (`x/sys/windows`) — matching go.mod line 31's stated rationale and nothing else. The uid-65532 contract is consistent across all three surfaces: Dockerfile `chown 65532:65532` + `USER nonroot:nonroot` (distroless nonroot = 65532), DEPLOYMENT `fsGroup: 65532`, `runAsUser: 65532`. TRUE.
