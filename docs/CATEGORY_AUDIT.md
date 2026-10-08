@@ -14250,3 +14250,28 @@ Verification: full non-test import enumeration.
 
 Verdict: TRUE — dependency arrows point uniformly downward;
 integrator only at the top.
+
+## Session 2735 update (Socratic pass 1401 — output-channel discipline census)
+
+Claim under test: library code never writes stdout/stderr directly —
+all output flows through the injected seams.
+
+Verification: stdlib `log.` + `fmt.Print` + `os.Stdout/Stderr` scan.
+
+- internal/: zero stdlib `log.Print/Fatal/Panic` calls and zero
+  `fmt.Print*` calls in non-test code — the library layer is silent
+  except through the `opts.log(level, msg)` callback and the logger
+  adapter (slog wrapper).
+- cmd/: only two direct-write sites, both correct:
+    - `main.go:110` — `os.Exit(run(args, os.Stdout, os.Stderr))`:
+      stdout/stderr arrive as injected writer parameters, so tests
+      capture them without process substitution.
+    - `run.go:307` — the `--log-file` open failure warning to stderr:
+      fires BEFORE the logger exists (it's what the logger would
+      attach to), so direct stderr is the only honest channel.
+- Consequence: every production log line goes through the level/
+  format machinery — no stealth output path bypasses --log-level,
+  --log-format, or the rotation cap.
+
+Verdict: TRUE — output flows through injected seams; the two direct
+writes are the entry points the seams themselves need.
