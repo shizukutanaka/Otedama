@@ -19220,3 +19220,28 @@ stdlib-surface block (s2930–s2939):
 
 No regressions introduced by the
 stdlib-surface census block.
+
+## Session 2941 update (Socratic pass 1606 — context census)
+
+Claim under test: `context.Background()`
+appears only at true ctx roots —
+never inside library code where a
+parent ctx should be threaded.
+
+Verification (3 sites):
+
+- `doctor.go:36` — subcommand entry;
+  `WithTimeout(30s)` is the check-
+  runner's parent ctx.
+- `run.go:195` — `signal.NotifyContext(
+  context.Background(), ...)` —
+  the root for the run loop.
+- `httpserver/server.go:139` —
+  `WithTimeout(Background(), 5s)` for
+  graceful shutdown — the parent ctx
+  is already cancelled by then, so a
+  fresh root is required.
+- Zero `context.TODO()` anywhere.
+
+Verdict: TRUE — all three are true
+roots; zero TODO markers.
