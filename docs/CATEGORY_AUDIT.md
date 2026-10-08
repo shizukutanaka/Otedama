@@ -10074,3 +10074,7 @@ Ecosystem re-verified live: sv2-apps latest tag is **v0.8.0** (`git ls-remote`, 
 ## Session 1871 update (Socratic pass 537 — README subcommand-table parity)
 
 Claim verified: README's command table (lines 84–93) enumerates all seven dispatch cases in cmd/otedama/main.go:119–131 — run, version, config, service, doctor, wallet (verify + change-passphrase), completion. No missing or phantom subcommand. TRUE.
+
+## Session 1872 update (Socratic pass 538 — OTEDAMA_* env parity re-verified)
+
+Claim re-verified: code declares exactly 15 OTEDAMA_* env vars (config layer + wallet/run); user docs name the same set. The three apparent doc-only hits (`OTEDAMA_DATABASE_*`, `OTEDAMA_BITCOIN_ADDRESSES`, `OTEDAMA_X`) are CATEGORY_AUDIT/KNOWN_LIMITATIONS prose about *deliberately absent* vars (removed postgres boilerplate, file-only field, sanitize example) — not live references. TRUE (re-confirmation of the session-1071 parity verdict).
