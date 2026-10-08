@@ -29335,3 +29335,93 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3109 update (Socratic pass 1773 — context complete ledger)
+
+Claim under test: the
+context surface is
+Context params +
+Done/Err polling +
+WithCancel/WithTimeout —
+with WithValue a
+single reviewed
+site.
+
+Verification —
+census:
+
+- `context.Context`×87 —
+  the
+  first-
+  param
+  contract
+  (verified
+  ctx-first
+  class).
+- `ctx.Done()`×24 +
+  `ctx.Err()`×17 —
+  the
+  cancellation
+  polling
+  surface.
+- `context.WithTimeout`×7 +
+  `context.WithCancel`×5 +
+  `context.CancelFunc`×3 —
+  the
+  derivation
+  surface;
+  every
+  With*
+  pairs
+  a
+  cancel
+  (verified
+  ctx-cancel
+  class).
+- `context.Background`×3 —
+  the
+  three
+  roots
+  (main
+  +
+  the
+  two
+  service
+  boundaries).
+- `context.DeadlineExceeded`×2 +
+  `context.Canceled`×1 —
+  sentinel
+  comparisons
+  via
+  errors.Is.
+- `context.WithValue`×1 —
+  the
+  single
+  reviewed
+  carrier
+  (verified
+  ctx-value
+  class).
+- ZERO
+  `context.TODO`,
+  `context.WithDeadline`,
+  `context.WithCancelCause`,
+  `context.WithDeadlineCause`,
+  `context.WithTimeoutCause`,
+  `context.AfterFunc`,
+  `context.Cause`,
+  `context.StopFunc`,
+  `context.WithValueOutsideParent`,
+  `context.RegisterMethod`
+  — the
+  residual
+  context
+  surface
+  absent.
+- ZERO
+  `golang.org/x/net/context`
+  — no
+  legacy
+  import.
+
+Verdict: TRUE.
