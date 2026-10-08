@@ -808,7 +808,7 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 5 — replacing the simulated Akash provider
 
-11. 🟡 **Concrete Akash integration surface.** Akash exposes a provider REST
+11. 🔵 **Concrete Akash integration surface.** Akash exposes a provider REST
     gateway (`/status`, `/version`, manifest POST on lease-won) and a gRPC
     `akash.provider.v1.ProviderRPC.GetStatus` (per-node GPU model + status,
     allocatable vs allocated), plus SDK `createLease(bidId)` /
@@ -818,13 +818,27 @@ endpoint against current vendor documentation. Tags as before
     routed GPU is actually leased before counting its yield, and gate
     accounting (Cat 5 #8) on real lease state. gRPC adds a dependency —
     weigh against ADR-003; the REST `/status` path may suffice read-only.
-12. 🟡 **Vast.ai as a second, simpler real compute backend.** Vast has a
+    — **Scope-refined (session 1756):** verified the unblock boundary —
+    no Akash endpoint/auth exists in config (the provider is fully
+    hardwired; `NewAkashProvider` takes only a `RateSource`), so a real
+    `GetStatus`/`/status` poll needs three ADR-level prerequisites first:
+    new config surface (endpoint URL, deployment scope, credentials), a
+    new outbound-HTTP dependency surface for the provider path (today
+    only `rates`/`doctor` HTTP exists), and a real account context to
+    point at — fabricating an endpoint is a forbidden nonexistent-URL
+    class. The `Provider`/`publish` seam already isolates the swap.
+12. 🔵 **Vast.ai as a second, simpler real compute backend.** Vast has a
     documented Bearer-token REST API with a *direct-bid* market (`bid_price`
     $/hr; highest bid runs, lower bids pause). Far less code than Akash gRPC
     and a cleaner live testbed for ADR-010 A4 strategic bidding (real
     preemption). A `VastProvider` behind the existing `provider` interface
     gives a non-simulated backend now. (Renting out *own* hardware — fine
     under the non-custodial stance.)
+    — **Scope-refined (session 1756):** same unblock boundary as row 11 —
+    needs a Bearer-token secret surface (no provider-credential field
+    exists in config), a new outbound-HTTP client, and an ADR-010 decision
+    on which real backend lands first. Implementation is mechanical once
+    those are decided; the decision is the blocker, not the code.
 13. 🔵 **Preemption is the dominant failure mode — price it in.** Duan et al.,
     "GFS" (arXiv:2509.11134, ASPLOS '26), forecast GPU demand and keep a
     reserve quota to cut eviction 33%. A preemption-risk term should raise a
