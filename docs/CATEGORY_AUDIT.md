@@ -42815,3 +42815,138 @@ census:
   in).
 
 Verdict: TRUE.
+
+## Session 3201 update (Socratic pass 1863 — context final ledger)
+
+Claim under test:
+context
+usage
+is
+`Background`
+roots
++
+`WithTimeout`/`WithCancel`
+bounds;
+`WithValue`
+is
+the
+single
+logger
+seam;
+Go-1.21
+context
+helpers
+(`TODO`/`AfterFunc`/`WithoutCancel`/
+`Cause`)
+are
+deliberately
+unadopted.
+
+Verification —
+census:
+
+- `context.Background`×403 —
+  every
+  test's
+  root
+  plus
+  the
+  three
+  production
+  roots
+  (main
+  signal
+  root,
+  engine
+  run
+  root,
+  doctor
+  check
+  root).
+- `context.WithTimeout`×143
+  —
+  every
+  bounded
+  operation
+  (pool
+  dial
+  15s,
+  RPC
+  60s,
+  handshake
+  15–30s,
+  HTTP
+  10s,
+  doctor
+  probes).
+- `context.WithCancel`×62
+  —
+  session/
+  goroutine
+  lifecycles;
+  every
+  site
+  pairs
+  with
+  `defer cancel()`/
+  stored-
+  `CancelFunc`×3
+  release.
+- `context.Context`×125
+  parameter
+  type;
+  `Canceled`×6
+  +
+  `DeadlineExceeded`×5
+  error
+  checks
+  (via
+  `errors.Is`).
+- `context.WithValue`×2 —
+  the
+  logger
+  `ctxKey`
+  injection
+  seam
+  only
+  (private
+  unexported
+  key
+  type,
+  verified
+  s3173 —
+  no
+  string
+  keys,
+  no
+  value-
+  smuggling
+  of
+  config).
+- ZERO:
+  `context.TODO`
+  (no
+  placeholder
+  ctx),
+  `context.WithDeadline`
+  (all
+  relative
+  `WithTimeout`),
+  `context.WithCancelCause`/`Cause`,
+  `context.WithoutCancel`
+  (Go-1.21),
+  `context.AfterFunc`
+  (Go-1.21),
+  storing
+  ctx
+  in
+  structs
+  (audited
+  session-610:
+  zero
+  `ctx
+  context.Context`
+  struct
+  fields).
+
+Verdict: TRUE.
