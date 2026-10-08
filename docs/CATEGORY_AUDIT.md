@@ -30270,3 +30270,134 @@ site census:
   TCP.
 
 Verdict: TRUE.
+
+## Session 3118 update (Socratic pass 1782 — tls/x509 complete ledger)
+
+Claim under test: the
+TLS surface is
+client-only
+Dialer/Dial with
+TLS≥1.2 + CA
+pooling — with
+every server/
+bypass/certificate
+API absent.
+
+Verification —
+census:
+
+- `tls.Config`×12 —
+  the
+  config
+  literals
+  at
+  4
+  connection
+  seams
+  (V1
+  TLS,
+  V2
+  v2tls,
+  doctor
+  TLS
+  probe,
+  tests'
+  mirror).
+- `tls.VersionTLS12`×4 —
+  every
+  MinVersion
+  is
+  pinned
+  1.2
+  (verified
+  TLS-
+  config
+  class).
+- `tls.Dialer`×4 +
+  `tls.Dial`×1 —
+  client-
+  only
+  dialing.
+- `x509.NewCertPool`×3 +
+  `x509.SystemCertPool`×2 +
+  `x509.CertPool`×1 —
+  the
+  `tls_ca_file`
+  +
+  system-
+  roots
+  CA
+  path
+  (verified
+  twin-TLS
+  class).
+- ZERO
+  `tls.Server`,
+  `tls.Listen`,
+  `tls.NewListener`,
+  `tls.Handshake`,
+  `InsecureSkipVerify`,
+  `CipherSuites`,
+  `CurvePreferences`,
+  `ClientAuth`,
+  `ClientCAs`,
+  `Renegotiation`,
+  `SessionTicketsDisabled`,
+  `GetCertificate`,
+  `ClientSessionCache`,
+  `LoadX509KeyPair`,
+  `X509KeyPair`,
+  `RenegotiateOnceAsClient`,
+  `VerifyConnection`,
+  `KeyLogWriter`,
+  `Certificates`,
+  `NameToCertificate`,
+  `CipherSuite`,
+  `ECDSAWithP256AndSHA256` —
+  no
+  server
+  socket,
+  no
+  verification
+  bypass,
+  no
+  client
+  certificate,
+  no
+  cipher/
+  curve
+  pinning
+  (default
+  suites
+  are
+  the
+  right
+  choice
+  for
+  a
+  mining
+  client).
+- ZERO
+  `x509.ParseCertificate`,
+  `ParseCertificates`,
+  `ParseCRL`,
+  `MarshalPKIXPublicKey`,
+  `CreateCertificate`,
+  `RevocationList`,
+  `Verify`,
+  `VerifyHostname` —
+  x509
+  is
+  CA-pool
+  plumbing
+  only;
+  the
+  library's
+  own
+  chain
+  verification
+  does
+  the
+  work.
+
+Verdict: TRUE.
