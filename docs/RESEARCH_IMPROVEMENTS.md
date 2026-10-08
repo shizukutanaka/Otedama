@@ -233,9 +233,24 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
+8. ✅ **Inference revenue is denominated/settled correctly** — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in
    accounting.
+   — **Verified (session 1741):** the USD→BTC path is correct —
+   `SatsPerSecond(usdPerHour, rate) = usd/rate × 1e8 / 3600`
+   (provider.go:183-190), rate≤0 → 0 (no sign flip), stale-rate fallback
+   95000 is a named constant, and `Confidence` scales `NetSatsPerSecond`
+   in `EffectiveYield` (provider.go:114-117). Accounting isolation
+   verified: the *only* surface simulated yield reaches is the `estSats`
+   estimate (run.go:1048/1596 via `satsAcc.observe(expectedYieldRate)`),
+   which is labelled `est. earned` in the TUI (dashboard.go:372) and the
+   active provider's name carries the "(simulated)" suffix — the
+   estimate honestly discloses what it contains. No payout ledger,
+   settlement accounting, or pool-reported metric is fed by it:
+   `otedama_shares_total{accepted,rejected}` counts only pool-verified
+   mining shares, which a simulated provider cannot produce. Simulated
+   yield is summed into the *estimate* by design (opportunity accrual)
+   and can never masquerade as settled revenue.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
