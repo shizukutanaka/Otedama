@@ -12694,3 +12694,7 @@ Claim verified: origin/master remains pinned at 40da2e51 (no new commits since t
 ## Session 2522 update (Socratic pass 1188 — ecosystem recheck)
 
 Claim verified via `git ls-remote`: stratum-mining/stratum latest release remains v1.12.0 (v1.11.0, v1.11.1 below); sv2-apps latest remains v0.8.0; sv2-spec HEAD unchanged at 8c1f8e66 — zero upstream movement since the s2507 ecosystem check, so every disclosed limitation and tracked-open set (#238 watch, #234, #232, #203, #198, #186, #103) still describes current upstream state. TRUE — no normative drift invalidates the recorded judgments.
+
+## Session 2523 update (Socratic pass 1189 — dependency-file integrity recheck)
+
+Claim verified: go.mod on the branch is byte-identical to origin/master (empty diff) — the audit surface introduced zero dependency drift. The manifest still holds exactly three direct dependencies, each carrying its CLAUDE.md-required rationale comment (go.yaml.in/yaml/v3 3.0.5 — stdlib lacks YAML decode; x/crypto v0.48.0 — stdlib lacks scrypt, wallet KDF; x/sys v0.41.0 — frozen syscall package cannot express TIOCGWINSZ/GetConsoleScreenBufferInfo, already in the module graph). The godebug block (panicnil=0, randautoseed=1, tlsmlkem=1) documents each pin's intent. TRUE — dependency hygiene invariant holds.
