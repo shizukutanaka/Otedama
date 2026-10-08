@@ -12742,3 +12742,7 @@ Claim verified: every path pattern in .github/CODEOWNERS resolves to a real tree
 ## Session 2534 update (Socratic pass 1200 — MILESTONE gate re-verification)
 
 Milestone checkpoint at pass 1200: `gofmt -l internal cmd` clean (zero unformatted files), `go build ./...` succeeds, `go vet ./internal/... ./cmd/...` clean, and `go test -count=1` passes across the audited surface — stratum, poolproto (+stratumv1, +stratumv2), config, lightning (11.6s), i18n (+messages), engine (24.7s), miner. All claims recorded in the ledger since the last milestone gate (s2514, pass 1180) remain consistent with a building, tested tree. TRUE — milestone gate green at 1200 passes.
+
+## Session 2535 update (Socratic pass 1201 — lint-config schema currency recheck)
+
+Claim verified: `.golangci.yml` uses the golangci-lint v1 schema consistent with the Makefile's pinned v1.64.8 (v2 migration was rejected at #1391 — config stays v1 by deliberate decision) — `linters.disable-all: true` + curated enable list, no deprecated keys (no skip-dirs/skip-files/maligned/golint/deadline), and `run.go: "1.24"` tracks go.mod's floor with an inline comment explaining the constraint. TRUE — linter config is current for its pinned toolchain.
