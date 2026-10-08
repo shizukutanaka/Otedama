@@ -10130,3 +10130,7 @@ Defect found and fixed: README's Requirements still described the pre-simplifica
 ## Session 1885 update (Socratic pass 551 — CONTRIBUTING→Makefile parity)
 
 Claim verified: every make target CONTRIBUTING.md cites (setup/build/test/lint ×2) exists in the Makefile's 32-target set; `migrate-from-v2` honestly prints the guide location rather than invoking a nonexistent subcommand. TRUE.
+
+## Session 1886 update (Socratic pass 552 — API.md metrics parity)
+
+Claim verified: docs/API.md's metrics table lists exactly the 46 production `otedama_*` series (the 4 extra code hits — hashrate_hps, x, y, z — are test-file literals, not registered production metrics). Every documented name resolves to a real registration. TRUE.
