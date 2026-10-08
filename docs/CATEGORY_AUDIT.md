@@ -11658,3 +11658,7 @@ Claim verified: the logging surface can't leak a nil logger, race on the default
 ## Session 2262 update (Socratic pass 928 — ADR-009 ecosystem recheck)
 
 Claim verified: no upstream movement invalidates the current implementation surface — sv2-spec's open PR set is unchanged (#238 optional SetupConnection flag negotiation — our strict-subset validation remains the forward-compatible posture; #234 authority-key docs; #203 coinbase payouts; #198 coinbase_witness; plus #232/#186 pure style and #103 WIP proxy annex — none normative for our wire surface); sv2-apps latest remains v0.8.0; SRI remains v1.12.0. Watch item unchanged: sv2-spec #238 is still the one to track — if it lands, our flags-subset check already accepts future optional bits by construction. TRUE.
+
+## Session 2263 update (Socratic pass 929 — outbound-HTTP redirect census)
+
+Claim verified: after the s2251 hashrate fix, the redirect-refusal posture is now uniform across the ENTIRE outbound HTTP surface — a census of every `http.Client` construction in non-test code finds exactly three (rates price fetcher, rates hashrate fetcher, doctor clock-skew probe) and all three set CheckRedirect to refuse every redirect; no bare `http.Get`, `http.Post`, `http.DefaultClient`, or `http.DefaultTransport` usage exists anywhere in the tree. The https→http downgrade class that #455 introduced is now closed on every reachable outbound path, not just the two that prompted it. TRUE.
