@@ -11874,3 +11874,7 @@ Claim verified: the two write-error postures are each correct for their payload 
 ## Session 2316 update (Socratic pass 982 — version defaults honesty)
 
 Claim verified: un-ldflags'd builds report themselves honestly — `Version = "v3.0.0-alpha.1-dev"` matches the VERSION file's v3.0.0-alpha.1 prefix with an explicit -dev marker; Commit/BuildDate default to "unknown" rather than fake values; Get() always fills GoVersion/Platform from runtime. No stale or misleading default. TRUE.
+
+## Session 2317 update (Socratic pass 983 — Worker Start/Stop idempotence)
+
+Claim verified: the Worker's lifecycle can't double-spawn or hang — `started atomic.Bool` (:125) with CAS(false,true) in Start (:154) makes a second Start a no-op; Stop (:186) short-circuits unless started, and the s1652 cancelReady rendezvous covers the Stop-before-Start-completes window. Neither path can leak a second grind set or block forever. TRUE.
