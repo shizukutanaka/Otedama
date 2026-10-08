@@ -10518,3 +10518,7 @@ Claim verified: each tick prunes stale streams before deciding, carries prevAllo
 ## Session 1982 update (Socratic pass 648 — power-breakeven floor derivation)
 
 Claim verified: the profitability floor is derived as powerWatts/1000 (kW) × price/kWh = USD/hour, converted to sats/s via the same SatsPerSecond helper used everywhere else, then divided by device count so the floor is per-device; every non-viable input (no watts, no price, no devices, no rate) yields floor=0 — never a bogus positive or NaN — and the gauge is set unconditionally so the display always matches the applied value. TRUE.
+
+## Session 1983 update (Socratic pass 649 — applyAllocation + pause-set discipline)
+
+Claim verified: pausing is scoped strictly to the assigned DeviceID (the multi-SHA256d-device hazard was fixed in s247 and documented inline); an idle device is paused unconditionally but its log line fires only on the idle transition (HeldIdle suppresses the ~2880-line/day flood); the switch matrix is complete (mining→non-mining pauses, non-mining→mining relies on the pool's next job, mining→mining just logs); reconcileArbPauses rewrites the shared set to exactly {idle or non-mining-stream} devices before applyAllocation, so the pause ledger and the physical worker state can never diverge for more than the current tick. TRUE.
