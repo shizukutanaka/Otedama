@@ -13272,3 +13272,7 @@ The phantom `legacy-v2` branch (no ref among 721 remote heads) was also referenc
 ## Session 2660 update (Socratic pass 1326 — MAINTAINERS.md)
 
 Corrected: (1) two stale `main` merge-target refs (:26, :60) → `master`; (2) cosign described as "the default path" — release.yml emits no signatures (marked planned); (3) `git tag -s` described as practice — all shipped tags v2.1.5–v2.1.9 are lightweight commit refs, never annotated/signed (marked intended-future). The aspirational custody procedure preserved with status notes. claim corrected: MAINTAINERS.md
+
+## Session 2661 update (Socratic pass 1327 — BENCHMARKS.md CI section)
+
+Corrected: benchmark CI paragraph still said "every push to main" (no main ref — actual triggers [main,master,develop] on push; only master exists) and named the uploaded file `benchmark.txt` (actual: `benchmark-results.txt`). Verified the session-484 correction block itself remains accurate (no comparison job or PR comment exists — benchmark job only tee+s upload-artifact). claim corrected: BENCHMARKS.md
