@@ -15671,3 +15671,28 @@ Verification:
 Verdict: TRUE — float64 reaches only decision/display
 surfaces; every settlement-adjacent path is integer or byte
 math.
+
+## Session 2791 update (Socratic pass 1457 — timer/ticker lifecycle census)
+
+Claim under test: every time.NewTimer/NewTicker is paired
+with Stop; every time.After is bounded and single-iteration.
+
+Verification — all 13 sites:
+
+- NewTicker ×8 — fetcher:459, hashrate:236, dashboard:189,
+  polling:63, run.go:238/:311/:936/:1489/:2232,
+  arbitrate.go:165 — every one `defer ticker.Stop()` on the
+  line directly after creation.
+- NewTimer ×2 — stratumv1:735 (callTimeout) defer Stop;
+  run.go:682 (reconnect sleep, comment explains why
+  NewTimer+Stop beats time.After: ctx-cancel must not wait
+  out the timer) Stop at :686.
+- time.After ×1 — run.go:1673 pool-requested reconnect wait
+  inside the comma-ok ReconnectWaiter branch: bounded by
+  maxReconnectWaitSeconds=300 and single-shot per iteration;
+  an abandoned channel is collected after it fires — the
+  per-iteration-varying duration makes NewTimer/Reset
+  inappropriate here.
+
+Verdict: TRUE — no unpaired timer; the lone time.After is
+bounded and structurally single-use.
