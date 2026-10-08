@@ -14662,3 +14662,28 @@ Verification: all non-string-keyed map declarations.
   keys. Every key type mirrors its wire/identifier width.
 
 Verdict: TRUE — key types are exact-value and width-correct.
+
+## Session 2751 update (Socratic pass 1417 — time.Sleep census)
+
+Claim under test: `time.Sleep` is confined to tests plus exactly
+one documented idle-poll — no unbounded blocking sleeps in
+production paths.
+
+Verification: single non-test site — `worker.go:282`.
+
+- Context: the per-thread grind loop's `localWork == nil` branch —
+  no job assigned yet, so it yields 10 ms and retries.
+- The same loop's first statement is
+  `select { case <-ctx.Done(): return; default: }`, so the idle
+  path still polls cancellation every 10 ms — exit latency is
+  bounded at the sleep granularity.
+- Alternative designs (sync.Cond wake, channel poke on SetWork)
+  would add a second synchronization path to the hot loop; the
+  10 ms poll is the KISS choice and its worst-case waste is a
+  sleeping core, not correctness.
+- Zero other production `time.Sleep` sites — all delay logic goes
+  through Timer/ctx-select (reconnect backoff, rate limiting,
+  RPC timeouts).
+
+Verdict: TRUE — one bounded idle-poll; everything else is
+cancellable timers.
