@@ -10418,3 +10418,7 @@ Claim verified: quoteFreshness clamps zero/future-dated quotes to now so a bad t
 ## Session 1957 update (Socratic pass 623 — applyAllocation device scoping)
 
 Claim verified: pauseDevice calls SetWork(nil) only on the worker whose DeviceID matches — the session-247 bug (idling one device silently paused all SHA256d devices) is structurally closed and multi-device-safe for future ASIC drivers; idle transitions log once via HeldIdle (no per-tick flood); mining↔non-mining switches pause/resume only the affected device; persistence across pool jobs comes from pauseSet, not the one-shot pause. TRUE.
+
+## Session 1958 update (Socratic pass 624 — Decide input guards + determinism)
+
+Claim verified: Decide rejects nil Input, invalid Policy, and non-finite or negative HysteresisMargin/MinYieldSatsPerSec up front; duplicate device IDs are a hard error, not a silent dedup; devices are ID-sorted before assignment so output order is deterministic; Yield.Effective() collapses non-finite yields to 0 (a bad quote can neither win a sort nor poison TotalYield) and clamps Confidence to ≤1 (a provider cannot inflate past its own net). TRUE.
