@@ -9978,3 +9978,7 @@ Claim verified: `git ls-remote --tags` confirms the newest tag is v2.1.9 (paired
 ## Session 1847 update (Socratic pass 513 — full metric-name census)
 
 Claim verified: 52 unique `otedama_*` literals exist in code; the 5 absent from docs/API.md (`otedama_hashrate_hps`, `otedama_test_total`, `otedama_x`, `otedama_y`, `otedama_z`) are all test fixtures inside metrics_test.go, not production series — every production metric name is documented, and every documented name resolves to a live call site (comm shows zero in either direction). TRUE — the G17 catalogue completeness fix holds.
+
+## Session 1848 update (Socratic pass 514 — govulncheck evergreen recheck)
+
+Claim verified: `govulncheck ./...` (v1.1.4, current DB) reports **0 reachable vulnerabilities** — 18 vulnerabilities exist in required modules but no code path reaches them. The security.yml step and THREAT_MODEL's "0 reachable" claim remain accurate. TRUE — RESEARCH_IMPROVEMENTS :951/:962 evergreen rows re-confirmed.
