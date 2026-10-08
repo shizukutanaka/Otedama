@@ -17076,3 +17076,21 @@ accumulated commits; the decoders' bound-before-
 alloc and U24 guards hold under mutation.
 
 Verdict: TRUE — zero crashes on the frame decoders.
+
+## Session 2850 update (Socratic pass 1515 — govulncheck re-verification)
+
+Claim under test: no reachable vulnerability has
+entered the dependency surface since the last
+govulncheck pass.
+
+Verification (govulncheck over ./...):
+
+- **0 vulnerabilities affect this code.**
+- 0 in imported packages; 18 module-level entries
+  exist in required modules but are unreachable
+  from our call graph (the same standing count as
+  the prior scan — transitive stdlib/crypto items
+  the code never invokes).
+
+Verdict: TRUE — zero reachable vulns on the
+current tree.
