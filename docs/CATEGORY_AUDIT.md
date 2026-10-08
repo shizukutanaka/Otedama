@@ -29557,3 +29557,109 @@ census:
   Equal.
 
 Verdict: TRUE.
+
+## Session 3111 update (Socratic pass 1775 — strconv complete ledger)
+
+Claim under test: the
+strconv surface is
+FormatUint/ParseUint/
+ParseFloat/Atoi —
+plus Quote for
+service argv —
+with the append/
+unquote/int
+variants absent.
+
+Verification —
+census:
+
+- `strconv.FormatUint`×10 +
+  `strconv.ParseUint`×7 —
+  the
+  unsigned
+  wire-
+  number
+  pair
+  (verified
+  parse-
+  bound
+  class:
+  every
+  ParseUint
+  declares
+  base
+  +
+  bitSize).
+- `strconv.ParseFloat`×6 —
+  the
+  float
+  reads
+  (all
+  followed
+  by
+  finite
+  checks —
+  verified
+  nonfinite
+  class).
+- `strconv.Atoi`×2 +
+  `strconv.Itoa`×1 —
+  the
+  two
+  int
+  sites
+  (port
+  range-
+  checked
+  at
+  validation).
+- `strconv.Quote`×1 —
+  the
+  service-
+  argv
+  escaper
+  (verified
+  quote-
+  token
+  class).
+- ZERO
+  `strconv.ParseInt`,
+  `ParseBool`,
+  `ParseComplex`,
+  `ParseUint`×other-base
+  misuse,
+  `FormatInt`,
+  `FormatFloat`,
+  `FormatBool`,
+  `FormatComplex`,
+  `AppendInt`,
+  `AppendUint`,
+  `AppendFloat`,
+  `AppendBool`,
+  `AppendQuote`,
+  `AppendQuoteRune`,
+  `AppendQuoteRuneToASCII`,
+  `AppendQuoteRuneToGraphic`,
+  `AppendQuoteToASCII`,
+  `AppendQuoteToGraphic`,
+  `CanBackquote`,
+  `QuotedPrefix`,
+  `Unquote`,
+  `UnquoteChar`,
+  `QuoteRune`,
+  `QuoteRuneToASCII`,
+  `QuoteRuneToGraphic`,
+  `QuoteToASCII`,
+  `QuoteToGraphic`,
+  `IsPrint`,
+  `IsGraphic`,
+  `IsSpace`,
+  `IntSize`,
+  `NumError` —
+  the
+  residual
+  strconv
+  surface
+  absent.
+
+Verdict: TRUE.
