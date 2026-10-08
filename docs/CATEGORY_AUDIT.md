@@ -11966,3 +11966,7 @@ Claim verified: clock.Fake is RLock-guarded on Now and write-locked on Set/Advan
 ## Session 2339 update (Socratic pass 1005 — HAL registry guard completeness)
 
 Claim verified: HAL Registry's edge behavior is fully honest — zero value is documented-unusable forcing NewRegistry (registry.go:18–30); Register rejects nil driver, empty name, and duplicates with errors (never silent replace) (:38–52); Drivers() hands a sorted fresh snapshot callers can mutate freely (:60–80); Lookup is comma-ok (:86–92); NewDetector substitutes an empty registry for nil (:115–123) instead of panicking. TRUE.
+
+## Session 2340 update (Socratic pass 1006 — V1 extranonce parse strictness)
+
+Claim verified: the V1 extranonce boundary is strict — extranonce1OK rejects empty AND non-hex (parse.go:202–208) before the silent-skip downstream path can see it; parseSetExtranonce type-checks every element then bounds en2 size (:210–228); parseSubscribeResult validates envelope shape and checks en2Size on the float BEFORE int() conversion, closing the 64.5/-0.5 truncation bypass (:318+); notices go through the shared sanitizer at a 256-rune cap (:236–240). TRUE.
