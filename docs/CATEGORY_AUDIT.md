@@ -11022,3 +11022,7 @@ Claim verified: the doctor runner can't lose a check or under-report severity �
 ## Session 2106 update (Socratic pass 772 — i18n fallback chain)
 
 Claim verified: the i18n bundle can't render nothing or panic — NewBundle hard-requires a non-nil English catalog (the authoritative last resort is guaranteed by construction) and rejects duplicate language catalogs at construction; Render's degradation chain is exact → base language (pt-BR falls to pt) → English → "!id!" placeholder WITH an error — a missing message degrades visibly instead of emitting an empty or wrong-language string; and RenderWith returns the raw untemplated text plus an error on missing id, parse failure, or execute failure — a broken template degrades to readable text, not empty output. Honesty residual stands: RenderWith does not fail loudly on missing template keys (recorded #540 closed-unmerged). TRUE.
+
+## Session 2107 update (Socratic pass 773 — SV2 wire primitives)
+
+Claim verified: the wire codec can't write a lie or read a flood — every append helper bounds-checks BEFORE writing the length byte (over-limit input errors out; a length prefix can never claim a size the field can't hold); every read helper declares ≤255/≤32 BEFORE allocating, so a hostile frame can't drive a large allocation — max 255 bytes per field; io.ReadFull on both the length prefix and the payload makes a truncated stream an error, never a partially-filled field; and the get/append asymmetry is correct: empty reads return "" / []byte{} to round-trip cleanly. TRUE.
