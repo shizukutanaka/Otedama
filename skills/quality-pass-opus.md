@@ -42,10 +42,9 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 
 ## 2. Opus優先タスクキュー（深い推論を要するもの）
 
-1. **hmacSHA256Pooled の配線判断**: `internal/stratum/noise_pool.go` に実装・
-   テスト・ベンチ済みだが `hkdf2`/`hkdf3`（noise.go）から未呼出。noise* は
-   CODEOWNERS必須領域 — 配線PRの起案には、割当プロファイル・ハンドシェイク頻度
-   の定量根拠と危険性ゼロの論証を添えること。
+1. ~~**hmacSHA256Pooled の配線判断**~~ ✅ 解消済み（訂正 session 2680:
+   #625 で hkdf2/hkdf3 が hmacSHA256Pooled を呼ぶ配線済み — noise_pool.go:24
+   のdocが同旨を記録。本タスクは完了）。
 2. **Noise NX / ellswift 実装計画（v3.1.0の核心）**: 受け入れ基準は
    sv2-spec `04-Protocol-Security.md`（Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256、
    BIP324の64バイトellswift、2-level PKIサーバ認証）。監査済みGo実装が存在しない
