@@ -15534,3 +15534,29 @@ Verification — full map-field inventory:
 
 Verdict: TRUE — no shared map is accessed without either a
 guard or an immutability/single-owner invariant.
+
+## Session 2786 update (Socratic pass 1452 — package-var mutation census)
+
+Claim under test: package-level tunable vars
+(arbitrationInterval, poolSilenceTimeout, poolDialTimeout,
+handshakeTimeout) are read-only in production and
+save/restore in tests.
+
+Verification:
+
+- Production writes: zero — every production site only reads
+  (run.go:878/:910/:1863, stratumv1/dialer.go,
+  stratumv2/dialer.go:112).
+- Test writes: all follow save-old → mutate → defer-restore
+  (dialer_test.go:21-22, stratumv2 dialer_test.go:1191-1192,
+  coverage_test.go:295/:350/:426). Race-stress milestone
+  gates run -race green, confirming no unsynchronized
+  cross-test mutation.
+- Same-name vars in different packages (stratumv1 vs
+  stratumv2 vs engine handshakeTimeout) are distinct
+  per-layer constants, each documented — a deliberate
+  layering, not a shared-state alias.
+- Unexported → external packages cannot mutate them at all.
+
+Verdict: TRUE — the var pattern is honest: production
+read-only, tests disciplined, documented boundaries.
