@@ -9970,3 +9970,7 @@ Claim verified: SPECIFICATION.md G10's "Fixed (session 61)" annotation still hol
 Defects found and fixed:
 - SPECIFICATION.md G3 claimed the poolproto bypass was simply "Open — deferred" citing KNOWN_LIMITATIONS §3 — stale: KL §3 is struck through RESOLVED (session 91: V1 dispatched via poolproto.DialURL with telemetry parity, verified live in run.go:1432-1444). Corrected G3 to "Partially resolved (sessions 38–91)" and narrowed the open remainder to the V2 inline-handshake path only. CLAIM STALE, corrected.
 - Remaining Open G-rows re-verified for KL cross-consistency: G4→§2 (Noise P-256, maintainer zone), G5→§1 (simulated AI yield), G6→§4 (GPU Linux-only), G18 (self-documented maintainer decision) — all consistent.
+
+## Session 1846 update (Socratic pass 512 — KL §17 install.sh gap re-verification)
+
+Claim verified: `git ls-remote --tags` confirms the newest tag is v2.1.9 (paired commits only, sole asset `Otedama2.1.9.zip`); no `v*` tag matching the v3 asset-naming contract exists, so install.sh's honest "no release asset matched" failure remains accurate and self-resolving on first v3 tag. The gap is disclosed, not hidden. TRUE.
