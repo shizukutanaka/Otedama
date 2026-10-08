@@ -15560,3 +15560,26 @@ Verification:
 
 Verdict: TRUE — the var pattern is honest: production
 read-only, tests disciplined, documented boundaries.
+
+## Session 2787 update (Socratic pass 1453 — caller-slice mutation census)
+
+Claim under test: no function mutates a slice its caller
+still owns (in-place sort, element overwrite) in a way that
+sneaks an ordering into shared state.
+
+Verification — all 13 sort sites:
+
+- Copies before sort: arbitration/engine.go:334 (DeviceRef
+  slice is `make`+`copy` before `SortFunc`), engine/stats.go:418
+  (`cp` is a `make`+`copy` under the latency lock — sort
+  happens after Unlock on private memory),
+  metrics entries/keys, fetcher rates/vals, registry names,
+  btccrypto names, i18n ids/missing/result — every one sorts
+  a locally constructed or freshly copied slice.
+- Zero sites sort a parameter slice in place.
+- Element writes outside sort sites: none on caller-owned
+  slices (all appends either reassign a local header or
+  append to a slice built in-function).
+
+Verdict: TRUE — ordering is always introduced on private
+copies; caller slices are never reordered or overwritten.
