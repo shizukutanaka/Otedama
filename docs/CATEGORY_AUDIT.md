@@ -27674,3 +27674,91 @@ census:
   bounded.
 
 Verdict: TRUE.
+
+## Session 3094 update (Socratic pass 1758 — math/big/rand complete ledger)
+
+Claim under test: the
+math surface is
+NaN/Inf guards +
+float bit
+extraction + the
+big.Int/big.Float
+target arithmetic —
+and math/rand is
+absent.
+
+Verification —
+census:
+
+- `math.IsInf`×13 +
+  `math.IsNaN`×6 +
+  `math.Inf`×1 —
+  the
+  non-finite
+  guards
+  (verified
+  finite-guard
+  class).
+- `math.Float64bits`×4 +
+  `Float64frombits`×3 +
+  `Float32bits`×2 +
+  `Float32frombits`×1 —
+  the
+  wire
+  float
+  codec.
+- `math.Trunc`/`Max`/`Abs`×1 —
+  the
+  residual
+  arithmetic.
+- `big.Int`×7 +
+  `big.NewInt`×5 +
+  `big.Float`×4 +
+  `big.NewFloat`×1 —
+  the
+  nBits↔target↔
+  difficulty
+  arithmetic
+  (verified
+  bitmath
+  class).
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  all
+  crypto/rand;
+  ZERO
+  `math/rand`
+  (verified
+  rand-provenance
+  class).
+- ZERO `math.Sqrt`,
+  `Pow`,
+  `Exp`,
+  `Log`,
+  `Sin`,
+  `Cos`,
+  `Ceil`,
+  `Floor`,
+  `Round`,
+  `Remainder`,
+  `Mod`,
+  `Log2`,
+  `Nextafter`,
+  `Copysign` —
+  the
+  transcendent
+  surface
+  absent.
+- ZERO `big.Rat`,
+  `big.Int`
+  modular
+  methods
+  beyond
+  Set —
+  the
+  surface
+  is
+  conversion
+  only.
+
+Verdict: TRUE.
