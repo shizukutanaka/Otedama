@@ -26107,3 +26107,71 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3076 update (Socratic pass 1740 — time surface ledger)
+
+Claim under test: the
+time surface is
+Now/Since/Duration/
+NewTicker/NewTimer —
+bounded timers
+paired with Stop,
+no Tick/leak or
+parse drift.
+
+Verification —
+census (word-boundary
+match, excluding
+runtime.* tail
+artifacts):
+
+- `time.Now`×45 —
+  wall-clock
+  reads (clock
+  abstraction
+  seam audited).
+- `time.Second`×36,
+  `Minute`×9,
+  `Millisecond`×5 —
+  duration
+  constants.
+- `time.Time`×28 +
+  `time.Duration`×26 —
+  the typed
+  values.
+- `time.Since`×17 —
+  elapsed
+  measurement.
+- `time.NewTicker`×10 —
+  all paired
+  with Stop
+  (verified
+  ticker
+  class).
+- `time.NewTimer`×3 +
+  `time.After`×3 —
+  the bounded
+  timeout
+  sites
+  (verified).
+- `time.UTC`×2,
+  `Date`×2,
+  `Seconds`×1,
+  `Sleep`×1 —
+  the narrow
+  remainder;
+  the lone
+  Sleep is
+  documented.
+- ZERO `time.Tick`
+  (leaks),
+  `time.Parse`,
+  `time.LoadLocation`,
+  `time.Sleep` in
+  loops,
+  `time.Local`
+  reads —
+  absent or
+  audited.
+
+Verdict: TRUE.
