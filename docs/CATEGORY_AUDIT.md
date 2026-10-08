@@ -10382,3 +10382,7 @@ Claim verified: StripScheme is the single canonical dial-target extractor (docto
 ## Session 1948 update (Socratic pass 614 — DialURL + sanitizer boundary)
 
 Claim verified: DialURL fails closed on unknown schemes before any network I/O, closes the conn on negotiate failure (no leaked socket), and wraps errors with URL context at both layers. SanitizePoolText strips Cc/Cf/Zl/Zp — ANSI escapes, Trojan-Source bidi/format chars, and line/paragraph separators that forge log lines — then caps at 256 runes against log flooding. TRUE.
+
+## Session 1949 update (Socratic pass 615 — numeric env single-source)
+
+Claim verified: numericEnvVars is the one slice both ResolveWithOrigins (applies) and EnvWarnings (warns) iterate — the parsed set and the validated set are structurally incapable of drifting apart; a malformed value produces an explicit "ignored, using default" warning so an operator typo can never vanish silently; each application stamps OriginEnv for config-show attribution; the layer-4 DataDir default keeps OriginDefault honest. TRUE.
