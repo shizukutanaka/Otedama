@@ -11930,3 +11930,7 @@ Claim verified: Header.Validate (frame.go:128–136) enforces both the U24 ceili
 ## Session 2330 update (Socratic pass 996 — coinbase payout evasion resistance)
 
 Claim verified: CoinbasePaysScript (script.go:95–134) parses the real tx layout (version → optional segwit marker → vin/scriptSig → vout) and compares each output's scriptPubKey positionally — a pool can't fake the payout via OP_RETURN/scriptSig/witness bytes. Every length is checked against remaining bytes (:113, :126) and malformed input errors rather than returning a silent false. TRUE.
+
+## Session 2331 update (Socratic pass 997 — Decide determinism end-to-end)
+
+Claim verified: Decide is byte-deterministic — input devices are copied then sorted by Identity.ID (engine.go:332–336, no caller-slice mutation), candidates sorted by policy score desc with StreamID as the deterministic tie-break (:407–414), and non-finite/non-positive yields collapse to 0 in Effective() (:96–105) so a bad quote can never win the sort or poison totals. Previous assignments are keyed only when provided. TRUE.
