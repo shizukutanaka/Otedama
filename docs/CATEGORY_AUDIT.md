@@ -13144,3 +13144,7 @@ All TRUE: datum:// sits in the scheme table (poolproto.go:120 → ProtocolDATUM)
 ## Session 2628 update (Socratic pass 1294 — architecture.md disclaimer self-parity)
 
 All TRUE: the session-243/487/1233 disclaimer block itself is accurate — hal.Device = {Identity(), Capabilities(), Shutdown(ctx)} (device.go:156-163; `Identity` not `Identify`, no SubmitWork/Metrics); provider.Provider = channel-based {ID(), Name(), Start(ctx,devices), Quotes(), Stop()} (provider.go:145+), not the aspirational request-response shape; internal/ tree = 19 packages all in the CLAUDE.md map (zero plugin/api/auth/observability/providers paths); SRI-inversion erratum holds (internal/stratum is own codec, SRI is Rust-only). Doc's remaining aspirational sections stay bounded by the disclaimer.
+
+## Session 2629 update (Socratic pass 1295 — KNOWN_LIMITATIONS drift)
+
+All TRUE: 17 sections re-verified; open set = {1,2,4,5,6,8,13,14,17} unchanged. §13's Go-pin failure description matches this session's live CI (Test 1.20/1.21 red, 1.23.x pending); §17's claim verified against `git tag` — newest is v2.1.9 shipping only `Otedama2.1.9.zip`, matching none of install.sh's CANDIDATES, honest-fail behavior unchanged. §2's stratum+v2tls:// guidance accurate (adapter dials system roots). Resolved items 3/7/9/10/11/12/15/16 remain resolved.
