@@ -11042,3 +11042,7 @@ Claim verified: the first-run backup check can't produce a false "verified" — 
 ## Session 2111 update (Socratic pass 777 — network-hashrate fetch lifecycle)
 
 Claim verified: the hashrate fetch can't deadlock, OOM, or pass off a lie — per-source goroutines send into a channel buffered to exactly len(sources) so no producer blocks, and the channel closes only after wg.Wait (send-on-closed is structurally impossible); all-fail returns a counted error rather than a silent stale value; the sorted-median aggregate is fed only readings that passed the plausibility band (absurd H/s rejected per-source); the body is LimitReader-capped on BOTH the success and non-200 paths (a hostile body can't allocate past the ceiling); and CurrentHashrate separates value from freshness — a stale reading is readable but flagged not-fresh so the yield math can degrade honestly. TRUE.
+
+## Session 2112 update (Socratic pass 778 — Akash quote honesty)
+
+Claim verified: the simulated Akash provider can't inflate its attractiveness — no devices → a single confidence-0 quote (visible to the dashboard without being a phantom revenue claim arbitration could act on); a stale rate still prices the quote but at reduced confidence 0.6 vs 0.85 fresh — the provenance of every number travels inside the quote, not in a hidden flag; net yield is gross × 0.80 with the provider fee already factored, so arbitration routes on net (consistent with the s1091 net-yield fix); and the name literally says "simulated" — the simulated nature can't be mistaken for a live API integration. TRUE.
