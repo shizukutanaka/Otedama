@@ -18779,3 +18779,33 @@ Verification (1 site):
 
 Verdict: TRUE — the only time.After is
 a bounded one-shot in teardown.
+
+## Session 2925 update (Socratic pass 1590 — bufio census)
+
+Claim under test: every `bufio.Reader`
+has a bounded size or a bounded read —
+no unbounded `ReadBytes`/`ReadString`
+on network input.
+
+Verification (8 sites):
+
+- `bufio.NewReaderSize(conn.raw,
+  maxLineBytes)` (stratumv1.go:189) —
+  the buffer size IS the line cap, so
+  `ReadSlice` returns
+  `bufio.ErrBufferFull` for a too-long
+  line and the reader never accumulates
+  an unbounded line.
+- stratumv1.go:243 handles
+  `ErrBufferFull` explicitly —
+  documented as the line-cap signal.
+- `bufio.NewReader(stdin)` (wallet.go:237)
+  — local interactive input, not a
+  network peer; fine.
+- `bufio.NewReader(in)` (setup.go:342)
+  — local file read.
+- Compile-guard `var _ io.Reader =
+  (*bufio.Reader)(nil)` — honest seam.
+
+Verdict: TRUE — network reads are
+buffer-capped; no unbounded ReadBytes.
