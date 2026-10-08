@@ -10370,3 +10370,7 @@ Claim verified: the HTTP surface carries a full timeout stack (ReadHeader 5s slo
 ## Session 1945 update (Socratic pass 611 — i18n render pipeline)
 
 Claim verified: RenderWith renders through Render (requested-lang → English fallback), parses the raw string as a template only when `{{` appears and data is non-nil, and on parse/execute error returns the RAW message plus the error — degraded but intact, never an empty string. MissingTranslations powers the CI completeness gate across the 10 priority languages. Honest residual: missing template data keys render as Go template's zero value (missingkey=default) rather than a loud failure — #540's strict-mode proposal was closed unmerged. TRUE.
+
+## Session 1946 update (Socratic pass 612 — submit-rate limiter mechanics)
+
+Claim verified: submitLimiter is an 8/s + burst-32 token bucket that starts full, refills via a ctx-scoped ticker (stopped on exit), and takes non-blocking — a tokenless share is dropped not queued (it would be stale by send time anyway); the cap sits far above any honest pool's credit rate so it only binds during a difficulty→0 flood; the whole structure is session-scoped so it is destroyed with the session — no cross-session leakage. TRUE.
