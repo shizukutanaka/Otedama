@@ -17219,3 +17219,19 @@ Verification (`git fetch + rev-parse`):
 
 Verdict: TRUE — mergeability holds; the ledger
 continues to sit on unmodified master.
+
+## Session 2857 update (Socratic pass 1522 — DCO sign-off parity)
+
+Claim under test: every recent branch commit
+carries the required DCO `Signed-off-by` trailer
+and a Conventional Commits prefix.
+
+Verification (`git log -15`):
+
+- 15/15 commits include `Signed-off-by: Devin
+  ...` — full DCO parity.
+- 15/15 subjects carry a `docs:` (or scoped)
+  Conventional Commits prefix; no bare subjects.
+
+Verdict: TRUE — commit hygiene holds on the
+recent ledger chain.
