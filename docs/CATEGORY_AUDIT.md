@@ -13064,3 +13064,7 @@ Census: code accepts exactly `fpps`, `pplns`, `solo`, `tides` (validated enum, e
 ## Session 2608 update (Socratic pass 1274 — log-level/format enum parity)
 
 Census: Validate() accepts `log_level` ∈ {debug, info, warn, error} (config.go:664) and `log_format` ∈ {text, json} (config.go:674), defaults info/text — matching SPECIFICATION.md:73-74 and API.md:27-28 exactly, including the documented defaults. Both-direction parity holds. TRUE.
+
+## Session 2609 update (Socratic pass 1275 — language enum parity)
+
+Census: PriorityLanguages() returns exactly en/ja/zh/ko/es/fr/de/pt/ru/ar (message.go:116-120); config.yaml.example's comment lists the identical 10 tags; API.md documents `--language` as a BCP 47 tag with OTEDAMA_LANGUAGE env parity. Three-way parity holds (code constants ↔ example config ↔ user docs). TRUE.
