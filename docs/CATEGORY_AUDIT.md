@@ -35555,3 +35555,168 @@ executed:
   strings/bytes).
 
 Verdict: TRUE.
+
+## Session 3151 update (Socratic pass 1815 — io + bufio detail ledger)
+
+Claim under test: the
+io
+surface is
+Reader/
+Writer/
+ReadFull
+dominated —
+fixed-size
+wire
+reads —
+and
+bufio
+appears
+only
+as
+the
+V1
+line
+reader
+plus
+two
+secret/
+config
+readers.
+
+Verification —
+census:
+
+- `io.Writer`×45 +
+  `io.Reader`×28 —
+  the
+  dominant
+  abstractions
+  (run()
+  args,
+  log
+  sinks,
+  exposition,
+  wire).
+- `io.ReadFull`×16 —
+  every
+  wire
+  read
+  is
+  a
+  fixed-length
+  exact-fill
+  (frame
+  headers,
+  SV2
+  message
+  bodies,
+  coinbase
+  fields).
+- `io.EOF`×5 +
+  `io.ErrUnexpectedEOF`×1 —
+  clean
+  boundary
+  detection
+  only.
+- `io.LimitReader`×4 —
+  inbound
+  body
+  caps
+  (price
+  feeds,
+  hash
+  feed,
+  pprof?).
+- `io.Discard`×3 —
+  drain/
+  test
+  sinks.
+- `io.ReadAll`×2 +
+  `io.Copy`×2 —
+  the
+  ONLY
+  unbounded-ish
+  reads,
+  both
+  verified
+  wrapped
+  by
+  LimitReader.
+- `io.Closer`×2,
+  `io.MultiWriter`×1
+  (stdout+file
+  log
+  tee),
+  `io.ByteReader`×1.
+- `bufio.NewReaderSize`×1 —
+  `stratumv1.go:189`
+  with
+  `maxLineBytes` —
+  the
+  64KiB
+  V1
+  line
+  ceiling
+  (structural
+  cap).
+- `bufio.NewReader`×2 —
+  `wallet.go:237`
+  secret
+  stdin
+  read,
+  `setup.go:342`
+  config
+  reader.
+- `bufio.Reader`×4 —
+  the
+  type
+  references.
+- ZERO
+  `io.CopyN`,
+  `CopyBuffer`,
+  `ReadAtLeast`,
+  `MultiReader`,
+  `NopCloser`,
+  `Seeker`,
+  `ReaderAt`,
+  `WriterAt`,
+  `Pipe`,
+  `TeeReader`,
+  `OffsetWriter`,
+  `StringWriter` —
+  no
+  pipe
+  tricks,
+  no
+  seek
+  reads,
+  no
+  nop-closer
+  hacks
+  in
+  production.
+- ZERO
+  `bufio.Scanner`,
+  `bufio.Writer`,
+  `Flush`,
+  `Peek`,
+  `ReadSlice`,
+  `ReadLine`,
+  `ScanLines`,
+  `MaxScanTokenSize` —
+  no
+  scanner
+  tokenization
+  (V1
+  uses
+  the
+  bounded
+  line
+  reader;
+  SV2
+  is
+  length-
+  prefixed
+  binary).
+
+Verdict: TRUE.
