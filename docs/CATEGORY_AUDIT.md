@@ -12062,3 +12062,7 @@ Claim verified: publishDifficulty computes E[seconds between shares] = difficult
 ## Session 2363 update (Socratic pass 1029 — worker-idle on session death)
 
 Claim verified: on every session end all workers get SetWork(nil) before the reconnect wait (run.go:602–605) — the dead session's last job is guaranteed-superseded under the next session's IDs (V1 new extranonces, V2 new channel) so hashing it through backoff would burn power on shares the submit gate always drops; dashboard.Update(disconnectedStats(...)) is pushed explicitly since the stats tick dies with the session — without it the TUI would freeze on its last "✓ connected" frame for the entire reconnect window (:606–611). TRUE.
+
+## Session 2364 update (Socratic pass 1030 — pools[] enum/URL validation)
+
+Claim verified: every pools[i] entry is validated at config load — empty URL flagged explicitly, non-empty run through validatePoolURL (scheme table + host:port target) (config.go:683–689); payout_scheme enum-gated to "",fpps,pplns,tides,solo with the offending value quoted in the issue (:690–696); empty payout_scheme is documented "unknown/unset" (not an error); TLSCAFile's contract is verified downstream — verification always performed, file never disables it (:233–240). TRUE.
