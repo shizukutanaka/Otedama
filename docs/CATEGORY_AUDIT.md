@@ -30680,3 +30680,154 @@ site census:
   census.
 
 Verdict: TRUE.
+
+## Session 3121 update (Socratic pass 1785 — strings/bytes complete ledger)
+
+Claim under test: the
+strings surface is
+prefix-join-contains-
+trim-builder-repeat —
+the text plumbing
+class; bytes is
+only Equal.
+
+Verification —
+census:
+
+- `strings.HasPrefix`×27 +
+  `strings.Join`×15 +
+  `strings.Contains`×13 +
+  `strings.TrimSpace`×11 +
+  `strings.Builder`×10 +
+  `strings.Repeat`×7 +
+  `strings.ToLower`×6 +
+  `strings.CutPrefix`×5 +
+  `strings.Split`×3 +
+  `strings.NewReplacer`×3 —
+  the
+  high-frequency
+  text
+  core.
+- `strings.LastIndexByte`/`IndexRune`/`IndexByte`/`EqualFold`/`ContainsRune`/`ContainsAny`×2
+  each +
+  `strings.TrimSuffix`/`TrimLeft`/`Trim`/`ToUpper`/`ReplaceAll`/`Reader`/`Map`/`IndexFunc`/`IndexAny`/`Index`/`Fields`/`ContainsFunc`×1
+  each —
+  the
+  tail.
+- `bytes.Equal`×2 —
+  the
+  ONLY
+  bytes
+  site:
+  target/
+  hash
+  comparison
+  (miner
+  meetsTarget +
+  wordlist
+  checksum).
+- ZERO
+  `strings.Title`
+  (deprecated
+  —
+  absent),
+  `ToTitle`,
+  `ToTitleSpecial`,
+  `ToUpperSpecial`,
+  `ToValidUTF8`,
+  `NewReader`×more,
+  `Clone`,
+  `Compare`,
+  `Count`,
+  `Cut`,
+  `CutSuffix`,
+  `FieldsSeq`,
+  `SplitSeq`,
+  `SplitAfter`,
+  `SplitN`,
+  `SplitAfterN`,
+  `Lines`,
+  `HasSuffix`,
+  `LastIndex`,
+  `LastIndexAny`,
+  `LastIndexFunc`,
+  `TrimFunc`,
+  `TrimLeftFunc`,
+  `TrimRight`,
+  `TrimRightFunc`,
+  `TrimPrefix`,
+  `ValidReader`,
+  `LastIndexRune` —
+  the
+  rest
+  of
+  the
+  strings
+  API
+  absent;
+  the
+  missing
+  `HasSuffix`/
+  `TrimPrefix`
+  sites
+  all
+  route
+  through
+  `HasPrefix`/
+  `CutPrefix`/
+  `TrimSpace`
+  equivalents.
+- ZERO
+  `bytes.Buffer`,
+  `NewBuffer`,
+  `NewBufferString`,
+  `NewReader`,
+  `Contains*`,
+  `Count`,
+  `Cut`,
+  `CutPrefix`,
+  `CutSuffix`,
+  `EqualFold`,
+  `Fields*`,
+  `HasPrefix`,
+  `HasSuffix`,
+  `Index*`,
+  `Join`,
+  `LastIndex*`,
+  `Lines`,
+  `Map`,
+  `MinRead`,
+  `Repeat`,
+  `Replace*`,
+  `Reader`,
+  `Runes`,
+  `Split*`,
+  `Title`,
+  `ToLower`,
+  `ToTitle`,
+  `ToUpper`,
+  `ToValidUTF8`,
+  `Trim*`,
+  `Valid`,
+  `ValidRune`,
+  `ValidString` —
+  the
+  bytes
+  package
+  is
+  deliberately
+  near-absent:
+  binary
+  work
+  lives
+  in
+  `encoding/binary`,
+  hex
+  in
+  `encoding/hex`,
+  slices
+  in
+  `slices.Equal`/
+  `subtle.ConstantTimeCompare`.
+
+Verdict: TRUE.
