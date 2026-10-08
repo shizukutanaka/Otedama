@@ -39605,3 +39605,130 @@ census:
   only.
 
 Verdict: TRUE.
+
+## Session 3179 update (Socratic pass 1843 — context + errors ledger)
+
+Claim under test: context
+derivation
+is
+`WithTimeout`/
+`WithCancel`
+only;
+`WithValue`
+keys
+are
+private
+typed;
+no
+`TODO`,
+no
+`WithoutCancel`,
+no
+`AfterFunc`;
+errors
+are
+`New`-leaf/
+`Is`-sentinel/
+`As`-target/
+`Join`-composite
+only.
+
+Verification —
+census:
+
+- `context`:
+  `Background`×403
+  (test-
+  dominated;
+  ~3
+  prod
+  roots),
+  `WithTimeout`×143,
+  `Context`×125,
+  `WithCancel`×62,
+  `Canceled`×6,
+  `DeadlineExceeded`×5,
+  `CancelFunc`×3,
+  `WithValue`×2
+  —
+  both
+  `WithValue`
+  sites
+  are
+  `internal/logger/logger.go`
+  `IntoContext`/
+  `FromContext`
+  with
+  an
+  unexported
+  `ctxKey`
+  type
+  (collision-
+  safe).
+  ZERO:
+  `context.TODO`,
+  `WithDeadline`
+  (WithTimeout
+  subsumes),
+  `WithoutCancel`,
+  `AfterFunc`,
+  `WithCancelCause`/`Cause` —
+  no
+  detached
+  or
+  cause-
+  tracked
+  contexts.
+- `errors`:
+  `Is`×62,
+  `New`×59,
+  `Join`×4,
+  `As`×4 =
+  129.
+  ZERO:
+  `errors.Unwrap`,
+  identity
+  `==`/
+  `!=`
+  on
+  sentinels —
+  sentinel
+  identity
+  is
+  always
+  `errors.Is`,
+  custom-
+  type
+  assertion
+  always
+  `errors.As`
+  (pointer
+  target),
+  multi-error
+  always
+  `errors.Join`
+  (4
+  sites,
+  all
+  validation
+  aggregation).
+  `errors.As`
+  targets:
+  all
+  pointer
+  receivers
+  (`*OpError`-
+  class
+  network
+  errors,
+  `*url.Error`
+  absent —
+  sites
+  verified
+  in
+  earlier
+  error-
+  idiom
+  audits).
+
+Verdict: TRUE.
