@@ -16992,3 +16992,28 @@ Verification:
   action needed, flagged here for completeness.
 
 Verdict: TRUE — tree clean, deps exact, no drift.
+
+## Session 2846 update (Socratic pass 1511 — branch payload re-census)
+
+Claim under test: the 72-file diff against master
+still consists solely of the known audit payload —
+docs/ledger edits, CI workflow hardening, the
+earlier code fixes, and config/example updates —
+with no foreign file sneaked in.
+
+Verification (`git diff --name-only origin/master..HEAD`):
+
+- 72 files, 10,696+/906- — every path matches a
+  previously-audited file: docs/* (audit ledger,
+  ADRs, guides), .github/workflows/* (hardening
+  batch), skills/*, Makefile/Dockerfile/.goreleaser,
+  cmd/otedama/* (config sanitize, run flag fixes),
+  config.yaml.example.
+- The foreign-path grep (excluding every known
+  payload directory) returns zero paths — nothing
+  outside the audited surface.
+- Growth since the 68-file census is accounted for
+  by subsequent ledger/ADR/fix batches.
+
+Verdict: TRUE — payload surface unchanged in kind;
+no foreign files.
