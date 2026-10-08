@@ -25678,3 +25678,82 @@ census:
   legacy crypto.
 
 Verdict: TRUE.
+
+## Session 3070 update (Socratic pass 1734 — net/http surface ledger)
+
+Claim under test: the
+net surface is the
+Conn/Dialer pair
+with bounded dials,
+and the HTTP
+surface is a
+private ServeMux
+plus timed
+clients — no
+shortcuts or
+default-transport
+drift.
+
+Verification —
+census:
+
+- `net.Conn`×14,
+  `net.Dialer`×6 —
+  the dial seam;
+  every dial
+  bounded
+  (verified
+  deadline
+  class).
+- `net.SplitHostPort`×3,
+  `ParseIP`×1,
+  `Listen`×1,
+  `Pipe`×1,
+  `DefaultResolver`×1 —
+  the narrow
+  remainder.
+- `http.Client`×6 —
+  every one
+  carries a
+  timeout +
+  redirect
+  policy
+  (verified).
+- `http.NewRequest
+  WithContext`×3,
+  `MethodGet`×3,
+  `NoBody`×3 —
+  ctx-bound
+  outbound
+  only.
+- Server side:
+  `Server`×2,
+  `ServeMux`×1,
+  `NewServeMux`×1,
+  `Request`×10,
+  `ResponseWriter`×4,
+  status codes —
+  the admin
+  server on a
+  private mux.
+- `pprof` handlers×6 —
+  all opt-in
+  on the
+  private mux
+  (verified).
+- ZERO `http.Get`,
+  `http.Post`,
+  `http.DefaultClient`,
+  `httputil`,
+  `cookiejar`,
+  `fcgi`,
+  `HandleFunc` on
+  the default
+  mux — the
+  lone
+  `http.DefaultServeMux`
+  reference is a
+  comment/doc
+  mention.
+
+Verdict: TRUE.
