@@ -10578,3 +10578,7 @@ Claim verified: both validators are spec-complete — base58 decode preserves le
 ## Session 1997 update (Socratic pass 663 — coinbase payout verification)
 
 Claim verified: the non-custodial guarantee is enforced at the transaction layer, not the byte layer — CoinbasePaysScript parses the vout list positionally (legacy + segwit serialization, every varint and length bound-checked, malformed → error not false-negative) so a hostile pool cannot evade by embedding the user's script in an OP_RETURN push, scriptSig, or witness data where bytes look like payout but pay nothing; ScriptForAddress first checksum-validates then emits the standard locking script for all five supported types with correct opcodes, giving the engine exactly one canonical byte string to compare. TRUE.
+
+## Session 1998 update (Socratic pass 664 — pool protocol abstraction boundary)
+
+Claim verified: one canonical scheme table feeds both FromURL and StripScheme (no dual-parser drift), unknown schemes return an error rather than a guess, StripUserinfo redacts only the authority's last '@' before the first '/' — a '@' in a path survives and malformed URLs pass through unredacted so diagnostics are never corrupted; the dialer registry panics on nil/unknown/duplicate registration (misconfiguration fails at boot, not silently at first dial), DialURL closes the connection on negotiate failure, and SanitizePoolText strips Cc+Cf+Zl+Zp — the Trojan Source class of bidi/format runes — plus a 256-rune cap before pool text reaches logs or the TUI. TRUE.
