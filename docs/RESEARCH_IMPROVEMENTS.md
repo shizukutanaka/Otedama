@@ -444,7 +444,19 @@ arXiv grounding (session 41):
 1. ✅ **Prometheus text-format `/metrics`** without a client dependency
    (ADR-005).
 2. ✅ **Health endpoint** + `ServeError()` accessor (session 31).
-3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span — ADR
+3. 🟡→🔵 **OpenTelemetry traces — already planned, not a gap.**
+   Verified session 1746: no OTel dependency exists in go.mod and no
+   spans exist anywhere — confirmed absent. But the row is already
+   dispositioned by the project's own roadmap, not an unhandled gap:
+   ADR-005 (:105-110) deliberately rejected the OTel metrics SDK for now
+   ("adopt incrementally if it becomes the unambiguous winner"), and
+   SUSTAINABILITY.md:105-115 pins the delivery shape — a separate
+   `otedama-full` binary behind `-tags otel` with OTLP/HTTP (not gRPC),
+   declared v3.3.0 scope. Connect→handshake→mine span instrumentation
+   lands with that artifact. 🔵 (planned/roadmap-anchored). Original
+   request follows:
+
+   OpenTelemetry traces for the connect→handshake→mine span — ADR
    mentions OTel; confirm spans exist on pool dial and submit.
 4. ✅ **Reject-rate & stale-rate gauges** (ties to Category 1). — session 101:
    `otedama_reject_rate` (rejected/judged) and `otedama_stale_rate`

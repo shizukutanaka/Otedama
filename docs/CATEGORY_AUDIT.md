@@ -9560,3 +9560,7 @@ Three Cat-6 rows were 🟡 "newly surfaced" research that was never dispositione
 ## Session 1745 update (Socratic pass 411 — carbon-intensity scope refined)
 
 Verified (scope refined): Cat-8 row 10 (optional carbon-intensity feed) — nothing named "carbon" exists in `internal/` and SUSTAINABILITY.md has no carbon anchor, so the alignment claim is aspirational. The blocker is not code but an external-dependency decision: every carbon-intensity source is region- or key-locked (WattTime/electricityMaps API keys; free feeds cover only specific grids like energy-charts.info/EU). Choosing a source family plus a user-declared grid region is the same class of decision as the TOU tariff feeds already parked under ADR-008 sub-domain 4 — that ADR is the natural home. Row flipped 🟡→🔵.
+
+## Session 1746 update (Socratic pass 412 — OTel is roadmap-planned, not a gap)
+
+Verified (scope refined): Cat-9 row 3 (OTel traces on connect→handshake→mine) — confirmed zero OTel dependency and zero spans. But this is already dispositioned by the project's own roadmap rather than an open gap: ADR-005 (:105-110) rejected the OTel metrics SDK "for now" with an incremental-adoption clause, and SUSTAINABILITY.md:105-115 pins the concrete delivery shape — separate `otedama-full` artifact behind `-tags otel`, OTLP/HTTP not gRPC, v3.3.0 scope. Span instrumentation lands with that artifact. Row flipped 🟡→🔵.
