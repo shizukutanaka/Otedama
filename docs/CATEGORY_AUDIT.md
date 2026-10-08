@@ -10998,3 +10998,7 @@ Claim verified: the SV2 adapter's job assembler can't grow unboundedly or leak a
 Claim verified: the BIP-39 implementation can't produce a weak or malformed seed — entropy bits are restricted to the spec's five legal sizes (128/160/192/224/256); io.ReadFull enforces a complete entropy read (a short read errors instead of yielding a partially-random seed); the entropy→mnemonic derivation is the exact spec (checksum = first ent/32 bits of SHA-256 MSB-first, 11-bit word indices); and the intermediate bit-buffer is zeroed before return so secret material doesn't linger on the heap. TRUE.
 
 MILESTONE GATE (s2100): gofmt clean; go build ./... clean; go vet ./... clean; go test all green — lightning, metrics, httpserver, tui, arbitration, poolproto+adapters, stratum.
+
+## Session 2101 update (Socratic pass 767 — seed encryption store)
+
+Claim verified: EncryptSeed/DecryptSeed can't leak material or oracle the passphrase — an empty passphrase is rejected; salt and nonce come from the injected reader (crypto/rand by default) with io.ReadFull completeness; scrypt(N,r,p) → 32-byte AES-256-GCM is the only path (no DIY crypto, per CLAUDE.md); every secret buffer — pass, derived key, plaintext — is zeroed by defer on BOTH paths; a GCM open failure collapses to the generic ErrWrongPassphrase (no distinguishing error leaks whether auth or format failed); the EncryptedSeed version gate is fail-closed; and the decrypted length is verified 64 bytes before it enters the fixed-size Seed. TRUE.
