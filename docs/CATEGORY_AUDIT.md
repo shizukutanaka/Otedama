@@ -13012,3 +13012,7 @@ Cycle position: all 46 branch-diff files audited; census classes completed this 
 ## Session 2595 update (Socratic pass 1261 — wallet subcommand surface parity)
 
 Four-way parity verified: wallet.go dispatches exactly `verify` + `change-passphrase` (wallet.go:41-43); completion.go verb lists match; API.md and SPECIFICATION.md document both with identical semantics. The 3 OTEDAMA_WALLET_* env vars in code (PASSPHRASE, NEW_PASSPHRASE, MNEMONIC_PASSPHRASE) are all documented in API.md's env table — including the claim that NEW_PASSPHRASE is env-only and never accepted as a flag (verified: no such flag exists in parseWalletFlags, so it cannot leak through argv/process lists). TRUE.
+
+## Session 2596 update (Socratic pass 1262 — complete flag-surface census)
+
+Bidirectional census: 15 flags registered across cmd/otedama (`--bitcoin-address`, `--config`, `--data-dir`, `--dry-run`, `--http-addr`, `--json`, `--language`, `--log-file`, `--log-format`, `--log-level`, `--no-tui`, `--origin`, `--pprof`, `--wallet-mnemonic-passphrase`, `--wallet-passphrase`) vs 15 flags documented in docs/API.md — identical sets in both directions. Zero undocumented flags, zero phantom flags. TRUE.
