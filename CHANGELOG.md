@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1824 — NOTICE)
+- Third-party attribution updated for the shipped dep set: `go.yaml.in/yaml/v3` replaces the archived `gopkg.in/yaml.v3` path (migrated in #444), and `golang.org/x/sys` is now listed as a direct dependency (used by internal/tui for terminal-width syscalls), not an indirect one
 ### Fixed (session 1800 — ci-cd.yml)
 - Removed the `deploy` job — it applied the nonexistent `k8s/deployment.yaml` on every master push when KUBE_CONFIG was set
 ### Fixed (session 1796 — ci.yml)

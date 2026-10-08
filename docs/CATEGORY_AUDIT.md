@@ -9872,3 +9872,10 @@ Claim verified: all 9 workflows carry an explicit top-level `permissions:` block
 ## Session 1823 update (Socratic pass 489 — workflow action-version census)
 
 Claim verified: no deprecated workflow commands anywhere (`::set-output`/`::save-state` absent), and every `uses:` pin is a current supported major or an exact semver — checkout@v4×40, setup-go@v5×20, upload-artifact@v4×11, codeql-action@v3×12 (v3 is the current major), docker/*@v4-v5, plus exact pins for the advisory scanners pinned at s1692 (trivy@0.36.0, gosec@2.29.0, trufflehog@3.97.9, scorecard-action@2.4.4). golangci-lint-action@v3 is deliberate — consistent with the pinned golangci-lint v1.64.8 (the v2 schema migration was rejected territory, #1391). No @v1/@v2 legacy refs. TRUE — no drift.
+
+## Session 1824 update (Socratic pass 490 — NOTICE third-party attribution audit)
+
+Defects found and fixed (legal-notice drift vs go.mod):
+1. **NOTICE still attributed `gopkg.in/yaml.v3`** — the module was migrated to the maintained `go.yaml.in/yaml/v3 v3.0.5` fork in merged PR #444 (gopkg.in archived April 2025, fails the maintained-dependency criterion recorded in go.mod's own rationale comment). Attribution path + pkg.go.dev URL updated; canonical copyright (2011-2019 Canonical Ltd, MIT/Apache-2.0) preserved with a continuation note.
+2. **`golang.org/x/sys` listed as "(indirect, via golang.org/x/crypto)"** — it is a direct `require` since #583 (used by internal/tui for TIOCGWINSZ/GetConsoleScreenBufferInfo terminal-width queries, per go.mod's comment). NOTICE now states the direct use.
+Residual: license texts themselves unchanged (all three deps remain BSD/MIT/Apache-2.0-compatible). Verified go.mod vs NOTICE 1:1 — the two entries now cover the full external dep set (yaml.v3, x/crypto, x/sys direct).
