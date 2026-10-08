@@ -25899,3 +25899,79 @@ census:
   math/rand.
 
 Verdict: TRUE.
+
+## Session 3073 update (Socratic pass 1737 — os/exec/signal surface ledger)
+
+Claim under test: the
+os surface is the
+minimal file/env
+subset — Join,
+Getenv, Stat, the
+bounded file ops —
+with one
+NotifyContext and
+two os.Exit
+confined to main.
+
+Verification —
+census:
+
+- `filepath.Join`×32 —
+  all path
+  construction;
+  ZERO hand-rolled
+  separators.
+- `os.Getenv`×16 —
+  env reads only;
+  ZERO `os.Setenv`
+  on production
+  paths (verified
+  env-surface).
+- `os.Stat`×10,
+  `os.ReadFile`×8,
+  `os.WriteFile`×4,
+  `os.OpenFile`×1,
+  `os.Open`×1,
+  `os.MkdirAll`×5 —
+  file IO; the
+  write contract
+  is 0600/0700
+  with
+  chmod-before-
+  rename
+  (verified).
+- `os.Remove`×9,
+  `os.Rename`×2 —
+  atomic save
+  lifecycle.
+- `os.Getwd`/`Chdir`
+  — zero; paths
+  are absolute
+  or relative to
+  the config dir.
+- `os.Exit`×2 —
+  confined to
+  main entry
+  points
+  (verified).
+- `exec.Command`×5 —
+  all fixed
+  binary + argv
+  (verified
+  exec class).
+- `signal.NotifyContext`×1
+  — the single
+  shutdown
+  wiring;
+  `os.Interrupt`×1.
+- ZERO `os.TempFile`,
+  `exec.LookPath`,
+  `signal.Notify`,
+  `signal.Reset`,
+  `os.Symlink`,
+  `os.Link`,
+  `os.Chown`,
+  `os.FindProcess` —
+  absent.
+
+Verdict: TRUE.
