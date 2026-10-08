@@ -25476,3 +25476,65 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3067 update (Socratic pass 1731 — json/yaml surface ledger)
+
+Claim under test: the
+codec surface is
+the narrow decode
+subset — Unmarshal
+for wire, RawMessage
+for deferred fields,
+yaml.NewDecoder for
+config only.
+
+Verification —
+census:
+
+- `json.Unmarshal`×26 —
+  the V1 wire
+  decode; every
+  input already
+  bounded at the
+  transport layer
+  (line cap).
+- `json.RawMessage`×18 —
+  deferred field
+  decode (params,
+  results) —
+  the correct
+  two-phase
+  pattern.
+- `json.NewEncoder`×3 —
+  the config
+  display and
+  V1 writer
+  seams.
+- `json.Marshal`×1 —
+  the single
+  compact
+  serialize.
+- `yaml.NewDecoder`×1 —
+  the config
+  file decode
+  (with
+  KnownFields
+  strictness
+  verified).
+- ZERO `json.Valid`,
+  `MarshalIndent`,
+  `Decoder`,
+  `Number`,
+  `Indent`,
+  `Compact`,
+  `HTMLEscape`,
+  `MarshalText` —
+  the extended
+  JSON API is
+  unused.
+- ZERO `yaml.Marshal`
+  — config is
+  read-only
+  at runtime.
+
+Verdict: TRUE.
