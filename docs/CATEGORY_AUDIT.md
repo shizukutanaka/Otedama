@@ -40384,3 +40384,160 @@ census:
   paths.
 
 Verdict: TRUE.
+
+## Session 3185 update (Socratic pass 1849 — encoding/hash ledger)
+
+Claim under test: wire
+encoding
+is
+LE-only
+`binary`
++
+`json.RawMessage`
+dispatch
++
+`hex`
++
+`pem`;
+no
+BE,
+no
+`gob`/`xml`/`csv`,
+no
+streaming
+`Decoder`
+outside
+the
+config
+path.
+
+Verification —
+census:
+
+- `encoding/json`:
+  `Unmarshal`×65,
+  `RawMessage`×61
+  (deferred
+  decode
+  at
+  dispatch),
+  `Marshal`×14,
+  `NewEncoder`×3,
+  `Encode`×1.
+  ZERO:
+  `json.Decoder`/`Encoder`
+  streaming
+  except
+  the
+  YAML-config
+  seam,
+  `json.Indent`/`Compact`/`HTMLEscape`,
+  `Valid` —
+  RPC
+  is
+  line-
+  oriented
+  `RawMessage`
+  dispatch,
+  never
+  token
+  streaming.
+- `encoding/binary`:
+  `LittleEndian`×84
+  —
+  LE
+  only
+  (both
+  V1
+  and
+  V2
+  wire
+  formats);
+  ZERO
+  `BigEndian`,
+  `Write`/`Read`
+  method-
+  value
+  forms
+  outside
+  the
+  U24/U32/U64
+  helpers,
+  `binary.Size`/`AppendUvarint`/`Varint`.
+- `encoding/hex`:
+  `DecodeString`×20
+  (all
+  length-
+  checked
+  per
+  earlier
+  audit),
+  `EncodeToString`×11.
+  ZERO:
+  `hex.Dump`/`Encoder`/`Decoder`,
+  `hex.Decode`/`Encode`
+  raw
+  forms.
+- `encoding/pem`:
+  `EncodeToMemory`×3,
+  `Block`×3
+  (wallet
+  seed
+  format).
+  ZERO:
+  `pem.Decode`/`Encode`
+  direct.
+- `encoding/base64`:
+  ZERO —
+  no
+  base64
+  anywhere
+  (verified
+  earlier:
+  session-710
+  census).
+- `hash`:
+  `hash.Hash`×4
+  interface
+  params;
+  `hash.LessOrEqual`/`hash.String`×3
+  are
+  package-
+  local
+  symbols
+  in
+  `internal/miner`
+  (name
+  collision
+  with
+  stdlib,
+  verified
+  not
+  imports).
+  ZERO:
+  `hash/fnv`/`crc32`/`crc64`/`adler32`/`maphash`
+  imports —
+  one
+  `fnv.New32a`
+  call-
+  fresh
+  hasher
+  per
+  earlier
+  audit
+  (metric
+  key).
+- ZERO
+  packages:
+  `encoding/gob`,
+  `encoding/xml`,
+  `encoding/csv`,
+  `encoding/asn1`,
+  `encoding/binary`'s
+  BE
+  half,
+  `compress/*`,
+  `mime/*`,
+  `net/rpc`/`jsonrpc`.
+
+Verdict: TRUE.
