@@ -13994,3 +13994,24 @@ Verification: all 5 `defer *.Close()` sites in non-test code.
   target is the success-path object of the just-returned call.
 
 Verdict: TRUE — close-defers are universally post-check.
+
+## Session 2725 update (Socratic pass 1391 — time.Sleep production census)
+
+Claim under test: `time.Sleep` in production code is not a disguised
+busy-wait or a cancellation-latency bug — sleeps belong in tests.
+
+Verification: exactly one non-test `time.Sleep` in the tree —
+`miner/worker.go:282`, inside the grind loop.
+
+- It fires only on `localWork == nil` (no job dispatched yet): a
+  bounded 10ms yield so an idle worker doesn't burn a core spinning
+  on the work mutex. There's no channel to select on — work arrives
+  via `SetWork`+mutex — so polling is the right primitive.
+- Cancellation latency is bounded by construction: `ctx.Done()` is
+  checked at the top of every loop iteration (worker.go:263-268),
+  so the sleep adds at most 10ms to worker shutdown.
+- The sleep sits AFTER the work-reload lock acquisition, before the
+  batch loop — it cannot delay a new job once dispatched (SetWork
+  doesn't wait for the sleeper; the sleeper polls the mutex).
+
+Verdict: TRUE — single idle-yield, cancellation-bounded.
