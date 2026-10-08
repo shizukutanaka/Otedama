@@ -16046,3 +16046,28 @@ Verification:
 
 Verdict: TRUE — secrets reach stdout exactly once by
 design, never reach logs or errors.
+
+## Session 2806 update (Socratic pass 1472 — variable-shift census)
+
+Claim under test: every shift with a variable count is
+bounded by a constant or carries a named bound — no shift
+≥ width can silently zero or wrap.
+
+Verification — the full non-constant-shift set:
+
+- seed.go BIP-39 bit loops: every `>>uint(i)`/`<<uint(j)`
+  has an nolint bound annotation (i<8 byte bits, i<5
+  checksum bits, i%8 indexes one byte); the word-index
+  accumulation `idx<<1` is a constant shift.
+- bech32.go convertBits: `top>>uint(i)` i<5 group;
+  `acc>>uint(bits)` bits<from+to≤16; `acc<<(to-uint(bits))`
+  with to/from the constant 5/8 group sizes (call sites
+  only ever pass 8→5 and 5→8) — sibling branches carry
+  the nolint bound.
+- Constant shifts: scryptN=1<<17, body caps 64<<10/8<<10,
+  byte composition <<8/16/24/32 — no count variable.
+- nBits exponent decomposition uses big.Int shifts
+  (unbounded domain, correct by construction).
+
+Verdict: TRUE — every variable shift is small-constant
+bounded or annotated; the ≥width hazard is absent.
