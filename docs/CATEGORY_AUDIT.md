@@ -16858,3 +16858,22 @@ Verification — all six dynamic-bound sites:
 
 Verdict: TRUE — every dynamic bound is either
 immutable during the loop or strictly monotone.
+
+## Session 2839 update (Socratic pass 1505 — milestone checkpoint)
+
+Milestone gate re-verification — all green:
+
+- `gofmt -l internal cmd` — clean.
+- `go build ./...` — clean.
+- `go vet ./internal/... ./cmd/...` — clean.
+- `go test -count=1` on engine, arbitration, miner,
+  stratum, poolproto{,stratumv1,stratumv2}, metrics,
+  config, rates — 10 legs, all PASS.
+
+Audit posture: ~365 mechanical/invariant census
+classes verified TRUE since the deep-dive phase;
+nine consecutive TRUE verdicts this stretch
+(s2831–s2838) with zero defects. The remaining
+failure classes are unchanged: the recorded Go-pin
+CI class (#1344 rejected) and the repo-settings
+dependency-graph class — no new class observed.
