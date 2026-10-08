@@ -17963,3 +17963,31 @@ Verification:
 
 Verdict: TRUE — no master drift; the branch
 remains merge-ready.
+
+## Session 2893 update (Socratic pass 1558 — `any`-usage census)
+
+Claim under test: `any`/empty-interface usage
+is restricted to genuinely dynamic surfaces
+(JSON-RPC wire types, template data, generics,
+stdlib APIs) — not lazy typing.
+
+Verification (`rg '\bany\b|interface\{\}'`):
+
+- Justified categories only:
+  - **V1 JSON-RPC** (stratumv1): `id`/`result`/
+    `error` fields are wire-dynamic (id may be
+    number or string per stratum convention);
+    `params []any`, `map[string]any` requests —
+    required by the protocol.
+  - **i18n**: `map[string]any` template data
+    (RenderWith) — text/template semantics.
+  - **Generics**: `fanIn[T any]` constraint.
+  - **sync.Pool**: `New func() any` (stdlib).
+  - False positive: english_wordlist.go:137
+    contains the literal word "any".
+- Zero `any` in economics/security-critical
+  typed surfaces (arbitration, engine, config
+  are fully typed).
+
+Verdict: TRUE — `any` is confined to surfaces
+where dynamic typing is structurally required.
