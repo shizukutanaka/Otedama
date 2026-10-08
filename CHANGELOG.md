@@ -9,6 +9,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 2657 — stale claims in the 3.0.0-alpha.1 entry)
+
+Historical entry corrections (the alpha entry itself is preserved; these
+claims no longer describe shipped behavior and were never errata'd):
+
+- "Nightly GitHub Action runs FuzzDecodeHeader and FuzzDecoder_ReadFrame
+  for 30 minutes each, auto-opens issues on crashers" — no nightly or
+  auto-issue job exists; test.yml's `fuzz` job runs `make fuzz` (a brief
+  smoke over all 23 targets) on push/PR only.
+- "PR-time benchstat comparison against main; >5% regression triggers a
+  warning comment" — the `benchmark` job runs `go test -bench=.` and
+  uploads the raw output as an artifact; there is no benchstat step and
+  no threshold comment.
+- "GoReleaser builds signed binaries" — `release.yml` never invokes
+  goreleaser; releases ship plain tarballs + checksums.txt, and no
+  cosign signatures are published (see VERIFY.md and the
+  docs/THREAT_MODEL.md residual-risk note).
+- "Primary branch: master → main" — the default branch is `master`;
+  no `main` ref exists.
+- "V1 is no longer supported" — `internal/poolproto/stratumv1` is a
+  complete working V1 client (stratum+tcp://, stratum+tls://); V1 pool
+  connections dispatch through `poolproto` since session 91.
+- "six parallel checks" for `otedama doctor` — the check set has grown
+  to 17.
+
 ### Fixed (session 2647 — audit-cycle backlog entries)
 
 - `rates.HashrateFetcher` now refuses HTTP redirects, matching the #455
