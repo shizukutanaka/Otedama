@@ -13176,3 +13176,7 @@ All TRUE: every cited surface exists — `otedama doctor`, `wallet verify`/`chan
 ## Session 2636 update (Socratic pass 1302 — solo-operations parity)
 
 **FIX APPLIED ×2:** two session-488 corrections had gone stale on this branch — (1) "fuzzing job does not exist" → false since test.yml:205 gained the `fuzz` job running `make fuzz` (session 1266/#1347); (2) "no govulncheck CI job — Makefile local only" → false since security.yml:56 runs govulncheck per push/PR (session 1265/#1346). Both corrections updated to "updated session 2636" notes keeping the original claim history. Remaining rows verified: cosign dead-code note still TRUE (release.yml never invokes goreleaser), CODEOWNERS sample matches the real file, SHA-pinning doctrine matches ci.yml pins.
+
+## Session 2637 update (Socratic pass 1303 — competitive-analysis parity)
+
+**FIX APPLIED:** failover row claimed "直感的なUIで可能" — no failover UI exists; the real mechanism is `pools[]` YAML/flag list with automatic failover on disconnect (run.go). Qualified in-place. Verified TRUE: DefaultPoolURL = `stratum+v2://public.stratum.slushpool.com:3336` (config.go:54) matching the "SV2 Slushpool public endpoint" claim; non-custody row already qualified (ZKP=v4.0, BIP-39/scrypt/AES-GCM current); session-506 notes (v30 IPC ≠ native SV2; LDK-free wallet; own i18n catalog) all accurate; 10-language i18n catalog exists.
