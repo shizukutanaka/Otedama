@@ -15470,3 +15470,37 @@ Verification:
 Verdict: TRUE — sentinel identity is end-to-end preserved;
 == and errors.Is are interchangeable for every declared
 sentinel, and no wrap point strips identity.
+
+## Session 2784 update (Socratic pass 1450 — durable-write census)
+
+Claim under test: every persistent write that must survive a
+crash uses the temp→write→sync→close→chmod→rename discipline;
+every write that does not is honestly scoped to
+crash-tolerant data.
+
+Verification — full write inventory:
+
+- wallet.dat (lightning/wallet.go:295-331): CreateTemp in the
+  same directory (same filesystem for the rename), Write,
+  Sync, Close with close-error treated as real (final-flush
+  note), Chmod 0600 BEFORE rename (no weak-permission window),
+  Rename. Every failure path removes the temp. Fully atomic +
+  durable.
+- Fingerprint sidecar (wallet.go:172/:227): direct
+  os.WriteFile — non-atomic, but scoped to a once-at-creation
+  integrity file whose torn state degrades to a detected
+  fingerprint mismatch, never a silent false match. Same
+  classification as the s2772 single-writer note.
+- Daemon unit/plist (service.go:217/:318): direct
+  os.WriteFile at 0o600 — system-config output; a torn write
+  produces a broken unit that the service manager reports,
+  not silent bad state.
+- Log rotation (logfile.go:65-84): Close → remove old →
+  Rename → openLocked; on Rename failure falls back to
+  reopening the existing file (documented). Telemetry data —
+  no fsync required.
+
+Verdict: TRUE — the one file that must be crash-durable
+(wallet.dat) uses the full discipline; every other write is
+scoped to data whose torn state is either detected or
+immaterial.
