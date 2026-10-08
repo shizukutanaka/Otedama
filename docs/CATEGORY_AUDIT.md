@@ -17409,3 +17409,22 @@ Verification:
 Verdict: TRUE — zero module drift; the
 3-dependency surface (x/crypto, x/sys,
 go.yaml.in/yaml/v3) is intact.
+
+## Session 2866 update (Socratic pass 1531 — fuzz rotation)
+
+Claim under test: the SV2 handshake decoders
+survive a short adversarial fuzz burst without
+crashes (rotating coverage — s2849 covered
+FuzzDecodeHeader + FuzzDecoder_ReadFrame).
+
+Verification:
+
+- `go test -fuzz=FuzzHandshakeDecoders
+  -fuzztime=25s ./internal/stratum/` →
+  **3,208,120 execs** (~125k/sec), 27 interesting
+  corpus entries, **zero crashes**, PASS.
+
+Verdict: TRUE — handshake decoders hold under
+~3.2M adversarial inputs; cumulative fuzz
+coverage now spans 3 of the 7 stratum targets
+with zero crashes.
