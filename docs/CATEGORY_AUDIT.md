@@ -11070,3 +11070,7 @@ Claim verified: an invalid metric/label name can never reach the wire — isVali
 ## Session 2118 update (Socratic pass 784 — HTTP admin surface)
 
 Claim verified: the admin server can't slowloris, leak pprof, or mask a crash — all four timeouts are set (ReadHeaderTimeout 5s + Read/Write/Idle), pprof is registered on the private mux only when enablePprof (never DefaultServeMux — a goroutine-dump endpoint can't silently ship on a shared mux); handleIndex serves exactly "/" and 404s the rest (no catch-all); readyz is an atomic tri-state, ServeError captures a listener crash for observation rather than dying silently, and Stop bounds the graceful shutdown at 5s. TRUE.
+
+## Session 2119 update (Socratic pass 785 — difficulty↔target bitmath tail)
+
+Claim verified: the difficulty→target conversion can't yield a catch-all or a lie — non-positive AND non-finite difficulty both rejected (`!(difficulty > 0)` catches NaN, IsInf catches ±Inf); the division runs at 256-bit big.Float precision so float64 rounding can't slip a boundary share; both directions reject — non-positive target AND a target exceeding 256 bits (a difficulty→0 can't silently produce "accept everything"); DifficultyFromTarget reports +Inf for a non-positive target rather than panicking or emitting a meaningless 0; and MeetsTarget propagates a malformed nBits error — a bad target descriptor can never accidentally validate a share. TRUE.
