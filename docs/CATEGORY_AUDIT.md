@@ -12845,3 +12845,7 @@ Claim verified: `.github/oss-fuzz-integration.md` stated "met: 21 targets" but t
 ## Session 2558 update (Socratic pass 1224 — .goreleaser.yaml honesty recheck)
 
 Claim verified: the branch-corrected .goreleaser.yaml header is accurate — release.yml confirmed to use plain `go build` + `gh release upload` (lines 106/115/120/150/185/192), so goreleaser is indeed the manual/alternative path requiring operator-provided cosign/cyclonedx-gomod/syft/git-cliff; the signs comment correctly scopes cosign to the checksums trust root; ldflags inject real `internal/version` symbols (matching #1275); name templates consistent with install.sh expectations (#487). TRUE — release-path docs are honest.
+
+## Session 2559 update (Socratic pass 1225 — doctor branch-payload deep check)
+
+Claim verified: the doctor diff is exactly the reviewed payload — panic→Fail conversion inside each fan-out goroutine (per-index-slot write, no race; converts panicking checks into named Fail results preserving the sibling results), `poolproto.SanitizePoolText` applied to Detail and Fix at the Print boundary (closes the pool-controlled-text→terminal injection path), the s2264 stale-comment correction, and +51 lines of regression tests covering both behaviors. TRUE — payload matches the PR contract with proper test coverage.
