@@ -10062,3 +10062,7 @@ Claim verified: CONTRIBUTING.md references exactly four make targets (setup/buil
 ## Session 1868 update (Socratic pass 534 — ADR inventory parity)
 
 Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 (11 files, contiguous numbering, no gaps) plus the index README — CLAUDE.md's "ADR-001〜011" is exact. TRUE.
+
+## Session 1869 update (Socratic pass 535 — G18 metric-unit naming verified)
+
+Claim verified: SPECIFICATION row G18 questioned ms-vs-s consistency. Production metric census: every duration metric carries an explicit unit suffix — `*_seconds` family (productive, uptime, clock_skew, rate_age, last_job, last_reject, share_interval, start_time) plus `otedama_submit_latency_milliseconds` whose ms unit is in the name itself; yield metrics consistently `*_sats_per_second`. No unitless time metric exists, so no silent ms/s confusion is possible on the wire. The deferred naming-convention decision is effectively moot: the shipped convention is already unambiguous-per-metric.
