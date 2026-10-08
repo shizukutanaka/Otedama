@@ -17669,3 +17669,22 @@ Verification (`go test -cover`, fresh run):
 
 Verdict: TRUE — the coverage bar holds on the
 five core packages.
+
+## Session 2880 update (Socratic pass 1545 — fuzz rotation 2)
+
+Claim under test: SV2 message encode→decode
+round-trips survive a short adversarial fuzz
+burst (rotating coverage — s2866 covered
+FuzzHandshakeDecoders).
+
+Verification:
+
+- `go test -fuzz=FuzzMessageRoundTrip
+  -fuzztime=25s ./internal/stratum/` →
+  **3,421,535 execs** (~135k/sec), 4 corpus
+  entries, **zero crashes**, PASS.
+
+Verdict: TRUE — message round-trips hold under
+~3.4M adversarial inputs; cumulative fuzz
+coverage now spans 4 of the 7 stratum targets
+with zero crashes.
