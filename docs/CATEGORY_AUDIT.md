@@ -21223,3 +21223,53 @@ net-rpc/smtp/cgi/mime/
 multipart/scanner/parser/
 ast/html) confirmed
 absent. No strays found.
+
+## Session 2988 update (Socratic pass 1652 — sort/slices/cmp surface)
+
+Claim under test: every
+sort is over a total order
+with an explicit
+tie-break, and the
+modernization is complete
+(zero `sort.*`).
+
+Verification:
+
+- Zero `sort.*` imports —
+  sort.Ints/Strings both
+  migrated to slices.Sort
+  (#619, #1235).
+- `slices.Sort` ×12 —
+  concrete ordered types.
+- `slices.SortFunc` ×2 —
+  arbitration device list
+  (Identity.ID) + metrics
+  exposition entries
+  (name, then key):
+  string comparators,
+  total order.
+- `slices.SortStableFunc`
+  ×1 — arbitration
+  candidates: primary key
+  policyScore descending
+  via `cmp.Compare(sb,sa)`,
+  tie-break stream.ID,
+  stability preserves
+  input order for full
+  ties — deterministic end
+  to end.
+- `cmp.Compare` ×5 +
+  `cmp.Or` ×4 — total-order
+  primitives; float
+  comparators rely on
+  cmp's defined NaN
+  ordering (NaN sorts
+  first), which is
+  deterministic even if a
+  score went non-finite.
+- `slices.Contains` ×1.
+- Zero sort.Interface /
+  sort.Slice / reflect-
+  driven comparators.
+
+Verdict: TRUE.
