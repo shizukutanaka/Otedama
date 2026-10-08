@@ -19796,3 +19796,49 @@ Verification:
 Verdict: TRUE — os is read-only;
 env mutation, identity lookup,
 and chdir are all absent.
+
+## Session 2957 update (Socratic pass 1622 — crypto/* census)
+
+Claim under test: all crypto is
+stdlib `crypto/*` or audited
+`golang.org/x/crypto/*` — no
+homebrew primitives, no weak
+algorithms.
+
+Verification (production imports
+only):
+
+- `crypto/sha256` — miner,
+  btccrypto, lightning seed +
+  wordlist, noise, noise_pool
+- `crypto/sha512` — lightning
+  seed (BIP-39)
+- `crypto/hmac` — lightning
+- `crypto/rand` — engine,
+  lightning, stratum/noise
+- `crypto/aes` + `crypto/cipher`
+  — seedstore AES-GCM
+- `crypto/ecdh` — noise.go
+  (Noise NX)
+- `crypto/tls` + `crypto/x509` —
+  stratumv1 tls, stratum v2tls,
+  doctor probe
+- `crypto/subtle` — wallet.go
+  constant-time passphrase
+  compare
+- `golang.org/x/crypto/pbkdf2` —
+  seed.go
+- `golang.org/x/crypto/scrypt` —
+  seedstore KDF
+- `golang.org/x/crypto/chacha20poly1305` —
+  noise.go AEAD
+- Zero `crypto/md5`, `sha1`,
+  `des`, `rc4`, `rsa`, `dsa`,
+  `elliptic` (production),
+  `subtle` misuse — no homebrew
+  crypto anywhere.
+
+Verdict: TRUE — every primitive
+is stdlib or audited x/crypto;
+crypto/subtle only for constant-
+time comparison.
