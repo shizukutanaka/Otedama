@@ -12014,3 +12014,7 @@ Claim verified: updateShareRates is honest — judged=accepted+rejected with the
 ## Session 2351 update (Socratic pass 1017 — service-definition body honesty)
 
 Claim verified: the generated systemd unit is honest and hardened — Type=simple with quoteToken'd ExecStart tokens, Restart=on-failure/10s, journald output with SyslogIdentifier, and real hardening (NoNewPrivileges, ProtectHome=read-only, PrivateTmp); ReadWritePaths is emitted only when a data dir exists — never a dangling empty directive (service.go:270–291). launchd writes the plist 0600 before `launchctl load -w` (:296–318). TRUE.
+
+## Session 2352 update (Socratic pass 1018 — service-subcommand dispatch honesty)
+
+Claim verified: `otedama service` dispatch is honest — missing subcommand → exitUsage on stderr; `service --help`/`-h`/`help` → stdout + exitOK (explicit help ≠ usage error, service.go:34–41); unknown subcommand → exitUsage with %q echo; install routes flags verbatim into ServiceFlags, manager creation and install errors → exitRuntime; status reports three true states (installed+running / installed+stopped / not-installed-with-guidance) — no fabricated "running" claim (:93–112). TRUE.
