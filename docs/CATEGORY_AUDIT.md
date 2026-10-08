@@ -11054,3 +11054,7 @@ Claim verified: the polling lifecycle can't double-launch, leak a goroutine, or 
 ## Session 2114 update (Socratic pass 780 — systemd unit generation)
 
 Claim verified: the generated systemd unit can't inject, over-privilege, or loop — every interpolated token (binary path, service args, ReadWritePaths data dir) goes through quoteToken (control chars/whitespace can't smuggle a second directive — s454/s809 hardening confirmed live); hardening is real: NoNewPrivileges, ProtectHome=read-only, PrivateTmp, and ReadWritePaths scoped to just the data dir (the daemon can't write outside it even if compromised); Restart=on-failure at bounded 10s avoids a crash-loop flood; serviceArgv only emits flags actually set (an unset option can't leak as an empty-valued flag); and Type=simple + After=network-online.target is correct for a network-bound daemon. TRUE.
+
+## Session 2115 update (Socratic pass 781 — logger singleton lifecycle)
+
+Claim verified: the package-level logger can't race, double-initialize, or be nil-poisoned — the fast path is a plain atomic.Pointer load; the slow path races via CompareAndSwap so exactly one construction wins (a loser returns the winner's pointer, never a second instance); SetDefault refuses nil so no caller can poison the singleton; and Discard() gives tests a real no-op logger rather than a nil that could panic downstream. TRUE.
