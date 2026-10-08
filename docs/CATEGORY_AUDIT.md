@@ -15127,3 +15127,30 @@ programmer error, which is intentionally loud).
 Verdict: TRUE — panic recovery exists exactly where the
 diagnostic tool must outlive a broken check; everywhere else
 programmer-error panics are intended to crash loudly.
+
+## Session 2770 update (Socratic pass 1436 — unbounded-growth census)
+
+Claim under test: no map or slice grows in proportion to
+peer-controlled input without a named bound.
+
+Verification: every external-input-driven structure carries a
+cap.
+
+- s.preAuthQ — preAuthCap=16 FIFO (stratumv1.go:333–338):
+  hostile pre-authorize notification floods cannot grow memory.
+- s.pending RPC ledger — bounded pendingCap; entries live at
+  most until response, 60s call timeout, or session teardown.
+- jobs/jobsOrder (run.go:112–122) — jobsCap=64 FIFO eviction
+  with a debug log per eviction.
+- a.pending/pendingOrder (dialer.go:223/:317) — pendingCap=64
+  FIFO; tip updates additionally invalidate all retained jobs.
+- MerkleBranch (parse.go:89) — element count ≤ the 64KiB line
+  budget, each element strictly validated len==32; total growth
+  proportional to already-bounded input, not to unbounded
+  remote state.
+- Coinbase assembly (stratumv1.go:538–541) — concatenation of
+  already-validated fields within the line ceiling.
+
+Verdict: TRUE — every externally-grown container is either
+FIFO-capped with a named constant or structurally proportional
+to the 64KiB input ceiling.
