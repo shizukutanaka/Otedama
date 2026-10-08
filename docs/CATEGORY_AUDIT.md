@@ -21025,3 +21025,56 @@ a read-only verdict, no
 edits.
 
 Verdict: TRUE.
+
+## Session 2984 update (Socratic pass 1648 — math-package surface)
+
+Claim under test: the
+`math/*` surface is
+guard-dominated — NaN/Inf
+rejection, bit-level float
+views, no complex numbers,
+no production math/rand.
+
+Verification:
+
+- `math` ×21 sites — mostly
+  `math.IsInf` (13), `math.Inf`
+  (17), `math.NaN` (10),
+  `math.IsNaN` (5): the
+  non-finite rejection guards
+  verified in earlier passes.
+- Only ONE production
+  `math.Inf()` call —
+  sha256d.go:263,
+  `DifficultyFromTarget`
+  returns +Inf for a
+  zero/negative target under
+  a documented contract
+  ("income is effectively
+  zero"); all other
+  constructions are test
+  inputs exercising the
+  guards.
+- `math.Float64bits`/
+  `Float64frombits`/
+  `Float32bits`/
+  `Float32frombits` — SV2
+  wire decoders read/write
+  IEEE-754 bit patterns; the
+  defined-behavior path, not
+  pointer casts.
+- `math/big` ×9 — sha256d
+  nBits/difficulty, base58,
+  crypto jitter.
+- `math/rand` — test-only
+  (3 files, all _test.go);
+  zero production.
+- `math/bits`, `math/cmplx`
+  — absent.
+- `math.Trunc` (V1 en2) +
+  `math.Max` (arbitration
+  floor) — verified.
+- `math.Abs` ×6 — skew and
+  power math.
+
+Verdict: TRUE.
