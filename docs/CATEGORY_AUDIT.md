@@ -12929,3 +12929,7 @@ Claim verified: CLAUDE.md's diff is honest map upkeep — `wallet` subcommand ad
 ## Session 2578 update (Socratic pass 1244 — ledger-append integrity + research-doc integrity)
 
 Claim verified: CHANGELOG.md is a pure +296-line append (zero content deletions) — honest-ledger invariant holds. RESEARCH_IMPROVEMENTS.md's 84 removed lines are all stale "next action" table entries replaced by its maintained priority index (within that doc's own convention — it is the research synthesis layer, not the verdict ledger); the surviving body has 212 status-marked items across 10 domains with honest 🟡/🔵/✅/❌ marking and 271 session citations. The docs-payload verification is now complete: all 10 files' diffs audited, two real defects fixed (THREAT_MODEL + AUDIT_CHECKLIST x/sys undercounts).
+
+## Session 2579 update (Socratic pass 1245 — branch + forbidden-path invariant recheck)
+
+Claim verified: `origin/master` still at `40da2e51` (unchanged this stretch); the branch is a strict descendant (942 commits ahead, clean fast-forward merge). The forbidden-path census over the full diff confirms ZERO files under `internal/providers/`, `internal/auth/`, `internal/render/`, `internal/scientific/`, `internal/observability/`, `internal/security/`, `pkg/`, `web/`, `k8s/`, or `cmd/otedamad/` — the architecture map holds. TRUE.
