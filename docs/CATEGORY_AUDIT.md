@@ -35867,3 +35867,158 @@ census:
   API.
 
 Verdict: TRUE.
+
+## Session 3153 update (Socratic pass 1817 — fmt + strconv detail ledger)
+
+Claim under test: the
+fmt
+surface is
+Errorf/
+Sprintf/
+Fprintf
+dominated
+and
+strconv
+is
+FormatUint/
+ParseUint/
+ParseFloat —
+no
+Scan
+family
+in
+production
+code.
+
+Verification —
+census:
+
+- `fmt.Errorf`×260 —
+  the
+  dominant
+  error
+  constructor
+  (%w
+  chaining
+  ×111
+  measured
+  in
+  the
+  verb
+  census).
+- `fmt.Sprintf`×211 —
+  error
+  text,
+  metric
+  labels,
+  display
+  formatting.
+- `fmt.Fprintf`×74 +
+  `Fprintln`×16 +
+  `Fprint`×10 —
+  output
+  writes
+  (usage
+  text,
+  doctor
+  reports,
+  config
+  display).
+- `fmt.Sscanf`×0
+  real —
+  the
+  sole
+  hit
+  is
+  `fetcher.go:52`'s
+  comment
+  documenting
+  why
+  `ParseFloat`
+  is
+  used
+  instead
+  ("Sscanf
+  is
+  greedy").
+- ZERO
+  `fmt.Printf`,
+  `Println`,
+  `Print`,
+  `Fscanf`,
+  `Fscan`,
+  `Scan`,
+  `Scanln`,
+  `Scanf`,
+  `fmt.Formatter`,
+  `fmt.GoStringer` —
+  no
+  bare-stdout
+  writes,
+  no
+  scan
+  parsing.
+- `strconv.FormatUint`×10 +
+  `ParseUint`×7 —
+  wire
+  numbers
+  (all
+  ParseUint
+  bitSize=32,
+  verified).
+- `strconv.ParseFloat`×6 —
+  price/rate
+  parsing.
+- `strconv.Atoi`×2 —
+  `config.go:810`
+  (range-
+  validated
+  port)
+  +
+  `stratumv1/parse.go:293`
+  (port
+  field
+  from
+  SplitHostPort).
+- `strconv.Itoa`×1 —
+  `runtime.go:57`
+  goroutine
+  gauge.
+- `strconv.Quote`×1 —
+  `service.go:502`
+  service
+  argv
+  quoting.
+- ZERO
+  `strconv.ParseInt`,
+  `ParseBool`,
+  `FormatInt`,
+  `FormatFloat`,
+  `FormatBool`,
+  `Unquote`,
+  `QuoteToASCII`,
+  `AppendUint`,
+  `AppendInt`,
+  `AppendFloat`,
+  `AppendQuote`,
+  `NumError`,
+  `ErrSyntax`,
+  `ErrRange`,
+  `UnquoteChar`,
+  `QuotedPrefix`,
+  `CanBackquote`,
+  `IsPrint` —
+  only
+  the
+  six
+  parse/
+  format
+  verbs
+  above
+  are
+  in
+  the
+  production
+  surface.
+
+Verdict: TRUE.
