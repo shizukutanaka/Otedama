@@ -17017,3 +17017,26 @@ Verification (`git diff --name-only origin/master..HEAD`):
 
 Verdict: TRUE — payload surface unchanged in kind;
 no foreign files.
+
+## Session 2847 update (Socratic pass 1512 — binary smoke re-verification)
+
+Claim under test: a fresh build still honors the
+CLI contract — version honesty, config-validate
+failure reporting, doctor flag surface.
+
+Verification on a fresh `go build ./cmd/otedama`:
+
+- `otedama version` — prints
+  `v3.0.0-alpha.1-dev (unknown) built unknown with
+  go1.27.1 for darwin/arm64`: the honest ldflags
+  defaults hold (unversioned dev build is plainly
+  marked, not masquerading as a release).
+- `otedama config validate` on an empty config —
+  fails with the clear "bitcoin_address is required"
+  message naming all three set-paths (flag, env,
+  file). The exit-78 contract was previously
+  verified and is unchanged in code.
+- `otedama doctor --help` — flag surface intact.
+
+Verdict: TRUE — binary contract holds on the
+current tree.
