@@ -12070,3 +12070,7 @@ Claim verified: every pools[i] entry is validated at config load — empty URL f
 ## Session 2365 update (Socratic pass 1031 — doctor ExitCode + dual-channel honesty)
 
 Claim verified: ExitCode is computed exactly once in Report.ExitCode (doctor.go:111–131) — StatusFail dominates StatusWarn dominates all else, StatusSkip counts toward exit 0 ("passed or skipped"); both output channels share it: Print sanitizes Detail/Fix through poolproto.SanitizePoolText at the terminal boundary (:137–139) while WriteJSON deliberately does NOT sanitize — the JSON encoder escapes control bytes as \u00XX so raw detail is preserved losslessly yet inert for machine consumers (:189–195); doc.ExitCode mirrors ExitCode() so a script can act without re-deriving the verdict (:213); per-status counters identical in both paths. TRUE.
+
+## Session 2366 update (Socratic pass 1032 — V1 write-path serialization + bounded wait)
+
+Claim verified: writeMu guards SetWriteDeadline+Write as one unit (stratumv1.go:719–722) — no deadline clobber mid-flight and each JSON-RPC line is a single Write so frames can't interleave; 10s write deadline so a wedged conn can't hold the mutex forever; on write error the pending[id] entry is deleted before returning — no channel leak or zombie waiter for a request that never left the box (:724–728); the response wait is bounded at callTimeout 60s with defer timer.Stop() so a live-but-silent pool can't leak the goroutine or pending entry for the session's life (:731–740); IDs come from atomic nextID. TRUE.
