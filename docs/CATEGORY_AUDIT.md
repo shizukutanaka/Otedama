@@ -13280,3 +13280,7 @@ Corrected: benchmark CI paragraph still said "every push to main" (no main ref �
 ## Session 2662 update (Socratic pass 1328 — CONTRIBUTING.md environment section)
 
 Corrected: the session-495 erratum described the go.mod layout as "`go 1.22` + `toolchain go1.24.0`" — the toolchain line has since been removed and go.mod declares `go 1.24.0` directly (godebug block preserved). Updated the correction text itself to the current state while noting the layered history. claim corrected: CONTRIBUTING.md
+
+## Session 2663 update (Socratic pass 1329 — stale go.mod layout descriptions)
+
+Corrected docs/SUSTAINABILITY.md:28 — still described "`go 1.22` baseline + `toolchain go1.24.0` pin" but the toolchain line was removed when the language floor caught up; go.mod now declares `go 1.24.0` directly. Same stale-layout class as the CONTRIBUTING.md fix (s2662). Verified TRUE meanwhile: GODEBUG_NOTES.md's "previously carried" phrasing is accurate history, BENCHMARKS Go-1.22 measurement environment carries an honest caveat, RESEARCH_IMPROVEMENTS ledger rows are historical records. claim corrected: docs/SUSTAINABILITY.md
