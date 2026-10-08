@@ -38811,3 +38811,130 @@ census:
   way).
 
 Verdict: TRUE.
+
+## Session 3173 update (Socratic pass 1837 — math/big/rand/bits ledger)
+
+Claim under test: every
+production
+random
+source
+is
+`crypto/rand`;
+`math/rand`
+is
+test-
+only
+seeded
+fixtures;
+float
+validation
+is
+`math.IsNaN`/
+`IsInf`
+first-
+class;
+`math/bits`
+unused.
+
+Verification —
+census:
+
+- `crypto/rand`
+  in
+  production:
+  `rand.Reader`×~13
+  prod
+  (seed/nonce/
+  handshake),
+  `rand.Int`×2
+  (run.go:486
+  nonce
+  pick,
+  setup.go:297
+  jitter);
+  `rand.Read`
+  ZERO
+  in
+  prod
+  (all
+  6
+  are
+  lightning
+  test
+  entropy
+  fills
+  via
+  crypto/rand).
+- `math/rand`:
+  TEST-
+  ONLY —
+  `rand.New(rand.NewSource(seed))`
+  ×8
+  in
+  arbitration
+  engine_test/
+  fuzz_test
+  +
+  lightning
+  fuzz_test;
+  `rand.Rand`
+  receiver
+  ×4
+  test
+  helpers;
+  ZERO
+  in
+  production
+  code.
+- `math`:
+  `Inf`×19
+  +
+  `IsInf`×16
+  +
+  `NaN`×11
+  +
+  `IsNaN`×11
+  (non-
+  finite
+  guard
+  rail
+  construction),
+  `Float64bits`×7/
+  `Float64frombits`×5/
+  `Float32bits`×2/
+  `Float32frombits`×1
+  (canonical
+  float
+  labels
+  +
+  wire
+  bitmath),
+  `Abs`×6,
+  `Trunc`×1,
+  `MaxFloat64`×1,
+  `Max`×1.
+  ZERO:
+  `Pow`/`Sqrt`/`Exp`/`Log`/`Mod`/`Floor`/`Ceil`/`Pi`/`E`/trig —
+  no
+  transcendental
+  math
+  anywhere.
+- `math/big`:
+  `Int`×12,
+  `NewInt`×9,
+  `Float`×4,
+  `NewFloat`×1 —
+  nBits↔target↔difficulty
+  arithmetic.
+  ZERO:
+  `Rat`,
+  `Scan`,
+  `GobEncode`.
+- `math/bits`:
+  ZERO —
+  no
+  bit
+  intrinsics
+  needed.
+
+Verdict: TRUE.
