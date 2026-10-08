@@ -11962,3 +11962,7 @@ Claim verified: ServiceStatus can't misreport — Installed is a filesystem stat
 ## Session 2338 update (Socratic pass 1004 — clock-abstraction contract honesty)
 
 Claim verified: clock.Fake is RLock-guarded on Now and write-locked on Set/Advance (clock.go:84–108) — concurrency-safe; the contract honestly documents that Set AND negative Advance move time backward (:92–95, :103–104) and warns production code not to assume monotonic ordering rather than pretending a guarantee it doesn't give. Compile-time satisfaction checks exist for both impls (:112+). TRUE.
+
+## Session 2339 update (Socratic pass 1005 — HAL registry guard completeness)
+
+Claim verified: HAL Registry's edge behavior is fully honest — zero value is documented-unusable forcing NewRegistry (registry.go:18–30); Register rejects nil driver, empty name, and duplicates with errors (never silent replace) (:38–52); Drivers() hands a sorted fresh snapshot callers can mutate freely (:60–80); Lookup is comma-ok (:86–92); NewDetector substitutes an empty registry for nil (:115–123) instead of panicking. TRUE.
