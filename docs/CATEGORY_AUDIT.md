@@ -14877,3 +14877,24 @@ Verification: trailing-`&name` sites + range-loop usage.
 
 Verdict: TRUE — zero aliasing captures; the dispatch-table &v is
 the correct escape idiom.
+
+## Session 2760 update (Socratic pass 1426 — milestone checkpoint)
+
+Milestone gate re-verified at HEAD (55c3fdcd8..bfc-bump): gofmt
+reports zero files, `go build ./...` clean, `go vet
+./internal/... ./cmd/...` clean, `go test -count=1` all 24
+package legs PASS — engine 25.1 s, lightning 11.9 s, doctor
+7.1 s, cmd/otedama 2.7 s.
+
+Census arc since s2740: variable-size allocations (bound-before-
+alloc holds — extranonce2_size double-gated at parse+use),
+non-string map keys (all exact-width integral), time.Sleep (one
+10 ms idle-poll inside the ctx-checked grind loop), file handles
+(3 owners, zero leaks), http.Client (all bounded+redirect-proof),
+slices/maps modernization (legacy sort surface zero), endianness
+(65/65 LittleEndian helpers), errors.Is/As (sentinels only),
+wrap verbs (%w for chains, %v for payloads), defer-in-loop
+(all function/goroutine-scoped), address-capture (zero aliasing;
+the frameDecoders &v idiom verified as per-call escape).
+
+Status: ledger-only cycle continues; no defects found.
