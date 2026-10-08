@@ -10334,3 +10334,7 @@ Claim verified: satsAccountant integrates the arbitration expected-yield (sats/s
 ## Session 1936 update (Socratic pass 602 — telemetry windows)
 
 Claim verified: LatencyTracker is a mutex-guarded 256-sample ring; negative samples are rejected; Quantile does nearest-rank on a sorted copy — exact within the retained window (no streaming-estimator error), index clamps make the q≤0/q≥1 endpoints fall out on a single code path, and sorting happens after the lock is released. hashrateWindow returns 0 — never negative/NaN — on counter reset (reconnect), baseline-primed on first observe. TRUE.
+
+## Session 1937 update (Socratic pass 603 — reject classification math)
+
+Claim verified: rejectClass checks canonical SV2 SubmitSharesError codes before substring heuristics ("invalid-job-id" is stale-class, not hardware — correct per spec); transitionReject guards on the "difficulty" category and refuses a zero issued-target (a synthetic share cannot establish an epoch); acceptanceRate returns 1.0 with zero judged shares (no 0/0 catastrophe reading); effectiveYield multiplies forecast yield by the productive-time fraction so a stalled miner shows a net-of-downtime number, not an unchanged quote. TRUE.
