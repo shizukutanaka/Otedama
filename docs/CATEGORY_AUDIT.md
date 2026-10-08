@@ -34142,3 +34142,135 @@ census:
   test-only.
 
 Verdict: TRUE.
+
+## Session 3142 update (Socratic pass 1806 — os file I/O detail ledger)
+
+Claim under test: the
+persistent
+file
+surface is
+Stat-first
+reads +
+atomic
+rename
+writes —
+with
+os.Create,
+RemoveAll,
+Symlink,
+and
+Truncate
+all
+zero.
+
+Verification —
+census:
+
+- `os.Stat`×10 —
+  the
+  Stat-first
+  fleet
+  (wallet/datadir
+  existence
+  gates;
+  verified
+  stat-toctou
+  class).
+- `os.Remove`×9 —
+  stale-temp
+  sweeps
+  and
+  service
+  uninstall.
+- `os.ReadFile`×8 —
+  config,
+  CA
+  bundle,
+  wallet,
+  wordlist
+  reads.
+- `os.MkdirAll`×5 —
+  datadir/
+  config
+  creation
+  (0700
+  verified).
+- `os.WriteFile`×4 —
+  service
+  definitions
+  (0600
+  +
+  nolint
+  annotations).
+- `os.Rename`×2 —
+  the
+  atomic
+  swap
+  pattern:
+  `logfile.go:74`
+  rotation
+  +
+  `wallet.go:327`
+  wallet.dat
+  (chmod-before-
+  rename
+  verified).
+- `os.ReadDir`×2 —
+  the
+  stale-temp
+  sweep
+  enumeration.
+- `os.OpenFile`×1 —
+  `logfile.go:41`
+  `O_CREATE|O_WRONLY|O_APPEND`
+  `0600`.
+- `os.Open`×1 —
+  `configfile.go:29`
+  config
+  read.
+- `os.CreateTemp`×1 —
+  `wallet.go:295`
+  `.wallet-*.tmp`
+  (the
+  atomic-save
+  pattern).
+- `os.Chmod`×1 —
+  `wallet.go:321`
+  chmod-before-
+  rename.
+- `filepath.EvalSymlinks`×2 —
+  `hal/gpu_linux.go:80`
+  DRM
+  canonicalization
+  +
+  `daemon/service.go:88`
+  binary
+  canonicalization.
+- ZERO
+  `os.Create`
+  (all
+  file
+  creation
+  uses
+  OpenFile/
+  CreateTemp/
+  WriteFile
+  with
+  explicit
+  perms),
+  `os.RemoveAll`,
+  `os.Lstat`,
+  `os.Symlink`,
+  `os.Readlink`,
+  `os.Truncate`,
+  `os.Chtimes`,
+  `os.Link`,
+  `os.MkdirTemp`,
+  `os.TempDir`,
+  `os.Mkdir`×bare —
+  residual
+  file
+  mutation
+  absent.
+
+Verdict: TRUE.
