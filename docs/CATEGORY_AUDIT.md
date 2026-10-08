@@ -10230,3 +10230,7 @@ Claim verified: the default logger lives in atomic.Pointer[Logger] (logger.go:19
 ## Session 1910 update (Socratic pass 576 — ADR-009 periodic ecosystem recheck)
 
 Periodic recheck (prior: s1897-era tracking): sv2-apps tag set tops out at v0.8.0 (7f490743) — no newer release; SRI latest = v1.12.0 on stratum-mining/stratum. Otedama's wire layer remains compatible with the current normative set; sv2-spec's tracked open items (#203 non-custodial payout debate, #238 optional SetupConnection flags — the latter already implemented upstream in sv2-apps #131, and our subset-flags validation stays forward-compatible) need no code delta today. TRUE.
+
+## Session 1911 update (Socratic pass 577 — arbitration Decide input hygiene)
+
+Claim verified: Decide rejects nil input, invalid Policy, non-negative/non-finite HysteresisMargin and MinYieldSatsPerSec, and duplicate device IDs (no silent dedup); sorts devices by ID for deterministic output; uses Previous only for hysteresis/switch detection; and tracks HeldIdle when a device that had a prior assignment is left idle. engine.go:307–360 clean. TRUE.
