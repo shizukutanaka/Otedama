@@ -10026,3 +10026,7 @@ Re-verified live: **sv2-apps latest is v0.8.0** (2026-09-17, Loupe-audit hardeni
 ## Session 1859 update (Socratic pass 525 — skills/ inventory parity)
 
 Defects found and fixed: CLAUDE.md's architecture map enumerated `skills/` as four files (tdd/code-review/security-audit/release-procedure) but the directory actually holds six — `quality-pass-opus.md` and `quality-pass-sonnet.md` (the quality-pass continuation instructions) were undocumented. The map's enumerated comments are meant to be complete inventories; added the two files to the listing. No other skills/ or top-level inventory drift found.
+
+## Session 1860 update (Socratic pass 526 — cmd/otedama inventory parity)
+
+Defects found and fixed: same inventory class as s1859 — CLAUDE.md's cmd/otedama comment enumerated six subcommands (run/version/config/service/doctor/completion) but `wallet` (shipped session 418, PR #529: recovery-phrase verify + passphrase rotation) was missing. Added it. The source file count (10 incl. main/logfile/configfile helpers) is consistent with the parenthetical convention — only user-facing subcommands are enumerated.

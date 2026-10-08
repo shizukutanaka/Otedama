@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1860 — CLAUDE.md)
+
+- Architecture map: added the shipped `wallet` subcommand (PR #529) to the `cmd/otedama` enumeration.
+
 ### Fixed (session 1859 — CLAUDE.md)
 
 - Architecture map: added `quality-pass-{opus,sonnet}.md` to the `skills/` inventory comment — the two files exist but were undocumented.
