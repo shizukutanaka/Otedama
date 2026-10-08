@@ -18044,3 +18044,32 @@ Verification (`rg '//go:'`):
 Verdict: TRUE — build-tag surface is a clean
 exhaustive partition; nothing else hooks the
 compiler.
+
+## Session 2896 update (Socratic pass 1561 — grind-loop hot-path audit)
+
+Claim under test: the miner's inner hashing
+loop performs zero allocation and zero I/O
+per nonce.
+
+Verification (worker.go:288-331):
+
+- `h := localWork.Header` — header copied by
+  value once per 1024-nonce batch; the loop
+  mutates only `h.Nonce`/`h.Time` on-stack.
+- Per nonce: `HashHeader(&h)` (value return),
+  `hashCount.Add(1)` (atomic), `LessOrEqual`
+  compare — no fmt/log/alloc/syscall.
+- Share found → one Share struct + non-blocking
+  `select` send; drops counted by
+  `dropCount.Add(1)` — observable, never
+  blocks the loop.
+- Nonce wrap (`nonce < prev`) → `ntimeRoll++`
+  and `h.Time` re-derives from the job's base
+  — distinct headers after 2^32 wrap.
+- Batch boundary rechecks workVer + ctx every
+  1024 nonces (documented responsiveness
+  trade-off).
+
+Verdict: TRUE — hot path is alloc-free and
+IO-free; share delivery is bounded-loss with
+observability.
