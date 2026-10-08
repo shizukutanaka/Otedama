@@ -10346,3 +10346,7 @@ Claim verified: incumbentHold requires the challenger to beat the incumbent's ow
 ## Session 1939 update (Socratic pass 605 — policyScore metric coherence)
 
 Claim verified: policyScore returns yield-shaped values under every policy — StackBTC applies the bounded 1.05 bonus only to BTC-native streams, privacy/environment scale by rating×0.01 (max +10%), earnings is the identity — so the hysteresis margin in incumbentHold always compares like-for-like in the same policy-adjusted metric (the invariant documented at :39-43). TRUE.
+
+## Session 1940 update (Socratic pass 606 — milestone checkpoint)
+
+Claim verified: branch remains green — go build ./... = 0 errors, go vet ./... = 0 findings, gofmt -l = clean, and the engine/doctor/arbitration test packages all PASS. 606 passes into the Socratic cycle, ~0 real defects per ~30 verified claims on this cycle. TRUE.
