@@ -38298,3 +38298,105 @@ census
   returns.
 
 Verdict: TRUE.
+
+## Session 3168 update (Socratic pass 1832 — builtin-identifier shadow ledger)
+
+Claim under test: no
+variable,
+parameter,
+or
+range
+name
+shadows
+a
+builtin
+identifier
+(`len`,
+`cap`,
+`new`,
+`make`,
+`error`,
+`byte`,
+`nil`,
+`min`,
+`max`,
+`any`,
+`comparable`,
+`clear`,
+`close`,
+`copy`,
+`append`,
+`delete`,
+`print`,
+`real`,
+`imag`,
+`complex`,
+`string`,
+`int`,
+`bool`,
+`rune`,
+`iota`,
+`true`,
+`false`).
+
+Verification —
+census:
+
+- `IDENT :=|=`
+  census
+  for
+  every
+  builtin
+  name
+  returned
+  only
+  string/
+  comment/
+  field-
+  tail
+  hits:
+  `"len = %d"`
+  format
+  strings,
+  `"min = %v"`/
+  `"error = %q"`
+  assertion
+  text,
+  `nil = silent`
+  comment,
+  `Version byte = 0x01`
+  field
+  decl,
+  `maxLen=`/
+  `strLen=`
+  tails.
+- Function
+  declarations
+  named
+  after
+  builtins:
+  ZERO
+  (`func new(`,
+  `func len(`,
+  `func error(`,
+  etc.
+  all
+  absent).
+- Range
+  variable
+  names:
+  `i`,
+  `ca`,
+  `w`,
+  `ch`,
+  `a`,
+  `tt`,
+  `job`,
+  `line`
+  —
+  none
+  collide
+  with
+  builtins.
+
+Verdict: TRUE.
