@@ -48,8 +48,9 @@ file previously carried `go 1.22` + `toolchain go1.24.0`; the split
 was collapsed once the language minimum caught up with the toolchain
 requirement.)
 
-The `go` line is bumped roughly once a year, six months after each
-Go minor's release, on a dedicated PR.
+The `go` line is bumped twice a year, roughly six months after each
+Go minor's release, on a dedicated PR — see "Process for upgrading
+the `go` directive" below.
 
 ## Active knobs
 
@@ -75,8 +76,9 @@ As of 2026-04-30:
 - **`randautoseed=1`** — keep Go 1.20+'s auto-seeding of `math/rand`
   from a cryptographically random source (rather than the historical
   fixed seed 1). Otedama does not rely on `math/rand`'s determinism
-  for anything security-relevant (`crypto/rand` is used there;
-  `math/rand/v2` only for non-security uses), so this pin also has no
+  for anything security-relevant (`crypto/rand` is used there; the
+  only `math/rand` in the tree is v1, in test files — fuzz seeds and
+  engine tests; `math/rand/v2` is unused), so this pin also has no
   observable effect today — same visibility rationale as `panicnil`.
 
 ## Knobs we may need in the next 10 years

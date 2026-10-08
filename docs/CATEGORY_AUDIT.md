@@ -13360,3 +13360,7 @@ claim corrected: sonnet task-queue row 2 "依存3件更新" is stale — all thr
 ## Session 2682 update (Socratic pass 1348 — .github/pull_request_template.md)
 
 claim verified: .github/pull_request_template.md (60 lines) — TRUE. Every referenced artifact exists: CONTRIBUTING.md, CLAUDE.md, skills/tdd.md, CHANGELOG.md `[Unreleased]` section, NOTICE, .golangci.yml for the lint checkbox. Legal-compliance section's SPDX claim matches the actual two-line `// SPDX-License-Identifier: Apache-2.0` header present on .go files (verified s1192); DCO sign-off requirement consistent with CONTRIBUTING.md. No stale claims — template is prescriptive-only.
+
+## Session 2683 update (Socratic pass 1349 — GODEBUG_NOTES.md full pass)
+
+claim corrected ×2: (a) "go line is bumped roughly once a year" contradicted the file's own upgrade process section ("bumped twice a year") — harmonized to twice-yearly, matching Go's Feb+Aug minor cadence. (b) "math/rand/v2 only for non-security uses" was inaccurate on two counts — `math/rand/v2` appears nowhere in the tree, and the only `math/rand` present is v1 in test files (internal/lightning/fuzz_test.go, internal/arbitration/fuzz_test.go+engine_test.go). Corrected to name v1-in-tests + v2-unused. Verified TRUE alongside: go.mod baseline block matches (:32-40), no toolchain line confirmed, tlsmlkem rename history accurate, release CI pin '1.23.x' + GOTOOLCHAIN=auto→go1.24.0 reasoning sound, fips140 section consistent with THREAT_MODEL note.
