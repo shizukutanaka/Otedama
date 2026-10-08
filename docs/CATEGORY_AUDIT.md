@@ -32971,3 +32971,197 @@ census:
   only.
 
 Verdict: TRUE.
+
+## Session 3134 update (Socratic pass 1798 — template/embed/exec/signal + residual packages)
+
+Claim under test: the
+remaining package
+surface is
+template.New×1 +
+exec.Command×5 +
+signal.NotifyContext×1 —
+with go:embed,
+netip, url,
+and every
+absent
+package
+still
+zero.
+
+Verification —
+census:
+
+- `template.New`×1 —
+  the
+  sole
+  template
+  site
+  (`internal/i18n/message.go:334`
+  `RenderWith`
+  —
+  trusted
+  bundle
+  text
+  only;
+  verified
+  i18n
+  class).
+- `exec.Command`×5 —
+  the
+  daemon
+  sites
+  (`systemctl
+  show-environment`,
+  `is-active`,
+  `launchctl
+  list`,
+  `sc.exe
+  query`,
+  shared
+  helper
+  —
+  verified
+  exec-argv
+  class:
+  fixed
+  binary +
+  argv).
+- `signal.NotifyContext`×1 —
+  the
+  single
+  root
+  signal
+  wiring
+  in
+  main
+  (verified
+  signal-
+  surface
+  class).
+- `go:embed` —
+  ZERO
+  hits;
+  the
+  i18n
+  catalogs
+  are
+  hand-written
+  Go
+  maps
+  (`en.go`,
+  `ja.go`,
+  `zh.go`,
+  ...)
+  not
+  embedded
+  files,
+  so
+  the
+  embed
+  directive
+  is
+  genuinely
+  absent.
+- ZERO
+  `text.`×all
+  (the
+  earlier
+  `text.*`
+  hits
+  were
+  `context.`
+  suffix
+  matches
+  —
+  re-verified
+  with
+  the
+  `[^A-Za-z]`
+  boundary),
+  `netip.*`,
+  `url.*`,
+  `user.*`,
+  `mime.*`,
+  `html.*`,
+  `container.*`,
+  `expvar.*`,
+  `plugin.*`,
+  `compress.*`,
+  `archive.*`,
+  `image.*`,
+  `database.*`,
+  `go/types`,
+  `go/parser`,
+  `go/ast`,
+  `debug/*`,
+  `index/*` —
+  no
+  other
+  package
+  in
+  the
+  tree.
+- ZERO
+  `template.Parse`,
+  `template.Must`,
+  `template.ParseFiles`,
+  `template.ParseFS`,
+  `template.ParseGlob`,
+  `template.HTMLEscape`,
+  `template.JSEscape`,
+  `template.URLQueryEscaper`,
+  `template.HTML`,
+  `template.HTMLAttr`,
+  `template.JS`,
+  `template.JSStr`,
+  `template.URL`,
+  `template.Srcset`,
+  `template.CSS`,
+  `template.FuncMap`,
+  `template.IsTrue` —
+  residual
+  template
+  absent;
+  `html/template`
+  is
+  never
+  imported.
+- ZERO
+  `signal.Notify`,
+  `signal.Stop`,
+  `signal.Reset`,
+  `signal.Ignore`,
+  `signal.Ignored`,
+  `signal.Signal`×more —
+  residual
+  signal
+  API
+  absent;
+  the
+  single
+  NotifyContext
+  is
+  the
+  whole
+  surface.
+- ZERO
+  `exec.CommandContext`,
+  `exec.LookPath`,
+  `exec.Cmd`×type,
+  `exec.Error`,
+  `exec.ExitError`,
+  `exec.ErrDot`,
+  `exec.ErrNotFound`,
+  `exec.ErrWaitDelay` —
+  residual
+  exec
+  absent;
+  every
+  call
+  is
+  the
+  fixed-argv
+  `Command`
+  form.
+
+Verdict: TRUE.
