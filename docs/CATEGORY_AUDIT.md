@@ -38400,3 +38400,104 @@ census:
   builtins.
 
 Verdict: TRUE.
+
+## Session 3169 update (Socratic pass 1833 — sentinel error ledger)
+
+Claim under test: the
+sentinel
+error
+surface
+is
+11
+exported
+sentinels
+plus
+~25
+unexported
+leaf
+errors,
+matched
+by
+`errors.Is`/
+`errors.As`
+exclusively —
+zero
+string-
+equality
+checks,
+zero
+`errors.Unwrap`.
+
+Verification —
+census:
+
+- Exported
+  sentinels
+  ×11:
+  `poolproto.ErrUnknownProtocol`,
+  `ErrHandshakeFailed`,
+  `ErrShareRejected`;
+  `btccrypto.ErrUnknownScheme`,
+  `ErrInvalidPublicKey`,
+  `ErrInvalidSignature`,
+  `ErrSchemeNotImplemented`,
+  `ErrNotBech32`,
+  `ErrNotBase58`,
+  `ErrUnrecognisedAddress`;
+  `lightning.ErrWrongPassphrase`.
+- `errors.New`×36
+  total —
+  the
+  11
+  exported
+  sentinels
+  plus
+  ~25
+  unexported
+  `errXxx`
+  leaf
+  errors
+  (all
+  leaf
+  constructors).
+- `errors.Is`×22 —
+  every
+  sentinel/
+  wrapped
+  comparison;
+  ZERO
+  `errors.Unwrap`
+  (no
+  manual
+  chain
+  walking).
+- `errors.As`×1 —
+  the
+  typed-
+  error
+  extraction
+  site.
+- `errors.Join`×2 —
+  the
+  two
+  multi-
+  error
+  folds.
+- `fmt.Errorf`×260 —
+  all
+  message
+  errors
+  (`%w`
+  where
+  wrapping).
+- ZERO
+  `== err`-style
+  identity
+  comparisons
+  against
+  sentinels
+  (earlier
+  `errors.Is/As`
+  sweep).
+
+Verdict: TRUE.
