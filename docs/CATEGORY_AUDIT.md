@@ -15414,3 +15414,31 @@ Verification: ~14 `== ""` decision points.
 Verdict: TRUE — every zero value has a single, documented
 meaning at its boundary; provenance tracking prevents a
 lower-layer "" from masquerading as a higher-layer setting.
+
+## Session 2782 update (Socratic pass 1448 — named-bound consistency census)
+
+Claim under test: every security- or protocol-relevant numeric
+bound is a named constant, not a scattered magic literal.
+
+Verification: every bound found is named — arbitrationInterval,
+poolSilenceTimeout, poolDialTimeout, handshakeTimeout, jobsCap,
+submitTimesCap, submitRateInterval, submitBurst,
+maxLineBytes (64 KiB), preAuthCap (16),
+maxReconnectWaitSeconds (300), maxExtranonce2Size (64),
+maxNoticeRunes/maxPoolTextRunes (256), pendingCap (64),
+MinQuoteInterval, CacheDuration, HashrateCacheDuration,
+maxPlausibleRateUSD/maxPlausibleHashrate, clockSkewWarn/Fail
+thresholds, maxReachabilityProbes, streamStaleTimeout,
+defaultHysteresisPct, seedstore maxLen, hashrate body cap.
+
+Duplication issue (recorded per CLAUDE.md rule 3 — log first,
+no immediate fix): the literal `3600` (share-interval
+starvation threshold, 1 h) appears twice at run.go:1088 and
+run.go:1638 — same semantic constant in two places; and the
+`10 * time.Second` write deadline at run.go:2013 is a bare
+literal sibling of the named poolDial/handshake timeouts.
+Cosmetic; a future maintainer pass can hoist both into named
+constants in one edit.
+
+Verdict: TRUE — bound policy is named and single-sourced
+everywhere except the two recorded literal duplications.
