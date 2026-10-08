@@ -10908,3 +10908,7 @@ Claim verified: job assembly and the share path can't be corrupted by pool input
 ## Session 2078 update (Socratic pass 744 — V1 RPC call ledger)
 
 Claim verified: an unresponsive pool can't leak goroutines or pending entries — the pending response channel is registered BEFORE the write (a response can never arrive unclaimed); the write itself runs under writeMu with a 10s deadline; every exit path — write error, ctx cancel, 60s callTimeout — deletes the pending entry so a pool that keeps the TCP alive but stops answering releases the goroutine and the ledger slot; the buffered cap-1 channel means the responder never blocks delivering; and a session close (cancelPending) surfaces as "session closed before response," not a hang. TRUE.
+
+## Session 2079 update (Socratic pass 745 — V1 notify strictness)
+
+Claim verified: a malformed notify can't produce silent wasted work — decodeNotifyJob rejects empty/malformed coinb1+coinb2, non-32-byte merkle branches, unparseable version/nbits/ntime, and a malformed prevhash (every one would zero-fill into a job whose shares all fail self-verification — mining burns cycles on a wrong root until the next notify); prevhash is un-swapped per 4-byte word honoring V1's "insane" wire order so PrevHash serializes correctly in the block header; the 9-positional-param minimum is enforced; and clean_jobs tolerates the 0/1 encoding some pools use instead of true/false — lenient only where leniency is safe. TRUE.
