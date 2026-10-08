@@ -10498,3 +10498,7 @@ Claim verified: the AI-inference provider names itself "(Akash Network, simulate
 ## Session 1977 update (Socratic pass 643 — polling lifecycle invariants)
 
 Claim verified: provider lifecycle is structurally leak-free — a second Start is rejected with a labeled error before prepare can mutate state; the quote channel is closed by the loop goroutine itself (the sole writer), so subscribers observe termination cleanly; Stop cancels, wg.Waits, then recreates the channel, making restart impossible to race; sendQuote drops the oldest buffered quote rather than blocking — arbitration always consumes the freshest estimate, never a queue of stale ones. TRUE.
+
+## Session 1978 update (Socratic pass 644 — provider contract honesty)
+
+Claim verified: the payout scheme is stored in atomic.Pointer so a pool failover re-prices subsequent quotes race-free; mutable-after-Start fields (HashrateFunc, NetworkHashrateFunc) carry explicit "not safe after Start" contracts; the package doc discloses that GPU Bitcoin mining is unreachable today (hal reports SHA256d=false for every GPU — arbitration's live decision is CPU-only) and records the custodial markets (RNDR, io.net) as deliberately excluded under ADR-001 so a future contributor cannot naively add them. TRUE.
