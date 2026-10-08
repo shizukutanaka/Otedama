@@ -11862,3 +11862,7 @@ Claim verified: Prometheus counters can never decrease — `Counter` exposes onl
 ## Session 2313 update (Socratic pass 979 — exposition label escaping)
 
 Claim verified: label values can't corrupt the exposition — escapeLabel (:383) escapes exactly the three Prometheus-special chars (backslash, double-quote, newline) and escapeHelp (:396) escapes the two valid in HELP text (backslash, newline; quote deliberately not escaped). A pool URL or label value containing " or \n stays inside the series line — no metric injection or malformed scrape. TRUE.
+
+## Session 2314 update (Socratic pass 980 — milestone gate re-verified)
+
+Milestone re-check at pass 980: `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, and `go test -count=1` green on metrics/rates/arbitration/engine/poolproto(all 3). The branch stays buildable and all covered packages' suites pass at the current tip. TRUE.
