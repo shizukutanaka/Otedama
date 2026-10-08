@@ -397,8 +397,14 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
+10. ✅ **SLO documentation** (target uptime, p99 submit latency) to make the
     metrics actionable.
+    — **Shipped (session 1739):** DEPLOYMENT.md gained an "SLO guidance"
+    table under Alerts — availability (`otedama_up` ≥99%/30d), pool
+    connectivity (connection_state=2 ≥99%/24h), share acceptance
+    (rejects ≤5%/10m — matching the shipped alert), and submit latency
+    (p50 <200ms, p99 <500ms — with the stale-share rationale). All named
+    metrics are real registrations.
 
 ---
 

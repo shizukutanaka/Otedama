@@ -9532,3 +9532,7 @@ Verified (row scope-refined 🟡→🔵): RESEARCH_IMPROVEMENTS.md Cat-4 row 9 a
 ## Session 1738 update (Socratic pass 404 — post-set_difficulty reject exclusion verified)
 
 Verified (row closed, stale marker): RESEARCH_IMPROVEMENTS.md Cat-2 row 4's "Nuance shipped (session 1726)" annotation is backed by live code — `transitionReject` (stats.go:289-302) compares the share's issue-time target against the current target and is invoked from both paths: V2 SubmitSharesError (run.go:1324) and V1 submit-result handling (run.go:1823). Retarget-artifact rejects are logged, attributed to `rejectReason("difficulty-transition")`, and excluded from the reject-rate metric — exactly the ESP-Miner #212 behaviour the row asked for. Marker flipped 🟡→✅.
+
+## Session 1739 update (Socratic pass 405 — SLO documentation shipped)
+
+Fixed (doc gap closed): RESEARCH_IMPROVEMENTS.md Cat-9 row 10 asked for SLO documentation making the metrics actionable. DEPLOYMENT.md now carries an "SLO guidance" table under the Alerts section: availability (`otedama_up` ≥99%/30d), pool connectivity (`otedama_pool_connection_state` =2 ≥99%/24h), share acceptance (rejects ≤5%/10m — the same threshold the shipped OtedamaShareRejectionHigh alert uses), and submit latency (p50 <200ms, p99 <500ms, with the stale-share causality rationale). Every metric named is a real registration — verified against the SPECIFICATION-tracked catalogue. Row flipped 🟡→✅.
