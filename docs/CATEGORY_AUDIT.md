@@ -18751,3 +18751,31 @@ Verification (~30 sites):
 Verdict: TRUE — `%w`-less fmt.Errorf
 is only for leaf errors; wrapping is
 done via %w where needed.
+
+## Session 2924 update (Socratic pass 1589 — time.After-in-loop census)
+
+Claim under test: `time.After` is not
+inside a hot loop where a new timer
+would leak per iteration.
+
+Verification (1 site):
+
+- `time.After`/`time.Tick` → exactly one
+  site: run.go:1673 `case <-time.
+  After(w)` — inside the `!ok` branch
+  of `sess.Jobs()`, i.e. once per
+  connection close.
+- Not a hot loop: this select runs once
+  per session teardown to honor the
+  pool's `client.reconnect` wait; the
+  enclosing function returns right
+  after.
+- `w` is already clamped by
+  `ReconnectWait` and cancellable via
+  `ctx.Done()` — shutdown can't be
+  delayed by a leftover timer.
+- `time.Tick` → zero (the GC-unfriendly
+  API that creates a permanent ticker).
+
+Verdict: TRUE — the only time.After is
+a bounded one-shot in teardown.
