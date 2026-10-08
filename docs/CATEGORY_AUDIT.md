@@ -10338,3 +10338,7 @@ Claim verified: LatencyTracker is a mutex-guarded 256-sample ring; negative samp
 ## Session 1937 update (Socratic pass 603 — reject classification math)
 
 Claim verified: rejectClass checks canonical SV2 SubmitSharesError codes before substring heuristics ("invalid-job-id" is stale-class, not hardware — correct per spec); transitionReject guards on the "difficulty" category and refuses a zero issued-target (a synthetic share cannot establish an epoch); acceptanceRate returns 1.0 with zero judged shares (no 0/0 catastrophe reading); effectiveYield multiplies forecast yield by the productive-time fraction so a stalled miner shows a net-of-downtime number, not an unchanged quote. TRUE.
+
+## Session 1938 update (Socratic pass 604 — hysteresis incumbent-hold)
+
+Claim verified: incumbentHold requires the challenger to beat the incumbent's own policy-adjusted score by (1+hysteresis) — a relative margin, not an absolute — and sets Held only when a *different*, higher-scoring stream was actually suppressed (incumbent-is-best stays Held=false, so flap-statistics stay honest); ForegoneSatsPerSec = maxRaw − held-yield records exactly what the margin cost so operators can tune hysteresis against evidence. TRUE.
