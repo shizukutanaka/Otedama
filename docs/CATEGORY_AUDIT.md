@@ -17466,3 +17466,25 @@ Verification:
 Verdict: TRUE — pristine tree and fully linear
 branch; every ledger entry is exactly one
 commit.
+
+## Session 2869 update (Socratic pass 1534 — doctor check census)
+
+Claim under test: doctor still registers exactly
+the 17 named checks documented in CLAUDE.md and
+DEPLOYMENT.md.
+
+Verification (`internal/doctor/checks.go`):
+
+- 17 `Name:` literals — Configuration, Bitcoin
+  address, Failover payout addresses, Data
+  directory, Lightning wallet, Pool reachability,
+  Pool diversity, Pool endpoint diversity, Pool
+  connection encryption, Pool TLS CA files,
+  Power & cost config, Environment variables,
+  Profitability floor, Pool payout schemes,
+  Hardware, Network, System clock accuracy.
+- Matches the documented check set 1:1 — no
+  unannounced check added or silently dropped.
+
+Verdict: TRUE — the doctor's 17-check surface is
+exactly as documented.
