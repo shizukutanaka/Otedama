@@ -20297,3 +20297,60 @@ per-subcommand with injected
 writers and explicit help
 detection; no global flag
 state.
+
+## Session 2969 update (Socratic pass 1634 — text/template census)
+
+Claim under test: `text/template`
+is used at exactly one site
+(internal/i18n/message.go
+RenderWith) on a trusted bundle
+string — no html/template, no
+user-supplied template.
+
+Verification:
+
+- `text/template` import — one
+  site at message.go:48.
+- `RenderWith` flow
+  (message.go:325-342):
+  - `Render(lang,id)` returns
+    the embedded message string
+    (compile-time bundle —
+    trusted).
+  - `data == nil ||
+    !strings.Contains(raw,"{{")`
+    → return raw (no work).
+  - `template.New("").Parse(raw)`
+    → parseErr returns raw +
+    error.
+  - `tmpl.Execute(&buf, data)`
+    → execErr returns raw +
+    error.
+- Template input is the
+  embedded i18n bundle —
+  compile-time Go source, not
+  user input — so template
+  injection is not possible.
+- Default `missingkey` behavior:
+  absent keys render `<no
+  value>` (graceful, not a
+  crash); parse and execute
+  errors return raw + wrapped
+  error.
+- Test matrix
+  (message_test.go:464+):
+  nil-data, no-template,
+  missing-ID (Render error),
+  substitute ok, bad-template
+  parse error, exec error on
+  `{{call .fn}}` non-function.
+- Zero `html/template`,
+  `template.Must`,
+  `ParseFiles`/`ParseGlob`/
+  `ParseFS`, `Funcs` custom
+  injection.
+
+Verdict: TRUE — template use is
+single-sourced on a trusted
+bundle with graceful error
+degradation.
