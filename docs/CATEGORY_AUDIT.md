@@ -10880,3 +10880,7 @@ Claim verified: the wire primitives can't produce or accept malformed encodings 
 ## Session 2071 update (Socratic pass 737 — handshake codec positionality)
 
 Claim verified: the handshake codec is positionally honest — MaxTargetUnconstrained emits the real all-ones U256 because the spec layout is fixed (omitting it would misalign the frame); decoders attribute errors to the exact field (ReqID/User/NominalHashrate/MaxTarget each wrap their own error); GroupChannelID is decoded even though a single-standard-channel client never consumes it — the bytes are real wire fields and reading them keeps the frame positionally correct; and the Extranonce Postel split is applied consistently (appendB0_32 strict on encode, getB0_255 lenient on decode, both bounded). (Maintainer-gated package — verdict only.) TRUE.
+
+## Session 2072 update (Socratic pass 738 — message dispatch forward-compat)
+
+Claim verified: dispatch can't break on future protocol evolution — an unrecognized msg_type populates Message.Unknown instead of erroring, so a pool emitting extension messages Otedama hasn't implemented can't kill the session (forward compatibility is a spec requirement); WrapMessage validates the header before returning a frame; ValidateSetupConnection enforces semantic constraints the bytes can't express (protocol must be MiningProtocol=0, MinVersion ≤ MaxVersion); and every decoder error propagates with field attribution rather than producing a partial Message. stratum/frame.go+wire.go+handshake.go+messages.go all covered this stretch. TRUE.
