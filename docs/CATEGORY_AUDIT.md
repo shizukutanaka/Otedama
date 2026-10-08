@@ -11094,3 +11094,7 @@ Claim verified: a malformed sysfs GPU can't register or misrepresent itself — 
 ## Session 2124 update (Socratic pass 790 — device identity gate)
 
 Claim verified: a device identity can't be empty, non-familial, or path-breakable — Validate() rejects empty ID, rejects a Family outside the enum (a garbage family string can't reach arbitration), and rejects whitespace OR '/' inside the ID rune-by-rune (the s512 fix to unicode.IsSpace confirmed live — CJK/NBSP/slash all rejected, so an ID can never act as a path or split a log line). The gate is applied at construction in the GPU and CPU drivers alike. TRUE.
+
+## Session 2125 update (Socratic pass 791 — poolproto registry + sanitize SSOT)
+
+Claim verified: the scheme table is a true single source of truth — knownSchemes feeds BOTH FromURL and StripScheme so a scheme can't be inferable-but-unstrippable (the s1333 desync class is structurally dead); Register panics on nil dialer, ProtocolUnknown, and duplicate ID — registry corruption can only happen at init, never silently; DialURL fails fast on unknown scheme and closes the socket when Negotiate fails (no conn leak on a failed handshake); SanitizePoolText strips unicode.Cc + Cf + Zl + Zp (the s1260 Cf/Zl/Zp fix confirmed live — ANSI escapes, zero-width format chars, and line/para separators are all removed, not escaped). TRUE.
