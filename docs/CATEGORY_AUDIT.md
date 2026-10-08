@@ -24165,3 +24165,50 @@ Verification — census
   check boundary.
 
 Verdict: TRUE.
+
+## Session 3044 update (Socratic pass 1708 — test-filesystem ledger)
+
+Claim under test: tests
+confine writes to
+t.TempDir / CreateTemp
+— no CWD pollution or
+manual temp cleanup
+that can leak.
+
+Verification — census
+of *_test.go:
+
+- `t.TempDir`×122 —
+  every test that
+  needs a directory
+  uses the testing
+  framework's
+  cleanup-owned
+  tempdir.
+- `os.CreateTemp`×11 —
+  the few temp FILE
+  cases (mostly
+  config-file /
+  wallet-fixture
+  writes); each
+  inside a
+  t.TempDir or with
+  cleanup.
+- ZERO `os.MkdirTemp`
+  in tests — nothing
+  bypasses the
+  framework's
+  cleanup.
+- ZERO `os.RemoveAll`
+  in tests — removal
+  is owned by
+  t.TempDir.
+- ZERO `os.Chdir` in
+  tests — no test
+  leaks a changed
+  working directory
+  into sibling tests
+  (the cwd-coupling
+  class verified).
+
+Verdict: TRUE.
