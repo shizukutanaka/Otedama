@@ -15000,3 +15000,33 @@ Verification: two flag-shaped hits + the comma-ok surface.
 
 Verdict: TRUE — assertion surface cannot panic; capability
 probes degrade where the interface is unmet.
+
+## Session 2765 update (Socratic pass 1431 — forever-loop exit census)
+
+Claim under test: every `for {` is a bounded daemon loop — it
+exits on ctx cancellation, channel close, or io error. No
+uninterruptible spins.
+
+Verification: 17 `for {` sites, classified by exit edge:
+
+- ctx-selected: fetcher.go:460, hashrate.go:237, polling.go:67,
+  arbitrate.go:170, run.go:239/:312/:904/:1014/:1557/:2233,
+  dashboard.go:190 (doneCh) — each body selects <-ctx.Done() or
+  the owner's done channel; cancellation latency bounded by the
+  select, not by loop work.
+- ctx-or-close-polled: stratumv2/dialer.go:272 —
+  `ctx.Err() != nil || s.conn.closed.Load()` at loop head plus
+  immediate return on ReadFrame error.
+- read-error exits: stratumv1.go:214 readLoop (returns on
+  ReadString error / deadline), fanin.go:36 (exits when the
+  source channel closes).
+- channel-close exits: hal/registry.go:174 breaks the labeled
+  `loop` on `!ok` (sender always closes resultsCh).
+- drain-then-goto: stratumv1.go:579 — non-blocking
+  `default: goto send`; the loop's only exit is deliberately the
+  empty-queue edge.
+- worker.go:263 grind loop — ctx.Done polled each iteration
+  (verified s2751).
+
+Verdict: TRUE — no spin without a cancellation edge; every
+blocking select carries an owner-termination case.
