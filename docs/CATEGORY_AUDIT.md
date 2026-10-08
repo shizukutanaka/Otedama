@@ -9808,3 +9808,7 @@ Claim verified: the remaining Makefile targets are all real and self-consistent 
 ## Session 1807 update (Socratic pass 473 — .github remainder: feature_request template + CODEOWNERS)
 
 Claim verified: `ISSUE_TEMPLATE/feature_request.yml` is schema-valid (yaml.safe_load passes; problem-first markdown, all three textareas required, scope options match the real product surface, CONTRIBUTING.md referenced — the file exists). `CODEOWNERS` patterns all resolve: `/internal/stratum/noise*` + `noise_pool*` cover noise.go/noise_pool*.go (test files included), `/internal/lightning/`, `/internal/btccrypto/`, `/internal/poolproto/`, `/.github/`, `/.goreleaser.yaml`, `/Makefile`, `/install.sh`, `/docs/`, and the named root docs all exist — no dangling patterns. TRUE — no defect.
+
+## Session 1808 update (Socratic pass 474 — GODEBUG_NOTES.md vs go.mod drift)
+
+Defect found and fixed: GODEBUG_NOTES.md quoted a `go 1.22` + `toolchain go1.24.0` split and explained its dual-line semantics — but go.mod is now a single `go 1.24.0` line with no toolchain directive, so the mechanism description was describing a layout that no longer exists (though its bottom-line conclusion — "Go 1.24+ is required" — happened to stay right). Rewrote the baseline block to the actual content and the rationale to the single-line reality, noting the collapsed split. Residual: CI's 1.20–1.23 Go-pin job failures under GOTOOLCHAIN=local remain the recorded maintainer decision.

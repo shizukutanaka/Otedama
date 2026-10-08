@@ -30,8 +30,7 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
-toolchain go1.24.0
+go 1.24.0
 
 godebug (
     panicnil=0
@@ -40,19 +39,17 @@ godebug (
 )
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
-the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **preferred build toolchain** — with the
-default `GOTOOLCHAIN=auto`, an older Go (1.21+) downloads go1.24.0
-automatically; under `GOTOOLCHAIN=local` the line is ignored, and the
-pinned `godebug tlsmlkem` then fails to parse on toolchains older
-than 1.24. So despite `go 1.22`, **Go 1.24+ is required to
-build Otedama**; the `go` line governs language defaults, not the
-minimum toolchain.
+**Why a single `go` line:** `go 1.24.0` declares the language semantics
+Otedama's source assumes and doubles as the minimum toolchain — an
+older Go refuses the module outright under `GOTOOLCHAIN=local`, and
+the pinned `godebug tlsmlkem` would fail to parse below 1.24 anyway.
+There is no `toolchain` line to drift apart from this floor. (The
+file previously carried `go 1.22` + `toolchain go1.24.0`; the split
+was collapsed once the language minimum caught up with the toolchain
+requirement.)
 
 The `go` line is bumped roughly once a year, six months after each
-Go minor's release, on a dedicated PR. The `toolchain` line is
-bumped quarterly to track the latest stable Go.
+Go minor's release, on a dedicated PR.
 
 ## Active knobs
 
