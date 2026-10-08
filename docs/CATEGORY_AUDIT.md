@@ -20726,3 +20726,57 @@ Verdict: TRUE — the binary is
 timezone-independent; every
 clock reading is monotonic
 or epoch.
+
+## Session 2978 update (Socratic pass 1642 — flag-consumption census)
+
+Claim under test: every
+registered CLI flag has a
+consumer — no orphan flags.
+
+Verification:
+
+- `run` flags (run.go:68-92)
+  — 15 registered:
+  - private (consumed by
+    run.go itself): configFile,
+    dryRun, noTUI,
+    walletPassphrase,
+    walletMnemonicPassphrase,
+    logFile, pprofEnabled,
+    showOrigin, jsonOut —
+    every one read ≥2 times.
+  - `setFlags` — written by
+    `fs.Visit` at :98 and read
+    by config.Resolve for the
+    `--origin` layer report.
+  - exported (consumed by
+    config.Resolve + engine):
+    BitcoinAddress (74 sites),
+    LogLevel (40), Language
+    (21), DataDir (31),
+    LogFormat (35), HTTPAddr
+    (31).
+- `doctor` flags
+  (doctor.go:18-21) — config,
+  bitcoin-address, data-dir,
+  json — all read inside
+  runDoctor.
+- `service` flags
+  (service.go:50-55) —
+  config, data-dir,
+  bitcoin-address, log-level,
+  log-format, language — all
+  feed the generated unit /
+  plist argv.
+- `version` flag
+  (version.go:17) — json —
+  read at :22 to select the
+  output format.
+- No `fs.String`/`fs.Bool`
+  registration without a
+  matching read.
+
+Verdict: TRUE — zero orphan
+flags; the registered surface
+and the consumed surface are
+identical.
