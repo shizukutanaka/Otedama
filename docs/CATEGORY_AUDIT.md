@@ -13316,3 +13316,7 @@ Corrected §3's "block subsidy は計算式で導出…既に対応済み" — F
 ## Session 2671 update (Socratic pass 1337 — DEPLOYMENT.md service sections)
 
 Verified TRUE: systemd hardening block (NoNewPrivileges/ProtectHome=read-only/PrivateTmp/Restart=on-failure/RestartSec=10s) exactly matches generated unit (service.go:280-289, test-pinned); launchd KeepAlive present (:373); Windows `sc.exe create Otedama` + `DisplayName=Otedama Mining Service` + `start=auto` exact (:407-410); k8s example `--http-addr=0.0.0.0:9090`, uid/fsGroup 65532, OTEDAMA_* env names all consistent with Dockerfile+config; session-485 Windows-event-log correction honest. claim verified: docs/DEPLOYMENT.md — TRUE
+
+## Session 2672 update (Socratic pass 1338 — TROUBLESHOOTING.md)
+
+Verified TRUE: "workers spawn one per runtime.NumCPU(), GOMAXPROCS caps parallel" — worker.go:95,139 default Threads=NumCPU confirmed; "exponential backoff (1s, 2s, …)" — reconnectBackoffInitial=1s, doubles, 64s cap, ±25% jitter (run.go:66-77); no-GPU-speedup claim honest (SHA256d=false capability gate); session-491 scheduling-class + session-476 GOMAXPROCS corrections still present; doctor/latency/linger/service-status guidance all match shipped surfaces. claim verified: docs/TROUBLESHOOTING.md — TRUE
