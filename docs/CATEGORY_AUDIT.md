@@ -13028,3 +13028,7 @@ Census: 9 workflow files on disk (ci, ci-cd, code-review, deploy, devin-direct-m
 ## Session 2599 update (Socratic pass 1265 — test-file coverage census)
 
 Census: all 21 Go package directories contain at least one _test.go file (71 test files total; leaf packages clock/httpserver/i18n/messages/metrics/poolproto/stratumv2/version at 1, stratum at 12, engine+cmd at 7 each). Zero production directories untested. Combined with the ~97%-median measured coverage (s2553), the ≥90% requirement is structurally plausible and empirically confirmed. TRUE.
+
+## Session 2600 update (Socratic pass 1266 — ecosystem recheck)
+
+ADR-009 tracking re-verified via git ls-remote: SRI latest tag remains v1.12.0, sv2-apps latest remains v0.8.0 — no upstream drift since the last recheck. ADR-009's claims remain current. TRUE.
