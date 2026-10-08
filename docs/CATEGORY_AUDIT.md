@@ -20626,3 +20626,59 @@ Verdict: TRUE — branch is
 healthy, ledger is consistent,
 and no new CI failure class
 has appeared.
+
+## Session 2976 update (Socratic pass 1640 — math/big + math surface)
+
+Claim under test: `math/big`
+use is the two known sites
+(difficulty bitmath + base58
+decode + crypto-random
+jitter), and `math` is
+non-finite guards + the
+en2 truncation guard only.
+
+Verification:
+
+- `math/big` production:
+  - miner/sha256d.go — nBits
+    mantissa `big.Int` shift,
+    `SetBytes` target load,
+    `diff1Target` const,
+    `big.Float` at `SetPrec(256)`
+    and `SetPrec(128)` for
+    precision-controlled
+    division (verified s2843).
+  - btccrypto/base58.go — the
+    O(n²)-bounded big.Int
+    decode, gated by the
+    50-char address-length
+    reject (#633).
+  - engine/setup.go:297 —
+    `rand.Int(rand.Reader,
+    big.NewInt(n))` — crypto-rand
+    jitter, not math/rand.
+- `math` production:
+  - arbitration/engine.go —
+    IsInf/IsNaN guards at
+    101/314/317 + `math.Max(
+    incScore, 1e-9)` div-zero
+    guard at :503.
+  - stratumv1/parse.go:331 —
+    `math.Trunc(en2SizeF)` —
+    float→int truncation guard
+    so a fractional
+    extranonce2_size cannot
+    slip through.
+  - doctor/checks.go:949 —
+    `math.Abs(skew)` magnitude.
+- Zero `math.Exp/Log/Sqrt/Pow/
+  Round/Floor/Ceil/Mod`
+  production sites.
+- Zero `math/bits` imports.
+- `math/rand` — test-only.
+
+Verdict: TRUE — big-number math
+is confined to the audited
+difficulty/address/jitter
+sites; everything else is
+guards.
