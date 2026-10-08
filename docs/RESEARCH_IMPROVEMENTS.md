@@ -299,7 +299,14 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
+11. ✅ **Deduplicate the two `Provider` implementations — resolved.**
+    Verified resolved in session 1726: the refactor this row prescribed
+    shipped as `internal/provider/polling.go`'s embedded `pollingProvider`
+    — exactly the proposed `baseProvider` (shared `launch`/`loop`/`Stop`/
+    `sendQuote`, distinct tick intervals via `interval`, preserved
+    channel re-creation for restart, buffered drop-oldest semantics).
+    Only `publish()` now differs per domain. (Historical row kept below.)
+    ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
     recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
     ad hoc"). `MiningProvider` and `AkashProvider`
     (`internal/provider/{mining,ai_inference}.go`) share substantial
@@ -541,6 +548,12 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — ✅ **Nuance shipped** (verified session 1726): `stats.go`'s
+   `transitionReject` now tags the difficulty epoch active at issue time
+   and excludes above-target-family rejects that arrive after the pool
+   retargeted (engine run.go:1816-1818 for V1 set_difficulty, run.go:1326
+   for V2 SetTarget). The reject-rate metric no longer counts them —
+   exactly what this item asked.
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
@@ -683,7 +696,14 @@ endpoint against current vendor documentation. Tags as before
     Signed-Releases / Token-Permissions and bundles osv-scanner; the
     Signed-Releases check rewards #22 and Pinned-Dependencies reinforces
     Cat 10 #10. (github.com/ossf/scorecard)
-24. 🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
+24. ✅→🟡 **Make govulncheck a hard CI gate — gate shipped; advisory
+    tracking remains evergreen.** Verified in session 1726: security.yml's
+    `govulncheck ./...` step runs with no `continue-on-error`, so any
+    finding fails the build — the gate this row asked for exists (added
+    session 1265). The remaining ask (recording advisory IDs in
+    THREAT_MODEL's dependency assumptions) stays open as an evergreen
+    documentation practice. (Original row kept below.)
+    🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
     current Go advisories on the `net/http` surface Otedama exposes
     (`/healthz /readyz /metrics`) — e.g. CVE-2025-22871 (request smuggling),
     GO-2025-3563 — and fail the build on any govulncheck finding. CLAUDE.md
