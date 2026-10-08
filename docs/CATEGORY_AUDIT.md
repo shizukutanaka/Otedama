@@ -9964,3 +9964,9 @@ Claim verified: httpserver/server.go:89-95 registers exactly `/healthz`, `/ready
 ## Session 1844 update (Socratic pass 510 — G10 readiness semantics re-verification)
 
 Claim verified: SPECIFICATION.md G10's "Fixed (session 61)" annotation still holds — `OnReady(true)` fires only after a pool session handshake completes (run.go:583), `OnReady(false)` on session end (:596) and via defer on run shutdown (:417-418), so `/readyz` reflects actual pool connectivity rather than process liveness; a k8s pod unable to reach any pool correctly reports not-ready. TRUE.
+
+## Session 1845 update (Socratic pass 511 — SPECIFICATION G-row status drift)
+
+Defects found and fixed:
+- SPECIFICATION.md G3 claimed the poolproto bypass was simply "Open — deferred" citing KNOWN_LIMITATIONS §3 — stale: KL §3 is struck through RESOLVED (session 91: V1 dispatched via poolproto.DialURL with telemetry parity, verified live in run.go:1432-1444). Corrected G3 to "Partially resolved (sessions 38–91)" and narrowed the open remainder to the V2 inline-handshake path only. CLAIM STALE, corrected.
+- Remaining Open G-rows re-verified for KL cross-consistency: G4→§2 (Noise P-256, maintainer zone), G5→§1 (simulated AI yield), G6→§4 (GPU Linux-only), G18 (self-documented maintainer decision) — all consistent.
