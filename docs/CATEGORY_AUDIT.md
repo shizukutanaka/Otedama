@@ -14330,3 +14330,34 @@ Verification: all 4 non-test init() bodies read in full.
 
 Verdict: TRUE — init work is registration + self-checks only;
 import-time is deterministic and I/O-free.
+
+## Session 2738 update (Socratic pass 1404 — discard-site census)
+
+Claim under test: every `_ =` blank assignment discards a value that
+carries no actionable error — nothing silently swallows a meaningful
+failure.
+
+Verification: all 51 non-test `_ =` sites enumerated and classified.
+
+- Deadline discards (5): `SetReadDeadline`/`SetWriteDeadline` —
+  deadline errors are only possible on a closed conn, where the
+  subsequent read/write error surfaces immediately; discarding is
+  the documented stdlib posture.
+- Close discards (~15): `sess.Close`, `conn.Close`, `tmp.Close`,
+  `resp.Body.Close` — teardown paths; close errors are subsumed by
+  the primary error or by a dead-connection signal arriving next.
+- Static-response writes (5): `io.WriteString`/`WriteText` on
+  healthz/index — a dead conn makes logging pointless.
+- Body drains (2): `io.Copy(io.Discard, LimitReader)` — keep-alive
+  best-effort.
+- The two judgment calls verified against context:
+  `dialer.go:207 _ = eerr` is the optional extranonce.subscribe —
+  the comment block above it documents that both error paths mean
+  "pool lacks rotation support" and proceeds.
+  `wallet.go:172` fingerprint sidecar write is marked intentionally
+  non-fatal (`_ = err` with the contract comment at :228).
+- No discard site swallows a validation, authorization, or state-
+  transition error — those all propagate or log.
+
+Verdict: TRUE — all 51 discards are teardown/best-effort sites with
+no actionable payload.
