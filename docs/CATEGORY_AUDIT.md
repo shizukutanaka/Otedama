@@ -20682,3 +20682,47 @@ is confined to the audited
 difficulty/address/jitter
 sites; everything else is
 guards.
+
+## Session 2977 update (Socratic pass 1641 — time surface)
+
+Claim under test: no
+wall-clock parsing or
+timezone dependence in
+production — all times are
+epoch seconds or monotonic.
+
+Verification:
+
+- `time.Parse`,
+  `time.ParseInLocation`,
+  `time.LoadLocation`,
+  `time.FixedZone`,
+  `time.Local`, `time.UTC()`,
+  `time.In()` — zero
+  production call sites.
+- Tests use `time.UTC` for
+  `clock.Fake` seeds only.
+- `time.Sleep` — exactly one
+  production site:
+  miner/worker.go:282 (the
+  grind-loop's 10ms yield
+  when no work is queued —
+  verified s2852).
+- `time.Now`/`Since`/`Until`
+  — used for uptime,
+  staleness, skew, deadline
+  math; all epoch- or
+  monotonic-based.
+- nTime on the wire is epoch
+  seconds (u32), so no
+  tzdata dependency exists
+  in the mining path.
+- Log timestamps come from
+  slog's own `time.Now`
+  internally — not repo
+  code.
+
+Verdict: TRUE — the binary is
+timezone-independent; every
+clock reading is monotonic
+or epoch.
