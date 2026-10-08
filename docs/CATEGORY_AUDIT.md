@@ -12959,3 +12959,7 @@ Claim verified: all 15 `OTEDAMA_*` environment variables referenced in internal/
 REAL FIX: `check-conflict-and-comment` failed on master CI with `fatal: not a git repository`. Root cause: this branch dropped the `actions/checkout` step as waste, but `gh pr view`/`gh pr comment` resolve the target repo from the local git remote — no checkout means no `.git`, so every invocation failed. The optimization was correct in spirit (a full clone IS waste) but the gh calls needed an explicit repo. Fixed by passing `--repo ${{ github.repository }}` on both invocations, preserving the no-checkout win. Confirmed by the job log (exit 1, `failed to run git`).
 
 Claim verified (flag parity): all 9 run-subcommand flags present in code have doc coverage — `--http-addr`/`--pprof` (#576), `--dry-run`/`--no-tui`/`--wallet-{,mnemonic-}passphrase`, `--log-file`, `--origin`, `--help` appear across API.md/SPECIFICATION/TROUBLESHOOTING. TRUE.
+
+## Session 2586 update (Socratic pass 1252 — cmd/otedama/config.go diff audit)
+
+Claim verified: the ±10-line config.go diff is honest hardening. (a) `config.EnvWarnings(nil)` prints malformed numeric `OTEDAMA_*` values to stderr before resolving — nil → os.Getenv, exactly mirroring the `ResolveWithOrigins(fromFile, nil, ...)` env layer it precedes; warnings go to stderr so `--json` stdout stays pure. (b) `safeDisplay()` wrap on LogLevel/LogFormat closes the last unsanitized echo of env/file-controllable strings (ANSI injection / line forgery). Both match verified semantics at config.go:392 and 216. TRUE.
