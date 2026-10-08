@@ -12909,3 +12909,7 @@ REAL FIX: AUDIT_CHECKLIST row 15 (runtime-dependency audited set) had the same x
 ## Session 2573 update (Socratic pass 1239 — KNOWN_LIMITATIONS §13 diff check)
 
 Claim verified: §13's rewrite is honest — the stale "six of seven workflows broken" narrative is replaced by the post-repair state: real Go jobs in deploy.yml, gated setup-node, deleted hollow security-tests, real fuzz job, docker-verify now launching real containers and polling `/healthz`, release.yml package metadata license fix. Residuals correctly kept as maintainer decisions, not re-deliverable bugs: the Go-version-pin class (#1344), ci-cd dead-weight deletion, golangci v2 migration (#1391), Dependency-graph repo setting, deploy.yml helm/KUBECONFIG gates. TRUE.
+
+## Session 2574 update (Socratic pass 1240 — MILESTONE full-gate rerun)
+
+Milestone verdict: `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1` on ALL 24 package legs green (engine 24.8s, doctor 7.1s, lightning 12.6s — everything passed). This pass-cycle also deep-verified the entire remaining workflow and docs payload: 9 workflow diffs all honest hardening (dead k8s jobs deleted, floating pins fixed, real build/test/csum bugs fixed), ADR-003 dep boundary + THREAT_MODEL + AUDIT_CHECKLIST now count x/sys correctly, KNOWN_LIMITATIONS §13 accurately reflects the repaired CI state with residuals kept as maintainer decisions.
