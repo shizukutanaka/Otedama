@@ -10102,3 +10102,7 @@ Claim verified: `datum://` URLs are rejected at two independent layers — confi
 ## Session 1878 update (Socratic pass 544 — BENCHMARKS.md vs tree census)
 
 Claim verified: every benchmark BENCHMARKS.md names exists in the tree (11 Benchmark* funcs across miner, stratum, clock, provider, metrics, tui tests); the doc's own prior corrections already disclose the two phantom rows (no `BenchmarkDecoder_*`, "unverified estimates"). CI's `go test -run=XXX -bench=. -benchmem` artifact job (test.yml:180–203) runs the real set. TRUE.
+
+## Session 1879 update (Socratic pass 545 — dependabot ecosystem parity)
+
+Claim verified: dependabot.yml watches exactly the three ecosystems that exist — gomod (/go.mod), github-actions (/.github/workflows), docker (/Dockerfile). No ecosystem configured without a manifest and no manifest without a watcher (e.g. no spurious npm/cargo entry). TRUE.
