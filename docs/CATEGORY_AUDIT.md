@@ -15154,3 +15154,31 @@ cap.
 Verdict: TRUE — every externally-grown container is either
 FIFO-capped with a named constant or structurally proportional
 to the 64KiB input ceiling.
+
+## Session 2771 update (Socratic pass 1437 — arithmetic-overflow census)
+
+Claim under test: difficulty/target arithmetic cannot overflow or
+produce silent garbage on adversarial or degenerate inputs.
+
+Verification:
+
+- TargetFromDifficulty (sha256d.go:226–245): `!(difficulty > 0)`
+  rejects zero/negative/NaN; `math.IsInf` rejected; big.Float at
+  256-bit precision for the division; explicit `len(b) > 32`
+  overflow rejection before the byte-swap. Overflow path is an
+  error, never a wrapped target.
+- publishDifficulty (stats.go:537–547): `diff <= 0` early-return
+  (upstream set_difficulty already rejects non-finite — merged
+  #456); `hashrate > 0` guard with explicit honest-zero else for
+  estimatedShareIntervalSeconds — div-by-zero cannot emit +Inf
+  into the gauge.
+- diff * 2^32 in float64: pool-assigned difficulty is bounded by
+  the wire format (JSON number, validated finite); even 2^200
+  stays far below float64's ~1.8e308 ceiling — no float64
+  overflow path.
+- nBits encode/decode (sha256d.go:195–205): mantissa assembled
+  from explicit byte shifts; exp<3 and negative-mantissa guards
+  verified earlier (pass 1057-chain).
+
+Verdict: TRUE — overflow surfaces either reject early or compute
+in arbitrary precision with an explicit >256-bit reject.
