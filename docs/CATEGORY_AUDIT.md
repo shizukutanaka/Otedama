@@ -11754,3 +11754,7 @@ Claim verified: every inbound HTTP response body in the tree is read through io.
 ## Session 2286 update (Socratic pass 952 — scan-family census)
 
 Claim verified: zero `fmt.Scan`/`Sscanf`/`Fscanf`/`binary.Read` decoders exist in production code — the only matches are comments documenting why they were rejected (fetcher.go:52 Sscanf greedy match, dialer.go:432 silent truncation "1a"→1, run.go:2164 echo-verbatim reason). All numeric decoding goes through strconv with explicit bit sizes; all wire decoding is manual length-prefixed reads. TRUE.
+
+## Session 2287 update (Socratic pass 953 — descriptor-leak census)
+
+Claim verified: no file/socket descriptor leaks on any error path — the wallet's atomic save closes+removes the temp file on every failure branch (Write/Sync/Close/Chmod/Rename); the doctor reachability probe closes conn immediately after a successful dial; configfile.Open defers f.Close(); the engine dial defers conn.Close(); tls.Dialer results are owned by the session lifecycle. No early-return path drops an open descriptor. TRUE.
