@@ -18326,3 +18326,25 @@ Verification (`rg '\bnew\('` — 8 sites):
 
 Verdict: TRUE — all 8 are canonical pointer
 constructions.
+
+## Session 2907 update (Socratic pass 1572 — literal slice-bound census)
+
+Claim under test: literal-index slices
+(`s[:n]`/`s[n:]`) are provably in-bounds.
+
+Verification (`rg '\[:\d|\[\d+:'`):
+
+- `os.Args[1:]` / `args[1:]` dispatch sites —
+  safe by CLI convention (subcommand
+  dispatch only fires when args[0]
+  matched), and `[1:]` on len-1 yields
+  empty, not panic.
+- sha256d.go:61-78 — 80-byte header layout
+  slices (`b[0:4]`/`b[4:36]`/`b[68:72]`/
+  `b[76:80]`) on `[80]byte` arrays —
+  compile-time bounds-consistent.
+- Zero literal slices on variable-length
+  inputs.
+
+Verdict: TRUE — every literal slice is on a
+fixed-size array or the args[1:] idiom.
