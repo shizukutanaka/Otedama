@@ -10550,3 +10550,7 @@ Claim verified: the default logger is race-free and non-nil by construction — 
 ## Session 1990 update (Socratic pass 656 — quality-gate milestone)
 
 Milestone checkpoint: the second audit cycle's ledger on PR #1405 has accumulated 21 verdict-only passes (s1971–s1989) plus fixes recorded earlier; gofmt reports zero diffs, `go build ./...` clean, `go vet ./...` zero findings, and `go test ./internal/provider/ ./internal/metrics/ ./internal/httpserver/ ./internal/i18n/ ./internal/logger/` all pass at 2026-10-02. No code defects surfaced in this stretch — every inspected claim verified TRUE. Surfaces closed this window: arbitration tick ordering + power-breakeven floor + applyAllocation/pause-set discipline; metrics registry guards, exposition snapshot integrity, runtime collector fidelity; HTTP management surface; i18n fallback/degrade; logger singleton hygiene.
+
+## Session 1991 update (Socratic pass 657 — clock abstraction + version contract)
+
+Claim verified: clock.Fake is mutex-guarded and honestly documents the contract's sharp edge — Set/Advance may move time backward, so callers must not rely on monotonic ordering (a test clock pretending monotonicity would silently hide skew bugs); compile-time `_ Clock` assertions catch interface drift at build; version.Info vars are `var` so ldflags can inject, the un-injected default carries a visible "-dev" suffix (never masquerades as a release), Get() snapshots once, and the single-line String() format is documented as a stable parse contract. TRUE.
