@@ -9764,3 +9764,7 @@ Claim verified: the workflow is internally consistent and minimal — (a) trigge
 ## Session 1796 update (Socratic pass 462 — ci.yml vestigial k8s deploy jobs)
 
 Defect found and fixed: ci.yml carried `deploy-staging`/`deploy-production` jobs that `kubectl apply -f k8s/01-*.yaml`…`08-*.yaml` — manifests under the forbidden `k8s/` path that do not exist AND describe a foreign product's topology (postgres/redis/monitoring/ingress — Otedama needs none of them; CLAUDE.md says k8s manifests were replaced by docs/DEPLOYMENT.md). Staging was additionally dead on arrival (if-gated on nonexistent `refs/heads/develop`); production was reachable — on any v* tag push with KUBE_CONFIG_PRODUCTION set it would have run real kubectl against nonexistent foreign manifests. Both jobs removed; `needs:` graph re-verified dangling-free. Deployment remains owned by deploy.yml (helm-based, kubeconfig-gated). Residual: ci.yml's own `release` job co-exists with release.yml on tags — both use the upsert-capable softprops/action-gh-release@v3 (s1666 convention), recorded.
+
+## Session 1797 update (Socratic pass 463 — dependabot.yml audit)
+
+Claim verified: `.github/dependabot.yml` is consistent with the repo — three ecosystems all real: gomod (go.mod exists, weekly Monday 09:00 Asia/Tokyo, x/* grouped), github-actions (workflow dir exists, `allow: direct` scoping, documented no-automerge note), docker (Dockerfile exists). Valid version-2 schema; labels and commit-message prefixes conventionally named. TRUE — no defect.
