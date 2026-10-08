@@ -377,7 +377,12 @@ spec:
 All exported metrics live under the `otedama_` prefix:
 
 - `otedama_hashrate_hashes_per_second` — gauge, live aggregate hash rate
-- `otedama_shares_total{status}` — counter, shares submitted/accepted/rejected
+- `otedama_shares_total{status}` — counter, pool-reported shares
+  (`status` is `accepted` or `rejected` only; **correction, session
+  1727:** submitted shares are a separate metric,
+  `otedama_shares_submitted_total` — this row previously implied a
+  `status="submitted"` label that does not exist)
+- `otedama_shares_submitted_total` — counter, shares sent to the pool
 - `otedama_pool_connection_state` — gauge, 0=disconnected, 1=connecting, 2=connected
 - `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
 - `otedama_arbitration_switches_total` — counter, workload reroutes (mining ↔ AI)
