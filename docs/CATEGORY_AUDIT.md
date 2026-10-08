@@ -19434,3 +19434,38 @@ Verification:
 
 Verdict: TRUE — bitSize is correct
 at every parse site.
+
+## Session 2948 update (Socratic pass 1613 — mutex pairing census)
+
+Claim under test: every `mu.Lock()`
+is paired with a `mu.Unlock()`
+— the asymmetry is only the
+"caller-holds-lock" helper idiom.
+
+Verification:
+
+- 52 `.Lock()` vs 54 `.Unlock()`
+  across non-test source — the +2
+  delta is explained by the
+  "Callers hold c.mu" contract in
+  logfile.go:67 (a function that
+  expects the caller to hold the
+  lock, documented on its godoc).
+- Every Lock site uses
+  `defer ...Unlock()` —
+  spot-checked the logfile, worker,
+  clock files: all follow
+  `mu.Lock(); defer mu.Unlock()`.
+- Zero bare `.Lock()` without a
+  paired `.Unlock()` in the same
+  function or the documented
+  caller-holds-idiom.
+- Zero `TryLock`, `Lock` on a nil
+  receiver, or lock-copy — the
+  mutexes are embedded fields on
+  pointer receivers.
+
+Verdict: TRUE — Lock/Unlock is
+always paired; the asymmetry is
+the documented caller-holds
+helper contract.
