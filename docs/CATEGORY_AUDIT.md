@@ -24002,3 +24002,55 @@ Verification — census:
   ctx.Done() case.
 
 Verdict: TRUE.
+
+## Session 3041 update (Socratic pass 1705 — modern-stdlib residual ledger)
+
+Claim under test: the
+Go1.21+ collection
+surface (slices/cmp/
+maps) is the ONLY
+ordering/merge
+machinery — the
+legacy `sort` package
+is fully retired.
+
+Verification — census:
+
+- `slices.Sort`×12 —
+  total-order sorts
+  (verified: all
+  comparators are
+  strict weak
+  ordering).
+- `slices.SortFunc`×2 +
+  `SortStableFunc`×1 —
+  custom comparators.
+- `slices.Contains`×1.
+- `cmp.Compare`×5 —
+  total-order
+  comparators.
+- `cmp.Or`×4 — first-
+  nonzero defaults
+  (merged earlier).
+- `maps.Copy`×2 +
+  `maps.Clone`×1 —
+  map merge/clone
+  (merged earlier).
+- ZERO `sort.*`
+  imports — the
+  modernization is
+  complete
+  (sort.Ints →
+  slices.Sort was a
+  merged earlier PR;
+  every site since
+  uses slices).
+- ZERO `slices.Iter`/
+  `maps.All` — iter
+  adoption is
+  deliberately not
+  taken (verified:
+  the range-loop
+  forms stay).
+
+Verdict: TRUE.
