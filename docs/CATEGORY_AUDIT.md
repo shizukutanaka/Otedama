@@ -24360,3 +24360,62 @@ of all 4 `init()`:
   per-test.
 
 Verdict: TRUE.
+
+## Session 3048 update (Socratic pass 1712 — env-read ledger)
+
+Claim under test: the
+env surface is the 15
+documented OTEDAMA_
+vars and reads go
+through injectable
+seams.
+
+Verification — census:
+
+- 15 distinct
+  `OTEDAMA_*` names
+  in production code:
+  ARBITRATION_
+  HYSTERESIS_PCT,
+  BITCOIN_ADDRESS,
+  CONFIG, CURTAIL_
+  BELOW_BTC_USD,
+  DATA_DIR,
+  ELECTRICITY_PRICE_
+  PER_KWH, HTTP_ADDR,
+  LANGUAGE, LOG_FORMAT,
+  LOG_LEVEL, MIN_YIELD_
+  SATS_PER_SEC,
+  POWER_WATTS, WALLET_
+  MNEMONIC_PASSPHRASE,
+  WALLET_NEW_PASSPHRASE,
+  WALLET_PASSPHRASE —
+  the documented set,
+  verified parity.
+- `os.Getenv`×16 sites
+  — the i18n injectable
+  getenv seam, the
+  config numericEnvVars
+  SSOT (resolution +
+  warning share one
+  table — no
+  unparsed value can
+  escape a warning),
+  and the cmd-entry
+  wallet vars.
+- `os.LookupEnv`×0 —
+  all reads are
+  presence-checked by
+  emptiness (env
+  vars here cannot
+  be meaningfully
+  empty).
+- ZERO `os.Setenv`/
+  `os.Unsetenv` in
+  production —
+  the process env
+  is read-only.
+- ZERO `os.Environ` —
+  no bulk env dumps.
+
+Verdict: TRUE.
