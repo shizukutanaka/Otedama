@@ -16759,3 +16759,29 @@ Verification — every secret-adjacent type:
 
 Verdict: TRUE — secret material has no serialization
 path; the only credential field is display-masked.
+
+## Session 2835 update (Socratic pass 1501 — errors.Join census)
+
+Claim under test: no errors.Join discards per-cause
+identity — a joined error must still resolve Is/As
+for every member and must not be interpreted by
+index order.
+
+Verification:
+
+- Sole site: rates/fetcher.go:370 —
+  errors.Join(fetchErrs...) gathers each source's
+  cause; errors.Is/As walk the join tree so no
+  sentinel is lost. The documented intent at :308
+  (join keeps each cause vs. blind "all failed")
+  matches the code.
+- The joined error is diagnostic — the caller only
+  checks non-nil, and classification (plausible vs
+  all-failed) happens on a separate branch (:373),
+  so member ordering is never inspected.
+- All other error constructors are single-cause
+  errors.New or sentinel vars (seedstore :38,
+  btccrypto :59/:63/:67) — no join.
+
+Verdict: TRUE — the one join preserves member
+identity and is consumed order-free.
