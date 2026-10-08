@@ -597,7 +597,7 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
+6. ✅ **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset
    windowed counters on reconnect, use saturating `uint64` accumulators,
@@ -609,6 +609,16 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
+   — ✅ **Re-verified (session 1734):** the claim holds against current
+   code, and is stronger than the note records — each `runSession*`
+   declares a fresh `hashrateWindow` (V2: run.go:943, V1: run.go:1492), so
+   reconnect doesn't merely saturate a stale baseline, it gets a whole
+   new window whose first `observe` re-primes to 0. The saturation arm
+   (total < lastTotal → rate 0, stats.go:164-173) additionally covers
+   counter shrink *within* a session. Regression pins exist exactly as
+   asked: `TestHashrateWindow_SaturatesOnCounterReset`,
+   `_ZeroDeltaTimeYieldsZero`, `_FeedsStallMonitor` (run_test.go:875-915).
+   Accumulators are `atomic.Uint64` (worker.go:121). Marker flipped 🟡→✅.
 7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
