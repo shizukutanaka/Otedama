@@ -25,8 +25,11 @@ whether v3 is right for them and how to migrate if so.
   by the pool). v3 is single-user by design.
 - KYC/AML features. v3 is designed around self-custody.
 
-If any of those is a hard requirement, **stay on v2.x**. The
-`legacy-v2` branch is maintained for security fixes until October 2026.
+If any of those is a hard requirement, **stay on v2.x**.
+**Correction (session 2659):** the `legacy-v2` maintenance branch was
+planned but never created — no such ref exists on the remote; treat
+v2.x as unmaintained rather than counting on the October-2026
+security-fix window described below.
 
 ## What changed in v3
 
@@ -172,7 +175,9 @@ template.
 
 ## What happens to v2?
 
-- `legacy-v2` branch receives **security fixes only** until 2026-10-24.
+- The `legacy-v2` maintenance branch was planned but never created
+  (**correction, session 2659** — no such ref exists on the remote);
+  in practice v2.x receives no fixes of any kind.
 - No new features, no compatibility bridges.
 - The `v2.x` series is marked End-of-Life on the release page.
 

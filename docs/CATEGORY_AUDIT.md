@@ -13264,3 +13264,7 @@ Five stale claims in the 3.0.0-alpha.1 block found and corrected (corrections bl
 ## Session 2658 update (Socratic pass 1324 — CHANGELOG alpha Security block + earlier-version refs)
 
 Continued spot check found three more stale alpha claims + one phantom reference (corrections merged into the session-2657 block): (1) "all GitHub Actions SHA-pinned" — all uses: are @v3–@v6 tags (no SHA pin exists anywhere); (2) "cosign keyless signing for release artifacts" — nothing signed is published; install.sh's optional verify path has no .sig to consume; (3) `legacy-v2` branch referenced by 2.1.9 + Earlier Versions — no such ref among the 721 remote heads. Verified TRUE meanwhile: govulncheck+gosec on PR (security.yml pull_request trigger), Dependabot enablement, CODEOWNERS, install.sh optional cosign verify mechanism, Akash-simulated/Noise-P256/GPU-Linux known-limitation rows. claim corrected: CHANGELOG.md
+
+## Session 2659 update (Socratic pass 1325 — legacy-v2 dangling refs)
+
+The phantom `legacy-v2` branch (no ref among 721 remote heads) was also referenced uncorrected in docs/MIGRATING-FROM-V2.md at :29 ("maintained for security fixes until October 2026") and :175 ("receives security fixes only until 2026-10-24") — both corrected in place with session-2659 errata preserving original wording intent. Already-corrected surfaces untouched: README.md:132-134 (session-493 erratum) and docs/RESEARCH_IMPROVEMENTS.md:2164. CLAUDE.md:76 contains the same phantom reference; ledger-only per maintainer-file convention. claim corrected: docs/MIGRATING-FROM-V2.md
