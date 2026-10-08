@@ -37647,3 +37647,153 @@ census:
   bypass.
 
 Verdict: TRUE.
+
+## Session 3163 update (Socratic pass 1827 — testing-API detail ledger)
+
+Claim under test: the
+test
+harness
+surface
+is
+the
+classic
+T/F/B
+API —
+assertions,
+subtests,
+TempDir/
+Setenv/
+Context —
+with
+zero
+TestMain,
+zero
+quickcheck,
+zero
+parallel-
+bench
+API.
+
+Verification —
+census
+(*_test.go
+only):
+
+- `testing.T`×1866,
+  `testing.F`×23,
+  `testing.B`×11 —
+  every
+  test/
+  fuzz/
+  bench
+  signature;
+  ZERO
+  `testing.M`
+  (no
+  TestMain),
+  ZERO
+  `testing.TB`,
+  `testing.AllocsPerRun`,
+  `QuickCheck`,
+  `Cover`.
+- `t.Errorf`×1666 +
+  `t.Error`×698 +
+  `t.Fatalf`×825 +
+  `t.Fatal`×254 —
+  the
+  assertion
+  fleet.
+- `t.Run`×48 +
+  `t.Parallel`×19 —
+  table/
+  subtest
+  and
+  parallel
+  usage.
+- `t.TempDir`×122 +
+  `t.Setenv`×32 +
+  `t.Cleanup`×36 +
+  `t.Context`×38 +
+  `t.Helper`×50 +
+  `t.Skip`×81 +
+  `t.Skipf`×1 +
+  `t.Logf`×13 +
+  `t.Log`×2 —
+  isolation
+  and
+  lifecycle
+  helpers.
+- `f.Add`×81 +
+  `f.Fuzz`×23 +
+  `f.Fatalf`×2 —
+  corpus
+  seeds
+  and
+  fuzz
+  runners.
+- `b.ReportAllocs`×11 +
+  `b.N`×11 +
+  `b.ResetTimer`×8 +
+  `b.Fatal`×1 —
+  the
+  benchmark
+  surface.
+- ZERO
+  `t.Chdir`,
+  `t.Loop`,
+  `t.Attrs`,
+  `t.Deadline`,
+  `t.Name`,
+  `t.Failed`,
+  `t.Skipped`,
+  `t.ReportAllocs`,
+  `t.Benchmark`,
+  `t.Fuzz`,
+  `t.Signal`,
+  `b.RunParallel`,
+  `b.SetBytes`,
+  `b.SetParallelism`,
+  `b.Loop`,
+  `b.Elapsed`,
+  `b.MemAllocs`,
+  `b.MemBytes`,
+  `f.Chdir`,
+  `f.Add`
+  beyond
+  count,
+  `m.Run`
+  (no
+  TestMain
+  fixture).
+- Suffix
+  pollution
+  ruled
+  out:
+  `t.LogLevel`×16
+  was
+  `got.LogLevel`
+  (config
+  struct),
+  `t.Running`×4
+  +
+  `t.DeadlineExceeded`×3
+  were
+  longer
+  identifier
+  tails,
+  `m.NewDecoder`×31/
+  `m.NewMiningJob`×20/
+  `m.Seed`×5/
+  `m.Now`×2
+  were
+  `stratum.*`
+  tails,
+  `b.NBits`×5/
+  `b.NTime`×2/
+  `b.NtimeStart`×1
+  were
+  `job.*`
+  field
+  tails.
+
+Verdict: TRUE.
