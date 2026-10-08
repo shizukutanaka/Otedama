@@ -12186,3 +12186,7 @@ Claim verified: `wallet verify` reads the recovery phrase from stdin only (never
 ## Session 2394 update (Socratic pass 1060 — MILESTONE: full local gate green)
 
 Milestone re-verification at pass 1060: `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1` on all 10 scoped packages — metrics, rates, arbitration, engine (24.9s), poolproto, poolproto/stratumv1, poolproto/stratumv2, miner, tui, httpserver — ALL ok. Verdict: gate green; no drift since the s2374/pass-1040 milestone. The audit ledger now records ~1,560+ verdicts across ~100+ cross-cutting classes; the codebase remains defect-free under the claim-verification loop since the last real fix (s2264).
+
+## Session 2395 update (Socratic pass 1061 — service subcommand dispatch + status honesty)
+
+Claim verified: `otedama service --help` prints to stdout + exitOK — explicit help is not an "unknown subcommand" error (the same class fixed at the leaf level) (service.go:35–42); the install flag surface is exactly the daemon.ServiceFlags set — --bitcoin-address documented as required only without a config file (:48–76); all three verbs delegate through injectable seams (newDaemonManager/managerInstall/managerUninstall/managerStatus) so tests never touch real OS services (:14–19); Status reports the honest tri-state — "installed, running" / "installed, stopped" / "not installed" — never claiming a state it didn't read (:99–113); exit contract: exitUsage on verb/parse errors, exitRuntime on daemon errors, exitOK on success. TRUE.
