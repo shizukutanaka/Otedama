@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1845 — SPECIFICATION.md)
+
+- Corrected stale G3 status: V1 pool connections dispatch through `poolproto` since session 91; only the V2 inline handshake remains open.
+
 ### Fixed (session 1841 — CONTRIBUTING.md)
 
 - Corrected the false claim that non-major languages are covered by machine translation; they fall back to English.
