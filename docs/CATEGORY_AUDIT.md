@@ -10426,3 +10426,7 @@ Claim verified: Decide rejects nil Input, invalid Policy, and non-finite or nega
 ## Session 1959 update (Socratic pass 625 — candidate filtering + sort)
 
 Claim verified: candidateStreams gates on family acceptance, positive effective yield, and the min-yield floor — belowFloor separates "no stream wanted this device" from "the work on offer was underpriced" for actionable idle logging; the candidate sort is policy-score descending with a StreamID tiebreak (fully deterministic); ForegoneSatsPerSec is measured against raw max yield, not the policy winner, so the foregone-cost metric stays honest under non-earnings policies; hysteresis is judged in the same policy-score space the selection used. TRUE.
+
+## Session 1960 update (Socratic pass 626 — incumbentHold honesty)
+
+Claim verified: the hysteresis gate is a relative margin — incumbent score × (1+hysteresis) — applied in policy-score space; Held is set only when a *different* higher-scoring stream was actually suppressed, so arbitration_holds cannot inflate by counting an incumbent that was itself best; ForegoneSatsPerSec is measured against raw max yield; the reason string distinguishes "held below margin" from "incumbent is best". TRUE.
