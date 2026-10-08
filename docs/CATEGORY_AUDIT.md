@@ -11734,3 +11734,7 @@ Claim verified: no path component in the tree comes from adversarial input — e
 ## Session 2281 update (Socratic pass 947 — log-injection census)
 
 Claim verified: all remote-derived text reaches log lines through the sanitizer or a parse-validated field — V1 reject `result.Reason` and V2 `e.Error` both pass through poolproto.SanitizePoolText before `%s` formatting (run.go:1317/1814); client.show_message notices are sanitized at the parse boundary (parse.go:241) before entering PoolNotices(); "connected to %s" sites log only the URL host component which is parse-validated and userinfo-stripped; remaining `%s` args are compile-time enums, numeric durations, or operator-owned config fields. No path exists where raw pool bytes reach a terminal log line — ANSI injection is structurally blocked at the two boundaries. TRUE.
+
+## Session 2282 update (Socratic pass 948 — iteration-order census)
+
+Claim verified: no output depends on map range order — the metrics exposition iterates `r.counters`/`r.gauges` (slices) then sorts by metricKey before writing; the TUI iterates `s.Providers` (a slice in deterministic config order); the map-typed ranges (pending RPC ledger, rejectByReason, arbitration stream maps) are consumed only by order-insensitive operations (count/delete/per-device independent scoring). Hash/map-input digests never hash a range-derived sequence. TRUE.
