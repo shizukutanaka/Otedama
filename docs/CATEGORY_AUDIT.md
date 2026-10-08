@@ -12889,3 +12889,7 @@ Claim verified: security.yml pins every floating tool ref off master/main/latest
 ## Session 2569 update (Socratic pass 1235 — ci-cd.yml diff deep check)
 
 Claim verified: ci-cd.yml's diff is real — `go build` corrected to `./cmd/otedama` (glob form was fragile), ldflags version injection added where it was silently missing, `sha256sum *` → `sha256sum otedama-*` (previously would have hashed checksums.txt into itself — a real bug), action-gh-release v1→v3, dead k8s deploy job removed (`k8s/deployment.yaml` never existed AND its `refs/heads/main` gate was unfireable — doubly dead), plus the standard concurrency/permissions/timeout/pin hardening. `GO_VERSION: '1.21'` remains = the disclosed Go-pin residual class. TRUE — all 9 workflow diffs now deep-verified as honest hardening.
+
+## Session 2570 update (Socratic pass 1236 — ADR payload diff check)
+
+Claim verified: the ADR diffs are honest — `docs/adr/README.md` updates ADR-003's dependency boundary to include x/sys (consistent with go.mod `golang.org/x/sys v0.41.0` used by internal/tui terminal-width syscalls, matching the s2556 NOTICE verdict), and ADR-009's +127 lines are append-only ecosystem recheck entries — including the s1661/s1681 self-correction sequence (a recorded misread on sv2-apps tags, corrected by appending, never rewriting). TRUE — honest-ledger protocol applied correctly.
