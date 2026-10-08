@@ -16373,3 +16373,27 @@ Verification — two candidates surfaced, both clean:
 
 Verdict: TRUE — no racy atomic read-modify-write; the
 two patterns present are CAS and single-writer.
+
+## Session 2819 update (Socratic pass 1485 — lock re-entry census)
+
+Claim under test: no function locks the same mutex twice
+without an intervening Unlock — Go's sync.Mutex is
+non-reentrant, so re-entry is an immediate self-deadlock.
+
+Verification:
+
+- Structural scan: every func body searched for two
+  `.Lock()/.RLock()` calls on the same receiver
+  expression with no `.Unlock()/.RUnlock()` between
+  them — zero hits across internal/ and cmd/.
+- Combined with s2808's lock-across-send scan and the
+  lock-balance/defer-unlock sweeps: every mutex region
+  is a single-acquire pairing.
+- Indirect re-entry (method calling another method that
+  re-locks the same mutex) is structurally absent —
+  all mutex-owning methods are leaf-level (stats
+  accountants, lazy series, gauge); none calls a
+  second locking method on the same owner.
+
+Verdict: TRUE — the class is absent; no re-entrancy
+deadlock is reachable.
