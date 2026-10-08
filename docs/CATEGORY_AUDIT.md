@@ -13002,3 +13002,9 @@ Claim verified against main.go:52-55 (exitOK=0, exitRuntime=1, exitUsage=64/EX_U
 ## Session 2593 update (Socratic pass 1259 — forbidden-path + architecture-map census)
 
 Census: all 9 CLAUDE.md forbidden paths absent (internal/providers, internal/auth, internal/render, internal/scientific, internal/observability, internal/security, pkg/, web/, k8s/, cmd/otedamad — zero existence). The internal/ tree is exactly the architecture map's 19 packages (arbitration, btccrypto, clock, config, daemon, doctor, engine, hal, httpserver, i18n, lightning, logger, metrics, miner, poolproto, provider, rates, stratum, tui, version) plus cmd/otedama — no orphan directories. TRUE.
+
+## Session 2594 update (Socratic pass 1260 — milestone)
+
+Gates re-verified: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean. Scoped tests for the surfaces audited this stretch — doctor (7.1s), i18n+messages, cmd/otedama (2.6s), config — all green. Pass 1260 milestone recorded.
+
+Cycle position: all 46 branch-diff files audited; census classes completed this stretch — doctor check count, i18n catalog parity, subcommand parity, exit-code parity (1 doc fix), forbidden-path census.
