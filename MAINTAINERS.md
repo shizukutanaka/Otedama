@@ -23,7 +23,8 @@ path before it is needed.
 
 The lead maintainer is responsible for:
 
-- Approving and merging PRs into `main`.
+- Approving and merging PRs into `master` (the default branch; the
+  earlier `main` references in this file were stale).
 - Tagging releases.
 - Holding the release signing key (see "Signing keys" below).
 - Triaging security advisories.
@@ -57,7 +58,7 @@ The lead grants triager rights via GitHub repo settings.
 
 ### 2. Committer
 
-What it means: merge rights on `main` for non-security-critical
+What it means: merge rights on `master` for non-security-critical
 paths. Can approve PRs, merge after CI passes. Still cannot tag a
 release or sign artifacts.
 
@@ -97,15 +98,19 @@ level; nobody is pressured to ascend.
 
 Two pieces of key material exist for Otedama releases:
 
-1. **Cosign keyless signing** (preferred). Per-release ephemeral keys
-   issued by Sigstore via GitHub OIDC. No long-lived secret to
-   manage; verification uses
+1. **Cosign keyless signing** (planned, not yet wired). Per-release
+   ephemeral keys issued by Sigstore via GitHub OIDC. No long-lived
+   secret to manage; verification uses
    `--certificate-identity-regexp` against the GitHub Actions OIDC
-   subject. This is the default path and requires no key custody.
+   subject. **Status (session 2660):** release.yml currently emits no
+   signatures at all — nothing uses this path yet; see VERIFY.md.
 
 2. **Maintainer GPG key for `git tag -s`**. Long-lived. Currently
    held by the lead. The fingerprint is published on the lead's
-   GitHub profile and on `keys.openpgp.org`.
+   GitHub profile and on `keys.openpgp.org`. **Status (session 2660):**
+   every shipped tag (v2.1.5–v2.1.9) is a lightweight commit ref, not
+   an annotated `tag -s` object, so no signed tag has been produced
+   yet — the procedure below describes intended practice once adopted.
 
 When a second maintainer is added, the GPG key custody changes:
 

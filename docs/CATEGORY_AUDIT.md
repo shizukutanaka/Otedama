@@ -13268,3 +13268,7 @@ Continued spot check found three more stale alpha claims + one phantom reference
 ## Session 2659 update (Socratic pass 1325 — legacy-v2 dangling refs)
 
 The phantom `legacy-v2` branch (no ref among 721 remote heads) was also referenced uncorrected in docs/MIGRATING-FROM-V2.md at :29 ("maintained for security fixes until October 2026") and :175 ("receives security fixes only until 2026-10-24") — both corrected in place with session-2659 errata preserving original wording intent. Already-corrected surfaces untouched: README.md:132-134 (session-493 erratum) and docs/RESEARCH_IMPROVEMENTS.md:2164. CLAUDE.md:76 contains the same phantom reference; ledger-only per maintainer-file convention. claim corrected: docs/MIGRATING-FROM-V2.md
+
+## Session 2660 update (Socratic pass 1326 — MAINTAINERS.md)
+
+Corrected: (1) two stale `main` merge-target refs (:26, :60) → `master`; (2) cosign described as "the default path" — release.yml emits no signatures (marked planned); (3) `git tag -s` described as practice — all shipped tags v2.1.5–v2.1.9 are lightweight commit refs, never annotated/signed (marked intended-future). The aspirational custody procedure preserved with status notes. claim corrected: MAINTAINERS.md
