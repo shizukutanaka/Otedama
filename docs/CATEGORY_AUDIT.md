@@ -11662,3 +11662,7 @@ Claim verified: no upstream movement invalidates the current implementation surf
 ## Session 2263 update (Socratic pass 929 — outbound-HTTP redirect census)
 
 Claim verified: after the s2251 hashrate fix, the redirect-refusal posture is now uniform across the ENTIRE outbound HTTP surface — a census of every `http.Client` construction in non-test code finds exactly three (rates price fetcher, rates hashrate fetcher, doctor clock-skew probe) and all three set CheckRedirect to refuse every redirect; no bare `http.Get`, `http.Post`, `http.DefaultClient`, or `http.DefaultTransport` usage exists anywhere in the tree. The https→http downgrade class that #455 introduced is now closed on every reachable outbound path, not just the two that prompted it. TRUE.
+
+## Session 2264 update (Socratic pass 930 — fix: stale DefaultClient comment)
+
+Claim verified (comment was stale → fixed): the clock-skew probe's body-drain comment still claimed "the production fallback uses http.DefaultClient" — outdated since #455 replaced it with the redirect-refusing clockSkewDefaultClient. The behavioral code was already correct (bounded 8KiB drain + Close for keep-alive reuse, no unbounded read); only the prose lagged. Corrected the comment to describe the actual mechanism. gofmt clean, build clean. TRUE.
