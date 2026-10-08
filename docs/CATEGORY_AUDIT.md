@@ -12058,3 +12058,7 @@ Claim verified: the publish boundary never emits an unobserved zero — rate gua
 ## Session 2362 update (Socratic pass 1028 — estimated-share-interval math)
 
 Claim verified: publishDifficulty computes E[seconds between shares] = difficulty × 2^32 / hashrate at stats.go:541–543 — the share-work definition where 1 share ≈ 2^32 hashes per unit difficulty; diff<=0 early-returns so a degenerate input can't write a misleading interval; hashrate<=0 publishes 0 rather than a divide-by-zero or a meaningless sentinel — "cannot estimate" is honest zero, not fabricated. TRUE.
+
+## Session 2363 update (Socratic pass 1029 — worker-idle on session death)
+
+Claim verified: on every session end all workers get SetWork(nil) before the reconnect wait (run.go:602–605) — the dead session's last job is guaranteed-superseded under the next session's IDs (V1 new extranonces, V2 new channel) so hashing it through backoff would burn power on shares the submit gate always drops; dashboard.Update(disconnectedStats(...)) is pushed explicitly since the stats tick dies with the session — without it the TUI would freeze on its last "✓ connected" frame for the entire reconnect window (:606–611). TRUE.
