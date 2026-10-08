@@ -11158,3 +11158,7 @@ Claim verified: the V1 steady state has the same honesty guarantees as V2 — wi
 ## Session 2140 update (Socratic pass 806 — milestone gate: clean tree)
 
 Milestone re-verification: `gofmt -l` clean across cmd + internal; `go build ./...` clean; `go vet ./...` clean; `go test` green on stratum, miner, engine, doctor, config, metrics, httpserver, hal (8 packages — all cached, all pass). The audit cycle's 806-pass ledger remains a zero-defect streak since the last real fix at s1649. TRUE.
+
+## Session 2141 update (Socratic pass 807 — pause reconcile + stream merge + power floor)
+
+Claim verified: a non-mining stream can't leave a mining worker running, and the power floor can't be computed on missing inputs — reconcileArbPauses pauses any device that's idle OR routed to a non-"mining" stream (the miningStreamPrefix check is the boundary that stops an AI/render stream from driving a SHA256d worker) and resumes only devices with a real mining assignment; powerFloor derives a per-device breakeven sats/sec only when ALL inputs are positive (powerWatts, price, devices, a real BTC rate) — a missing or zero rate yields floor=0 which the caller treats as "no floor"; and streamsSlice merges duplicate stream IDs by copying YieldPerDevice into the first (later entries override per-device yields, DefaultYield fills only a zero-value first) — each YieldPerDevice map is copied, so the returned slice can never alias the internal map. TRUE.
