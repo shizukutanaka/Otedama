@@ -12682,3 +12682,7 @@ Claim checked: section headers of this ledger should be a strictly increasing se
 ## Session 2519 update (Socratic pass 1185 — branch-composition census)
 
 Claim verified: the branch's net diff vs origin/master is exactly the established payload — 46 files, ~6032/-820; docs/CATEGORY_AUDIT.md dominates (~4.9k added lines, the verdict ledger); code deltas are the known real fixes: doctor panic-proof fan-out (doctor.go/checks.go + tests), miner worker partition total in uint64, rates hashrate redirect refusal + tests, config TLSCAFile doc, stratum DispatchFrame godoc + encryptedframe fuzz, install.sh asset name, THREAT_MODEL/ADR-009 doc corrections. No file outside this known set appears; no forbidden path touched (pkg/, web/, k8s/, providers/ etc. absent from the diff). TRUE — branch composition remains exactly the documented payload.
+
+## Session 2520 update (Socratic pass 1186 — ledger-tail integrity + sequence monotonicity)
+
+Claim verified: the ledger ends well-formed — final block is a complete Session-header entry followed by prose, no truncated table or dangling delimiter; file is 12,688 lines with 1,686 `## Session` sections (the header count is now dominated by the Socratic pass series, consistent with ~1,190 passes × one entry each plus the older audit blocks). Monotonicity holds from the first Socratic-labeled entry onward (session numbers strictly increase through s2519; collisions recorded at s2518 are confined to the pre-Socratic numbering era). TRUE — ledger structurally sound at the tail where every append lands.
