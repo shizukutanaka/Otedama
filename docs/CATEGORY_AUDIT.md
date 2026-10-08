@@ -10274,3 +10274,7 @@ Milestone: ~19 passes this block (s1899–s1920) all TRUE verdicts, ledger-only.
 ## Session 1921 update (Socratic pass 587 — doctor wallet check hygiene)
 
 Claim verified: checkWallet reports honest tri-state — absent wallet.dat → warn with the real remediation (set passphrase), stat failure → fail, group/other-readable permissions → warn + chmod fix (restored-backup exposure), and the fingerprint sidecar is displayed only when it matches the 8-hex shape so a corrupt file cannot inject control text into the report. TRUE.
+
+## Session 1922 update (Socratic pass 588 — doctor pool-probe boundary)
+
+Claim verified: pool reachability probes are bounded (maxReachabilityProbes=8 — a long pool list cannot turn doctor into a port scanner), parallel with a 5s per-dial timeout honoring ctx, and userinfo is stripped both before dialing and before display so credentials never reach the network probe or the report; outcome tri-state is honest (zero reachable → Fail, partial → Warn naming the dead failover). TRUE.
