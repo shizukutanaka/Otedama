@@ -17136,3 +17136,29 @@ Verification (`git diff --name-status origin/master..HEAD`):
 
 Verdict: TRUE — architecture map respected; zero
 forbidden-path additions.
+
+## Session 2853 update (Socratic pass 1518 — clock-abstraction hygiene)
+
+Claim under test: branch-touched files introduced
+no clock-abstraction violation — new direct
+time.Now()/time.Since() calls must be legitimate
+wall-clock uses, not test-seam breaches.
+
+Verification (grep over branch-touched files vs
+added-line diff):
+
+- One added call site: `internal/doctor/doctor.go`
+  — `time.Since(t0)` inside the panic→Fail recovery
+  block. It mirrors the adjacent non-panic path's
+  identical `Elapsed: time.Since(t0)`; doctor check
+  latency is real wall time by design, and the
+  clock abstraction is not threaded through this
+  package. Legitimate.
+- All other `time.Now`/`time.Since` occurrences in
+  branch-touched files (doctor/checks.go,
+  engine/stats.go, miner/worker.go,
+  rates/hashrate.go, extras_test.go) are
+  pre-existing master lines, not additions.
+
+Verdict: TRUE — zero seam breaches; the one
+addition matches the file's existing pattern.
