@@ -10856,3 +10856,7 @@ Claim verified: payout verification can't be evaded — ScriptForAddress re-vali
 ## Session 2065 update (Socratic pass 731 — poolproto SSOT + sanitization)
 
 Claim verified: the display boundary can't leak credentials or accept control text — one scheme table is the single source for both FromURL and StripScheme (the two can't desync); StripUserinfo redacts only a '@' before the first '/' so an '@' inside a path is preserved — redaction never corrupts a diagnostic; SanitizePoolText removes Cc + Cf + Zl + Zp runes — ANSI introducers, DEL, the bidi/format class behind Trojan Source, and line/paragraph separators that forge extra log lines — then caps at 256 runes so pool text can't flood the log; and malformed URLs pass through unchanged rather than corrupting the error that reported them. TRUE.
+
+## Session 2066 update (Socratic pass 732 — V1 dialer boundary)
+
+Claim verified: dialing can't stall failover or degrade transport — the whole attempt (TCP connect + TLS handshake) runs under an explicit dialTimeout context so a blackhole endpoint can't pin a failover round to the OS SYN-retry default (~2 min) when the caller's ctx has no deadline; TLS configuration follows strict precedence (injected test config → per-pool CA bundle → system roots) with verification always on and no plaintext fallback; a self-imposed deadline surfaces as "dial timeout," not a connection refusal, so the failover classifier sees the true cause; and credentials ride on the Connection so Negotiate needs no second copy. TRUE.
