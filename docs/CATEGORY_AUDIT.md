@@ -11034,3 +11034,7 @@ Claim verified: the frame decoder can't be driven into a hostile allocation — 
 ## Session 2109 update (Socratic pass 775 — SV2 mining-channel decode)
 
 Claim verified: OpenMiningChannel decode can't mis-attribute or accept a truncated field — the fixed layout decodes field-by-field through the bounded wire primitives (ReqID U32, User STR0_255, NominalHashrate 4-byte float32 bits, MaxTarget exactly 32 bytes via io.ReadFull — a short frame errors at the exact field, never a partially-filled struct); every stage's error is wrapped with the field name for attribution; and MaxTargetUnconstrained is the spec's all-FF declaration consistent with the sv2-spec #236 SetTarget bound tracking. TRUE.
+
+## Session 2110 update (Socratic pass 776 — backup verification + session identity)
+
+Claim verified: the first-run backup check can't produce a false "verified" — every edge fails closed (nil writer, empty mnemonic, empty positions, out-of-range position, EOF/empty line, wrong word → verified=false; EqualFold compare so capitalization isn't a false negative); the failure banner states plainly the phrase is the ONLY recovery path and is not stored on disk — honest non-custodial disclosure; sessionUser prefers the pool's explicit user (never concatenates it with an address), falls back to addr.worker then addr; and maskAddr shows a long address only as 6+…+4 while leaving short identifiers intact — the log/TUI surface can never echo a full payout address. TRUE.
