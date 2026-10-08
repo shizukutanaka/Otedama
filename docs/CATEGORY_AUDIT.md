@@ -10458,3 +10458,7 @@ Claim verified: hashrateWindow differentiates cumulative counts into a current r
 ## Session 1967 update (Socratic pass 633 — LatencyTracker exactness)
 
 Claim verified: the tracker is a mutex-guarded ring buffer of fixed capacity (bounded memory, newest samples overwrite oldest); negative samples are rejected; Quantile is an exact nearest-rank on a sorted copy of the retained window — no streaming-estimator error, and the single code path clamps every q (≤0→min, ≥1→max) without an out-of-range index. TRUE.
+
+## Session 1968 update (Socratic pass 634 — submitLimiter flood bound)
+
+Claim verified: the share-submission path is bounded by a token bucket (8/s refill, burst 32) whose take() never blocks — a difficulty-collapse flood (hostile or broken set_difficulty → 0) drops shares instead of queueing goroutines and wire frames; the bucket starts full so an honest trickle never waits; the refill goroutine is scoped to the session ctx and dies with it. TRUE.
