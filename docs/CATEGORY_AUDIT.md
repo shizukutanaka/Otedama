@@ -10082,3 +10082,7 @@ Claim re-verified: code declares exactly 15 OTEDAMA_* env vars (config layer + w
 ## Session 1873 update (Socratic pass 539 — config.yaml.example key-subset parity)
 
 Claim verified: every top-level key in config.yaml.example (bitcoin_address, data_dir, language, log_format, log_level, name, pools, workers) exists in internal/config's yaml-tag set — the example contains zero phantom keys. Absent advanced fields (bitcoin_addresses, arbitration_hysteresis_pct, curtail_below_btc_usd, power_watts, min_yield_sats_per_sec, http_addr, tls_ca_file, payout_scheme, user/password/url under pools) are intentionally non-minimal and documented in docs/api-reference instead. TRUE.
+
+## Session 1874 update (Socratic pass 540 — SECURITY.md supported-version parity)
+
+Claim verified: SECURITY.md's support table is internally consistent with the release reality — newest tag is v2.1.9 (matches the "Partial — critical only until 2026-10" row), the working tree VERSION v3.0.0-alpha.1 is correctly classed as unsupported-alpha, and no v3.0.x stable exists yet so the Yes rows have no live counterpart (policy-before-release, not a falsehood). Honest residual: the v2.1.9 partial-support window expires **this month** (2026-10); whether a maintenance release or a table refresh follows is a maintainer decision, flagged here.
