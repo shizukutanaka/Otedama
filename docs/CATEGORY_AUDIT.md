@@ -38172,3 +38172,129 @@ census:
   names.
 
 Verdict: TRUE.
+
+## Session 3167 update (Socratic pass 1831 — keyword-frequency ledger)
+
+Claim under test: the
+control-
+flow
+vocabulary
+is
+ordinary
+—
+one
+documented
+forward
+`goto`,
+zero
+`fallthrough`,
+bare
+`return`
+only
+in
+void
+functions.
+
+Verification —
+census
+(production):
+
+- `return`×1491
+  total,
+  of
+  which
+  bare
+  `return`
+  at
+  EOL
+  ×67 —
+  matches
+  the
+  earlier
+  bare-
+  return
+  ledger
+  (all
+  void-
+  function
+  exits,
+  no
+  naked
+  named-
+  return
+  reads).
+- `if`×1325,
+  `case`×315,
+  `switch`×85,
+  `else`×50,
+  `default`×163 —
+  ordinary
+  branching
+  distribution.
+- `for`×830,
+  `range`×178,
+  `continue`×54,
+  `break`×10 —
+  loops
+  dominated
+  by
+  range;
+  most
+  exits
+  by
+  return
+  not
+  break.
+- `go`×114
+  (of
+  which
+  `go func`×20
+  literal
+  closures;
+  remainder
+  named
+  spawns
+  — the
+  goroutine
+  ownership
+  ledger),
+  `defer`×91
+  (`defer func`×9
+  closures).
+- `select`×46,
+  `chan`×58,
+  `interface`×54,
+  `map`×145,
+  `struct`×157,
+  `type`×211,
+  `func`×780,
+  `var`×239,
+  `const`×93,
+  `iota`×5.
+- `goto`×1 —
+  `stratumv1.go:583`
+  `goto send // channel empty`
+  (documented
+  forward
+  jump
+  inside
+  the
+  V1
+  non-
+  blocking
+  writer;
+  no
+  backward
+  goto,
+  no
+  other
+  site).
+- `fallthrough`×0 —
+  every
+  case
+  terminates
+  implicitly
+  or
+  returns.
+
+Verdict: TRUE.
