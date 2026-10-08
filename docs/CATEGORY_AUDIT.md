@@ -12698,3 +12698,7 @@ Claim verified via `git ls-remote`: stratum-mining/stratum latest release remain
 ## Session 2523 update (Socratic pass 1189 — dependency-file integrity recheck)
 
 Claim verified: go.mod on the branch is byte-identical to origin/master (empty diff) — the audit surface introduced zero dependency drift. The manifest still holds exactly three direct dependencies, each carrying its CLAUDE.md-required rationale comment (go.yaml.in/yaml/v3 3.0.5 — stdlib lacks YAML decode; x/crypto v0.48.0 — stdlib lacks scrypt, wallet KDF; x/sys v0.41.0 — frozen syscall package cannot express TIOCGWINSZ/GetConsoleScreenBufferInfo, already in the module graph). The godebug block (panicnil=0, randautoseed=1, tlsmlkem=1) documents each pin's intent. TRUE — dependency hygiene invariant holds.
+
+## Session 2524 update (Socratic pass 1190 — secret-material commit census)
+
+Claim verified: scanning the branch's full diff for secret-material patterns (PEM private-key blocks, 64-hex strings, xprv extended keys, WIF payloads, password/api-key assignments) finds zero committed secrets — every hit is prose inside the ledger itself or a CI workflow's own secret-scanning grep step; all "mnemonic"/"passphrase" occurrences are documentation of the wallet flow, not material. Production files (internal/, cmd/, install.sh, Dockerfile) show zero pattern matches outright. TRUE — secret hygiene invariant holds; CLAUDE.md's no-secrets-in-commits rule is satisfied on the branch.
