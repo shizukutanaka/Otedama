@@ -10358,3 +10358,7 @@ Claim verified: the fetch pipeline drops out-of-band readings before the median 
 ## Session 1942 update (Socratic pass 608 — rate-fetch boundary)
 
 Claim verified: fetchOne issues a ctx-bound GET, reads at most 64KiB, measures the Date-header skew before body read so a malformed body still yields a skew observation (and non-200s return skew too — feeding the always-updated aggregate), checks status after the bounded read, and extracts via a per-source parser. StartBackground fetches immediately, ticks thereafter, stops the ticker, and exits on ctx alone. TRUE.
+
+## Session 1943 update (Socratic pass 609 — fanIn shutdown contract)
+
+Claim verified: fanIn's buffer is bounded (bufFactor×N capped at 64, min 1); every producer goroutine selects on ctx at BOTH the input receive and the output send, so a never-written input or a stalled consumer cannot pin it; the output closes only after all producers drain or ctx fires — no send-on-closed, no leaked goroutine. mergeQuotes uses bufFactor 64 (quote burst tolerance) while mergeShares uses 4 (share backpressure is deliberate — workers keep their own drop accounting). TRUE.
