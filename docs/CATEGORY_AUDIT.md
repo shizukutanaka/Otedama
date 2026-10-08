@@ -10002,3 +10002,7 @@ Claim verified: internal/lightning exposes only seed-lifecycle functions — Gen
 ## Session 1853 update (Socratic pass 519 — KL §14 DATUM reservation re-verification)
 
 Claim verified: `datum://` is parsed into `ProtocolDATUM` (poolproto.go:81,120) but has no implementation package; engine/run.go:825-833 fails fast with an explicit "recognized but not implemented — ADR-009" error rather than silently mis-dialing. Scheme reservation without implementation — exactly as KL §14 documents. TRUE.
+
+## Session 1854 update (Socratic pass 520 — KL §5 PQ-scaffold re-verification)
+
+Claim verified: btccrypto.go:68-72 defines `ErrSchemeNotImplemented` for ML-DSA/SPHINCS+ namespace stubs pending BIP-360 + stdlib crypto/mldsa; :248 documents call sites may already branch on the registry entry; only btccrypto.go + secp256k1.go reference the schemes — no active PQ path exists. "Scaffolded, not active" is exact. TRUE.
