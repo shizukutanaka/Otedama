@@ -11882,3 +11882,7 @@ Claim verified: the Worker's lifecycle can't double-spawn or hang — `started a
 ## Session 2318 update (Socratic pass 984 — share-drop non-blocking send)
 
 Claim verified: the grind hot loop can never stall on a slow share consumer — the send at worker.go:316 is `select{shares<-share; default:}` so a full channel drops the share and increments dropCount (:318), which Stats() surfaces at :242. A found share is either delivered or honestly counted as dropped — never silently lost and never blocking the hash loop. TRUE.
+
+## Session 2319 update (Socratic pass 985 — sysfs read bound)
+
+Claim verified: HAL's lone `os.ReadFile` (gpu_linux.go:168, inside readSysFile) needs no size cap — sysfs attribute files are kernel-generated, ≤PAGE_SIZE, and can't be grown or replaced by an unprivileged user; reads happen only at enum time, never on the hot path. The "unbounded read" class doesn't apply here. TRUE.
