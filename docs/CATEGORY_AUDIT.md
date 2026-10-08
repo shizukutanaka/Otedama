@@ -18276,3 +18276,30 @@ os.Interrupt'` production):
 
 Verdict: TRUE — single canonical wiring;
 no orphaned signal channels.
+
+## Session 2905 update (Socratic pass 1570 — sort-determinism census)
+
+Claim under test: every `slices.Sort`/
+`SortFunc`/`SortStableFunc` uses a total
+order — no unstable ties on equal keys.
+
+Verification (15 sites):
+
+- Plain `slices.Sort` on strings/numerics —
+  inherently total (hal registry names,
+  i18n ids, rates vals, metrics keys,
+  engine setup strings).
+- `slices.SortFunc` comparators are all
+  total:
+  - arbitration devices: `cmp.Compare(a.ID,
+    b.ID)` — unique key.
+  - arbitration candidates:
+    `SortStableFunc` by score desc, then
+    StreamID — composite key is unique.
+  - metrics entries: `(name, key)`
+    composite — unique.
+- No comparator that can return 0 for two
+  distinct orderings of the input.
+
+Verdict: TRUE — all sort outputs are
+deterministic across runs and inputs.
