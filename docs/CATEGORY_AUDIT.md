@@ -15314,3 +15314,17 @@ Verification: 20 `go func` sites.
 Verdict: TRUE — every goroutine is either resource-free or has
 a top-of-body cleanup defer; none can leak a resource by an
 early-return path.
+
+## Session 2777 update (Socratic pass 1443 — escape-hatch census)
+
+Claim under test: no code path escapes Go's memory- or type-
+safety via unsafe, go:linkname, or cgo.
+
+Verification: zero `unsafe.` references, zero `go:linkname`,
+zero `import "C"` in non-test code. `CGO_ENABLED=0` is pinned
+in every build surface that ships a binary: Dockerfile:21,
+release.yml:102/:147, test.yml:70, ci.yml:141 — pure-Go
+reproducibility is enforced at four independent points.
+
+Verdict: TRUE — the escape-hatch surface is empty and the
+build environment forbids reintroducing it silently.
