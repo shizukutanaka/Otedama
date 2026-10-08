@@ -9915,3 +9915,7 @@ Claim verified: the dependency DAG matches the architecture map exactly — engi
 ## Session 1833 update (Socratic pass 499 — fuzz target self-discovery)
 
 Claim verified: the test.yml `fuzz` job runs `make fuzz`, which discovers targets dynamically — `grep -rln 'func Fuzz' --include='*_test.go' internal cmd` then `-fuzz="^FN$" -fuzztime=30s` per target. Enumerated 23 `func Fuzz` across 9 packages (stratum×7, stratumv1×5, lightning×2, miner×3, arbitration, btccrypto, config, rates, cmd): all reachable with no hardcoded list that could drift. New fuzz tests are picked up automatically; `found=0` guard prints rather than failing on an empty set. TRUE.
+
+## Session 1834 update (Socratic pass 500 — doctor check-count parity)
+
+Claim verified: CLAUDE.md documents "17 並行ヘルスチェック" and DefaultChecks returns exactly 17 (config, bitcoin-address, failover-addresses, data-dir, wallet, pool reachability/diversity/endpoint-diversity/encryption/tls-ca, payout-scheme, power-economics, profitability-floor, hardware, network, clock-skew, env-vars) — doc count matches implementation 1:1, all run through the panic-proofed fan-out (s1649). TRUE.
