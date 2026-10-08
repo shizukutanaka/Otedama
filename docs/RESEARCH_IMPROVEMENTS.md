@@ -619,10 +619,20 @@ endpoint against current vendor documentation. Tags as before
    asked: `TestHashrateWindow_SaturatesOnCounterReset`,
    `_ZeroDeltaTimeYieldsZero`, `_FeedsStallMonitor` (run_test.go:875-915).
    Accumulators are `atomic.Uint64` (worker.go:121). Marker flipped 🟡→✅.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — ✅ **Already satisfied** (verified session 1735): `internal/stratum/messages.go:11-14`
+   declares "The specification's source of truth is the
+   independently-versioned repository github.com/stratum-mining/sv2-spec
+   (SRI split the roles code out after v1.5.0); stratumprotocol.org
+   renders it. When the codec and the site disagree, trust the repo."
+   `frame.go` cites stable rendered-spec section URLs; `poolproto/stratumv2`
+   reuses that same codec rather than carrying a second protocol truth.
+   The `stratum-mining/stratum` references in CHANGELOG/ADR-009 are
+   ecosystem tracking of the SRI *implementation* releases — correctly
+   distinct from spec truth. No `sv2-rs` or stale link remains.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
