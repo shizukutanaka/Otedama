@@ -14223,3 +14223,30 @@ Verification: regex scan over all non-test structs for
 
 Verdict: TRUE — context is parameter-threaded everywhere; no stored
 scopes.
+
+## Session 2734 update (Socratic pass 1400 — import-direction census)
+
+Claim under test: the internal import graph is a DAG — no low-level
+package depends upward.
+
+Verification: full non-test import enumeration.
+
+- Leaf layer (zero internal deps): miner, stratum, hal, metrics,
+  clock, version, i18n, lightning — pure infrastructure, nothing
+  above them reaches back.
+- Second layer: arbitration→hal (capability reads), provider→hal,
+  config→btccrypto (address validation), daemon→config,
+  httpserver→metrics, poolproto→{btccrypto,stratum} (V2 wire codec
+  shared beneath the protocol abstraction).
+- Top: engine imports all 14 internal packages — it is the sole
+  integrator. doctor→{btccrypto,config,poolproto} reads the same
+  leaves without pulling engine.
+- No cycles: nothing below engine imports it; nothing imports doctor,
+  daemon, httpserver, or provider from beneath; cmd is the only
+  consumer of engine.
+- The one edge worth noting — poolproto→stratum — is the protocol
+  abstraction legitimately sharing the V2 codec leaf, not upward
+  coupling.
+
+Verdict: TRUE — dependency arrows point uniformly downward;
+integrator only at the top.
