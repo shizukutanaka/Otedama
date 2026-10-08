@@ -202,7 +202,9 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    and the same host serves `/api/v1/mining/pools/1w` (per-pool block
    counts → share). The unsolved piece is *identity mapping*: the API
    reports pool names ("Foundry USA", "AntPool") while config carries
-   pool URLs (`stratum+tcp://fp2.antpool.com:3333`); joining them requires
+   pool URLs (`stratum+tcp://stratum.antpool.com:3333` — corrected
+   session 2693; the earlier `fp2.antpool.com` example no longer
+   resolves); joining them requires
    either a user-declared pool identity or a curated hostname→pool table —
    a design decision (new config surface vs. a curated-map maintenance
    liability) fit for an ADR, not a drive-by heuristic. Deferred pending

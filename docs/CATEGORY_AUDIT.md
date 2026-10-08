@@ -13424,3 +13424,10 @@ self-correction: my session-2684 ledger claim "demand.sv2.io exists as a real SR
 ## Session 2694 update (Socratic pass 1360 — milestone gate)
 
 gofmt -l internal cmd: clean. go build ./...: ok. go vet ./internal/... ./cmd/...: ok. go test -count=1 all 23 internal+cmd packages: PASS (incl. doc-touching config/doctor/poolproto/cmd packages). Branch merges cleanly into master.
+
+## Session 2695 update (Socratic pass 1361 — repo-wide hostname census)
+
+Census: every hostname-shaped literal in *.go/*.md/*.yaml/*.sh (113 unique names) DNS-checked. Verdicts:
+claim corrected ×1: docs/RESEARCH_IMPROVEMENTS.md:205's illustrative pool URL "fp2.antpool.com:3333" is NXDOMAIN (AntPool's live endpoint is stratum.antpool.com, resolving today) — corrected inline.
+claim verified TRUE for the rest: all *.example.com names are RFC-2606 placeholders (correct as examples); app.kubernetes.io + monitoring.coreos.com are label-key prefixes not dialables; *.sh/*.info hits are filenames not hostnames; otedama.dev/.io hits are substrings of metric names and of CHANGELOG entries recording the *already-fixed* session-1682 phantom; ast.ai is a substring of Vast.ai (research lead, not an endpoint claim); demand.sv2.io/demand.fun/public.stratum.slushpool.com remain only inside test fixtures (never dialed) and historical ledger/ADR errata text (append-only).
+class note: phantom-hostname sweep is now a recurring census class; today's yield was 5 dead hostnames across 5 files (corrected session 2693) + 1 here.
