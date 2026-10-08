@@ -10302,3 +10302,7 @@ Claim verified: Report.ExitCode implements strict status dominance — any Statu
 ## Session 1928 update (Socratic pass 594 — doctor path/address checks)
 
 Claim verified: checkFailoverAddresses runs the same btccrypto.ValidateAddress checksum verification on every failover address as the primary (masked display, "typo sends earnings to strangers" fix); checkDataDir mirrors the real OS-default resolution (XDG/AppSupport/%APPDATA%), warns-not-fails on a not-yet-created dir, fails on stat errors and not-a-dir, and warns on group/other-readable perms because the wallet lives there. TRUE.
+
+## Session 1929 update (Socratic pass 595 — doctor diversity checks)
+
+Claim verified: checkPoolDiversity warns on 0/1 pools with the honest consequence (mining stops on outage); checkPoolEndpointDiversity goes beneath URL counting — resolves each pool via an injectable resolver, warns when two pools share a resolved IP (illusory failover), honestly skips when fewer than two resolve (offline/sandbox), and documents the missing ASN-dataset limitation. Display is userinfo-stripped throughout. TRUE. Doctor's 17 checks now fully verified this cycle.
