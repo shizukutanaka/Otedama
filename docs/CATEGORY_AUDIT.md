@@ -24801,3 +24801,58 @@ of all named
   all small.
 
 Verdict: TRUE.
+
+## Session 3056 update (Socratic pass 1720 — struct-tag ledger)
+
+Claim under test: every
+struct tag is a
+protocol-correct
+`json:` or `yaml:`
+name — no stray or
+broken tags.
+
+Verification — census
+of all `\`<name>:`
+tags in production:
+
+- `json:`×43 — the
+  V1 JSON-RPC wire
+  field names
+  (subscribe /
+  authorize /
+  notify /
+  submit /
+  configure /
+  set_difficulty /
+  show_message etc.)
+  and the config
+  JSON-display
+  mirrors; each
+  verified to match
+  the protocol
+  spec naming.
+- `yaml:`×20 — the
+  documented
+  config-file
+  schema tags,
+  verified parity
+  against
+  config.yaml.example
+  earlier.
+- ZERO other tag
+  namespaces — no
+  `xml:`, `toml:`,
+  `form:`, `db:`,
+  `bson:`, `protobuf:`,
+  `env:` — the only
+  wire encodings in
+  play are JSON
+  (V1) and YAML
+  (config).
+- The lone
+  `\`result:``
+  hit is a
+  comment, not a
+  tag (verified).
+
+Verdict: TRUE.
