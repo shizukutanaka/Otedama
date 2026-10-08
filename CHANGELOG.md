@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Added (session 1753 — Noise 暗号化フレーム長プレフィックスのファズ)
+
+- `FuzzEncryptedConn_Read` / `FuzzEncryptedConn_LengthPrefix`
+  (internal/stratum/encryptedframe_fuzz_test.go): Noise u16 長プレフィックスの
+  逆直列化経路をファズ — 実フレーム種コーパス＋敵対的プレフィックスで、
+  panic・超過割当・認証失敗時の平文漏洩・ストリーム非同期を不変条件として検査
+  （SRI noise_sv2 オーバーフロー類型の Otedama 相当面）。
+
 ### Docs (session 1725 — .goreleaser.yaml ヘッダコメント訂正)
 
 - 「本番実行は release.yml がタグプッシュで起動」という誤記を訂正 — release.yml

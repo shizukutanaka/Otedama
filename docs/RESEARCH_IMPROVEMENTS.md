@@ -956,7 +956,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -967,6 +967,17 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+   — **Applied (session 1753):** added `FuzzEncryptedConn_Read` and
+   `FuzzEncryptedConn_LengthPrefix` (internal/stratum/
+   encryptedframe_fuzz_test.go) over the Noise u16 length prefix —
+   seeded with real zero-key frames plus adversarial prefixes (max/zero
+   claims, truncation, garbage-after-valid, sub-tag-size claims);
+   invariants asserted: no panic, no oversize allocation, no plaintext
+   on auth failure, reads bounded to the frame budget. 860k+1.9M execs
+   clean in smoke. The existing `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame`
+   already cover the cleartext `MsgLength`/`DefaultMaxFrameSize`
+   arithmetic, which this pass re-verified as already guarded
+   (Validate → MaxFrameSize check → allocate).
 2. ✅ **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
