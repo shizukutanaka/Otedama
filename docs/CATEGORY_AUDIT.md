@@ -43446,3 +43446,124 @@ census:
   dynamically).
 
 Verdict: TRUE.
+
+## Session 3206 update (Socratic pass 1868 — time final ledger)
+
+Claim under test:
+`time`
+is
+unit
+constants
++
+`Now`/`Since`/
+`Sleep`/`After`/`Ticker`/
+`Timer`;
+monotonic
+`Since`
+for
+elapsed
+math,
+`UTC`
+everywhere,
+zero
+`AfterFunc`/`Parse`/locales.
+
+Verification —
+census:
+
+- Units:
+  `Second`×257,
+  `Millisecond`×229,
+  `Minute`×28,
+  `Hour`×13,
+  `Nanosecond`/`Microsecond`×1
+  each —
+  every
+  deadline/
+  backoff/
+  interval
+  is
+  an
+  explicit
+  duration
+  literal.
+- `time.Now`×116,
+  `Since`×26 —
+  monotonic
+  elapsed
+  measurement
+  (never
+  `Now().Sub`
+  across
+  clock-
+  reset
+  boundaries
+  incorrectly;
+  `clock.Clock`
+  abstracts
+  production
+  paths).
+- `time.Sleep`×86 —
+  almost
+  all
+  test
+  pacing;
+  production
+  hot
+  paths
+  use
+  `After`/`Ticker`.
+- `time.After`×71,
+  `NewTicker`×20,
+  `NewTimer`×3 —
+  every
+  `Ticker`/`Timer`
+  pairs
+  with
+  `Stop`
+  (audited
+  s2747+).
+- `time.Duration`×40
+  type
+  +
+  `Time`×37,
+  `UTC`×13
+  (timezone
+  is
+  pinned —
+  no
+  `Local`/`LoadLocation`),
+  `Date`×13,
+  `Unix`×7.
+- `time.ParseDuration`×1 —
+  single
+  config
+  string
+  parse.
+- ZERO:
+  `time.AfterFunc`
+  (explicit
+  goroutine+timer
+  instead),
+  `time.Tick`/`Tick`-
+  channel
+  (non-
+  stoppable),
+  `time.Parse`/`ParseInLocation`/`RFC3339*`
+  (no
+  timestamp
+  strings
+  round-
+  trip),
+  `time.Local`/`LoadLocation`/`FixedZone`,
+  `time.Until`
+  (`Since`
+  with
+  sign
+  flip
+  used),
+  `time.NewDate`,
+  `time.Weekday`/`Month`/`Location`-
+  arithmetic.
+
+Verdict: TRUE.
