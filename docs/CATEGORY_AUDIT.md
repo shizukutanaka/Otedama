@@ -19842,3 +19842,54 @@ Verdict: TRUE — every primitive
 is stdlib or audited x/crypto;
 crypto/subtle only for constant-
 time comparison.
+
+## Session 2958 update (Socratic pass 1623 — net + net/http census)
+
+Claim under test: every outbound
+connection has an explicit
+timeout, and every HTTP client
+refuses redirects.
+
+Verification:
+
+- `net.Dialer` — 4 sites, all
+  with declared Timeout:
+  engine/run.go:877 (15s pool
+  dial), stratumv2/dialer.go:76,
+  stratumv1/dialer.go:97,
+  doctor/checks.go:372 (5s) +
+  :845 (3s). Same dialer
+  timeouts already counted at
+  s2940.
+- `net.Listen` — one site
+  (httpserver/server.go:111)
+  for the admin HTTP server.
+- `http.Client` — two sites:
+  rates/hashrate.go:110 (with
+  `Timeout: 10s` +
+  `CheckRedirect` refusal) and
+  doctor/checks.go:875
+  `clockSkewDefaultClient`
+  (same redirect refusal; the
+  caller adds a 5s
+  ctx.WithTimeout). The comment
+  documents the redirect threat
+  model explicitly: https→http
+  downgrade + attacker Date.
+- `net.SplitHostPort` —
+  --http-addr and doctor
+  host parsing.
+- `net.ParseIP` — loopback
+  check on the admin bind.
+- Zero `net.ResolveTCPAddr`,
+  `LookupHost`, `LookupAddr`,
+  `DialContext` without
+  Timeout.
+- Zero `http.Post`, `http.Head` —
+  feed is GET-only; doctor
+  clock-skew probe is GET.
+
+Verdict: TRUE — every dial has
+an explicit timeout; every HTTP
+client refuses redirects; all
+requests are GET.
