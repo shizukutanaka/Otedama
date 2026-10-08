@@ -13400,3 +13400,7 @@ claim verified: cost table 595h sum, all scenario arithmetic (A −$7.01/−$6.2
 claim corrected ×1 (via erratum): "88% over budget" — (1,940−1,040)/1,040 ≈ 86.5% (1.5pp rounding slip).
 note: same 4-week-month vs calendar-week budget-convention drift as ADR-008 (cross-referenced).
 claim verified: scenario arithmetic A ($2.69→$2.86, +6.3%, ~$310/5yr) and B ($131.04→$137.58, +$2,352/yr), cost table 480h, combined 1,940h incl. ADR-010's 290h cross-check, adjusted 1,450h/40%-over, min-viable 715h, cluster pairs, rejection list — TRUE.
+
+## Session 2691 update (Socratic pass 1357 — docs/adr/ADR-010 full pass)
+
+claim verified: session-2623 erratum (:16) remains accurate — alpha Decide is per-device Allocation, not two-quote ~150 LOC comparator. Cost table sums to 290h (40+30+60+20+15+30+45+25+25 = 29wk @10h). Forecaster buffer math 14×24×(60/5)=4,032 entries, period=288 consistent. Citations check out (Lykouris-Mirrokni STOC 2018, Burnetas 1811.12852, Zuo & Joe-Wong 2105.04373, Mellor & Shapiro 1302.3721, SCaLE 2601.09042, ROSS 2601.14612, non-stationary-BCO 2506.02980). Cluster graph {A1,A6,A8}/{A2,A3}/{A7 requires A6} consistent. Rejection list non-custodial compliant. Proposed paths (forecast/, switchcost/, device/, bid/, preference/, calibration/, robust/, explain/) absent as expected — proposal, not drift — TRUE.
