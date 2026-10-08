@@ -33858,3 +33858,158 @@ census:
   s3132.
 
 Verdict: TRUE.
+
+## Session 3140 update (Socratic pass 1804 — format-verb census)
+
+Claim under test: the
+format-verb
+surface is
+%s/%d/%w/%q/%v
+dominated
+with a
+bounded
+float
+and
+hex
+tail —
+no
+%T,
+no
+%U,
+no
+raw
+%x
+byte
+dumps
+outside
+hash
+display.
+
+Verification —
+census
+(verbs
+across
+all
+fmt
+calls):
+
+- `%s`×199 —
+  string
+  formatting
+  (the
+  dominant
+  verb).
+- `%d`×174 —
+  integer
+  formatting.
+- `%w`×111 —
+  error
+  wraps
+  (matches
+  the
+  s3138
+  count
+  exactly).
+- `%q`×78 —
+  quoted
+  strings
+  (the
+  pool-
+  text
+  quoting
+  boundary:
+  userinfo/
+  job-ids/
+  pool
+  errors
+  quoted
+  at
+  log
+  emission).
+- `%v`×69 —
+  generic
+  value
+  (errors,
+  mixed
+  types).
+- Float
+  verbs:
+  `%.0f`×31,
+  `%.2f`×13,
+  `%g`×10,
+  `%.4f`×4,
+  `%.1f`×4,
+  `%e`×3,
+  `%.4g`×2,
+  `%f`/`%.6g`/`%.5f`×1
+  each —
+  the
+  rate/hashrate/
+  hashrate-
+  window
+  display
+  fleet
+  (estimate-
+  only,
+  never
+  wire
+  values).
+- Hex
+  verbs:
+  `%08X`×8,
+  `%02X`×7,
+  `%08x`×6,
+  `%02x`×1 —
+  nonce/
+  hash/
+  share-
+  digest
+  display.
+- Flag
+  variants:
+  `% o`/`% e`/`% p`/`% t`/`% s`/`% f`/`% b`×few —
+  space-flag
+  pad-positive
+  formatting
+  in
+  aligned
+  log
+  columns.
+- Width
+  variants:
+  `%-14s`×3,
+  `%-30s`,
+  `%-12s`,
+  `%04o`×2 —
+  left-align
+  and
+  zero-pad
+  for
+  the
+  TUI/doctor
+  tables.
+- ZERO
+  `%T`
+  (type
+  debug
+  verb),
+  `%U`
+  (unicode
+  verb),
+  `%#v`
+  (Go-syntax
+  dump),
+  `%p`
+  pointer
+  verbs
+  in
+  user-facing
+  output —
+  no
+  reflection/
+  pointer
+  leakage
+  in
+  formatting.
+
+Verdict: TRUE.
