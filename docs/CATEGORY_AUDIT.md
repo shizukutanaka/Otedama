@@ -11098,3 +11098,7 @@ Claim verified: a device identity can't be empty, non-familial, or path-breakabl
 ## Session 2125 update (Socratic pass 791 — poolproto registry + sanitize SSOT)
 
 Claim verified: the scheme table is a true single source of truth — knownSchemes feeds BOTH FromURL and StripScheme so a scheme can't be inferable-but-unstrippable (the s1333 desync class is structurally dead); Register panics on nil dialer, ProtocolUnknown, and duplicate ID — registry corruption can only happen at init, never silently; DialURL fails fast on unknown scheme and closes the socket when Negotiate fails (no conn leak on a failed handshake); SanitizePoolText strips unicode.Cc + Cf + Zl + Zp (the s1260 Cf/Zl/Zp fix confirmed live — ANSI escapes, zero-width format chars, and line/para separators are all removed, not escaped). TRUE.
+
+## Session 2126 update (Socratic pass 792 — env/flag layer + DefaultDataDir)
+
+Claim verified: the env layer can't stomp a value with "" or drift from the flag layer — applyEnvLayer walks the single numericEnvVars spec table for every numeric key (a new numeric field gets parse+origin in one edit site — no per-key drift possible); every string env applies only when non-empty, so a blank OTEDAMA_* can't silently erase a valid file value; applyFlagLayer stamps OriginFlag only on non-empty flags (origin can't lie about which layer won); DefaultDataDir is a pure GOOS dispatch honoring APPDATA→"", UserHomeDir→darwin fallback, XDG_DATA_HOME→~/.local/share on linux — never an empty-success path. TRUE.
