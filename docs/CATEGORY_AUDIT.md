@@ -10354,3 +10354,7 @@ Claim verified: branch remains green — go build ./... = 0 errors, go vet ./...
 ## Session 1941 update (Socratic pass 607 — rate-median integrity)
 
 Claim verified: the fetch pipeline drops out-of-band readings before the median so a manipulated endpoint cannot pull it; the two-source case distrusts a >4x divergence because a 2-element "median" is a mean with no outlier rejection; lastOKSources persists regardless of success (degraded backing 3→1 is observable before 0); clock skew aggregates from every response including non-200s and persists before the rate check so skew telemetry survives a total-fetch failure. TRUE.
+
+## Session 1942 update (Socratic pass 608 — rate-fetch boundary)
+
+Claim verified: fetchOne issues a ctx-bound GET, reads at most 64KiB, measures the Date-header skew before body read so a malformed body still yields a skew observation (and non-200s return skew too — feeding the always-updated aggregate), checks status after the bounded read, and extracts via a per-source parser. StartBackground fetches immediately, ticks thereafter, stops the ticker, and exits on ctx alone. TRUE.
