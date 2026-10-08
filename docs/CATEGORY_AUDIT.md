@@ -23340,3 +23340,71 @@ Verification — census:
   the owning mutex).
 
 Verdict: TRUE.
+
+## Session 3029 update (Socratic pass 1693 — crypto residual ledger)
+
+Claim under test: every
+crypto primitive is a
+vetted stdlib/btcec
+building block used in
+its intended role —
+no weak primitives, no
+homegrown schemes.
+
+Verification — census
+(path artifacts
+`tls.go`/`secp256k1.go`
+excluded):
+
+- `tls.Config`×12 +
+  `VersionTLS`×4 +
+  `Dialer`×4 + `Dial`×1
+  — the twin dialers
+  with MinVersion
+  TLS1.2 and
+  verification always
+  on (verified).
+- `x509.NewCertPool`×3 +
+  `SystemCertPool`×2 +
+  `CertPool`×1 — the
+  tlscafile override
+  path (verified).
+- `sha256.Sum`×11 +
+  `sha256.New`×8 — the
+  sha256d hot path and
+  stream hashers.
+- `rand.Reader`×11 —
+  crypto/rand at every
+  secret-bearing site
+  (verified — no
+  math/rand production).
+- `ecdh.P`×3 +
+  PublicKey/PrivateKey —
+  the Noise NX
+  P-256/X25519 sites
+  (honest stub,
+  maintainer area).
+- `scrypt.Key`×2 +
+  `pbkdf2.Key`×1 +
+  `sha512.New`×1 —
+  wallet KDF chain
+  (seedstore +
+  BIP-39 PBKDF2-HMAC-
+  SHA512, verified).
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `AEAD`×2 — seed
+  encryption.
+- `hmac.New`×1 —
+  the pooled HMAC
+  hasher factory.
+- `subtle.
+  ConstantTimeCompare`
+  ×1 — wallet
+  fingerprint
+  comparison.
+- ZERO md5/sha1/des/
+  rc4/elliptic-math
+  shortcuts.
+
+Verdict: TRUE.
