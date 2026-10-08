@@ -26481,3 +26481,70 @@ census:
   waits.
 
 Verdict: TRUE.
+
+## Session 3081 update (Socratic pass 1745 — flag/log/slog surface ledger)
+
+Claim under test: flag
+parsing is per-
+subcommand FlagSet,
+and logging routes
+through the slog
+wrapper with zero
+stdlib log calls.
+
+Verification —
+census:
+
+- `flag.NewFlagSet`×5 +
+  `ErrHelp`×5 +
+  `ContinueOnError`×5 +
+  `FlagSet`×3 —
+  one FlagSet
+  per
+  subcommand,
+  ErrHelp for
+  the help
+  exit path,
+  ContinueOnError
+  so callers
+  own exit
+  codes
+  (verified
+  exit-code
+  class).
+- `flag.Parse`×1 +
+  `flag.Flag`×1 —
+  the two
+  remaining
+  flag types.
+- ZERO `flag.CommandLine`
+  pollution —
+  no global
+  flag state.
+- `slog.NewTextHandler`×2 +
+  `NewJSONHandler`×2 +
+  `Logger`×2 +
+  `New`×1 +
+  `Level*`×5 +
+  `HandlerOptions`×1 —
+  the logger
+  package's
+  complete
+  slog
+  vocabulary.
+- ZERO `log\.` calls
+  — the stdlib
+  log package
+  is fully
+  absent;
+  the slog
+  wrapper is
+  the only
+  logger.
+- ZERO `slog.SetDefault`,
+  `slog.Default`
+  — the global
+  slog is
+  untouched.
+
+Verdict: TRUE.
