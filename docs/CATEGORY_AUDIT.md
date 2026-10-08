@@ -19711,3 +19711,46 @@ comparison is preceded by a
 non-finite reject; no float
 math on precision-critical
 values.
+
+## Session 2955 update (Socratic pass 1620 — math/big census)
+
+Claim under test: `math/big` is
+used only for (a) the share-target
+math, (b) base58 decode, and (c)
+uniform random sampling — never
+as a substitute for int64.
+
+Verification (13 sites, 4 files):
+
+- `sha256d.go` — nBits→target via
+  `new(big.Int).SetUint64(mant)`
+  + `Lsh` (mantissa ×
+  2^(8*(exp-3))); `diff1Target`
+  = `0xffff << 208` — canonical.
+- `big.Float` — two divisions:
+  `SetPrec(256)` for share-target
+  (sha256d.go:230-231) and
+  `SetPrec(128)` for share
+  difficulty (:265-266). The
+  comment documents the
+  choice — fractional precision
+  before truncation, not a
+  float64 shortcut.
+- `rand.Int(rand.Reader, big.NewInt(n))` —
+  uniform-random sampling at
+  engine/setup.go:297 + run.go:486
+  (crypto/rand, bounded).
+- `btccrypto/base58.go` — base58
+  decode accumulation; the
+  comment explains the leading-
+  '1' → leading-zero-byte
+  compensation.
+- Zero `big.Rat`, `big.NewFloat`
+  without `SetPrec` — every
+  `big.Float` declares its
+  precision explicitly.
+
+Verdict: TRUE — big-number use is
+limited to share math, base58
+decode, and uniform sampling,
+each with documented precision.
