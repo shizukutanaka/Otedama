@@ -9,6 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 2647 — audit-cycle backlog entries)
+
+- `rates.HashrateFetcher` now refuses HTTP redirects, matching the #455
+  posture on the price fetcher and clock-skew probe: a 30x on the
+  hardcoded HTTPS hashrate sources could downgrade to plaintext http and
+  inject a manipulated network-hashrate reading into yield estimates.
+  Same `CheckRedirect` rejection + regression test (session 2251).
+- `pools[].tls_ca_file` is now honored for `stratum+v2tls://` as well as
+  `stratum+tls://` — the V2 connect path reads the PEM file and builds a
+  `stratum.TLSConfigWithExtraCAs` config instead of silently using system
+  roots; doctor's warning text updated to cover both schemes (session
+  2616, with regression test).
+- `devin-direct-merge.yml`'s check-conflict job now passes `--repo` to its
+  `gh` invocations — the job no longer checks out the repo, so bare `gh`
+  calls failed with "not a git repository" (session 2599).
+
 ### Fixed (session 1884 — README.md)
 
 - Requirements note now states the actual go.mod declaration (`go 1.24.0`)

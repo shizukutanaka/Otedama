@@ -13216,3 +13216,7 @@ All claims verified TRUE — engine dispatch at run.go:822 routes V1 URLs to `ru
 ## Session 2646 update (Socratic pass 1312 — RESEARCH_IMPROVEMENTS drift recheck)
 
 All claims verified TRUE — census counts stable since s1284: 88 🔵 ADR-tracked rows, 7 ❌ scope-rejected (multi-algo, pool server, custodial escrow, federated multi-agent — each matches a CLAUDE.md prohibition verbatim), 102 ✅ shipped; `engine.parseHost` datum:// claim is live code (run.go:2191, dispatched at :837); datum:// recognized-but-fail-fast at poolproto.go:120 ⟷ run.go:825-833 — Category-4 rows (JDC, solo-bitcoind, OCEAN DATUM, TemplateSource) all correctly remain 🔵; session-1740 scope-refinement note for pool-share awareness is self-consistent.
+
+## Session 2647 update (Socratic pass 1313 — CHANGELOG currency)
+
+FALSE CLAIM found and corrected — `[Unreleased]` tracked doc corrections through session 1884 but three user-facing code fixes on this branch had no entry: s2251 (HashrateFetcher redirect refusal), s2616 (tls_ca_file honored on stratum+v2tls://), s2599 (devin-direct-merge --repo). All three appended under a session-2647 backlog entry. Previously verified entries (jitter #1403, deploy-pipeline #1404, solo net-yield, session-1318 coinbase verification, TLSCAFile session-409) all confirmed live and accurate.
