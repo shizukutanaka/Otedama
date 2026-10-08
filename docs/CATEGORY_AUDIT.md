@@ -13068,3 +13068,7 @@ Census: Validate() accepts `log_level` ∈ {debug, info, warn, error} (config.go
 ## Session 2609 update (Socratic pass 1275 — language enum parity)
 
 Census: PriorityLanguages() returns exactly en/ja/zh/ko/es/fr/de/pt/ru/ar (message.go:116-120); config.yaml.example's comment lists the identical 10 tags; API.md documents `--language` as a BCP 47 tag with OTEDAMA_LANGUAGE env parity. Three-way parity holds (code constants ↔ example config ↔ user docs). TRUE.
+
+## Session 2610 update (Socratic pass 1276 — config-example field parity)
+
+Bidirectional census: all 20 `yaml:`-tagged fields in config.go are represented in config.yaml.example — 7 active top-level keys (bitcoin_address, data_dir, language, log_format, log_level, pools, workers) + the remaining 13 as documented commented options (bitcoin_addresses, http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct) or nested pool/worker keys (url, user, password, payout_scheme, tls_ca_file, name). Header correctly describes precedence (flags > env > file > defaults) matching the 4-layer Resolve order. TRUE.
