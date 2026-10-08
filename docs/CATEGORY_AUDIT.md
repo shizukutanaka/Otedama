@@ -37115,3 +37115,142 @@ census:
   fleet.
 
 Verdict: TRUE.
+
+## Session 3160 update (Socratic pass 1824 — encoding/binary + hex + json + base64 detail ledger)
+
+Claim under test: the
+encoding
+fleet
+is
+fixed-width
+little-
+endian
+wire
+codec +
+JSON
+RPC +
+hex,
+with
+zero
+big-
+endian/
+varint/
+base64
+usage.
+
+Verification —
+census:
+
+- `binary.LittleEndian`×65 —
+  every
+  wire
+  marshal/
+  unmarshal
+  (PutUint16/
+  32/64
+  and
+  readers);
+  the
+  entire
+  binary
+  surface.
+- ZERO
+  `binary.BigEndian`,
+  `NativeEndian`,
+  `AppendByteOrder`,
+  `binary.Read`,
+  `binary.Write`,
+  `Uvarint`,
+  `Varint`,
+  `PutUvarint`,
+  `PutVarint`,
+  `AppendUvarint`,
+  `AppendVarint`,
+  `Size`,
+  `ByteOrder` —
+  no
+  reflection
+  codec,
+  no
+  varints
+  (SV2
+  is
+  fixed-
+  width
+  LE).
+- `json.Unmarshal`×26 —
+  V1
+  RPC
+  and
+  config-file
+  decode.
+- `json.RawMessage`×18 —
+  deferred
+  dispatch
+  fields
+  (method-
+  keyed
+  route).
+- `json.NewEncoder`×3 +
+  `json.Marshal`×1 —
+  the
+  V1
+  writer
+  +
+  doctor
+  JSON
+  report.
+- ZERO
+  `json.NewDecoder`,
+  `Encoder`×0?,
+  `Decoder`,
+  `Token`,
+  `Delim`,
+  `MarshalIndent`,
+  `Indent`,
+  `Compact`,
+  `HTMLEscape`,
+  `Valid`,
+  `Number`,
+  `Marshaler`,
+  `Unmarshaler`,
+  `SyntaxError`,
+  `UnmarshalTypeError` —
+  no
+  streaming
+  decode
+  (line-
+  framed
+  Unmarshal
+  only).
+- `hex.DecodeString`×6 +
+  `hex.EncodeToString`×4 —
+  the
+  wire
+  hex
+  fields
+  (extranonce,
+  coinbase
+  parts,
+  prevhash,
+  merkle
+  branches).
+- ZERO
+  `base64.*` —
+  StdEncoding,
+  URLEncoding,
+  RawStdEncoding,
+  RawURLEncoding,
+  Encoder,
+  Decoder
+  all
+  absent
+  (no
+  base64
+  anywhere
+  in
+  the
+  protocol
+  stack).
+
+Verdict: TRUE.
