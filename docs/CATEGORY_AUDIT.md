@@ -11830,3 +11830,7 @@ Claim verified: the dashboard can never interleave with logger stdout — the pa
 ## Session 2305 update (Socratic pass 971 — shutdown defer ordering)
 
 Claim verified: Run()'s teardown is LIFO-consistent — dashboard/HTTP stops first, then providers (mining then Akash), then workers stop last (:351–352 provider Stops, :269–273 worker loop registered earlier so it runs last). No use-after-stop: providers can briefly tick against idle workers during unwind, which is a benign zero-quote state; ctx cancellation is the dominant stop signal everywhere, so the defer order only polishes the tail. TRUE.
+
+## Session 2306 update (Socratic pass 972 — conn ownership lifecycle)
+
+Claim verified: every pool connection has single-owner cleanup — `defer conn.Close()` registers only after successful dial (:884), the reader goroutine self-terminates on read error and closes inCh; the V1 path's `defer sess.Close()` (:1464) mirrors it, and DialURL cleans its own conn on failure so no partial resource leaks. Double-Close on net.Conn is a returned error, never a panic. TRUE.
