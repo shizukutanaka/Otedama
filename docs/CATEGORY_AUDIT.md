@@ -12833,3 +12833,7 @@ Claim verified: full milestone re-run — `gofmt -l internal cmd` prints zero fi
 ## Session 2555 update (Socratic pass 1221 — merged-invariant spot re-verification)
 
 Claim verified: invariants from the merged fix wave are all present on `origin/master` — `maxExtranonce2Size = 64` bound (#428) enforced via `extranonce2SizeOK`, retarget-reject detection (#447 transitionReject), V2 share-target publication + starvation warn (#407/#396/#408), SubmitSharesSuccess sequence validation (#422/#423), reject-reason accounting with mutex discipline (#591, 42 reject references in run.go). TRUE — master retains every merged guard; no regression by later merges.
+
+## Session 2556 update (Socratic pass 1222 — NOTICE attribution parity)
+
+Claim verified: the branch-updated NOTICE is accurate against go.mod — `golang.org/x/sys` correctly reclassified from "indirect, via x/crypto" to "direct, used by internal/tui for terminal-width syscalls (TIOCGWINSZ/GetConsoleScreenBufferInfo)", and `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` migration (#444) reflected with the maintained-continuation note; all four deps (x/crypto, x/sys, yaml, stdlib) plus BIP-39 public-domain wordlist and trademark/AI-assistance disclaimers present. TRUE — attribution complete and consistent with the actual dependency tree.
