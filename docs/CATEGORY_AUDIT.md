@@ -23176,3 +23176,53 @@ Verification — census:
   earlier).
 
 Verdict: TRUE.
+
+## Session 3026 update (Socratic pass 1690 — encoding/json ledger)
+
+Claim under test: every
+JSON decode is bounded
+by a transport-layer
+limit — no unbounded
+Decode.
+
+Verification — census:
+
+- `json.Unmarshal`×26 —
+  all inputs arrive
+  pre-bounded: V1 lines
+  are ≤64KiB (bufio
+  cap), HTTP bodies are
+  LimitReader'd, wallet
+  is 4KiB-capped.
+- `json.RawMessage`×18 —
+  the V1 protocol's
+  preserve-then-decode
+  pattern: params are
+  carried as RawMessage
+  and decoded only when
+  the method is known
+  (verified at the
+  V1-parser pass).
+- `json.NewEncoder`×3 —
+  the JSON sinks
+  (doctor --json,
+  config origins,
+  service status).
+- `json.Marshal`×1.
+- ZERO `json.Decoder`
+  stream decoding —
+  the V1 protocol is
+  line-delimited JSON,
+  so per-line Unmarshal
+  is the correct shape.
+- ZERO `json.Number`
+  — float64 decoding
+  matches the V1 spec's
+  JSON-RPC numbers
+  (set_difficulty etc.),
+  with NaN/Inf rejects
+  at the semantic layer.
+- ZERO `jsoniter`/
+  `fastjson` deps.
+
+Verdict: TRUE.
