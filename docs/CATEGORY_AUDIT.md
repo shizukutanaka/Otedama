@@ -26778,3 +26778,134 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3085 update (Socratic pass 1749 — goroutine spawn ownership ledger)
+
+Claim under test: all
+25 goroutine
+spawn sites are
+owned —
+WaitGroup-tracked,
+ctx-driven, or
+caller-owned —
+zero fire-and-
+forget.
+
+Verification —
+census (25 sites
+across 10 files):
+
+- `internal/engine/
+  run.go`×6 —
+  the main
+  loop's
+  orchestrated
+  goroutines
+  (pollers,
+  monitors,
+  reconnection
+  loops) —
+  all
+  ctx-
+  driven
+  with
+  WaitGroup
+  drain
+  on
+  shutdown
+  (verified
+  lifecycle
+  class).
+- `internal/rates/
+  hashrate.go`×2 +
+  `fetcher.go`×2 —
+  the feed
+  poll
+  loops —
+  ticker
+  + Stop
+  paired.
+- `internal/
+  poolproto/
+  stratumv1/
+  stratumv1.go`×2 —
+  the V1
+  read/
+  write
+  halves —
+  session-
+  owned.
+- `internal/miner/
+  worker.go`×2 —
+  the worker
+  grind
+  loops —
+  cancelReady
+  rendezvous
+  (verified).
+- `internal/
+  httpserver/
+  server.go`×2 —
+  the serve
+  goroutine +
+  graceful-
+  stop
+  helper —
+  server-
+  owned.
+- `internal/hal/
+  registry.go`×2 —
+  the detect
+  fan-out —
+  buffered
+  resultsCh
+  (verified
+  fanout
+  class).
+- `internal/engine/
+  fanin.go`×2 —
+  the stream
+  merger —
+  fan-in
+  owner.
+- `internal/tui/
+  dashboard.go`×1 —
+  the render
+  loop.
+- `internal/provider/
+  polling.go`×1 —
+  the shared
+  polling
+  machine.
+- `stratumv2/`,
+  `daemon/`,
+  `doctor/`,
+  `lightning/`,
+  `cmd/` —
+  ZERO bare
+  `go `
+  calls —
+  all
+  session-
+  scoped
+  work is
+  synchronous
+  or
+  callback-
+  driven.
+- All 25
+  verified
+  against
+  the
+  leak-
+  map
+  (session-553):
+  each is
+  either
+  ctx-
+  cancelled
+  or
+  WaitGroup-
+  awaited.
+
+Verdict: TRUE.
