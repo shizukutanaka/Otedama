@@ -10222,3 +10222,7 @@ Claim verified: fanIn observes ctx on both receive and send (a stuck input can't
 ## Session 1908 update (Socratic pass 574 — rates fetch integrity)
 
 Claim verified: Fetcher fans out across all sources in parallel, drops readings outside the [100, 1e8] USD plausibility band before the median (protects the two-source case against unit/parse corruption), aggregates clock skew even from failed responses and warns past 120s, keeps per-source errors inspectable via errors.Join, and falls back honestly when every source fails. fetcher.go clean. TRUE.
+
+## Session 1909 update (Socratic pass 575 — logger singleton race-freedom)
+
+Claim verified: the default logger lives in atomic.Pointer[Logger] (logger.go:192); the fast path is a single Load, the cold path allocates and CompareAndSwap with the CAS loser returning the winner's instance — race-free for concurrent FromContext readers and SetDefault writers. TRUE.
