@@ -14924,3 +14924,30 @@ Verification: all conversions listed (13 `[]byte(s)`; zero
 Verdict: TRUE — every conversion is an API boundary or one-shot;
 the asymmetric direction (strings→bytes only) means no stale-view
 aliasing risk either.
+
+## Session 2762 update (Socratic pass 1428 — strconv-discard census)
+
+Claim under test: every strconv.Parse*/Atoi either checks err or
+deliberately discards it into a harmless sentinel.
+
+Verification: 18 strconv call sites; 3 discard err — each checked:
+
+- stratumv1.go:690 — JSON-RPC `id` field normalization: a
+  non-numeric id string yields n=0, i.e. an unmatched pending-map
+  key (same benign fate as a wrapped negative int, both marked
+  nolint:gosec with rationale).
+- parse.go:293 — reconnect directive fallback port decode
+  (port-as-string): Atoi failure → port 0, which downstream
+  directive validation rejects as unusable — fail-quiet into a
+  no-op, never a wrong-port connect.
+- stratumv2/dialer.go:436 parseJobID — strict ParseUint chosen
+  over Sscanf(%d) *because* garbage→0 is safe (documented);
+  "1a"→0 cannot collide with a real numeric id. The adapter path
+  is dormant — engine submits inline — so the discard is doubly
+  inert.
+- All remaining sites check err (fetcher.go:105, hashrate.go:68,
+  config.go:405/:549/:810, parse.go:94/:99/:103,
+  run.go:2168 err==nil-gated use).
+
+Verdict: TRUE — each discard lands on a sentinel the protocol
+already treats as absent/invalid.
