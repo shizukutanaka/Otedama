@@ -26702,3 +26702,79 @@ census:
   CGO=0).
 
 Verdict: TRUE.
+
+## Session 3084 update (Socratic pass 1748 — hash/cmp/slices/maps residue ledger)
+
+Claim under test: the
+container API is
+Go-1.21+ modern —
+slices/cmp/maps —
+with hash.Hash as
+the pooled hasher
+interface and no
+legacy sort.
+
+Verification —
+census:
+
+- `slices.Sort`×12 +
+  `SortFunc`×2 +
+  `SortStableFunc`×1 +
+  `Contains`×1 —
+  the complete
+  modern sort
+  API; ZERO
+  `sort.*`.
+- `cmp.Compare`×5 +
+  `cmp.Or`×4 —
+  the
+  comparator
+  package.
+- `maps.Copy`×2 +
+  `maps.Clone`×1 —
+  the map
+  helpers.
+- `hash.Hash`×4 —
+  the pooled-
+  hasher
+  interface
+  type
+  (verified
+  hasher-pool
+  class).
+- `fnv.New32a`×1 —
+  the job-id
+  FNV hash.
+- `hash.Set`×2 /
+  `hash.LessOrEqual`×2
+  — not stdlib
+  hash:
+  these are
+  big.Int
+  method
+  calls on a
+  local named
+  `hash` in
+  miner
+  bitmath
+  (structural,
+  not API).
+- ZERO `iter.*` —
+  range-over-
+  func not
+  adopted.
+- ZERO
+  `constraints.*`
+  — generics
+  constraints
+  unneeded.
+- ZERO `crc32`,
+  `crc64`,
+  `adler32`,
+  `fnv` beyond
+  New32a —
+  checksum
+  surface
+  absent.
+
+Verdict: TRUE.
