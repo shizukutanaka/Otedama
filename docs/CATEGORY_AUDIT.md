@@ -10010,3 +10010,7 @@ Claim verified: btccrypto.go:68-72 defines `ErrSchemeNotImplemented` for ML-DSA/
 ## Session 1855 update (Socratic pass 521 — KL §13 revised-entry re-verification)
 
 Claim verified: §13's post-1658 status text matches current files exactly — deploy.yml:166-186 still carries `helm upgrade ... ./kubernetes/helm/otedama` (nonexistent chart path) gated behind `secrets.STAGING_KUBECONFIG` (unreachable by design, as documented); ci.yml contains zero deploy-staging/production jobs (deleted s1796, confirmed by empty grep). Go-pin failure class and the closed-pin-PR maintainer decision are described verbatim. TRUE.
+
+## Session 1856 update (Socratic pass 522 — KL §4 GPU limitation re-verification)
+
+Claim verified: gpu_stub.go (build `!linux`) is a documented no-op — non-Linux enumeration needs IOKit/DXGI out of scope, stub self-annotates the v3.5.0 roadmap milestone; internal/miner has zero GPU dispatch (only a comment); engine's allDeviceFamilies lists FamilyGPU for arbitration enumeration only. Detection is genuinely Linux-only and no mining path consumes GPUs. TRUE.
