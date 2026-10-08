@@ -10038,3 +10038,7 @@ Claim verified: `find internal -type d` returns exactly the 20 packages the arch
 ## Session 1862 update (Socratic pass 528 — workflows inventory parity)
 
 Defects found and fixed: third enumeration drift in the architecture map — `.github/workflows/` lists 8 files but `scorecard.yml` (the OpenSSF Scorecard workflow added session 1754) is undocumented. Added it. With this fix all three map enumerations (skills/, cmd/, workflows/) now match the filesystem exactly; the internal/ listing was already exact (s1861).
+
+## Session 1863 update (Socratic pass 529 — test.yml benchmark annotation parity)
+
+Claim verified: CLAUDE.md annotates `test.yml (fuzz+benchmark)` — test.yml:180-203 carries a real `benchmark` job running `go test -run=XXX -bench=. -benchmem ./...` with artifact upload (plus the s1347 fuzz job). The parenthetical is accurate, not aspirational. TRUE.
