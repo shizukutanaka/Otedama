@@ -12718,3 +12718,7 @@ Claim verified: the tree has exactly three platform-suffixed sources — hal/gpu
 ## Session 2528 update (Socratic pass 1194 — architecture-map conformance census)
 
 Claim verified: the branch's file-level diff against master touches only mapped locations — the two additions are `.github/workflows/scorecard.yml` (inside the enumerated workflows dir) and `internal/stratum/encryptedframe_fuzz_test.go` (inside allowed internal/stratum/); every other entry is a modification. Zero additions in the forbidden set (internal/providers/ plural, internal/auth/, internal/render/, internal/scientific/, internal/observability/, internal/security/, pkg/, web/, k8s/, cmd/otedamad/). TRUE — CLAUDE.md's architecture-map rule is fully honored on the branch.
+
+## Session 2529 update (Socratic pass 1195 — workflow branch-filter residual check)
+
+Claim checked: after #1293's master inclusion, every workflow's push/PR filter still carries the inert names `main` (all five files) and `develop` (ci, ci-cd, security, test) — harmless supersets since GitHub treats missing names as never-match, and every list does contain `master` so triggers DO fire. One real residual: `deploy.yml` filters on `main` ONLY (lines 6,13 — no master), so it can never trigger on this repo's branch layout; that is consistent with the already-recorded dead-workflow findings for deploy.yml (npm steps, phantom k8s path) and adds trigger-dormancy to the same class rather than a new defect — it deploys nothing either way. ⚠️ Noted, same-class residual.
