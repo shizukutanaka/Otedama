@@ -1014,7 +1014,10 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+   — **Applied (session 1752):** go.mod now imports `go.yaml.in/yaml/v3`
+   v3.0.5 with a rationale comment (merged via an earlier session PR); the
+   archived path is gone from the dependency set.
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -1024,7 +1027,10 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+   — **Applied (session 1752):** bumped to v0.48.0 (merged); the remaining
+   delta to latest is routine dependabot-tracked hygiene, and the cited
+   CVEs were all in unreachable ssh/openpgp subpackages anyway.
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
    are all in the `ssh`/`openpgp` subpackages; Otedama imports only
@@ -1032,7 +1038,13 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+3. 🔵 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   — **Dispositioned (session 1752):** Go-version-pin updates are a
+   maintainer-rejected class (the 1.20-1.23 CI pin bump PR was closed
+   unmerged). GODEBUG_NOTES' stale "pins toolchain go1.24.0" claim was
+   corrected this session — go.mod has no `toolchain` line at all; the
+   `go 1.24.0` directive is the only floor, so the knob only materializes
+   once the release toolchain reaches 1.25+.
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
@@ -1049,7 +1061,9 @@ month, so the discipline matters.
 
 ### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
 
-5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+5. ✅ **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+   — **Applied (session 1752):** ADR-011 already carries the erratum
+   (:130-153) recording exactly this gap.
    BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
    (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
    `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
@@ -1059,7 +1073,9 @@ month, so the discipline matters.
    Go implementation exists)**, materially raising the estimate. **Action:**
    record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
    raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
-6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+6. ✅ **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   — **Applied (session 1752):** KNOWN_LIMITATIONS §5 (:197-214) and
+   ROADMAP :44 already carry the corrected wording.
    signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
    the key-path spend removed — and explicitly defers PQ signatures to "a
    separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
@@ -1067,7 +1083,9 @@ month, so the discipline matters.
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
-7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+   — **Applied (session 1752):** ROADMAP :82 already targets the IPC
+   interface with the multiprocess-binary caveat.
    Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
    submit blocks over a unix socket — a cleaner target than legacy
@@ -1081,7 +1099,10 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+   — **Applied (session 1752):** ROADMAP :26 already records "SRI past
+   alpha" with the interop-pin note; ADR-009 tracks the live release line
+   (v1.12.0 latest as of session 1751 rechecks).
    ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
    update the rationale text and pin a specific SRI tag as the interop
    reference for Go SV2 conformance tests.
@@ -1089,14 +1110,18 @@ month, so the discipline matters.
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+    — **Applied (session 1752):** ADR-010's A4 reframe (:143) already
+    directs the build at `akash-network/chain-sdk`.
     successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
     github.com/akash-network/chain-sdk)
-11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+11. ✅ **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    — **Applied (session 1752):** ADR-010 :143 carries the reframe
+    verbatim (bid-price policy fed to the daemon's on-chain config).
     "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;
     the real auction is on-chain and mediated by the provider daemon's bid
@@ -1587,8 +1612,8 @@ Noise surface stays the documented alpha stub (KNOWN_LIMITATIONS §2).
 
 ## Session 400 — provider liveness gap (surfaced) + publish() audit
 
-**Mining yield quoted while pool is down [🟡 SURFACED — needs design
-decision, not a silent fix].** `MiningProvider.publish` emits full
+**Mining yield quoted while pool is down [🔵 SURFACED — maintainer
+design decision].** `MiningProvider.publish` emits full
 expected yield for every SHA256d device regardless of pool session
 state — there is no connectivity input on the provider. During a
 reconnect gap or total failover exhaustion, arbitration keeps devices
@@ -1712,7 +1737,7 @@ correctly shown in their own contexts. `otedama v` is a real alias for
 
 ## Session 403 — CONTRIBUTING/README command audit + DCO drift [SURFACED]
 
-**DCO sign-off required by CONTRIBUTING.md but not practiced [🟡
+**DCO sign-off required by CONTRIBUTING.md but not practiced [🔵
 SURFACED — maintainer policy decision].** CONTRIBUTING.md §DCO states
 all commits must carry `git commit -s` Signed-off-by, and the PR
 template repeats it. Reality: **zero** of the last 50 commits on

@@ -132,16 +132,19 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251):** `go.mod` still pins
-  `toolchain go1.24.0`, which predates this feature — so the
-  container-aware default is **not compiled into current builds**.
-  A Kubernetes miner today still sees the host's full core count. This
-  benefit only materializes once the `toolchain` line is bumped to
-  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
-  over a year old). The bump was scoped but not performed in session
-  251 because this environment's module proxy denies the Go toolchain
-  download (`sum.golang.org` Forbidden). Tracked in
-  RESEARCH_IMPROVEMENTS session-251 item 3.
+- **Not yet in effect (verified session 251; corrected session 1752):**
+  `go.mod` has **no `toolchain` line at all** — the `go 1.24.0`
+  directive is the only version floor, so builds made with a Go <1.25
+  toolchain still lack the container-aware default. A Kubernetes miner
+  built today still sees the host's full core count unless the build
+  toolchain is ≥1.25. (Release CI pins `GO_VERSION: '1.23.x'` with
+  `GOTOOLCHAIN` unset — i.e. the default `auto`, which auto-downloads
+  the minimum satisfying toolchain = go1.24.0 — so official artifacts
+  are also below 1.25.) The benefit materializes once the build
+  toolchain floor reaches 1.25.x; a toolchain-version bump is a
+  maintainer decision (the earlier 1.20-1.23 CI pin-update PR was
+  closed unmerged). Tracked in RESEARCH_IMPROVEMENTS session-251
+  item 3.
 - Otedama impact: positive once the toolchain bump lands — fixes a
   class of "miner saturates noisy-neighbor pod limit" reports we
   expect from Kubernetes users.
