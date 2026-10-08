@@ -42204,3 +42204,175 @@ inner
 roundtripper.
 
 Verdict: corrected — production DNS probe legitimately uses the system resolver.
+
+## Session 3197 update (Socratic pass 1859 — tls/x509/ecdh ledger)
+
+Claim under test: TLS
+is
+MinVersion=
+TLS1.2
+everywhere
+with
+no
+verify-
+bypass;
+x509
+is
+pool
+roots
++
+test-
+cert
+minting;
+key
+agreement
+is
+stdlib
+`crypto/ecdh`
+(not
+x/crypto
+curve25519).
+
+Verification —
+census:
+
+- `crypto/tls`:
+  `Config`×18,
+  `Conn`×13,
+  `VersionTLS12`×10
+  (every
+  `Config`
+  pins
+  `MinVersion: tls.VersionTLS12`
+  —
+  the
+  twin
+  TLS
+  boundary),
+  `Dialer`×5,
+  `Certificate`×4,
+  `Listen`×2
+  (test),
+  `CertificateVerificationError`×2,
+  `Dial`×1
+  (test).
+  ZERO:
+  `InsecureSkipVerify`
+  (audit-
+  verified
+  ×0
+  since
+  the
+  twin-
+  boundary
+  pass),
+  `SessionTicketKey`/`SessionTicketsDisabled`,
+  `CipherSuites`/`CurvePreferences`/
+  `ClientSessionCache`
+  custom
+  tuning
+  (stdlib
+  defaults
+  kept),
+  `Renegotiation`,
+  `Certificates`/
+  `GetCertificate`
+  server-side
+  cert
+  config
+  beyond
+  tests,
+  `tls.ClientAuth`.
+- `x509`:
+  `NewCertPool`×6,
+  `CertPool`×4,
+  `CreateCertificate`×3
+  +
+  `Certificate`×3,
+  `SystemCertPool`×2,
+  `ParseCertificate`×2,
+  `KeyUsageDigitalSignature`/`KeyUsageCertSign`/`ExtKeyUsage`/`ExtKeyUsageServerAuth`×2
+  each
+  —
+  CA-file
+  loading
+  for
+  `tls_ca_file`
+  +
+  httptest
+  TLS
+  fixtures.
+  ZERO:
+  `ParsePKCS1*`/`MarshalPKCS*`,
+  `DecryptPEMBlock`/`IsEncryptedPEMBlock`,
+  `VerifyHostname`
+  manual
+  (stdlib
+  verify
+  handles
+  it),
+  `x509.RevocationList`/CRL,
+  `x509.CreateRevocationList`,
+  `x509.OCSPServer`/`IssuingCertificateURL`
+  fields.
+- `crypto/ecdh`:
+  `ecdh.P256`×8,
+  `PublicKey`×1,
+  `PrivateKey`×1
+  —
+  the
+  Noise
+  NX
+  P-256
+  stub
+  (documented:
+  SV2
+  spec's
+  X25519
+  is
+  intentionally
+  not
+  implemented;
+  the
+  P-256
+  path
+  is
+  a
+  stand-
+  in
+  until
+  the
+  real
+  cipher-
+  suite,
+  flagged
+  in
+  THREAT_MODEL
+  and
+  noise
+  godoc).
+  `elliptic.P256`×3
+  +
+  `ecdsa.GenerateKey`×3
+  —
+  test
+  cert
+  minting
+  only.
+  ZERO:
+  `X25519`,
+  `ed25519`,
+  `rsa`,
+  `ecdsa.Sign`/`Verify`/`SignASN1`
+  production
+  (btccrypto
+  uses
+  libsecp256k1
+  wrapper
+  not
+  stdlib
+  ecdsa
+  for
+  secp256k1).
+
+Verdict: TRUE.
