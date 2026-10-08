@@ -10098,3 +10098,7 @@ Claim verified: `config.DefaultPoolURL` (stratum+v2://public.stratum.slushpool.c
 ## Session 1877 update (Socratic pass 543 — datum:// dual-layer rejection)
 
 Claim verified: `datum://` URLs are rejected at two independent layers — config `validatePoolURL` (config.go:780 accepts only the four stratum schemes) and the engine's ADR-009 fail-fast (run.go:825–833 with the recognized-but-unimplemented message). Honest note: because every pool URL arrives via config validation first, the engine's datum-specific error text is unreachable in production (prophylactic for future non-config sources); the config-layer message is generic but equally fail-closed. TRUE.
+
+## Session 1878 update (Socratic pass 544 — BENCHMARKS.md vs tree census)
+
+Claim verified: every benchmark BENCHMARKS.md names exists in the tree (11 Benchmark* funcs across miner, stratum, clock, provider, metrics, tui tests); the doc's own prior corrections already disclose the two phantom rows (no `BenchmarkDecoder_*`, "unverified estimates"). CI's `go test -run=XXX -bench=. -benchmem` artifact job (test.yml:180–203) runs the real set. TRUE.
