@@ -11014,3 +11014,7 @@ Claim verified: HashrateMonitor can't cry wolf or go mute — a stall only warns
 ## Session 2104 update (Socratic pass 770 — config file load path)
 
 Claim verified: the config-file load can't silently misconfigure — KnownFields(true) makes a typo'd yaml key a hard decode error surfaced on stderr (never an ignored field); a missing file cleanly yields the zero Config for the defaults layer, but a non-ENOENT open failure and any parse failure both warn rather than being swallowed — only an io.EOF empty file decodes to zero quietly; and the default-path search honors the documented precedence OTEDAMA_CONFIG → XDG_CONFIG_HOME → ~/.config/otedama/config.yaml. TRUE.
+
+## Session 2105 update (Socratic pass 771 — doctor runner + report dominance)
+
+Claim verified: the doctor runner can't lose a check or under-report severity — Run fans all checks into goroutines that write disjoint results[idx] slots (no shared map to race on); a panicking check converts to StatusFail via defer/recover (s1649's fix confirmed live — one bad check can never nuke the other 16 results); ExitCode has strict dominance fail(2) > warn(1) > pass(0) so a report's exit status is the worst outcome, not the average; and Print sanitizes both Detail and Fix through the shared SanitizePoolText (s1659's ANSI fix confirmed in place) while WriteJSON goes through the encoder for inert escaping. TRUE.
