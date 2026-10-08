@@ -18176,3 +18176,31 @@ Milestone re-check at pass ~1565:
 
 Verdict: TRUE — branch state remains green
 across format/build/vet/test gates.
+
+## Session 2901 update (Socratic pass 1566 — unmarshal-reuse hazard census)
+
+Claim under test: `json.Unmarshal`/`Decode`
+targets are fresh per parse — no stale-field
+carryover across reused values.
+
+Verification (`rg 'json.Unmarshal|.Decode\('`
+production, ~25 sites):
+
+- Every target is a local `var` declared
+  inside the parse function or loop
+  iteration: `var ns notifyStrings`
+  (parse.go:133), `var msg rpcMessage`
+  (stratumv1.go:271 — fresh per line),
+  `var v struct{...}` per fetcher,
+  `dec.Decode(&cfg)` single-shot config.
+- The one field-level reuse site —
+  reconnect `d.Host`/`d.Port`/`d.Wait`
+  (parse.go:286-298) — is a fresh `var d`
+  per notification, and each field's
+  unmarshal failure is either returned or
+  best-effort-tolerated by design.
+- Zero unmarshal into package-level or
+  long-lived values.
+
+Verdict: TRUE — no stale-field carryover;
+each parse materializes a fresh value.
