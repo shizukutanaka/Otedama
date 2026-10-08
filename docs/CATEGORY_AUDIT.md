@@ -9990,3 +9990,7 @@ Claim verified: README.md:54's `curl ... raw.githubusercontent.com/master/instal
 ## Session 1850 update (Socratic pass 516 — ADR index/file parity re-verification)
 
 Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 plus README.md; the index table (README.md:35-45) lists all 11 with titles matching filenames and statuses — Accepted: 001-006, 011 (002 noted partially-superseded by 006); Proposed: 007-010. No orphan files, no missing rows, statuses consistent with prior errata entries. TRUE.
+
+## Session 1851 update (Socratic pass 517 — KL §8 ASIC-detection gap re-verification)
+
+Claim verified: internal/hal/ contains only device.go, gpu_linux.go, gpu_stub.go, registry.go — no asic driver package; device.go:32 self-documents "No ASIC driver exists at all (docs/KNOWN_LIMITATIONS.md §8)" and :178 reiterates "no ASIC or GPU [beyond linux sysfs]" in the Driver contract doc. Code and KL agree: FamilyASIC is an enum value awaiting a driver, not dead weight. TRUE — the disclosed boundary is honest.
