@@ -10262,3 +10262,7 @@ Claim verified: internal/version declares exactly the var symbols (Version, Comm
 ## Session 1918 update (Socratic pass 584 — hal GPU sysfs boundary)
 
 Claim verified: GPULinuxDriver.Enumerate returns empty (not error) when /sys/class/drm is absent — matching the Detector's partial-failure policy; only renderD* nodes are scanned; EvalSymlinks dedupes multi-node GPUs by canonical device path; parseGPUDevice skips invalid identities with a logFn note; readSysFile trims and never propagates read errors into device construction. TRUE.
+
+## Session 1919 update (Socratic pass 585 — worker lifecycle rendezvous)
+
+Claim verified: Worker.Start is single-call (atomic CAS, panics on a second call rather than corrupting the share channel); cancel is published under mutex before cancelReady closes; Stop returns early only when Start never began, else waits cancelReady→cancel→done — the Start/Stop race window is structurally eliminated, not guarded. TRUE.
