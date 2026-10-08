@@ -14607,3 +14607,31 @@ Verification: 19 `make(chan` sites enumerated.
   channel capacity.
 
 Verdict: TRUE — every capacity is a named policy, none accidental.
+
+## Session 2749 update (Socratic pass 1415 — variable-size allocation census)
+
+Claim under test: every `make([]T, varN)` where N is attacker- or
+runtime-influenced has a bound checked before allocation.
+
+Verification: all 12 variable-capacity make() sites.
+
+- `stratumv1.go:530` `make([]byte, sz)` — the pool-controlled
+  extranonce2 size, double-gated: `ep.size > 64` early-return at
+  the use site AND `maxExtranonce2Size = 64` enforced at parse
+  (parse.go:192,:225,:331 — the #428 bound, still intact).
+- `frame.go:296` `make([]byte, h.MsgLength)` — U24 field ≤16 MiB
+  plus the decoder's MaxFrameSize gate evaluated before the read.
+- `wire.go:46,:74` `make([]byte, n)` — n comes from the length-
+  prefixed readers, bounded by the declared-length-first contract.
+- `noise.go:336` `make([]byte, ctLen)` — the comment documents the
+  bound: ciphertext length is derived from the u16 frame length,
+  cannot be coerced huge.
+- `noise(_pool).go` ipad/opad `blockSize` — the 64-byte sha256
+  block constant, not runtime data.
+- `base58.go:50` `leading+len(decoded)` — decoded is bounded by the
+  already-validated input string (each char ≤1 byte).
+- `seed.go:91,:142` — entropy bits (128–256 domain) and required
+  word count, both bounded by the BIP-39 size class.
+- No site allocates from an unvalidated external length.
+
+Verdict: TRUE — bound-before-alloc holds at every variable site.
