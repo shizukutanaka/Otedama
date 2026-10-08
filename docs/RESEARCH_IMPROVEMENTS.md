@@ -421,8 +421,21 @@ arXiv grounding (session 41):
 9. ✅ **Idle/curtailment hook** (session 112) — `curtail_below_btc_usd` config
    field; BTC rate goroutine calls `SetWork(nil)` when price drops below
    threshold and logs re-start on recovery; `otedama_curtailed` gauge.
-10. 🟡 **Carbon-intensity feed (optional)** — for users who want to mine on
-    low-carbon grid windows; aligns with SUSTAINABILITY.md.
+10. 🟡→🔵 **Carbon-intensity feed (optional) — scope refined.**
+    Verified session 1745: nothing named "carbon" exists in `internal/`
+    (the only match is a BIP-39 wordlist entry) and SUSTAINABILITY.md
+    contains no carbon reference, so the row's alignment claim is
+    aspirational rather than anchored. Implementation is not blocked on
+    code — it is blocked on an external-dependency decision: every
+    carbon-intensity source is region- or key-locked (WattTime /
+    electricityMaps need API keys; free feeds like energy-charts.info
+    cover only the EU). Choosing a source family and how a user declares
+    their grid region is the same class of feed-integration decision as
+    the TOU tariff feeds already parked under ADR-008 sub-domain 4 —
+    that ADR is the natural home for this row. Original request follows:
+
+    For users who want to mine on low-carbon grid windows; aligns with
+    SUSTAINABILITY.md.
 
 ---
 

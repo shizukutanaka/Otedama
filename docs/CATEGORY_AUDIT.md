@@ -9556,3 +9556,7 @@ Verified (row remains genuinely open): RESEARCH_IMPROVEMENTS.md Cat-5 row 4 asks
 ## Session 1744 update (Socratic pass 410 — Cat-6 research rows dispositioned)
 
 Three Cat-6 rows were 🟡 "newly surfaced" research that was never dispositioned. Verified each against shipped code and assigned the honest marker: (1) Markovian-reward matching (Tekin & Liu) → 🔵 grounding for ADR-010 A3, today's engine is hysteresis-guarded greedy Decide — not a defect; (2) bi-criteria bandit → 🔵 conditional, verified no hard power cap exists — power is a breakeven floor `max(min_yield, powerFloor)` (arbitrate.go:130-139, 206-208), a threshold not a constrained-optimisation surface; (3) federated/multi-agent → ❌ out of scope as the row self-declared, Otedama is a single-node client by product definition. Marker updates only; no code touched.
+
+## Session 1745 update (Socratic pass 411 — carbon-intensity scope refined)
+
+Verified (scope refined): Cat-8 row 10 (optional carbon-intensity feed) — nothing named "carbon" exists in `internal/` and SUSTAINABILITY.md has no carbon anchor, so the alignment claim is aspirational. The blocker is not code but an external-dependency decision: every carbon-intensity source is region- or key-locked (WattTime/electricityMaps API keys; free feeds cover only specific grids like energy-charts.info/EU). Choosing a source family plus a user-declared grid region is the same class of decision as the TOU tariff feeds already parked under ADR-008 sub-domain 4 — that ADR is the natural home. Row flipped 🟡→🔵.
