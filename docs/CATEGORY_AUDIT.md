@@ -9883,3 +9883,7 @@ Residual: license texts themselves unchanged (all three deps remain BSD/MIT/Apac
 ## Session 1825 update (Socratic pass 491 — SPDX header re-census)
 
 Claim verified: **every** tracked `.go` file (all 197) begins with the `// SPDX-License-Identifier: Apache-2.0` header — the CONTRIBUTING.md rule is .go-scoped and holds at 100%. Non-.go files carry no SPDX mandate under that rule; census shows only scorecard.yml (created s1754) happens to include one, all other workflows/Makefile/Dockerfile/install.sh/.golangci.yml/.goreleaser.yaml use descriptive comment headers instead — a cosmetic inconsistency, not a violation. Follow-up to the s1824 NOTICE fix: license surface now consistent across LICENSE/NOTICE/SPDX/go.mod. TRUE.
+
+## Session 1826 update (Socratic pass 492 — markdown anchor-link census)
+
+Claim verified: every `[text](file#anchor)` link across all root + docs/ markdown resolves — zero broken fragment links (GitHub heading-slug rules applied: lowercase, punctuation stripped, spaces→hyphens). Complements the s1686 file-existence census: both the file layer and the anchor layer of the internal link graph are whole. TRUE — no dangling references.
