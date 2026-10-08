@@ -17639,3 +17639,19 @@ Verification (`go build ./cmd/otedama` → run):
 
 Verdict: TRUE — the shipped binary boots and
 its command surface matches the documentation.
+
+## Session 2878 update (Socratic pass 1543 — govulncheck currency)
+
+Claim under test: the reachable vulnerability
+count is still zero on the branch tip.
+
+Verification (`govulncheck ./...`):
+
+- Symbol results → **0 reachable
+  vulnerabilities**; 18 module-level findings
+  remain unreachable (no call path into the
+  vulnerable symbols) — identical to s2850.
+
+Verdict: TRUE — no new reachable vuln
+introduced by the ledger-only additions since
+s2850.
