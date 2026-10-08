@@ -10450,3 +10450,7 @@ Claim verified: publishBTCRate only writes gauges from observed state — rate g
 ## Session 1965 update (Socratic pass 631 — buildStats single-source invariants)
 
 Claim verified: one windowed hashrate is computed per stats tick and drives the log, the otedama_hashrate gauge, the stall monitor, and the TUI snapshot — they cannot disagree; SharesSent is the real submitted counter, so found-vs-sent divergence on channel-full drops is visible rather than hidden (KNOWN_LIMITATIONS §9 approximation removed); a provider renders Active only when arbitration is actually routing a device to it — existence or a quote does not make it active; nil seams (latency tracker, activity map) degrade to honest zeros. TRUE.
+
+## Session 1966 update (Socratic pass 632 — rate/accountant primitives)
+
+Claim verified: hashrateWindow differentiates cumulative counts into a current rate (a lifetime average can never hit the stall floor — stall detection structurally possible), saturates to 0 on counter reset (reconnect), and primes its baseline on first observation; uptimeAccountant carries the sub-second remainder across non-uniform ticks so productive time stays exact; satsAccountant only integrates rate×elapsed over productive intervals — the estSats estimate can never run backwards or accrue during idle/stalled/curtailed periods. TRUE.
