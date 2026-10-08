@@ -10194,3 +10194,7 @@ Pass-566 checkpoint on the parity sweep: `go build ./...`, `go vet ./...`, and `
 ## Session 1901 update (Socratic pass 567 — Akash provider honest-scope re-verification)
 
 Claim verified: internal/provider/ai_inference.go's AkashProvider documents itself honestly — it publishes AI-inference yield estimates for GPU devices, with real Akash bid-submission explicitly out of scope (ai_inference.go:39); engine wires NewAkashProvider alongside MiningProvider. The 🔵 scope-refined backlog row remains the accurate disposition, not a hidden stub claim. TRUE.
+
+## Session 1902 update (Socratic pass 568 — AI-yield honesty labeling)
+
+Claim verified: AkashProvider.Name() returns "AI Inference (Akash Network, simulated)" (ai_inference.go:79) — the simulated nature surfaces in the TUI, logs, and `config show`, so operators cannot mistake estimate-driven arbitration for live Akash revenue. TRUE.
