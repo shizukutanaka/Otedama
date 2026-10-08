@@ -11834,3 +11834,7 @@ Claim verified: Run()'s teardown is LIFO-consistent — dashboard/HTTP stops fir
 ## Session 2306 update (Socratic pass 972 — conn ownership lifecycle)
 
 Claim verified: every pool connection has single-owner cleanup — `defer conn.Close()` registers only after successful dial (:884), the reader goroutine self-terminates on read error and closes inCh; the V1 path's `defer sess.Close()` (:1464) mirrors it, and DialURL cleans its own conn on failure so no partial resource leaks. Double-Close on net.Conn is a returned error, never a panic. TRUE.
+
+## Session 2307 update (Socratic pass 973 — inCh reader/consumer contract)
+
+Claim verified: the V2 session's poolMsg channel can't deadlock — reader goroutine is sole closer (defer close(inCh)), buffer 32, and BOTH send sites are `select{inCh<-; ctx.Done()}`-cancellable so a full channel never parks the reader; consumer treats `!ok` as "pool closed connection" and `pm.err` as session-ending read error → reconnect/failover. Foreign-channel frames are filtered per SV2 group-channel rules (s449). TRUE.
