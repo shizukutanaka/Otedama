@@ -12078,3 +12078,7 @@ Claim verified: writeMu guards SetWriteDeadline+Write as one unit (stratumv1.go:
 ## Session 2367 update (Socratic pass 1033 — V1 close idempotence + send/close race)
 
 Claim verified: session.Close is idempotent via closeOnce — ctxCancel, cancelPending, conn.Close run exactly once (stratumv1.go:659–668); closeChannels is the sole closer of jobsCh/diffCh/noticeCh under sendMu so any send racing the close either lands beforehand or is skipped — send-on-closed is structurally impossible (:560–568); sendJob re-checks closed under the same sendMu and, on CleanJobs, drains jobsCh fully before queueing new-block work — stale jobs can't reach workers (the #1 reject cause) (:572–590); rpcMessage.uintID accepts float64/int/int64/string ids and a negative wraps to an unmatched key only — documented benign (:681–691). TRUE.
+
+## Session 2368 update (Socratic pass 1034 — numeric validation ordering)
+
+Claim verified: appendNumericIssues checks math.IsNaN/IsInf on all five economic float fields BEFORE any range comparison (config.go:702–717) — the ordering matters because x<0 is false for NaN, so a non-finite value would otherwise sail through every range check and poison arbitration math downstream (documented rationale inline); each range check then quotes the offending value (hysteresis [0,1), curtail/min-yield/power/price >=0 with "0 = disabled" semantics stated in the message) (:718–743). TRUE.
