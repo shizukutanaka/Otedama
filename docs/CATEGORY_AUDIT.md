@@ -11050,3 +11050,7 @@ Claim verified: the simulated Akash provider can't inflate its attractiveness �
 ## Session 2113 update (Socratic pass 779 — provider polling lifecycle)
 
 Claim verified: the polling lifecycle can't double-launch, leak a goroutine, or close-early — launch holds mu and refuses a second start while cancel != nil (no two loops on one quoteCh); the loop goroutine itself owns the close(quoteCh) via defer — Stop only cancels and waits, so close can never precede the last send or happen concurrently with one; Stop waits for the goroutine to exit before recreating quoteCh at the same capacity, so a restart can't race a still-running predecessor; and the ticker is stopped via defer on every exit path — no timer leak. TRUE.
+
+## Session 2114 update (Socratic pass 780 — systemd unit generation)
+
+Claim verified: the generated systemd unit can't inject, over-privilege, or loop — every interpolated token (binary path, service args, ReadWritePaths data dir) goes through quoteToken (control chars/whitespace can't smuggle a second directive — s454/s809 hardening confirmed live); hardening is real: NoNewPrivileges, ProtectHome=read-only, PrivateTmp, and ReadWritePaths scoped to just the data dir (the daemon can't write outside it even if compromised); Restart=on-failure at bounded 10s avoids a crash-loop flood; serviceArgv only emits flags actually set (an unset option can't leak as an empty-valued flag); and Type=simple + After=network-online.target is correct for a network-bound daemon. TRUE.
