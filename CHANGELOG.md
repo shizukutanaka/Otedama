@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1841 — CONTRIBUTING.md)
+
+- Corrected the false claim that non-major languages are covered by machine translation; they fall back to English.
+
 ### Fixed (session 1835 — config.yaml.example)
 
 - Corrected the supported-language list: `ru` and `ar` were missing and `zh-CN` was shown instead of the canonical `zh` tag.
