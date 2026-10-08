@@ -10554,3 +10554,7 @@ Milestone checkpoint: the second audit cycle's ledger on PR #1405 has accumulate
 ## Session 1991 update (Socratic pass 657 — clock abstraction + version contract)
 
 Claim verified: clock.Fake is mutex-guarded and honestly documents the contract's sharp edge — Set/Advance may move time backward, so callers must not rely on monotonic ordering (a test clock pretending monotonicity would silently hide skew bugs); compile-time `_ Clock` assertions catch interface drift at build; version.Info vars are `var` so ldflags can inject, the un-injected default carries a visible "-dev" suffix (never masquerades as a release), Get() snapshots once, and the single-line String() format is documented as a stable parse contract. TRUE.
+
+## Session 1992 update (Socratic pass 658 — HAL registry + GPU sysfs boundary)
+
+Claim verified: driver registration is fail-loud (nil, empty name, and duplicates are all errors — never a silent replace); detection fans out per driver so one failing driver cannot starve the others, every accepted device passes Identity().Validate() (invalid ones are logged and skipped), and ctx cancellation returns the devices accumulated so far plus the context error; the GPU sysfs path deduplicates multi-node GPUs via EvalSymlinks, treats an absent DRM tree as "no GPUs" rather than an error, and reports SHA256d=false with the honest rationale inline (no compute dispatch exists — a true flag previously spawned a phantom CPU mining pool per GPU and misattributed its shares to the GPU's ID in metrics and arbitration sampling). TRUE.
