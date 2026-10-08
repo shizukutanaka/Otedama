@@ -39076,3 +39076,111 @@ census:
   audits.
 
 Verdict: TRUE.
+
+## Session 3175 update (Socratic pass 1839 — unicode/utf8/encoding-residual ledger)
+
+Claim under test: sanitize
+boundaries
+cover
+Cc+Cf+Zl+Zp;
+no
+manual
+UTF-8
+decoding;
+`encoding/*`
+usage
+is
+limited
+to
+json/hex/binary/pem
+—
+zero
+xml/csv/gob/base32/
+base64
+deserialization.
+
+Verification —
+census:
+
+- `unicode`:
+  `In`×2
+  (shared
+  `isUnsafeRune`
+  at
+  poolproto.go:461
+  +
+  config.go:209,
+  post-#1341
+  Cc+Cf+Zl+Zp
+  coverage),
+  `IsControl`×1
+  (daemon
+  quoteToken,
+  post-#809),
+  `IsSpace`×1.
+  ZERO:
+  `Is`/`IsDigit`/`IsLetter`/`ToUpper`/`ToLower`/`SimpleFold`/`CaseRange`,
+  `unicode/utf16`.
+- `utf8`:
+  `ValidString`×1
+  (wordlist
+  integrity
+  check).
+  ZERO:
+  `RuneCount`/`DecodeRune`/`DecodeLastRune`/`EncodeRune`/`Valid` —
+  no
+  manual
+  rune
+  decoding;
+  strings
+  rely
+  on
+  Go's
+  UTF-8
+  semantics.
+- `encoding/*`
+  imports:
+  `json`×17,
+  `hex`×13,
+  `binary`×10,
+  `pem`×3.
+  ZERO:
+  `xml`,
+  `csv`,
+  `gob`,
+  `base32`,
+  `asn1`,
+  `ascii85` —
+  no
+  alternate
+  wire
+  codecs.
+  (`base64`
+  absent
+  as
+  a
+  decoder
+  of
+  external
+  input —
+  BTCCrypto
+  works
+  in
+  raw
+  bytes/hex.)
+- No
+  `unicode.Upper`/
+  case-
+  folding
+  for
+  protocol
+  text —
+  comparisons
+  use
+  `strings.EqualFold`
+  or
+  explicit
+  ASCII
+  ranges.
+
+Verdict: TRUE.
