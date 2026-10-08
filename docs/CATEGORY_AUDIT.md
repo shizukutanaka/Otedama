@@ -14453,3 +14453,30 @@ enumeration.
 
 Verdict: TRUE — exit is main-only, env mutation absent, env reads
 confined to their seams.
+
+## Session 2743 update (Socratic pass 1409 — goroutine-ownership census)
+
+Claim under test: every spawned goroutine has an owner and a
+bounded exit path — no orphans.
+
+Verification: 21 non-test `go` statement sites enumerated.
+
+- Owner categories:
+  - Per-source fan-out: rates/fetcher.go:297, hashrate.go:148,
+    hal/registry.go:155, doctor.go:235, checks.go:370 — WaitGroup
+    or results-channel slots; the aggregator joins them.
+  - Lifecycles tied to ctx: httpserver.go:129 (`<-ctx.Done()` →
+    `s.Stop()`), engine run.go orchestrators (:236,:308,:384,:902,
+    :1785,:2230), provider/polling.go:51, tui/dashboard.go — all
+    exit when the parent ctx cancels or their owner signals.
+  - Session loops: stratumv1 (2), stratumv2/dialer.go start(ctx),
+    miner/worker.go (:168 grind + :174 waiter) — die on conn
+    failure or Stop.
+  - httpserver.go:119 Serve loop — errors park in `serveErr`
+    (observable via ServeError), graceful stop via Stop().
+- fanin.go:34/56 — per-source copiers plus the `wg.Wait();
+  close(out)` aggregator; out closes exactly when sources drain.
+- No site spawns without a capture variable, a WaitGroup pair, or a
+  ctx — ownership is uniform.
+
+Verdict: TRUE — all 21 spawns are owned and ctx/Close-bounded.
