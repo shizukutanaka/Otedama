@@ -13020,3 +13020,7 @@ Bidirectional census: 15 flags registered across cmd/otedama (`--bitcoin-address
 ## Session 2597 update (Socratic pass 1263 — metric-name parity re-verification)
 
 Census re-run: 51 `otedama_*` literal names in the tree vs 46 documented in API.md. The 5 undocumented names (`otedama_hashrate_hps`, `otedama_test_total`, `otedama_x`, `otedama_y`, `otedama_z`) exist only inside metrics_test.go as exposition-format test fixtures — not registered metrics. Real registered surface = 46 = documented 46, bidirectional parity holds. TRUE.
+
+## Session 2598 update (Socratic pass 1264 — workflow inventory parity)
+
+Census: 9 workflow files on disk (ci, ci-cd, code-review, deploy, devin-direct-merge, release, scorecard, security, test) = exactly the 9 named in CLAUDE.md's architecture map — including scorecard.yml which the #1248-era inventory lacked. No orphan or phantom entries. TRUE.
