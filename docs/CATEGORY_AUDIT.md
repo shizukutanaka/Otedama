@@ -24257,3 +24257,52 @@ Verification:
 Verdict: TRUE —
 clean linear chain,
 1,407 commits ahead.
+
+## Session 3046 update (Socratic pass 1710 — CGO ledger)
+
+Claim under test: the
+binary is pure Go —
+zero cgo imports,
+zero FFI risk, and
+release builds pin
+CGO_ENABLED=0.
+
+Verification:
+
+- `import "C"`: ZERO
+  in internal/ + cmd/
+  — no cgo
+  call sites.
+- Dockerfile build:
+  `CGO_ENABLED=0
+  GOOS=linux go
+  build` — the
+  release artifact
+  is statically
+  linked.
+- Deliberate-design
+  docs: miner/
+  sha256d.go:13-15
+  documents "Why pure
+  Go (no CGO, no
+  SIMD)?"; hal/
+  gpu_linux.go:13-15
+  documents the same
+  for GPU sysfs
+  ("CGO adds build
+  complexity, cross-
+  compilation
+  difficulty").
+- `.goreleaser.yaml`
+  verified earlier:
+  CGO disabled for
+  all targets.
+- No unsafe.Pointer/
+  reflect bypass to
+  force cgo-adjacent
+  tricks (verified).
+
+Verdict: TRUE —
+fully pure-Go,
+statically-linked
+releases.
