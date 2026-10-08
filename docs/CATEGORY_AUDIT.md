@@ -13320,3 +13320,7 @@ Verified TRUE: systemd hardening block (NoNewPrivileges/ProtectHome=read-only/Pr
 ## Session 2672 update (Socratic pass 1338 — TROUBLESHOOTING.md)
 
 Verified TRUE: "workers spawn one per runtime.NumCPU(), GOMAXPROCS caps parallel" — worker.go:95,139 default Threads=NumCPU confirmed; "exponential backoff (1s, 2s, …)" — reconnectBackoffInitial=1s, doubles, 64s cap, ±25% jitter (run.go:66-77); no-GPU-speedup claim honest (SHA256d=false capability gate); session-491 scheduling-class + session-476 GOMAXPROCS corrections still present; doctor/latency/linger/service-status guidance all match shipped surfaces. claim verified: docs/TROUBLESHOOTING.md — TRUE
+
+## Session 2673 update (Socratic pass 1339 — KNOWN_LIMITATIONS re-verification)
+
+All 17 sections + resolution markers still accurate at session 2673: active sections (§1 simulated AI yield, §2 Noise-unwired→v2tls, §4 GPU-detect-only, §5 PQ-scaffold, §6 receive-only Lightning, §8 no-ASIC-detect, §13 CI Go-pin failures — #1344-class remains broken by maintainer decision, §14 DATUM reserved-scheme fail-fast, §17 install.sh no compatible release — remote tags still only v2.1.4–v2.1.9) all match shipped code; RESOLVED sections have no regressions. claim verified: docs/KNOWN_LIMITATIONS.md — TRUE
