@@ -10126,3 +10126,7 @@ Defect found and fixed: SPECIFICATION §2's exit-code table presented 0/1/64/78 
 ## Session 1884 update (Socratic pass 550 — README Go-requirement note)
 
 Defect found and fixed: README's Requirements still described the pre-simplification two-part declaration — "`go 1.22` 宣言に加え `toolchain go1.24.0` と `godebug tlsmlkem`" — while go.mod now declares `go 1.24.0` directly (no toolchain line; the godebug block exists but is not the version gate). Corrected to the single-directive statement.
+
+## Session 1885 update (Socratic pass 551 — CONTRIBUTING→Makefile parity)
+
+Claim verified: every make target CONTRIBUTING.md cites (setup/build/test/lint ×2) exists in the Makefile's 32-target set; `migrate-from-v2` honestly prints the guide location rather than invoking a nonexistent subcommand. TRUE.
