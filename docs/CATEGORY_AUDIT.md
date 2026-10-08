@@ -18868,3 +18868,36 @@ Verification:
 Verdict: TRUE — all prefix checks are
 leading-literal scheme/address-type
 discriminators, not host substrings.
+
+## Session 2928 update (Socratic pass 1593 — net/url census)
+
+Claim under test: no URL parse
+bypasses host/port extraction — no
+`url.Parse` + unchecked `.Host`,
+and no custom parse that misses
+edge cases.
+
+Verification:
+
+- **`net/url` usage → zero.** No
+  `url.Parse`, `url.URL`, or
+  `net.URL` in production code.
+- Pool URLs are validated by custom
+  `validatePoolURL` (config.go:779):
+  `CutPrefix` against the 4 scheme
+  literals, then `validatePoolTarget`
+  on the remainder.
+- `validatePoolTarget` is strictly
+  more restrictive than `net/url`
+  would be: `ContainsAny(rest,
+  "@/?# \t")` rejects userinfo, path,
+  query, fragment, and whitespace —
+  then `net.SplitHostPort` verifies
+  host:port structure, host non-empty,
+  port 1-65535.
+- net.SplitHostPort handles IPv6
+  `[::1]:3333` brackets correctly.
+
+Verdict: TRUE — zero net/url usage;
+the custom validator is stricter than
+the stdlib parser for this domain.
