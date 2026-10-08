@@ -14169,3 +14169,29 @@ Verification: 36 bare-error return sites across 11 files (non-test).
 
 Verdict: TRUE — pass-through discipline consistent; boundaries wrap,
 interior bubbles stay bare.
+
+## Session 2732 update (Socratic pass 1398 — Mutex-vs-RWMutex selection census)
+
+Claim under test: lock granularity matches actual read/write ratios —
+a read-hot path behind a plain Mutex would serialize scrapes against
+each other.
+
+Verification: 30 sync.{Mutex,RWMutex} sites (non-test).
+
+- RWMutex exactly at read-heavy seams: metrics registry/gauge
+  (scrapes), rates quote+hashrate feeds (read per arb tick), hal and
+  btccrypto registries and poolproto scheme registry (enumerate-time
+  reads), clock.Fake.Now (hot reads). All read-dominated → RW is the
+  right pick.
+- Plain Mutex where writers ARE the traffic: V1 writeMu/pendingMu/
+  sendMu (every submit serializes writes), engine per-reason
+  counters (every op writes; scrape reads are rare), streamsMu/
+  activityMu (arb updates are writes), worker.mu (work swap), tui.mu
+  (frame swap), polling mutex. RWMutex here would cost the fast path
+  without benefit.
+- True hot path needs neither: miner grind uses the `workVer`
+  generation counter + atomic work pointer instead of a lock at all —
+  readers spin lock-free on version change (worker.go).
+
+Verdict: TRUE — each lock's granularity matches its contention
+profile; the hottest read (mining work) avoids locks entirely.
