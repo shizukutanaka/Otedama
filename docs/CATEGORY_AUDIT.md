@@ -11766,3 +11766,7 @@ Claim verified: every randomness consumer uses crypto/rand — wallet/seed/seeds
 ## Session 2289 update (Socratic pass 955 — ADR-009 ecosystem recheck)
 
 Claim verified: the sv2-spec normative open set is unchanged — #238 (optional SetupConnection flags negotiation; forward-compat with our subset validation — still the tracked watch item), #234 (authority key mgmt), #232, #203 (coinbase payouts extension), #198, #186, #103 (WIP proxy annex). Releases endpoints were GitHub-rate-limited this pass; last confirmed floors stand (sv2-apps v0.8.0, SRI v1.12.0) with no contradicting evidence in the accessible search index. TRUE.
+
+## Session 2290 update (Socratic pass 956 — env-inheritance census)
+
+Claim verified: subprocess children (systemctl/launchctl/sc.exe via runCmd) inherit the parent env including OTEDAMA_WALLET_* secrets — this is not an escalation: the child's /proc/<pid>/environ is readable to exactly the same uid that could read the parent's, which is the documented threat boundary for env-delivered secrets (the reason env is preferred over argv, which leaks via /proc cmdline to all users). No argv contains a secret and no daemon code references the passphrase vars. TRUE.
