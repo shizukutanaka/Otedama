@@ -13304,3 +13304,7 @@ Re-verified: all ✅-marked items match shipped code (poolproto split + V1 diale
 ## Session 2668 update (Socratic pass 1334 — SECURITY.md supported-versions table)
 
 Corrected the v2.1.9 (legacy) row — it promised "重大な脆弱性のみ、2026年10月まで" but `git ls-remote --heads` confirms the planned `legacy-v2` maintenance branch was never created (same phantom-ref family corrected in CHANGELOG s2658 and MIGRATING-FROM-V2 s2659); the window also expires this month. Row now reads No + migration pointer. Rest of file verified TRUE: PVR path (GitHub private reporting primary, maintainer contact fallback, PGP/Foundation deferred honestly), 72h/7d/14d/30–90d timeline is a stated goal not a claim, CVSS v3.1 severity bands conventional, scope excludes web/plugin correctly (per CLAUDE.md map). claim corrected: SECURITY.md
+
+## Session 2669 update (Socratic pass 1335 — GOVERNANCE.md deep pass)
+
+Verified TRUE: Dependabot + unsigned-release corrections (session 492) still accurate; ADR "append-only" clause honored in spirit — 6 ADRs carry appended Errata preserving original decision text (no rewriting); CODE_OF_CONDUCT.md / LICENSE / NOTICE all exist at referenced paths; release-tiebreak + scope-expansion rules are conditional process statements (no false facts); solo-maintainer phase acknowledged honestly. claim verified: GOVERNANCE.md — TRUE
