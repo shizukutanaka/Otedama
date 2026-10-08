@@ -10430,3 +10430,7 @@ Claim verified: candidateStreams gates on family acceptance, positive effective 
 ## Session 1960 update (Socratic pass 626 — incumbentHold honesty)
 
 Claim verified: the hysteresis gate is a relative margin — incumbent score × (1+hysteresis) — applied in policy-score space; Held is set only when a *different* higher-scoring stream was actually suppressed, so arbitration_holds cannot inflate by counting an incumbent that was itself best; ForegoneSatsPerSec is measured against raw max yield; the reason string distinguishes "held below margin" from "incumbent is best". TRUE.
+
+## Session 1961 update (Socratic pass 627 — share-rate metrics reconciliation)
+
+Claim verified: otedama_shares_unaccounted reconciles local found vs pool-judged counts with a zero clamp (a stats tick racing an accept burst can never produce a meaningless negative); rejectReason creates counters lazily but only for the closed rejectClass enum — label cardinality is bounded; judged==0 short-circuits before the division so reject/stale rates are exact 0 rather than NaN; staleRate is computed against judged shares (pool-visible denominator), not found. TRUE.
