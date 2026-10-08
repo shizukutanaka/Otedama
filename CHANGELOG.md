@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+
+### Fixed (session 1835 — config.yaml.example)
+
+- Corrected the supported-language list: `ru` and `ar` were missing and `zh-CN` was shown instead of the canonical `zh` tag.
+
 ### Fixed (session 1827 — docs/API.md)
 - Metrics table now covers the full registered set: `otedama_shares_submitted_total`, `otedama_shares_submit_in_flight`, `otedama_effective_yield_sats_per_second`, `otedama_power_breakeven_floor_sats_per_second` were all missing from the API reference
 ### Fixed (session 1824 — NOTICE)
