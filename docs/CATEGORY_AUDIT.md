@@ -10242,3 +10242,7 @@ Claim verified: candidateStreams filters by family acceptance, positive effectiv
 ## Session 1913 update (Socratic pass 579 — branch health + CI snapshot)
 
 Claim verified: HEAD is ancestor-clean off origin/master at 276 commits ahead; `go build`, `go vet`, `gofmt -l` all clean (s1900 checkpoint); PR #1405 CI shows 22 pending / 0 failed — the two known non-actionable classes remain (Go-pin matrices vs go.mod≥1.24, Dependency Review behind the repo's disabled dependency graph). TRUE.
+
+## Session 1914 update (Socratic pass 580 — metrics exposition escaping)
+
+Claim verified: label sets are rendered with sorted keys (deterministic exposition), escapeLabel handles backslash/quote/newline correctly via strings.Replacer, escapeHelp correctly escapes only backslash+newline (quotes are not special in HELP lines), and cloneLabels copies caller maps at registration so post-registration mutation cannot alter stored series. metrics.go:360–405 clean. TRUE.
