@@ -13164,3 +13164,7 @@ All TRUE: Go-floor row corrected to 1.24+ matches go.mod (tlsmlkem godebug parse
 ## Session 2633 update (Socratic pass 1299 — RESEARCH_IMPROVEMENTS open-set)
 
 All TRUE: 🔵 planned rows are all ADR-tracked by design (thermal→ADR-008 sub-domain 6, solo-mining→ADR-009, ASIC→ADR-008 sub-domain 1 now disclosed in KNOWN_LIMITATIONS §8); ❌ rejected rows carry scope citations. Status markers last synchronized at session 1284 remain consistent — no untracked opens. Ledger-vs-code spot checks pass (rejectClass, reject-rate gauges, per-device lazy series, V1 reconciliation ceiling).
+
+## Session 2634 update (Socratic pass 1300 — milestone checkpoint)
+
+**MILESTONE pass 1300 — all green:** `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/arbitration/miner/stratum/config/poolproto{,/stratumv1,/stratumv2} all ok. Working tree = ledger + doc corrections only; no code drift since last milestone. Cumulative: ~1297 audit classes verified true, real fixes this cycle include SPEC §7 rewrite (s2615), tls_ca_file doc+doctor chain (s2616), ADR-010 erratum (s2623), MIGRATING deps 2→3 (s2632).
