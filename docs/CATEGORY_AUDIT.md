@@ -10214,3 +10214,7 @@ Claim verified: pollingProvider's launch rejects double-start, Stop is safe-when
 ## Session 1906 update (Socratic pass 572 — provider contract + yield math)
 
 Claim verified: provider.go's contract (publish ≥1 quote per MinQuoteInterval or an explicit {SatsPerSecond:0,Confidence:0} rather than silence) is what both providers implement; SatsPerSecond returns 0 for non-positive inputs so no negative/NaN yield reaches arbitration; Yield.Effective rejects non-positive net/confidence and clamps confidence ≤1.0. TRUE.
+
+## Session 1907 update (Socratic pass 573 — quote fan-in + arbitration intake)
+
+Claim verified: fanIn observes ctx on both receive and send (a stuck input can't pin the goroutine), closes out only after all inputs drain, and bounds the merged buffer; the arbitration loop keys quotes through updateStream, tracks per-stream freshness in lastQuoteAt, prunes stale streams each tick, and carries prevAlloc across Decide failures so a transient error never resets hysteresis. TRUE.
