@@ -10350,3 +10350,7 @@ Claim verified: policyScore returns yield-shaped values under every policy — S
 ## Session 1940 update (Socratic pass 606 — milestone checkpoint)
 
 Claim verified: branch remains green — go build ./... = 0 errors, go vet ./... = 0 findings, gofmt -l = clean, and the engine/doctor/arbitration test packages all PASS. 606 passes into the Socratic cycle, ~0 real defects per ~30 verified claims on this cycle. TRUE.
+
+## Session 1941 update (Socratic pass 607 — rate-median integrity)
+
+Claim verified: the fetch pipeline drops out-of-band readings before the median so a manipulated endpoint cannot pull it; the two-source case distrusts a >4x divergence because a 2-element "median" is a mean with no outlier rejection; lastOKSources persists regardless of success (degraded backing 3→1 is observable before 0); clock skew aggregates from every response including non-200s and persists before the rate check so skew telemetry survives a total-fetch failure. TRUE.
