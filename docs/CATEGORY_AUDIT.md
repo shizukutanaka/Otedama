@@ -33165,3 +33165,179 @@ census:
   form.
 
 Verdict: TRUE.
+
+## Session 3135 update (Socratic pass 1799 — test-file surface ledger)
+
+Claim under test: the
+test-file
+surface is
+testing.T/F/B +
+httptest +
+deterministic
+math/rand +
+two
+DeepEqual —
+with goleak
+as a
+documented
+non-dependency
+and
+testing/quick
+absent.
+
+Verification —
+census
+(`*_test.go`
+only):
+
+- `testing.T`×1866 —
+  the
+  dominant
+  test
+  driver.
+- `testing.F`×23 —
+  matches
+  the
+  recorded
+  23
+  fuzz
+  targets
+  exactly.
+- `testing.B`×11 —
+  benchmarks.
+- `httptest.NewServer`×56
+  +
+  `httptest.NewTLSServer`×2
+  +
+  `httptest.NewUnstartedServer`×1 —
+  the
+  HTTP-client
+  test
+  fleet
+  (rates
+  fetchers,
+  hash-rate
+  feed,
+  doctor
+  probes).
+- `rand.Reader`×8 +
+  `rand.NewSource`×8
+  +
+  `rand.New`×8 +
+  `rand.Read`×6 +
+  `rand.Rand`×4 —
+  `math/rand`
+  in
+  TESTS
+  only:
+  deterministic
+  seeds
+  (the
+  production
+  surface
+  is
+  `crypto/rand`
+  exclusively,
+  verified
+  earlier).
+- `reflect.DeepEqual`×2 —
+  test-side
+  structural
+  compare
+  (zero
+  in
+  production
+  code).
+- `goleak`×2 —
+  COMMENT-only
+  in
+  `rates/fetcher_test.go:1128`
+  documenting
+  that
+  the
+  goroutine-leak
+  helper
+  deliberately
+  mirrors
+  go.uber.org/goleak
+  WITHOUT
+  adding
+  the
+  dependency.
+- ZERO
+  `quick.Check`,
+  `quick.Config`,
+  `quick.Value`,
+  `quick.Generator`,
+  `testing/quick`
+  —
+  the
+  stdlib
+  property
+  generator
+  is
+  absent;
+  property
+  tests
+  are
+  hand-written
+  (the
+  arbitration
+  invariant
+  suite)
+  plus
+  the
+  native
+  fuzz
+  corpus.
+- ZERO
+  `testing.M`,
+  `testing.Main`,
+  `testing.MainStart`,
+  `testing.AllocsPerRun`,
+  `testing.CoverMode`,
+  `testing.Coverage`,
+  `testing.Verbose`,
+  `testing.Short`×0-hits?,
+  `testing.Fail`,
+  `testing.FailNow`×as
+  free
+  fns —
+  only
+  the
+  T/F/B
+  method
+  surface
+  is
+  used;
+  no
+  TestMain,
+  no
+  covermode
+  queries.
+- ZERO
+  `httptest.NewRecorder`,
+  `httptest.NewRequest`,
+  `httptest.NewResponseWriter`,
+  `httptest.DefaultRemoteAddr`,
+  `httptest.ResponseRecorder` —
+  server-side
+  test
+  helpers
+  absent;
+  only
+  the
+  real-server
+  constructors
+  are
+  used
+  (tests
+  run
+  against
+  actual
+  listeners,
+  not
+  recorder
+  shims).
+
+Verdict: TRUE.
