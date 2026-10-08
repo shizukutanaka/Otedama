@@ -18102,3 +18102,29 @@ Verification (`rg 'select' + 'default:'`):
 Verdict: TRUE — every non-blocking select
 either yields real work between polls or
 deliberately drops with observability.
+
+## Session 2898 update (Socratic pass 1563 — exit-surface census)
+
+Claim under test: only `main` terminates the
+process; no library code calls os.Exit or
+log.Fatal.
+
+Verification (`rg 'os\.Exit|log\.Fatal|panic'`):
+
+- `os.Exit` — exactly 1 site:
+  cmd/otedama/main.go:110 `os.Exit(run(...))`
+  — the single root exit consuming the
+  structured exit-code contract.
+- `log.Fatal` — zero anywhere.
+- `panic` — exactly the 12 init-time guards
+  already censused at s2884 (worker double-
+  start, poolproto/btccrypto duplicate
+  register, wordlist integrity, metrics
+  name/type collisions): all constructor-
+  time fail-fast, none reachable at runtime
+  from external input.
+- No `os.Exit`/`log.Fatal` inside internal/ —
+  every error returns to cmd layer.
+
+Verdict: TRUE — exit discipline is absolute;
+library code never terminates the process.
