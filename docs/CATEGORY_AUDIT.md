@@ -12026,3 +12026,7 @@ Claim verified: readiness tracks a real pool session, not process start — OnRe
 ## Session 2354 update (Socratic pass 1020 — MILESTONE gate re-verification)
 
 Milestone verdict: gofmt -l internal cmd clean; go build ./... clean; go vet ./internal/... ./cmd/... clean; go test -count=1 on all 10 scoped packages (metrics, rates, arbitration, engine, poolproto×3, miner, tui, httpserver) — all ok. The 1020-pass ledger is self-consistent and the tree builds/vets/tests green at HEAD. TRUE.
+
+## Session 2355 update (Socratic pass 1021 — V1 submit echo verbatim)
+
+Claim verified: mining.submit echoes the pool's opaque job_id verbatim at params[1] (stratumv1.go:626–629) — the u32 wire ID is internal-only for stale gating; empty extranonce2 pads with "00"×negotiated size bounded by maxExtranonce2Size (:613–619) so strings.Repeat can't be coerced; worker name falls back to "otedama" only absent an authorized user; ntime/nonce are fixed %08x per spec; the result decode requires a strict bool true for Accepted (:637–648). TRUE.
