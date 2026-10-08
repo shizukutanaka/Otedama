@@ -11798,3 +11798,7 @@ Claim verified: the sole production recover() is correctly placed — doctor.go:
 ## Session 2297 update (Socratic pass 963 — WaitGroup pairing re-verification)
 
 Claim verified: every WaitGroup satisfies Add-before-spawn / Done-deferred / Wait-after-all-adds — hashrate.go:145, hal/registry.go:152, doctor checks.go:361 and doctor.go:234 use the identical loop pattern where no Add can outlive the loop; fanin.go:33 adds a wait-then-close goroutine; tui dashboard.go and provider/polling.go pair Add/Done/Wait across lifecycle with the recreated-after-Wait contract honored in provider Start/Stop. No negative-counter or Add-after-Wait hazard. TRUE.
+
+## Session 2298 update (Socratic pass 964 — KNOWN_LIMITATIONS re-verification)
+
+Claim verified: every open limitation row remains accurate against current code — §1 simulated inference yield (provider still named "(simulated)"), §2 Noise NX unwired + P-256 stub (maintainer-gated, v2tls:// is the real confidentiality path), §4 GPU Linux-only/SHA256d=false, §5 PQ scaffolded-only, §6 Lightning receive-only, §8 no ASIC detection, §13 CI workflows (Go-pin and dependency-graph gaps persist — rejected classes), §14 DATUM reserved-scheme fail-fast, §17 install.sh still has no compatible release (newest tag remains v2.1.9 — locally confirmed via git tag; the s1664/s1665 pipeline fixes land with the next v* tag). TRUE.
