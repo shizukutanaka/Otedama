@@ -16809,3 +16809,27 @@ Verification:
 
 Verdict: TRUE — the class is absent; field inheritance
 cannot drift.
+
+## Session 2837 update (Socratic pass 1503 — post-copy mutation census)
+
+Claim under test: no struct is mutated after being
+handed to a consumer — a post-handoff write races
+the reader and produces torn state.
+
+Verification — the one shared-pointer publication:
+
+- Both miner.Work construction sites (run.go:2044 V2
+  dispatch, run.go:2136 V1 applyJob) build the
+  `*miner.Work` fresh per job via a complete literal;
+  after `wr.SetWork(w)` the local `w` is never
+  written again — publication is the last touch.
+- One Work is shared across all unpaused workers
+  (write-once-publish-read-many); workers re-read
+  only via the workVer change check — no writer
+  exists post-publish, so no torn field read.
+- The storeBoundedJob path stores *NewMiningJob
+  pointers in the jobs map; entries are replaced,
+  not mutated in place (tip invalidation replaces
+  the map wholesale, s2815).
+
+Verdict: TRUE — publication is always the last write.
