@@ -9998,3 +9998,7 @@ Claim verified: internal/hal/ contains only device.go, gpu_linux.go, gpu_stub.go
 ## Session 1852 update (Socratic pass 518 — KL §6 receive-only Lightning re-verification)
 
 Claim verified: internal/lightning exposes only seed-lifecycle functions — GenerateEntropy, MnemonicToSeed/Entropy, EncryptSeed/DecryptSeed, WalletManager, Fingerprint(FilePath), NewEnglishWordList — no payment send, invoice, channel or node API exists anywhere in the package (5 source files, exports enumerated). "Receive-only; no embedded node" is exactly accurate. TRUE.
+
+## Session 1853 update (Socratic pass 519 — KL §14 DATUM reservation re-verification)
+
+Claim verified: `datum://` is parsed into `ProtocolDATUM` (poolproto.go:81,120) but has no implementation package; engine/run.go:825-833 fails fast with an explicit "recognized but not implemented — ADR-009" error rather than silently mis-dialing. Scheme reservation without implementation — exactly as KL §14 documents. TRUE.
