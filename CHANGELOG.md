@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1859 — CLAUDE.md)
+
+- Architecture map: added `quality-pass-{opus,sonnet}.md` to the `skills/` inventory comment — the two files exist but were undocumented.
+
 
 ### Fixed (session 1845 — SPECIFICATION.md)
 
