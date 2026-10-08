@@ -30401,3 +30401,163 @@ census:
   work.
 
 Verdict: TRUE.
+
+## Session 3119 update (Socratic pass 1783 — os complete ledger)
+
+Claim under test: the
+os surface is
+filesystem reads/
+atomic writes/
+stdin-stdout-exit —
+with the mutating
+process API absent.
+
+Verification —
+census:
+
+- `os.Getenv`×16 —
+  env
+  reads
+  (verified
+  env-
+  surface
+  class:
+  15
+  effective
+  vars
+  +
+  platform
+  vars).
+- `os.Stat`×10 +
+  `os.File`×10 +
+  `os.ReadFile`×8 +
+  `os.MkdirAll`×5 +
+  `os.WriteFile`×4 +
+  `os.Remove`×9 +
+  `os.Rename`×2 +
+  `os.ReadDir`×2 +
+  `os.Open`×1 +
+  `os.OpenFile`×1 +
+  `os.O_WRONLY`/`O_CREATE`/`O_APPEND`×1 +
+  `os.CreateTemp`×1 +
+  `os.Chmod`×1 —
+  the
+  filesystem
+  class
+  (verified
+  file-
+  write
+  hygiene
+  +
+  atomic-
+  save
+  classes).
+- `os.Stdout`×6 +
+  `os.Stderr`×4 +
+  `os.Stdin`×4 +
+  `os.ModeCharDevice`×3 —
+  the
+  stdio
+  +
+  TTY-
+  detect
+  surface.
+- `os.UserHomeDir`×7 +
+  `os.Executable`×1 +
+  `os.Args`×1 +
+  `os.Interrupt`×1 +
+  `os.ErrNotExist`×6 +
+  `os.Exit`×2 —
+  path/
+  signal/
+  exit
+  surface.
+- ZERO
+  `os.Create`,
+  `os.Mkdir`,
+  `os.MkdirTemp`,
+  `os.RemoveAll`,
+  `os.Truncate`,
+  `os.Link`,
+  `os.Symlink`,
+  `os.Readlink`,
+  `os.Lstat`,
+  `os.Chdir`,
+  `os.Chown`,
+  `os.Chtimes`,
+  `os.Lchown`,
+  `os.Pipe`,
+  `os.NewFile`,
+  `os.Process`,
+  `os.ProcessState`,
+  `os.FindProcess`,
+  `os.StartProcess`,
+  `os.Kill`,
+  `os.Signal`×more,
+  `os.Environ`,
+  `os.Setenv`,
+  `os.Unsetenv`,
+  `os.Clearenv`,
+  `os.ExpandEnv`,
+  `os.LookupEnv`,
+  `os.UserConfigDir`,
+  `os.UserCacheDir`,
+  `os.UserStateDir`,
+  `os.IsNotExist`,
+  `os.IsExist`,
+  `os.IsPermission`,
+  `os.IsTimeout`,
+  `os.IsPathSeparator`,
+  `os.Getwd`,
+  `os.Hostname`,
+  `os.Getuid`,
+  `os.Geteuid`,
+  `os.Getgid`,
+  `os.Getegid`,
+  `os.Getgroups`,
+  `os.Getppid`,
+  `os.Getpid`,
+  `os.PageSize`,
+  `os.TempDir`,
+  `os.SameFile`,
+  `os.DirEntry`,
+  `os.FileInfo`×type,
+  `os.ModeDir`,
+  `os.ModeSymlink`,
+  `os.ModeSocket`,
+  `os.ModeNamedPipe`,
+  `os.ModeDevice`,
+  `os.ModeSetuid`,
+  `os.ModeSetgid`,
+  `os.ModeSticky`,
+  `os.ModeAppend`,
+  `os.ModeExclusive`,
+  `os.ModeTemporary`,
+  `os.O_RDONLY`,
+  `os.O_RDWR`,
+  `os.O_TRUNC`,
+  `os.O_SYNC`,
+  `os.O_EXCL`,
+  `os.SEEK_*`,
+  `os.PathSeparator`,
+  `os.PathListSeparator`,
+  `os.DevNull` —
+  every
+  process-
+  spawn/
+  env-
+  mutate/
+  chdir/
+  ownership
+  surface
+  absent;
+  deprecated
+  `os.IsNotExist`/
+  `IsExist`/
+  `IsPermission`
+  all
+  migrated
+  to
+  `errors.Is`.
+
+Verdict: TRUE.
