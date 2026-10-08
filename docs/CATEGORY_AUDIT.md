@@ -10932,3 +10932,7 @@ Claim verified: the signature-scheme abstraction can't silently mislead — the 
 ## Session 2084 update (Socratic pass 750 — secp256k1 stub honesty)
 
 Claim verified: the secp256k1 schemes can't produce a fake verification — both registered names ("ecdsa-secp256k1", "schnorr-secp256k1") are namespace-reserving stubs whose Verify/PublicKeyFromBytes/SignatureFromBytes all return ErrSchemeNotImplemented rather than a hand-rolled approximation (no DIY crypto — the same honesty-over-silent-approximation stance as the ML-DSA/SPHINCS+ scaffolding); the compile-time `var _ Scheme` check fails at build time if the interface grows; and the dependency decision is recorded in ADR-011 with the transport gap tracked in KNOWN_LIMITATIONS §2 — the stub is disclosed, not hidden. TRUE.
+
+## Session 2085 update (Socratic pass 751 — clock + version abstractions)
+
+Claim verified: time and build metadata can't silently mislead — clock.Fake is RWMutex-guarded so concurrent test readers never tear reads; Set/Advance give deterministic control; the Clock interface is compile-checked on both implementations; and the version package's defaults are honest ("v3.0.0-alpha.1-dev", "unknown" commit/date) — a build made without ldflags injection still reports dev/unknown rather than a fabricated release identity; Get() snapshots the live injected values with real runtime.Version and GOOS/GOARCH. TRUE.
