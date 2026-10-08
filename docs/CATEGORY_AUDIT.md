@@ -17903,3 +17903,22 @@ tests excluded):
 
 Verdict: TRUE — spawn surface unchanged and
 fully owned since the last census.
+
+## Session 2890 update (Socratic pass 1555 — sentinel-comparison census)
+
+Claim under test: sentinel errors are only ever
+matched via errors.Is/As, never raw `==`.
+
+Verification:
+
+- `rg 'err\s*==\s*Err|!=\s*os\.Err'` over
+  production → **zero hits**.
+- The `err == nil` sites are success checks
+  (idiomatic), not sentinel equality.
+- `errors.Is`/`errors.As` usage: **64 sites**
+  across internal/ + cmd/ — the documented
+  convention (#1239 completed the migration
+  off `os.IsNotExist`).
+
+Verdict: TRUE — wrapped-error discipline
+holds; no `==` sentinel comparison survives.
