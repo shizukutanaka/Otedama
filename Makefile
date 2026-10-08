@@ -51,10 +51,10 @@ help: ## Display this help message
 setup: ## Install development tools
 	@echo "Installing development tools..."
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-	$(GO) install github.com/securego/gosec/v2/cmd/gosec@latest
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
-	$(GO) install github.com/google/go-licenses@latest
-	$(GO) install mvdan.cc/gofumpt@latest
+	$(GO) install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	$(GO) install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+	$(GO) install github.com/google/go-licenses/v2@v2.0.1
+	$(GO) install mvdan.cc/gofumpt@v0.12.0
 	@echo "Development tools installed."
 
 .PHONY: deps
@@ -175,13 +175,13 @@ security: ## Run security scanners
 	@if command -v gosec >/dev/null 2>&1; then \
 		gosec -severity medium ./...; \
 	else \
-		echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@latest')"; \
+		echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0')"; \
 	fi
 	@echo "Running govulncheck..."
 	@if command -v govulncheck >/dev/null 2>&1; then \
 		govulncheck ./...; \
 	else \
-		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@v1.1.4')"; \
 	fi
 	@echo "Security scan complete."
 
@@ -191,7 +191,7 @@ licenses: ## Check dependency licenses
 		go-licenses check ./... \
 			--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0; \
 	else \
-		echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses@latest')"; \
+		echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses/v2@v2.0.1')"; \
 	fi
 
 .PHONY: validate
@@ -210,7 +210,7 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	@if command -v govulncheck >/dev/null 2>&1; then \
 		govulncheck ./...; \
 	else \
-		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@v1.1.4')"; \
 	fi
 	@echo "==> [5/8] golangci-lint run"
 	@command -v golangci-lint >/dev/null 2>&1 \
@@ -278,7 +278,7 @@ docs: ## Generate documentation
 .PHONY: docs-serve
 docs-serve: ## Serve documentation locally on port 6060
 	@echo "Starting documentation server at http://localhost:6060/pkg/$(MODULE)/"
-	$(GO) run golang.org/x/tools/cmd/godoc@latest -http=:6060
+	$(GO) run golang.org/x/tools/cmd/godoc@v0.50.0 -http=:6060
 
 # --------------------------------------------------------------------------
 # Release

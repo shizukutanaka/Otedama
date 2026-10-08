@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1712 — Makefile ツールピン発散)
+
+- `make setup`/`docs-serve`/skip-hint の `@latest` 4+1 件を CI 整合の固定バージョンへ
+  （gosec v2.29.0・govulncheck v1.1.4・go-licenses/v2 v2.0.1・gofumpt v0.12.0・godoc x/tools v0.50.0）。
+  go-licenses は v2 モジュールパスへも修正。
+
 
 ### Fixed (session 1703 — lint ピン発散 + fpm ライセンス表記)
 - `test.yml`/`ci-cd.yml` の golangci-lint `version: latest` が v2（設定スキーマ非互換）へ解決 — Makefile の `v1.64.8` へ統一
