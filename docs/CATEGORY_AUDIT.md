@@ -13036,3 +13036,7 @@ ADR-009 tracking re-verified via git ls-remote: SRI latest tag remains v1.12.0, 
 ## Session 2601 update (Socratic pass 1267 — ADR-003 dependency-claim re-verification)
 
 Read the full ADR-003: its "exactly three external runtime dependencies" list (stdlib counted, gopkg.in/yaml.v3 named) is stale-looking but deliberately append-only — Erratum 1 (session 251) records the yaml.org archival + migration recommendation, Erratum 2 (session 1236) records the completed go.yaml.in migration AND the x/sys whitelist addition (internal/tui width_*). Actual go.mod: exactly 3 direct requires (go.yaml.in/yaml/v3 v3.0.5, x/crypto v0.48.0, x/sys v0.41.0) = the effective policy stated in Erratum 2 verbatim. THREAT_MODEL's "three direct dependencies" matches. The ADR-011 secp256k1 amendment remains permitted-but-unshipped (P-256 stub disclosed). TRUE — no drift.
+
+## Session 2602 update (Socratic pass 1268 — service-subcommand parity)
+
+Four-way parity: service.go dispatches exactly `install`/`uninstall`/`status` (service.go:28-32); the bash, zsh, and fish completion blocks enumerate the identical three verbs; API.md documents the same three with matching semantics. No start/stop/restart verbs exist anywhere — consistent with the daemon design (launchd/systemd/SCM own lifecycle). TRUE.
