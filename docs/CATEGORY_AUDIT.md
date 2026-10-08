@@ -10928,3 +10928,7 @@ Claim verified: payout address validation can't pass a typo'd or structurally-wr
 ## Session 2083 update (Socratic pass 749 — btccrypto abstraction honesty)
 
 Claim verified: the signature-scheme abstraction can't silently mislead — the registry is RWMutex-guarded and Register panics only on a duplicate-name programming error at init (not a runtime path); sentinel errors carry precise semantics (ErrSchemeNotImplemented for registered-but-unwired future schemes vs ErrUnknownScheme for absent names vs ErrUnrecognisedAddress for well-formed-neither input, so callers can give accurate guidance); SchemeForAddressType deliberately errors on P2MR — a future BIP-360 address fails loudly rather than producing a wrong verdict; Schemes() sorts for deterministic output; and TaggedHash/Hash256 implement the BIP-340 tag-hash and double-SHA-256 conventions exactly. TRUE.
+
+## Session 2084 update (Socratic pass 750 — secp256k1 stub honesty)
+
+Claim verified: the secp256k1 schemes can't produce a fake verification — both registered names ("ecdsa-secp256k1", "schnorr-secp256k1") are namespace-reserving stubs whose Verify/PublicKeyFromBytes/SignatureFromBytes all return ErrSchemeNotImplemented rather than a hand-rolled approximation (no DIY crypto — the same honesty-over-silent-approximation stance as the ML-DSA/SPHINCS+ scaffolding); the compile-time `var _ Scheme` check fails at build time if the interface grows; and the dependency decision is recorded in ADR-011 with the transport gap tracked in KNOWN_LIMITATIONS §2 — the stub is disclosed, not hidden. TRUE.
