@@ -12764,3 +12764,7 @@ Claim verified: `test.yml`'s fuzz job (added at #1347) delegates to `make fuzz`,
 ## Session 2539 update (Socratic pass 1205 — master-drift + mergeability recheck)
 
 Claim verified: `origin/master` remains frozen at `40da2e51` (post-#1404 tip, unchanged since s2521's check); the branch is now 902 commits ahead and `git merge-tree --write-tree HEAD origin/master` still produces a clean tree (`4b523da0f`) with zero conflicts. TRUE — the ledger branch stays mergeable; no upstream drift to reconcile.
+
+## Session 2540 update (Socratic pass 1206 — skills-directory inventory check)
+
+Claim verified: `skills/` contains all four CLAUDE.md-named skill files (tdd.md, code-review.md, security-audit.md, release-procedure.md) plus two additional curated quality-pass guides (quality-pass-opus.md, quality-pass-sonnet.md — extra files beyond the documented four are additive, not drift; the enumeration in CLAUDE.md names a minimum set); no `.agents/skills/` or `.devin/skills/` shadow copies exist. TRUE — the skill surface matches its documented contract.
