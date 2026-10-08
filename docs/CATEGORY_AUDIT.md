@@ -38708,3 +38708,106 @@ unchanged.
 Verdict: FALSE
 →
 fixed.
+
+## Session 3172 update (Socratic pass 1836 — ordering/container API ledger)
+
+Claim under test: ordering
+and
+container
+helpers
+are
+fully
+modernized
+—
+`slices`/
+`maps`/
+`cmp`
+only,
+zero
+`sort`
+package
+imports,
+zero
+manual
+equality/
+contains
+loops.
+
+Verification —
+census:
+
+- `sort`  package:
+  ZERO —
+  no
+  `import "sort"`,
+  no
+  `sort.Strings`/
+  `Ints`/
+  `Slice`/
+  `Float64s`
+  anywhere
+  (the
+  slices
+  modernization
+  is
+  complete;
+  the
+  earlier
+  "15
+  sort
+  sites"
+  ledger
+  counted
+  `slices.Sort*`
+  call
+  sites,
+  not
+  `sort.`).
+- `slices`:
+  `Sort`×13,
+  `SortFunc`×2,
+  `Equal`×2,
+  `SortStableFunc`×1,
+  `IsSortedFunc`×1,
+  `Contains`×1 =
+  20.
+  ZERO:
+  `SortStable`
+  (stable
+  needs
+  always
+  take
+  `SortStableFunc`),
+  `BinarySearch`,
+  `Reverse`,
+  `Compact`,
+  `Concat`.
+- `maps`:
+  `Copy`×2,
+  `Clone`×1 =
+  3.
+  ZERO:
+  `Keys`/
+  `Values`
+  (plain
+  `for range`
+  preferred),
+  `Equal`,
+  `DeleteFunc`.
+- `cmp`:
+  `Compare`×5,
+  `Or`×4 =
+  9.
+  ZERO:
+  `Diff`,
+  `Less`
+  (raw
+  bool
+  comparisons
+  suffice
+  where
+  not
+  three-
+  way).
+
+Verdict: TRUE.
