@@ -13308,3 +13308,7 @@ Corrected the v2.1.9 (legacy) row — it promised "重大な脆弱性のみ、20
 ## Session 2669 update (Socratic pass 1335 — GOVERNANCE.md deep pass)
 
 Verified TRUE: Dependabot + unsigned-release corrections (session 492) still accurate; ADR "append-only" clause honored in spirit — 6 ADRs carry appended Errata preserving original decision text (no rewriting); CODE_OF_CONDUCT.md / LICENSE / NOTICE all exist at referenced paths; release-tiebreak + scope-expansion rules are conditional process statements (no false facts); solo-maintainer phase acknowledged honestly. claim verified: GOVERNANCE.md — TRUE
+
+## Session 2670 update (Socratic pass 1336 — SUSTAINABILITY §3 subsidy claim)
+
+Corrected §3's "block subsidy は計算式で導出…既に対応済み" — FALSE: `internal/provider/mining.go:131` is a hardcoded `blockRewardBTC = 3.125` constant; the yield estimator has no block-height source (V1 mining.notify carries none) so formula derivation is impossible until Track D node integration lands. Doc now records the intent + correction. Other sections verified TRUE: §5 SHA-pin/cosign 未実施 disclosure accurate (all @vN tags, no signatures), §9 fuzz census "23 targets/14 files/9 pkgs, stratum 7個" — stratum has exactly 7, §6/§7 flag names + Renovate-swap + OTel-scope claims accurate, §10 Apache/DCO/SECURITY status corrected inline. claim corrected: docs/SUSTAINABILITY.md

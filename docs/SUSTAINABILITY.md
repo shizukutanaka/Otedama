@@ -50,7 +50,7 @@ The single highest-leverage observation: **the cost of building these foundation
 **研究結論:** Bitcoin Core JSON-RPC は実質的に stable（5+ 年変更なし）、6ヶ月リリースで3メジャー並行サポート。Mining-relevantなRPC (`getblocktemplate`, `submitblock`, `getmininginfo`) は何年もABI互換。**変動領域は mempool policy** (Core 30 の OP_RETURN サイズ制限撤廃でKnots分裂、394→2,909ノード)。**2028 halving**: block 1,050,000 (~2028年3-4月)、subsidy 3.125→1.5625 BTC。Hashprice 2026/Q1 で~$27-29/PH/day (史上最低)、CoinShares予測 $35-50/PH/day レンジ。
 
 **Otedamaの判断:**
-- block subsidy は **計算式で導出** (`50e8 >> (height/210000)`)、**ハードコードしない**（既に対応済み）。
+- block subsidy は **計算式で導出** (`50e8 >> (height/210000)`)、**ハードコードしない**を目標とする。**訂正 (session 2670)**: 現状は「既に対応済み」ではなく、`internal/provider/mining.go` の `blockRewardBTC = 3.125` ハードコード定数のまま — yield 推定器は block height を取得する経路（V1 mining.notify には height が無い）を持たないため、ノード統合（Track D / `getblocktemplate` または IPC template）まで formula 導出は実装不可。次回 halving 前の接続時に高める判断。
 - アドレスパーサは witness-version dispatch で**全 prefix 対応**、Bech32m/Bech32 polymod 厳密に区別（混同で資金喪失するため）。
 - coinbase は常に `getblocktemplate` 出力から構築、ハンドメイド consensus rule なし → CTV/CSFS/OP_CAT/BIP-360 全てコード変更なしで吸収。
 - `bitcoind` と `bitcoinknotsd` どちらでも動く（mining RPCは同一）。
