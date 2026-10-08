@@ -13008,3 +13008,7 @@ Census: all 9 CLAUDE.md forbidden paths absent (internal/providers, internal/aut
 Gates re-verified: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean. Scoped tests for the surfaces audited this stretch — doctor (7.1s), i18n+messages, cmd/otedama (2.6s), config — all green. Pass 1260 milestone recorded.
 
 Cycle position: all 46 branch-diff files audited; census classes completed this stretch — doctor check count, i18n catalog parity, subcommand parity, exit-code parity (1 doc fix), forbidden-path census.
+
+## Session 2595 update (Socratic pass 1261 — wallet subcommand surface parity)
+
+Four-way parity verified: wallet.go dispatches exactly `verify` + `change-passphrase` (wallet.go:41-43); completion.go verb lists match; API.md and SPECIFICATION.md document both with identical semantics. The 3 OTEDAMA_WALLET_* env vars in code (PASSPHRASE, NEW_PASSPHRASE, MNEMONIC_PASSPHRASE) are all documented in API.md's env table — including the claim that NEW_PASSPHRASE is env-only and never accepted as a flag (verified: no such flag exists in parseWalletFlags, so it cannot leak through argv/process lists). TRUE.
