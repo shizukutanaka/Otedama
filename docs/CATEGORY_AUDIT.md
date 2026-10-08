@@ -10150,3 +10150,7 @@ Claim verified: the message catalog ships exactly the 10 languages API.md:191 do
 ## Session 1890 update (Socratic pass 556 — milestone checkpoint)
 
 Cycle-2 checkpoint at pass 556: branch 253 commits ahead of master (40da2e515, unchanged — master is an ancestor, clean merge). This pass-block's enumeration parity sweep continued through SPECIFICATION §3 schema (all 20 yaml tags), exit-code contract (doctor 0/1/2 defect fixed s1883), README Go-version note (stale two-part declaration fixed s1884), CONTRIBUTING→Makefile, API.md flags/metrics/locales — 2 real doc defects found and corrected, the rest TRUE.
+
+## Session 1891 update (Socratic pass 557 — HTTP endpoint parity)
+
+Claim verified: the httpserver mux registers exactly the documented surface — /healthz, /readyz, /metrics, / (server.go:89–95) matching SPECIFICATION:159, plus /debug/pprof/* only behind the --pprof flag matching API.md:34. No undocumented routes. TRUE.
