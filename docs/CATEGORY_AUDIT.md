@@ -34013,3 +34013,132 @@ calls):
   formatting.
 
 Verdict: TRUE.
+
+## Session 3141 update (Socratic pass 1805 — environment/argv surface ledger)
+
+Claim under test: the
+environment
+surface is
+os.Getenv×13
+call-sites +
+3
+function-value
+injections +
+os.UserHomeDir×7,
+with a
+SINGLE
+real
+os.Exit
+and
+SINGLE
+os.Args
+reference.
+
+Verification —
+census:
+
+- `os.Getenv`×16
+  total:
+  13
+  call-sites
+  +
+  3
+  function-value
+  injections
+  (`config.go:397`
+  and
+  `config.go:516`
+  —
+  the
+  injectable
+  env
+  lookup;
+  `run.go:262`
+  `DetectLangFromEnv(os.Getenv)`).
+- Env
+  keys
+  read:
+  `OTEDAMA_WALLET_PASSPHRASE`×3,
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`×2,
+  `OTEDAMA_WALLET_NEW_PASSPHRASE`×1,
+  `OTEDAMA_CONFIG`×1,
+  `XDG_CONFIG_HOME`×2,
+  `XDG_DATA_HOME`×1,
+  `APPDATA`×1
+  —
+  plus
+  the
+  `OTEDAMA_*`
+  runtime
+  keys
+  via
+  the
+  injectable
+  env
+  layer
+  (config.go).
+- `os.UserHomeDir`×7 —
+  home-dir
+  resolution
+  for
+  data/config
+  defaults.
+- `os.Exit`×1
+  REAL:
+  `cmd/otedama/main.go:110`
+  —
+  the
+  single
+  exit
+  funnel;
+  the
+  second
+  hit
+  is
+  a
+  `doctor.go:110`
+  doc
+  comment.
+- `os.Args`×1:
+  `os.Args[1:]`
+  at
+  the
+  same
+  main.go
+  line —
+  the
+  single
+  argv
+  source.
+- ZERO
+  `os.Setenv`,
+  `os.Unsetenv`,
+  `os.Clearenv`,
+  `os.Environ`,
+  `os.ExpandEnv`,
+  `os.LookupEnv`,
+  `os.Getuid`,
+  `os.Geteuid`,
+  `os.Getpid`,
+  `os.Getppid`,
+  `os.UserConfigDir`,
+  `os.UserCacheDir`,
+  `os.Hostname`
+  in
+  production
+  code —
+  env
+  reads
+  go
+  through
+  Getenv
+  or
+  the
+  injectable
+  layer;
+  env
+  mutation
+  is
+  test-only.
+
+Verdict: TRUE.
