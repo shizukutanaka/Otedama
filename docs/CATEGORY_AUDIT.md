@@ -9708,3 +9708,7 @@ Defect found and fixed: the workflow cloned the entire repository history (`acti
 ## Session 1782 update (Socratic pass 448 — make docs always failed; fixed)
 
 Defect found and fixed: `make docs` ran `go doc -all ./...` which `go doc` refuses — patterns naming more than one package exit 1 with "does not specify a single package" — so the target failed deterministically on every repo state and wrote a zero-byte api-reference.txt before dying. The target now iterates `go list ./...` and emits `go doc -all <pkg>` per package, failing closed on any package error. Verified live: `make docs` produces a 4,736-line api-reference.txt (gitignored since s1678).
+
+## Session 1783 update (Socratic pass 449 — --pprof help text overstated its scoping)
+
+Defect found and fixed: the `--pprof` flag help read "(only on loopback/private addresses)", which reads as an enforced restriction — but `New(addr, registry, enablePprof)` mounts /debug/pprof/ on whatever address --http-addr binds, including public ones; the non-loopback case produces only a stderr warning (startHTTPServer). Corrected the help text to "intended for loopback/private addresses; a warning is printed when --http-addr is non-loopback", matching docs/API.md's already-honest "intended for" phrasing. Remaining surfaces verified TRUE: index page is fully static (no version/config/pool disclosure), handleIndex 404s sub-paths, pprof registration gated behind the flag, all timeouts set (ReadHeader 5s slowloris mitigation), ServeError surfaced via poll.
