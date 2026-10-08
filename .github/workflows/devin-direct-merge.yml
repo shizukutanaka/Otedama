@@ -31,9 +31,11 @@ jobs:
         run: |
           PR_NUM=${{ github.event.pull_request.number }}
           # mergeable は GitHub が非同期計算 — 初回 UNKNOWN を競合なしと誤認しないよう短くリトライ
+          # --repo は必須: checkout を行わないため gh はローカル .git から
+          # リポジトリを解決できず、"not a git repository" で失敗する
           STATUS=""
           for i in 1 2 3; do
-            STATUS=$(gh pr view $PR_NUM --json mergeable --jq .mergeable)
+            STATUS=$(gh pr view $PR_NUM --repo ${{ github.repository }} --json mergeable --jq .mergeable)
             [ "$STATUS" != "UNKNOWN" ] && break
             sleep 5
           done
@@ -48,4 +50,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "/fix-conflict masterブランチとの競合を git merge で解消し、テストを通してください。"
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "/fix-conflict masterブランチとの競合を git merge で解消し、テストを通してください。"

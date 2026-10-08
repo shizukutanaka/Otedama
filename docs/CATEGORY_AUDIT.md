@@ -12953,3 +12953,9 @@ Claim verified: census of all `"otedama_*"` literals in internal/+cmd/ yields 51
 ## Session 2584 update (Socratic pass 1250 — env-var surface parity)
 
 Claim verified: all 15 `OTEDAMA_*` environment variables referenced in internal/+cmd/ (arbitration hysteresis/floor/curtail, bitcoin address, config, data dir, electricity price, http addr, language, log level/format, power watts, three wallet secrets) are documented in docs/API.md and/or docs/SPECIFICATION.md; zero code-only and zero doc-only names. TRUE. (Note: first census run showed false negatives because `grep -o` prefixes filenames on multi-file input — corrected with `-h`.)
+
+## Session 2585 update (Socratic pass 1251 — real fix: devin-direct-merge gh repo context)
+
+REAL FIX: `check-conflict-and-comment` failed on master CI with `fatal: not a git repository`. Root cause: this branch dropped the `actions/checkout` step as waste, but `gh pr view`/`gh pr comment` resolve the target repo from the local git remote — no checkout means no `.git`, so every invocation failed. The optimization was correct in spirit (a full clone IS waste) but the gh calls needed an explicit repo. Fixed by passing `--repo ${{ github.repository }}` on both invocations, preserving the no-checkout win. Confirmed by the job log (exit 1, `failed to run git`).
+
+Claim verified (flag parity): all 9 run-subcommand flags present in code have doc coverage — `--http-addr`/`--pprof` (#576), `--dry-run`/`--no-tui`/`--wallet-{,mnemonic-}passphrase`, `--log-file`, `--origin`, `--help` appear across API.md/SPECIFICATION/TROUBLESHOOTING. TRUE.
