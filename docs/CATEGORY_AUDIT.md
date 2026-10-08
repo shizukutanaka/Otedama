@@ -10154,3 +10154,7 @@ Cycle-2 checkpoint at pass 556: branch 253 commits ahead of master (40da2e515, u
 ## Session 1891 update (Socratic pass 557 — HTTP endpoint parity)
 
 Claim verified: the httpserver mux registers exactly the documented surface — /healthz, /readyz, /metrics, / (server.go:89–95) matching SPECIFICATION:159, plus /debug/pprof/* only behind the --pprof flag matching API.md:34. No undocumented routes. TRUE.
+
+## Session 1892 update (Socratic pass 558 — research-backlog census re-verification)
+
+Claim verified: RESEARCH_IMPROVEMENTS.md marker counts unchanged since the s1821 census — ✅102 · 🔵88 · 🟡14 · ❌7 — with the same live 🟡 rows (P-256 Noise stub maintainer zone :506, govulncheck evergreen :951/:962, unverified GPU-spot snippet :1203). No drift. TRUE.
