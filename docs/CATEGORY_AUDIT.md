@@ -12046,3 +12046,7 @@ Claim verified: both session paths handle the optional CA bundle identically —
 ## Session 2359 update (Socratic pass 1025 — SV2 adapter Submit honesty)
 
 Claim verified: the SV2 adapter Submit returns ShareResult{Accepted:true} but its docstring discloses the provisional nature explicitly — the authoritative verdict arrives asynchronously via SubmitSharesSuccess/Error which the engine's frame loop processes (dialer.go:353–358); channel_msg bit is set in sendMsg matching the engine's inline path (:367–370); the opaque job id goes through parseJobID (:358). No false claim of confirmed pool acceptance. TRUE.
+
+## Session 2360 update (Socratic pass 1026 — HashrateMonitor stall honesty)
+
+Claim verified: NewHashrateMonitor defaults a degenerate maxStall<1 to 3 so a single sample can't trigger (stats.go:457–460); warn fires once per stall episode at stallCount>=maxStall && !warned (:467–476) and re-arms only on a recovery above the floor, logging "hashrate recovered" — a stall can't be re-reported as ongoing nor silently retriggered (:478–484); Stalled() mirrors the live warned state for health endpoints (:491); the floor comparison includes exact-floor readings as stalls (:467). TRUE.
