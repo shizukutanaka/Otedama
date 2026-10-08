@@ -16175,3 +16175,26 @@ Verification — the complete set:
 
 Verdict: TRUE — builders are function-scoped one-shot
 writers; the sole Reset is the intended pool contract.
+
+## Session 2811 update (Socratic pass 1477 — slice-truncate/map-clear census)
+
+Claim under test: capacity-retaining truncations and map
+clears are bounded and intentional — no unbounded
+backing-array retention.
+
+Verification — the complete set (two sites):
+
+- run.go:1207 `jobOrder = jobOrder[:0]` on tip update —
+  the slice is capped at jobsCap=64 uint32s (≤256B of
+  backing); keeping the array across jobs is the
+  deliberate zero-alloc pattern; `jobs` itself is
+  replaced wholesale (new map), so only the named job
+  survives — the documented invalidation.
+- arbitrate.go:243 `clear(opts.activity)` — Go 1.21
+  builtin under activityMu; resets the published
+  activity map to exactly the new allocation, no stale
+  device entries.
+- No other `[:0]`/clear sites exist in production.
+
+Verdict: TRUE — both truncations are bounded and load-
+bearing invariants, not leaks.
