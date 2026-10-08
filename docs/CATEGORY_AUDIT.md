@@ -19245,3 +19245,26 @@ Verification (3 sites):
 
 Verdict: TRUE — all three are true
 roots; zero TODO markers.
+
+## Session 2942 update (Socratic pass 1607 — deprecated-API census)
+
+Claim under test: no deprecated
+stdlib packages remain —
+`io/ioutil`, `math/rand`,
+`xerrors` are all absent.
+
+Verification:
+
+- `io/ioutil` → zero imports
+  (modernized to `io.ReadAll`,
+  `os.ReadFile`, etc.).
+- `math/rand` → zero imports —
+  all randomness comes from
+  `crypto/rand` (verified s2883).
+- `golang.org/x/xerrors` → zero
+  imports — the repo uses stdlib
+  `errors` + `fmt` `%w` (verified
+  s2923).
+
+Verdict: TRUE — no deprecated
+packages; modern stdlib throughout.
