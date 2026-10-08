@@ -12781,3 +12781,7 @@ Corrected state (append-only, history not rewritten):
 - The `test:` job (replaced with Go build/vet/test at #1404) genuinely runs on master — not dormant.
 - The k8s deploy steps (helm/kubectl, `./kubernetes/helm/otedama/values*.yaml` — a tree that does not exist) are each gated by `if: env.KUBECONFIG_B64 != ''`; without the STAGING_KUBECONFIG/PROD_KUBECONFIG secrets they no-op rather than fail. So deploy.yml on master is secret-gated dormant for its deploy stages, not trigger-dormant as s2529 stated.
 - The missing kubernetes/ tree remains a real residual only reachable if k8s secrets are configured; the dormant-by-guard outcome means it produces no master-branch failures today.
+
+## Session 2543 update (Socratic pass 1209 — workflow secret-gating census)
+
+Claim verified: every non-GITHUB_TOKEN secret reference in workflows is condition-gated or design-intended — deploy.yml's STAGING_KUBECONFIG/PRODUCTION_KUBECONFIG/SLACK_WEBHOOK steps all carry `if: env.* != ''` guards (s2542); release.yml's HOMEBREW_TAP_TOKEN job is wholly behind `if: vars.HOMEBREW_TAP_REPO != ''`; ci.yml's two Docker Hub logins are PR-gated only (`if: github.event_name != 'pull_request'`), which assumes the owner repo provisions DOCKER_USERNAME/DOCKER_PASSWORD — a standard owner-repo assumption, not a defect (jobs fail only if the owner never configured Docker Hub, in which case the failure is the intended signal). GITHUB_TOKEN is ambient. TRUE — no unguarded optional-secret path that could silently fail.
