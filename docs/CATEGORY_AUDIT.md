@@ -11954,3 +11954,7 @@ Claim verified: NewDecoder pins MaxFrameSize to the 16 MiB default (frame.go:255
 ## Session 2336 update (Socratic pass 1002 — counter/gauge type honesty)
 
 Claim verified: Counter is atomic.Uint64 (metrics.go:85–89) — no float64 precision ceiling exists and Inc/Add are exact at any magnitude; there is no decrement path (structurally monotonic). Gauge is float64 under sync.RWMutex (:91–98) — the only type that legitimately carries fractional values. isValidMetricName enforces [a-zA-Z_:][a-zA-Z0-9_:]* with the leading-digit guard via position i>0 (:104–115). TRUE.
+
+## Session 2337 update (Socratic pass 1003 — daemon status honesty)
+
+Claim verified: ServiceStatus can't misreport — Installed is a filesystem stat of the unit/plist (service.go:241–243, :334–336), Running is `systemctl --user is-active` output == "active" or `launchctl list` without "Could not find" (:246–247, :339–340) so failed/inactive/missing units all report false, and Details carries the tool's raw output verbatim. Unsupported platforms return an explicit error (:138). TRUE.
