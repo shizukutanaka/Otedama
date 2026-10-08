@@ -14361,3 +14361,28 @@ Verification: all 51 non-test `_ =` sites enumerated and classified.
 
 Verdict: TRUE — all 51 discards are teardown/best-effort sites with
 no actionable payload.
+
+## Session 2739 update (Socratic pass 1405 — merged-#1404/1405 invariants)
+
+Claim under test: two merged fixes remain at HEAD — the doctor
+check fan-out survives a panicking check, and the dead Node.js
+deploy-test job was replaced with real Go gates.
+
+Verification: HEAD reads.
+
+- `internal/doctor/doctor.go:239-245` — each fan-out worker wraps
+  `chk.Run(ctx)` in `defer func(){ if rec := recover(); ... }()`;
+  a panic becomes `Result{Status: Fail, Detail: "check panicked: %v"}`
+  instead of killing the diagnostic. Panic-proof invariant intact.
+- `.github/workflows/ci-cd.yml` — matrix test job runs
+  `go-version: ${{ matrix.go }}` per-OS with `go test -race
+  -coverprofile` (:42,:58); build job (:120-151) builds the real
+  binary with `-X internal/version.{Version,Commit}` ldflags and
+  emits 5 OS/arch artifacts. The dead Node.js deploy job is gone —
+  replaced by these Go gates (#1404 invariant intact).
+- Residual in the same file: `GO_VERSION: '1.21'` (:21) is the
+  recorded Go-pin CI class (#1344 closed unmerged — do not
+  re-propose).
+
+Verdict: TRUE — both merged fixes remain; the Node-dead-job zone is
+Go-only now.
