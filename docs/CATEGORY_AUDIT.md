@@ -9382,3 +9382,9 @@ Residuals (recorded, not fixable here): the lint jobs still fail before reaching
 **Claim verified: "no remaining mutable refs or license mislabels in the release/lint chain" — TRUE after s1703.** Census of every `uses:` across the 8 workflows shows only major-version tags (@v3/@v4/@v5) — the maintainer's chosen posture, previously disclosed in solo-ops; not a defect. The three lint sites now all resolve to golangci-lint **v1.64.8**; `.golangci.yml` has no `version:` key and only v1-schema top-level fields — compatible with the pin. License metadata census: `.goreleaser.yaml:158` `license: Apache-2.0` (correct), Makefile `--allowed_licenses` is the dependency-allowlist (correct per CLAUDE.md dependency policy) — the fpm `--license "MIT"` mislabel was the only wrong site, fixed in s1703.
 
 Residuals: major-version `uses:` tags are mutable within their major line by GitHub design — converting to SHA pinning would be a maintainer policy decision, not recorded as an open defect. `golangci-lint-action@v3` itself is an older action major but accepts the `v1.64.8` version input format.
+
+## Session 1705 update (Socratic pass 371)
+
+**Claim verified: "go.mod/go.sum describe exactly the dependency set the code needs" — TRUE (measured).** `go mod verify` → `all modules verified` (every module in the cache matches its go.sum hash — no tampered/local-modified deps). `go mod tidy -diff` → empty (zero drift: no unused requires, no missing requires for any import — the declared graph is exactly the used graph). `devin-direct-merge.yml` re-audit: fetch-depth 0, minimal permissions (contents:read + pull-requests:write), mergeable-retry loop against the async UNKNOWN state, fork gate, timeout — all correct.
+
+Residuals: none for this surface. The lint pins converged in s1703 only take effect once the Go-pin class (#1344 decision) lets the jobs reach the lint step.
