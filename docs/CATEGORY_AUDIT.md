@@ -17879,3 +17879,27 @@ NewTimer/NewTicker):
 
 Verdict: TRUE — no timer leak and no
 uncancellable wait.
+
+## Session 2889 update (Socratic pass 1554 — goroutine-spawn census)
+
+Claim under test: every goroutine spawn in
+production is owned — bounded by a ctx or a
+WaitGroup whose parent waits on it.
+
+Verification (`rg '^\s*go (func|name)'`,
+tests excluded):
+
+- Exactly 20 spawn sites, identical to the
+  s2277 census — no new spawn added since.
+- Ownership categories (all ctx/Wg-bounded):
+  - ctx-driven loops: httpserver (2), run.go
+    (5), hashrate/fetcher/polling tickers,
+    provider polling.
+  - WaitGroup-paired: worker threads (168,174),
+    fanin (34,56), doctor fanout (235,370),
+    hal detect (155,167), rates source fanout
+    (148,297).
+- No `go` call escapes the tracked set.
+
+Verdict: TRUE — spawn surface unchanged and
+fully owned since the last census.
