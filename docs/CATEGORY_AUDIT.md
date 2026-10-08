@@ -10190,3 +10190,7 @@ Claim verified: CONTRIBUTING.md's required commands (setup/build/test/lint) all 
 ## Session 1900 update (Socratic pass 566 — milestone checkpoint)
 
 Pass-566 checkpoint on the parity sweep: `go build ./...`, `go vet ./...`, and `gofmt -l` all clean on the current HEAD (f875de3a8). The doc-spec parity block (passes 547–565) covered schema, flags, metrics, locales, endpoints, env, and doc-command surfaces with two real defects corrected (SPECIFICATION exit-code set, README Go-version narrative); everything else verified TRUE.
+
+## Session 1901 update (Socratic pass 567 — Akash provider honest-scope re-verification)
+
+Claim verified: internal/provider/ai_inference.go's AkashProvider documents itself honestly — it publishes AI-inference yield estimates for GPU devices, with real Akash bid-submission explicitly out of scope (ai_inference.go:39); engine wires NewAkashProvider alongside MiningProvider. The 🔵 scope-refined backlog row remains the accurate disposition, not a hidden stub claim. TRUE.
