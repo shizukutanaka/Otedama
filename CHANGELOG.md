@@ -8350,3 +8350,10 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Docs (session 1701 — VERIFY.md/goreleaser コメント訂正)
 
 - VERIFY.md ステータス欄更新 — release.yml/ci.yml の集約 `checksums.txt` 配布開始を反映、cosign/SBOM 不在は継続記載。.goreleaser.yaml の sign コメントを実挙動（checksums のみ署名）へ訂正
+
+### Fixed (session 1770 — Dockerfile named-volume perms)
+
+- `Dockerfile`: `/var/lib/otedama` をビルド時に uid 65532 所有で事前作成
+  し最終イメージへ COPY — named volume 初回作成時の root:root 化で
+  nonroot コンテナが wallet.dat を書けなかった欠陥を修理（DEPLOYMENT.md
+  の Docker/Compose/k8s 全例が踏む経路）。
