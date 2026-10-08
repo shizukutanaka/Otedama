@@ -20974,3 +20974,54 @@ Verdict: TRUE — the
 dependency surface matches
 the product definition;
 nothing heavy drags in.
+
+## Session 2983 update (Socratic pass 1647 — hash-package surface)
+
+Claim under test: the
+`hash/*` surface is two
+legitimate uses only — FNV
+fallback and the pooled
+Noise HMAC.
+
+Verification:
+
+- `hash/fnv` — one site,
+  run.go:2171, the
+  ParseUint-then-FNV-1a
+  job-ID fallback (non-numeric
+  pool job IDs can't collide).
+- `hash` — noise_pool.go:27,
+  a sync.Pool of raw
+  `sha256.New` hashers used
+  by `hmacSHA256Pooled` —
+  a hand-rolled HMAC that
+  matches `hmac.New` (tests
+  compare against the
+  unpooled reference).
+- `getHasher` always
+  `h.Reset()` on borrow —
+  dirty-pool state can't
+  leak; `putHasher` returns
+  without reset (safe: the
+  next borrow resets).
+- Long-key path: key >64B
+  is hashed first, matching
+  RFC 2104; caller's key
+  buffer is replaced, not
+  mutated.
+- `innerSum`/`result` are
+  fresh `Sum(nil)` slices —
+  no aliasing into pool
+  state.
+- Zero `container/*`
+  imports — no heap/ring/
+  list (the latency ring is
+  a slice+index).
+- Zero crc/adler/maphash.
+
+CODEOWNERS note: noise* is
+maintainer-review — this is
+a read-only verdict, no
+edits.
+
+Verdict: TRUE.
