@@ -14480,3 +14480,31 @@ Verification: 21 non-test `go` statement sites enumerated.
   ctx — ownership is uniform.
 
 Verdict: TRUE — all 21 spawns are owned and ctx/Close-bounded.
+
+## Session 2744 update (Socratic pass 1410 — panic-site census)
+
+Claim under test: every panic() is a programmer-error contract
+violation — never reachable from pool/network/user input.
+
+Verification: all 12 non-test panic sites.
+
+- metrics.go ×5 (:155,:166,:182,:204,:216) — the registry panics on
+  invalid label/metric names and counter-vs-gauge re-registration;
+  prometheus-style fail-fast because registration runs at init or
+  constructor time, where a bad name is a code defect, not runtime
+  state.
+- lightning/english_wordlist.go ×2 (:38,:42) — the init() BIP-39
+  integrity pin (count ≠2048, SHA-256 mismatch): fail before any
+  seed derivation with a corrupt wordlist.
+- btccrypto.go:187 — duplicate scheme registration.
+- poolproto.go ×3 (:371,:375,:380) — nil Dialer, Dialer returning
+  ProtocolUnknown, duplicate protocol id.
+- worker.go:155 — `Worker.Start` called twice; the CAS-guarded
+  lifecycle makes double-start a programmer error.
+- Every site fires on a contract the code itself publishes
+  (registration rules, lifecycle rules, embedded-data integrity) —
+  zero sites consume pool/network/config input, so panic cannot be
+  triggered remotely.
+
+Verdict: TRUE — panic on programmer error only; remote input always
+gets errors.
