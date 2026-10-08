@@ -24514,3 +24514,61 @@ Verification:
 
 Verdict: TRUE —
 milestone green.
+
+## Session 3051 update (Socratic pass 1715 — builtin ledger)
+
+Claim under test: Go
+builtins are used
+idiomatically —
+zero complex/real/
+imag/print/println,
+correct clear/new/
+delete/min/max/copy.
+
+Verification — census
+(word-boundary):
+
+- ZERO `complex(` /
+  `real(` / `imag(` /
+  `print(` / `println(`
+  — the numeric domain
+  is int64/uint64/
+  float64 only, and
+  output goes through
+  fmt.
+- `clear(`×1 —
+  arbitrate.go:243
+  clearing the
+  activity map
+  (Go 1.21+
+  adoption
+  complete).
+- `new(`×9 — all
+  canonical (each
+  verified in the
+  new-vs-make class).
+- `delete(`×15 —
+  map key removal,
+  all correct.
+- `min(`/`max(`×9 —
+  the builtin-minmax
+  class verified:
+  clamping + bounds.
+- `cap(`×1 —
+  single capacity
+  check site.
+- `copy(`×37 —
+  length-consistent
+  copies (copy-order
+  class verified).
+- `append(`×125 —
+  all self-referential
+  (append-alias
+  class verified).
+- `recover(`×1 /
+  `panic(`×12 —
+  the ledgered
+  invariant set
+  (session-3043).
+
+Verdict: TRUE.
