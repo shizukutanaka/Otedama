@@ -13136,3 +13136,7 @@ All TRUE: ADR-011's Accepted status vs go.mod — neither dcrec/secp256k1 nor bt
 ## Session 2626 update (Socratic pass 1292 — ADR-001/004/005/006 implementation parity)
 
 All TRUE: ADR-004 (custom ANSI TUI, zero framework deps) — internal/tui imports only stdlib + x/sys/{unix,windows}; ADR-005 (Prometheus exposition, no client lib) — internal/metrics is pure stdlib; ADR-006 (protocol abstraction) — poolproto Register/DialURL registry live; ADR-001 (non-custodial) — AES-256-GCM seedstore + btccrypto coinbase payout verification hold. CI re-verified: only unfixable classes fail (Go 1.20/1.21 pin vs go.mod≥1.24 [#1344 rejected]; Dependency Review repo setting); 1.23.x jobs pending queue, not failures.
+
+## Session 2627 update (Socratic pass 1293 — ADR-009 proposal-vs-code parity)
+
+All TRUE: datum:// sits in the scheme table (poolproto.go:120 → ProtocolDATUM) but run.go:825-833 fails fast with honest "recognized but not implemented — ADR-009" (KNOWN_LIMITATIONS §14) — no silent misdial. Proposed internal/poolproto/{datum,solo}/ correctly absent. payout_scheme enum {fpps,pplns,tides,solo} validated at config.go:692-696 — "solo" there is pool payout accounting, distinct from the ADR's template-authorship solo mode; no conflation in code or doc. ADR's session-503/504 updates recorded inline (NexusPool JDP production, BIP110 chain-signaling) without altering the proposal.
