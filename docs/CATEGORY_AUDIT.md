@@ -19662,3 +19662,52 @@ Verdict: TRUE — WaitGroup fan-out
 + one hasher pool are the only
 sync primitives beyond the
 audited set.
+
+## Session 2954 update (Socratic pass 1619 — math-package census)
+
+Claim under test: every float
+comparison against a bound is
+preceded by an explicit
+`math.IsNaN`/`math.IsInf`
+reject — NaN can't sneak past
+a `<` check.
+
+Verification (14 sites, 8 files):
+
+- `math.IsNaN`/`IsInf` gates —
+  every float64 boundary field:
+  difficulty (sha256d.go:227,
+  parse.go:181), hysteresis
+  margin + min yield
+  (engine.go:314,:317),
+  config float fields
+  (config.go:717), price
+  (fetcher.go:109), provider
+  yield (provider.go:118,
+  engine.go:101). The gate
+  pattern is the same:
+  `if !valid || math.IsNaN(x) ||
+   math.IsInf(x,0) { reject }`.
+- `math.Inf(1)` —
+  sha256d.go:263 returns +Inf
+  on target overflow — a
+  deliberate "unreachable
+  target" signal, not a leak.
+- `math.Trunc` — en2Size check
+  at parse.go:331 verifies the
+  float is a whole integer.
+- `math.Abs` — doctor's clock-
+  skew measurement.
+- `metrics.go:418-422` —
+  canonical Prometheus
+  NaN/±Inf emission, documented.
+- Zero `math.Pow`, `Log`, `Exp`,
+  `Sqrt`, `Sign` — real-
+  precision arithmetic stays
+  in `big.Int`/`big.Float`.
+
+Verdict: TRUE — every float
+comparison is preceded by a
+non-finite reject; no float
+math on precision-critical
+values.
