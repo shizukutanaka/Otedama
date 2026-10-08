@@ -13756,3 +13756,31 @@ tests is the standard pattern. **Non-test sites: exactly 2.**
 
 Verdict: FALSE (one unjustified suppression) → fixed; all errcheck
 suppressors now carry or inherit a reason.
+
+## Session 2714 update (Socratic pass 1380 — residual suppressor audit)
+
+Claim under test: the 4 remaining named suppressions (3 `gocritic`,
+1 `nilerr`) name linters that are actually enabled in `.golangci.yml`
+and are each justified.
+
+Verification:
+
+- **All named linters are enabled** — `.golangci.yml:23` (errcheck),
+  `:31` (gosec), `:37` (gocritic), `:56` (nilerr). No dead suppression
+  against a disabled linter.
+- `internal/metrics/runtime.go:63` — gocritic flags `"%s"` inside a
+  label template, but `%q` would apply Go string escaping; Prometheus
+  label quoting is `escapeLabel`'s job. Justified inline.
+- `internal/doctor/extras_test.go:1970` — `"a1b2c3d "` is a deliberate
+  negative-case (trailing space must fail address validation).
+  Justified inline.
+- `internal/daemon/service.go:407` — `%q` would escape Windows path
+  separators in the sc.exe argv; manual quoting is intentional.
+  Justified inline.
+- `internal/daemon/service.go:434` — nilerr: sc.exe failing means
+  "not installed", matching the launchd path's semantics.
+  Justified inline.
+
+Verdict: TRUE — suppression surface fully accounted for:
+117 total = 62 errcheck + 51 gosec + 3 gocritic + 1 nilerr,
+all named, all justified (this pass closes s2711–s2714's census).
