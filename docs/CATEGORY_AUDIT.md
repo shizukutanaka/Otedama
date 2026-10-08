@@ -16684,3 +16684,28 @@ Verification — every loop-parallel spawn:
 
 Verdict: TRUE — every loop-parallel spawn copies its
 iteration state explicitly.
+
+## Session 2832 update (Socratic pass 1498 — decode-beyond-declared census)
+
+Claim under test: no decoder reads past its payload's
+declared length — every fixed read must be length-
+gated, every variable read cursor-bounded.
+
+Verification — the complete decoder set:
+
+- Fixed reads: handshake.go:110-115 (len<6 reject
+  then [0:2]+[2:6]), :291-298 (len<4 then [0:4]),
+  messages.go:133-156 (len<minNeed then sliced reads,
+  each OPTION field re-checked before slicing) —
+  every bounds arithmetic precedes the slice.
+- Variable reads: all go through newByteReader over
+  the payload remainder — cursor-bounded by
+  construction (short-input returns error, not panic).
+- Frame layer already guarantees payload length ==
+  MsgLength (validated pre-decode, s2763 evidence);
+  decoders then can only touch [0,len(payload)] — Go
+  range checks plus the explicit short-payload errors
+  mean silent truncation is impossible.
+
+Verdict: TRUE — every decode is length-first; the
+read-past-declared class is absent.
