@@ -10514,3 +10514,7 @@ Ecosystem re-verified live: SRI latest tag remains **v1.12.0** (`git ls-remote` 
 ## Session 1981 update (Socratic pass 647 — arbitration tick sequencing)
 
 Claim verified: each tick prunes stale streams before deciding, carries prevAlloc through Decide failure (a transient error cannot reset hysteresis), mirrors every gauge from the actual applied allocation (including a zero power floor — a dead rate feed cannot leave a stale positive floor on display), rebuilds the activity map under its own lock with idle devices excluded, logs idle transitions once per change, and — critically — reconciles the shared pause set BEFORE applyAllocation so the pause survives the very next pool job rather than reverting on the tick's own SetWork(nil). TRUE.
+
+## Session 1982 update (Socratic pass 648 — power-breakeven floor derivation)
+
+Claim verified: the profitability floor is derived as powerWatts/1000 (kW) × price/kWh = USD/hour, converted to sats/s via the same SatsPerSecond helper used everywhere else, then divided by device count so the floor is per-device; every non-viable input (no watts, no price, no devices, no rate) yields floor=0 — never a bogus positive or NaN — and the gauge is set unconditionally so the display always matches the applied value. TRUE.
