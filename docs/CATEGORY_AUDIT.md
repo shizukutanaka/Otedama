@@ -18543,3 +18543,37 @@ Verification:
 
 Verdict: TRUE — zero runtime reflection
 in production code.
+
+## Session 2916 update (Socratic pass 1581 — strings.Trim census)
+
+Claim under test: every trim call uses
+the right primitive — CutPrefix for
+prefix stripping, TrimSpace for
+whitespace, Trim* only for char-set ops.
+
+Verification (~25 sites):
+
+- `CutPrefix` used for all "remove a
+  known prefix" cases: PCI_ID=, url
+  schemes, XDG_CONFIG_HOME= — correct
+  idiom (TrimLeft would strip any
+  combination of chars).
+- `TrimLeft(typed, "-")` — intentionally
+  strips leading dashes from CLI flag
+  names; char-set semantics are the
+  desired ones.
+- `strings.Trim(host, "[]")` — strips
+  leading `[` AND trailing `]`; a
+  malforma "[::1" would lose the `[`
+  only, which is still safer than
+  keeping brackets.
+- `TrimSpace` for all whitespace
+  normalization (mnemonic, sysfs vendor,
+  output compares).
+- `TrimSuffix(bip39EnglishRaw, "\n")`
+  — strips exactly one trailing newline
+  before Split — correct (Trim would
+  eat consecutive newlines).
+
+Verdict: TRUE — Trim primitives used
+correctly; no Trim-vs-Prefix confusion.
