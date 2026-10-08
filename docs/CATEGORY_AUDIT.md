@@ -13048,3 +13048,7 @@ Four-way parity: config.go dispatches exactly `show`/`validate` (config.go:31-33
 ## Session 2604 update (Socratic pass 1270 — doctor check-count re-verification)
 
 Census: exactly 17 `Check` literals in checks.go (Configuration, Bitcoin address, Failover payout addresses, Data directory, Lightning wallet, Pool reachability, Pool diversity, Pool endpoint diversity, Pool connection encryption, Pool TLS CA files, Power & cost config, Environment variables, Profitability floor, Pool payout schemes, Hardware, Network, System clock accuracy). CLAUDE.md's "17 並行ヘルスチェック" is exactly right; API.md documents the schema+exit codes without naming checks — no contradiction. TRUE.
+
+## Session 2605 update (Socratic pass 1271 — ledger self-integrity re-verification)
+
+Sequence audit: 1,772 `## Session` blocks, sequence reaches s2605 continuously. The five numbering repeats found by `uniq -d` are all previously documented or intentional: s864 (update+correction pair per the correction protocol), s2257/s2257b (intentional sub-entry), and the s877×3/s1203×2/s1269×2 cosmetic collisions recorded at the s1148-era integrity check (bodies genuine and distinct, per honest-ledger append-only rule). No undocumented drift. TRUE.
