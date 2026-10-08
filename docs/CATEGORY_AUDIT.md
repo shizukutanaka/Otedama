@@ -18398,3 +18398,29 @@ Verification:
 
 Verdict: TRUE — the only select-in-loop
 labels its break; no select-scoping bug.
+
+## Session 2910 update (Socratic pass 1575 — copy() length census)
+
+Claim under test: every `copy()` either
+targets a fixed-layout destination sized
+to the source, or consumes the returned
+`n` for partial copies.
+
+Verification (~25 sites):
+
+- Fixed-layout copies: block header
+  `b[4:36]`↔`PrevHash[:]` (32/32),
+  handshake `hs.h[:]`/`hs.ck[:]` from
+  hash sums (32/32), key `key[:]` from
+  KDF outputs, wire `buf[8:40]`↔PrevHash
+  — all same-length fixed arrays.
+- Right-alignment: `copy(be[32-len(b):],
+  b)` twice — big-endian pad; `b` is a
+  digest ≤32, len bound held upstream.
+- Partial copies: `n := copy(p, r.b[
+  r.pos:])` and `n := copy(p, c.readbuf)`
+  — n is consumed to advance pos/drain
+  the buffer.
+
+Verdict: TRUE — every copy is length-
+consistent or the returned n is used.
