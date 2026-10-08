@@ -17501,3 +17501,21 @@ Milestone re-check at pass 1535:
 
 The branch stays buildable, vet-clean, and the
 full suite passes at the current tip. TRUE.
+
+## Session 2871 update (Socratic pass 1536 — commit-convention parity)
+
+Claim under test: the branch's most recent
+commits keep Conventional Commits form and the
+DCO sign-off trailer.
+
+Verification (`git log -10`):
+
+- 10/10 subjects use the `docs:` Conventional
+  prefix — every recent commit is a ledger
+  entry as expected.
+- `%(trailers:key=Signed-off-by)` → **10/10**
+  carry `Signed-off-by: Devin` — the DCO
+  requirement holds.
+
+Verdict: TRUE — convention and sign-off parity
+on the branch tip.
