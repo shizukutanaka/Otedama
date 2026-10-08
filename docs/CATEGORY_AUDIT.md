@@ -10378,3 +10378,7 @@ Claim verified: submitLimiter is an 8/s + burst-32 token bucket that starts full
 ## Session 1947 update (Socratic pass 613 — poolproto dispatch surface)
 
 Claim verified: StripScheme is the single canonical dial-target extractor (doctor delegates to it — no per-package parsing drift); StripUserinfo redacts only an '@' inside the authority segment and returns malformed URLs unchanged so redaction can never corrupt diagnostics; the Dialer registry is init-time only and panics on nil/ProtocolUnknown/duplicate registration — programmer errors fail loud at startup, not mid-run; Lookup returns ErrUnknownProtocol for unlinked protocols. TRUE.
+
+## Session 1948 update (Socratic pass 614 — DialURL + sanitizer boundary)
+
+Claim verified: DialURL fails closed on unknown schemes before any network I/O, closes the conn on negotiate failure (no leaked socket), and wraps errors with URL context at both layers. SanitizePoolText strips Cc/Cf/Zl/Zp — ANSI escapes, Trojan-Source bidi/format chars, and line/paragraph separators that forge log lines — then caps at 256 runes against log flooding. TRUE.
