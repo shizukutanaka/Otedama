@@ -25975,3 +25975,63 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3074 update (Socratic pass 1738 — strconv surface ledger)
+
+Claim under test: the
+strconv surface is
+the width-faithful
+pair — ParseUint
+bitSize 32 for
+wire numerics,
+FormatUint for
+the encode
+inverse — with
+Atoi confined to
+range-checked
+ports.
+
+Verification —
+census:
+
+- `strconv.FormatUint`×10
+  — encode path.
+- `strconv.ParseUint`×7 —
+  all bitSize
+  32 wire
+  numerics
+  (verified).
+- `strconv.ParseFloat`×6 —
+  env-var floats
+  + rate parse;
+  each followed
+  by
+  plausibility
+  / non-finite
+  gates
+  (verified).
+- `strconv.Atoi`×2 —
+  port numbers
+  only; both
+  range-checked
+  (verified).
+- `strconv.Quote`×1 —
+  service
+  argv.
+- `strconv.Itoa`×1 —
+  the lone
+  base-10
+  helper.
+- ZERO `ParseInt`,
+  `ParseBool`,
+  `ParseComplex`,
+  `FormatInt`,
+  `FormatFloat`,
+  `Unquote`,
+  `IsPrint`,
+  `CanBackquote` —
+  the wider
+  surface is
+  unused.
+
+Verdict: TRUE.
