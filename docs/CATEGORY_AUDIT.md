@@ -15357,3 +15357,16 @@ Verification: 17 exported interfaces.
 
 Verdict: TRUE — 100% of interface implementations are pinned
 by a compile guard or an unavoidable typed boundary.
+
+## Session 2779 update (Socratic pass 1445 — CI-status snapshot)
+
+Repeated CI-failure notifications arrived this segment (each
+push retriggers the recorded classes: Go 1.20–1.23 toolchain
+pins incompatible with go.mod 1.24 — #1344-class, rejected;
+Dependency Review blocked by repo-level dependency graph being
+disabled). A `git_pr_checks` snapshot at head 617cceeba reports
+0 checks registered — the notifications refer to earlier
+pushes' completed runs, not a new failure class. Nothing
+actionable; no new class observed.
+
+Verdict: recorded classes only — no action.
