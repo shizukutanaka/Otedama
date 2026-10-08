@@ -14535,3 +14535,29 @@ enumeration.
   into the other.
 
 Verdict: TRUE — path hygiene is package-level strict.
+
+## Session 2746 update (Socratic pass 1412 — verb-free fmt.Errorf census)
+
+Claim under test: `fmt.Errorf` calls without format directives are
+behaviorally correct — the `%`-free form just routes through fmt
+for nothing.
+
+Verification: `fmt.Errorf("literal")` site enumeration — 36 sites
+across 14 files (btccrypto 14, stratumv1/parse 4, rates 4, engine 5,
+config 3, lightning 2, stratum/tls 1, doctor 1, base58 1).
+
+- Every site is a static error message — no verbs, no args — so the
+  result is identical to `errors.New`. No correctness issue:
+  fmt.Errorf with no directives performs no formatting and wraps
+  nothing (the string is preserved verbatim; `errors.Is` is
+  unaffected because no %w exists).
+- The only residual is style: ~36 wasted fmt dispatches in
+  mostly-cold paths (error construction on the error path, never
+  the hot loop).
+- **Rejected class:** PR #1185 proposed the mechanical
+  `fmt.Errorf` → `errors.New` conversion and was closed unmerged —
+  the maintainer declined the churn. Recorded here so future passes
+  do not re-propose it; the sites stay as deliberate style.
+
+Verdict: TRUE (with recorded residual) — functionally identical;
+conversion is a rejected refactor class, not a defect.
