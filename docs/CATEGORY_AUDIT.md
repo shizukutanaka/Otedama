@@ -12410,3 +12410,7 @@ Claim verified: every external interaction is bounded — reachability probes ca
 ## Session 2451 update (Socratic pass 1117 — branch health)
 
 Claim verified: the audit branch is 0 commits behind origin/master — master is still at 40da2e51 (#1404) and has not moved past our base; git merge-tree --write-tree produces a clean tree (ffbc7a9c) with no conflict markers, so PR #1405 remains trivially mergeable. TRUE.
+
+## Session 2452 update (Socratic pass 1118 — engine fan-in)
+
+Claim verified: fanIn's per-input goroutine selects ctx.Done on BOTH the receive and the forward-send — a stuck input (never written, never closed) can't pin it open, and shutdown completes even if the consumer stopped reading out; output buffer is bufFactor*N clamped [1,64]; a single closer goroutine does wg.Wait→close(out) so out closes exactly once after all producers exit (fanin.go:21–50); mergeQuotes uses factor 64 (expensive to lose quotes), mergeShares 4 (:53–60). TRUE — no goroutine leak, no double-close, no lost close on cancel.
