@@ -16120,3 +16120,33 @@ files:
 
 Verdict: TRUE — mutex extents contain only memory ops;
 every channel send is lock-free or cancellation-guarded.
+
+## Session 2809 update (Socratic pass 1475 — panic-reachability census)
+
+Claim under test: none of the 12 panic sites is reachable
+from network/pool input or inside a spawned goroutine
+processing untrusted data — each fires only on init or a
+programmer-error contract violation.
+
+Verification — the complete panic set:
+
+- metrics.go:155/166/182/204/216 (5) — fire on invalid
+  label NAME or name/type collision at registration.
+  Series are created lazily under mutex, but every metric
+  name and label name is a compile-time constant; only a
+  programmer introducing a bad constant can reach them.
+  Untrusted label VALUES flow through escapeLabel, not
+  name validation.
+- english_wordlist.go:38/42 — init-time hash/count pin.
+- btccrypto.go:187, poolproto.go:371/375/380 — Register()
+  init-time invariants.
+- worker.go:155 — Worker.Start-twice guard; called only
+  from the engine setup path on the owning goroutine;
+  the panic is the intentional fail-fast for a contract
+  violation (cannot be triggered by pool data).
+- recover exists exactly once (doctor/checks.go:241)
+  converting per-check panics to Fail — a deliberate
+  blast-radius boundary, not a mask.
+
+Verdict: TRUE — every panic is init-time or
+programmer-error; untrusted input cannot reach one.
