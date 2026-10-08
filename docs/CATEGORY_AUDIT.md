@@ -22016,3 +22016,59 @@ Verification — census:
   no binary introspection.
 
 Verdict: TRUE.
+
+## Session 3003 update (Socratic pass 1667 — flag surface ledger)
+
+Claim under test: all CLI
+parsing is per-subcommand
+FlagSets — no global
+flag.Parse, no untyped
+numeric flags.
+
+Verification — census:
+
+- `flag.NewFlagSet` ×5 +
+  `flag.ContinueOnError`
+  ×5 — every subcommand
+  owns a FlagSet with
+  ContinueOnError (errors
+  return through run()'s
+  exit-code contract, not
+  os.Exit from library
+  code).
+- `flag.ErrHelp` ×7 —
+  --help detection →
+  stdout + exit 0
+  (verified contract).
+- `fs.StringVar`×12 /
+  `String`×9 /
+  `BoolVar`×5 / `Bool`×2 —
+  ALL flags are string
+  or bool; ZERO numeric
+  flag types (numeric
+  values route through
+  the numericEnvVars
+  string layer — SSOT,
+  verified).
+- `fs.SetOutput` ×3 —
+  FlagSet output routed
+  to the injected writer
+  (testability seam).
+- `fs.Parse` ×2 — the
+  only real parse calls.
+- `flag.Parse` — ZERO
+  calls (the one match
+  is a comment at
+  main.go:96); libraries
+  never parse argv.
+- `fs.Visit` ×1 —
+  run.go:98 records
+  explicitly-set flags
+  into setFlags (the
+  precedence/orphan
+  tracking verified at
+  s2978).
+- `flag.Flag`/`FlagSet`
+  — type refs only.
+
+Verdict: TRUE.
