@@ -13084,3 +13084,7 @@ Correction to s2593 (per the append-only honesty protocol): that entry said "the
 ## Session 2613 update (Socratic pass 1279 — SPECIFICATION §6 metrics catalogue)
 
 §6's table lists 45 distinct base names + the combined `rate_sources_ok / rate_sources_total` row = all 46 registered `otedama_*` series exactly (recomputed: zero spec'd name unregistered; the only unlisted registered literals are test fixtures `otedama_hashrate_hps`/`_x`/`_y`/`_z` — registration-guard test inputs, not production metrics). The `go_*` runtime-collector family is documented nowhere and exposed nowhere: `RuntimeCollector()` is registered only in metrics_test — PR #1158 (closed unmerged) had proposed wiring it into /metrics and was rejected, so docs correctly match the shipped surface. TRUE.
+
+## Session 2614 update (Socratic pass 1280 — milestone: full gate re-verified)
+
+Milestone re-run: `gofmt -l internal cmd` → clean; `go build ./...` → ok; `go vet ./internal/... ./cmd/...` → clean; `go test -count=1` on config, i18n (+messages), metrics, engine, cmd/otedama → all green (engine 25.3s). No drift since pass 1260's milestone.
