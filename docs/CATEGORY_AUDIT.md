@@ -25343,3 +25343,64 @@ census:
   duplication.
 
 Verdict: TRUE.
+
+## Session 3065 update (Socratic pass 1729 — strconv surface ledger)
+
+Claim under test: the
+strconv surface is
+the narrow wire-
+numeric subset —
+ParseUint/FormatUint
+for protocol fields,
+ParseFloat for
+prices, Atoi for
+ports, Quote for
+log hygiene.
+
+Verification —
+census:
+
+- `FormatUint`×10 —
+  uint→string on
+  the wire and
+  display paths.
+- `ParseUint`×7 —
+  wire numeric
+  fields; all
+  bitSize-32
+  bounded
+  (verified).
+- `ParseFloat`×6 —
+  price/rate
+  parsing with
+  NaN/Inf
+  upstream
+  guards
+  (verified).
+- `Atoi`×2 —
+  port fields,
+  range-checked
+  after parse.
+- `Itoa`×1 —
+  the single
+  int display.
+- `Quote`×1 —
+  the service
+  argv quoting.
+- ZERO `ParseInt`,
+  `ParseBool`,
+  `FormatInt`,
+  `FormatFloat`,
+  `FormatBool`,
+  `QuoteRune`,
+  `QuoteToASCII`,
+  `Unquote*`,
+  `Append*`,
+  `IsPrint` —
+  the wider
+  conversion and
+  quoting
+  surfaces are
+  unused.
+
+Verdict: TRUE.
