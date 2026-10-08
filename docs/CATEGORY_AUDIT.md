@@ -14092,3 +14092,31 @@ Verification at HEAD:
   visible characters, and a Cf char can't dodge truncation.
 
 Verdict: TRUE — dual-site sanitizer parity intact.
+
+## Session 2729 update (Socratic pass 1395 — merged-#477 V2-handshake deadline invariant)
+
+Claim under test: merged #477's live-V2 handshake bound still holds —
+a pool that answers the TCP connect but stalls the protocol handshake
+must not hold the failover hop hostage.
+
+Verification at HEAD — deadline surface across both V2 layers:
+
+- `engine/run.go:104` `poolDialTimeout = 15s` bounds the dial
+  (run.go:862 `context.WithTimeout`); dialer mirrors it at
+  `stratumv2/dialer.go:56`.
+- `engine/run.go:1855` `handshakeTimeout = 15s` applied via
+  `conn.SetDeadline` (covers BOTH read and write, :1863) and reset to
+  the zero deadline on defer (:1864) — the bound covers exactly the
+  handshake window and no more.
+- `stratumv2/dialer.go:100` independent `handshakeTimeout = 15s` via
+  `SetReadDeadline` (:112) also reset on defer (:113) — the
+  package-level negotiate path is bounded identically.
+- Write side: `dialer.go:423` per-write `writeTimeout`,
+  `run.go:2013` 10s `SetWriteDeadline` — a pool that accepts bytes
+  slowly can't pin the writer either.
+- Steady-state: `run.go:910` `poolSilenceTimeout` read deadline keeps
+  the post-handshake loop bounded too (silence detector, #408).
+
+Verdict: TRUE — every network phase is deadline-bounded (dial,
+handshake read+write, steady-state read, per-write), none leaks past
+its defer.
