@@ -33,9 +33,9 @@ in the OSS-Fuzz repository (not in Otedama's own repo):
 ```yaml
 homepage: "https://github.com/shizukutanaka/Otedama"
 language: go
-primary_contact: "monu@example.com"
+primary_contact: "CHANGEME@example.com"  # substitute the maintainer's real contact before submitting
 auto_ccs:
-  - "monu@example.com"
+  - "CHANGEME@example.com"
 sanitizers:
   - address
 fuzzing_engines:

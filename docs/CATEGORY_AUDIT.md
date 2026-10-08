@@ -9768,3 +9768,7 @@ Defect found and fixed: ci.yml carried `deploy-staging`/`deploy-production` jobs
 ## Session 1797 update (Socratic pass 463 — dependabot.yml audit)
 
 Claim verified: `.github/dependabot.yml` is consistent with the repo — three ecosystems all real: gomod (go.mod exists, weekly Monday 09:00 Asia/Tokyo, x/* grouped), github-actions (workflow dir exists, `allow: direct` scoping, documented no-automerge note), docker (Dockerfile exists). Valid version-2 schema; labels and commit-message prefixes conventionally named. TRUE — no defect.
+
+## Session 1798 update (Socratic pass 464 — .github docs/templates audit)
+
+Defect found and fixed: `oss-fuzz-integration.md`'s `project.yaml` template carried `primary_contact: "monu@example.com"` + matching `auto_ccs` — a person-looking placeholder address that reads as if it were a real contact and could be copied verbatim into the upstream oss-fuzz submission (CLAUDE.md forbids nonexistent addresses). Replaced with the self-annotating `CHANGEME@example.com` + inline instruction. Verified TRUE alongside: both build.sh fuzz targets exist (`FuzzDecodeHeader`, `FuzzDecoder_ReadFrame` at internal/stratum/frame_fuzz_test.go:25,85), the corrected `compile_native_go_fuzzer` interface is the documented path, the ISSUE_TEMPLATE pair is schema-valid and asks for `otedama doctor` output (real command), and pull_request_template.md matches the shipped toolchain.
