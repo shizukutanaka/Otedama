@@ -1889,3 +1889,17 @@ Re-verified via individual PR pages (GitHub API + list-page HTML both unreliable
 - **#198 open** — `coinbase_witness` field on NewTemplate (Sjors coordinating SRI-first deployment order).
 - Releases: SRI **v1.12.0**, sv2-apps **v0.8.0** — both unchanged.
 - Cosmetic-only open items: #186 (markdown table cells), #103 (WIP Proxy Annex draft).
+
+### Session 1730 recheck (ecosystem)
+
+Re-verified live via the GitHub API (2026-10-08): **no drift since
+session 1708.** sv2-spec normative open set unchanged — #238
+(optional SetupConnection flag negotiation; Otedama's subset-flag
+validation stays forward-compatible: an optional-flag echo satisfies
+"returned ⊆ offered"), #234 (authority key management/rotation docs,
+no wire change), #203 (non-custodial payout extension — the tracked
+JDP-payout proposal), #198 (`coinbase_witness` on NewTemplate).
+Cosmetic only: #186, #232, WIP #103. Releases: SRI **v1.12.0**
+(2026-09-17), sv2-apps **v0.8.0** (2026-09-17) — both unchanged; the
+standing P0 gap (no `mining.configure` / BIP323 version-rolling
+client-side, while tProxy v0.8.0 ships the mask) is unaffected.
