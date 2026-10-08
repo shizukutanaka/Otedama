@@ -12963,3 +12963,11 @@ Claim verified (flag parity): all 9 run-subcommand flags present in code have do
 ## Session 2586 update (Socratic pass 1252 — cmd/otedama/config.go diff audit)
 
 Claim verified: the ±10-line config.go diff is honest hardening. (a) `config.EnvWarnings(nil)` prints malformed numeric `OTEDAMA_*` values to stderr before resolving — nil → os.Getenv, exactly mirroring the `ResolveWithOrigins(fromFile, nil, ...)` env layer it precedes; warnings go to stderr so `--json` stdout stays pure. (b) `safeDisplay()` wrap on LogLevel/LogFormat closes the last unsanitized echo of env/file-controllable strings (ANSI injection / line forgery). Both match verified semantics at config.go:392 and 216. TRUE.
+
+## Session 2587 update (Socratic pass 1253 — NOTICE/run.go/config.yaml.example diffs)
+
+Three small diffs verified against code:
+
+- NOTICE: x/sys corrected indirect→direct with accurate use (internal/tui terminal-width syscalls — the only importer, verified pass 1246); yaml corrected `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` with archive-continuation note matching go.mod. TRUE.
+- run.go: `--pprof` help text corrected — old text claimed a loopback-only restriction that does not exist; implementation prints a warning for non-loopback binds but does not block (#504). New text matches behavior. TRUE.
+- config.yaml.example: language list corrected — `zh-CN` → `zh` (LangChinese is "zh", message.go:106) and `ru`/`ar` added (both in PriorityLanguages). Old example was wrong on both counts. TRUE.
