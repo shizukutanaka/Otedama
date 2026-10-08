@@ -43567,3 +43567,145 @@ census:
   arithmetic.
 
 Verdict: TRUE.
+
+## Session 3207 update (Socratic pass 1869 — os/signal/exec/user final ledger)
+
+Claim under test:
+`os`
+is
+file-
+lifecycle
++
+env/
+stdio/
+home;
+`signal.NotifyContext`
+is
+the
+single
+signal
+root;
+`exec.Command`
+is
+the
+fixed
+daemon
+set;
+`os/user`
+is
+unneeded
+(`UserHomeDir`).
+
+Verification —
+census
+(top
+of
+~28
+symbols):
+
+- `os.WriteFile`×57
+  (mode-
+  explicit
+  wallet/
+  config/
+  service
+  writes),
+  `os.Stat`×29
+  (TOCTOU-
+  aware
+  probes),
+  `os.MkdirAll`×23
+  (0700/0755),
+  `os.Getenv`×23,
+  `os.ReadFile`×22,
+  `os.Remove`×19,
+  `os.File`×18,
+  `os.UserHomeDir`×14
+  (XDG
+  fallback
+  base —
+  `os/user`
+  package
+  is
+  never
+  imported:
+  no
+  passwd
+  lookup,
+  avoids
+  CGO
+  and
+  NSS
+  dependence),
+  `os.ErrNotExist`×12
+  (via
+  `errors.Is`),
+  `os.CreateTemp`×12,
+  `os.Chmod`×9
+  (0600/0700
+  discipline),
+  `os.Stdout`×7/`Stdin`×4/`Stderr`×4,
+  `os.ReadDir`×7,
+  `os.Getuid`×5,
+  `os.Setenv`/`Rename`×4
+  each.
+- `signal.NotifyContext`×1 —
+  the
+  single
+  root
+  in
+  `cmd/otedama`
+  (SIGINT/SIGTERM);
+  ZERO
+  `signal.Notify`/`Stop`/`Reset`/`Ignore`
+  elsewhere.
+- `exec.Command`×7 —
+  daemon
+  service
+  lifecycle
+  only
+  (`systemctl`,
+  `launchctl`,
+  `sc.exe`
+  install/
+  uninstall/
+  start/
+  status)
+  with
+  fixed
+  binaries
+  and
+  argv;
+  ZERO
+  `exec.LookPath`
+  misuse,
+  `exec.ErrDot`,
+  shell
+  invocation
+  (`sh
+  -c`,
+  `cmd
+  /c`).
+- ZERO:
+  `os/user`,
+  `os/exec.Cmd`-env
+  inheritance
+  leaks
+  (argv
+  fixed),
+  `os.Exit`
+  outside
+  `main`
+  (single
+  exit
+  seam,
+  verified
+  earlier),
+  `os.Setuid`/`Setgid`/`Seteuid`,
+  `os.Symlink`/`Link`/`Readlink`
+  beyond
+  `EvalSymlinks`
+  normalization
+  sites.
+
+Verdict: TRUE.
