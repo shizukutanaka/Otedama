@@ -14303,3 +14303,30 @@ Verification: go.mod `godebug` block (go.mod:11-15) + GODEBUG_NOTES.
 
 Verdict: TRUE — declared knob set complete and frozen at defaults;
 no hidden runtime GODEBUG dependencies.
+
+## Session 2737 update (Socratic pass 1403 — init() side-effect census)
+
+Claim under test: package init() functions perform only load-time
+registration and self-checks — no I/O, goroutines, or network at
+import time.
+
+Verification: all 4 non-test init() bodies read in full.
+
+- `lightning/english_wordlist.go:35` — splits the embedded BIP-39
+  constant into EnglishWords, fails fast on count≠2048 and on
+  SHA-256 mismatch against the pinned list digest. Pure data +
+  integrity check, no I/O.
+- `btccrypto/secp256k1.go:48` — registers the two stub scheme
+  entries ("ecdsa-secp256k1", "schnorr-secp256k1") into the package
+  registry.
+- `stratumv1/stratumv1.go:758` + `stratumv2/dialer.go:31` — each
+  registers its Dialer twice (plain + useTLS) into
+  `poolproto.Register`; the registry fails fast on nil/duplicate,
+  so malformed registrations panic at import, not at first dial.
+- No init() reads files, dials, spawns goroutines, or mutates
+  env/global beyond its own registry — import order is irrelevant
+  and blank-import wiring (_ import for side effect) is absent:
+  consumers import the protocol packages explicitly.
+
+Verdict: TRUE — init work is registration + self-checks only;
+import-time is deterministic and I/O-free.
