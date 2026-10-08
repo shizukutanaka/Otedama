@@ -16633,3 +16633,28 @@ Verification:
   moved outside locks at #714) — intentional.
 
 Verdict: TRUE — the stale-capture class is absent.
+
+## Session 2830 update (Socratic pass 1496 — zero-enum marker census)
+
+Claim under test: no enum uses zero as a reserved
+"uninitialized" marker that a real value could also
+reach — the classic valid-vs-unset ambiguity.
+
+Verification — the complete enum set:
+
+- arbitration.Policy (int, iota) — zero IS
+  PolicyMaximizeEarnings, a real documented default,
+  not a sentinel. engine.go:311 still gates
+  in.Policy.Valid(), so out-of-range ints are
+  rejected while zero is honest.
+- StreamID (string type) — the empty string is the
+  single documented idle marker (engine.go:191):
+  "" is unset-by-design, never a pool-supplied value
+  (pool IDs are validated non-empty upstream).
+- No other int enum carries a reserved-zero marker
+  without a Valid() gate — every defined enumeration
+  boundary was already Valid()-gated (s2777 census).
+
+Verdict: TRUE — zero is a real value where used,
+documented empty where "unset" is needed; no
+valid/unset collision.
