@@ -32150,3 +32150,209 @@ census:
   need.
 
 Verdict: TRUE.
+
+## Session 3129 update (Socratic pass 1793 — filepath/sort/log complete ledger)
+
+Claim under test: the
+filesystem surface is
+filepath.Join +
+EvalSymlinks +
+the
+Separator/Glob
+constants —
+with every
+path mutation
+absent;
+sort is the
+slices.Sort
+modernization
+(stdlib
+`sort`
+package
+never
+imported).
+
+Verification —
+census:
+
+- `filepath.Join`×32 —
+  every
+  path
+  is
+  a
+  local-
+  controlled
+  Join
+  under
+  a
+  data
+  dir
+  (verified
+  file-
+  path
+  SSOT
+  class).
+- `filepath.Separator`×2 +
+  `filepath.EvalSymlinks`×2 +
+  `filepath.Glob`×1 —
+  the
+  constant
+  refs +
+  the
+  daemon
+  binary
+  canonicalization
+  +
+  the
+  wallet
+  stale-
+  temp
+  sweep.
+- `slog.NewTextHandler`×2 +
+  `slog.NewJSONHandler`×2 +
+  `slog.New`×1 +
+  `slog.Logger`×2 +
+  `slog.Level`×1 +
+  `slog.LevelWarn`/`Info`/`Error`/`Debug`×1 +
+  `slog.HandlerOptions`×1 +
+  `slog.Handler`×1 —
+  the
+  structured-
+  logging
+  matrix
+  (verified
+  log-
+  format
+  class:
+  text
+  vs
+  JSON
+  by
+  flag).
+- `log.Error`×1 +
+  `log.Adapter`×1 —
+  the
+  legacy-
+  logger
+  adapter
+  seam
+  inside
+  `internal/logger`
+  (the
+  stdlib
+  `log`
+  package
+  is
+  never
+  imported —
+  the
+  `log.*`
+  hits
+  are
+  the
+  internal
+  logger's
+  own
+  API).
+- ZERO
+  `sort.` —
+  the
+  stdlib
+  sort
+  package
+  is
+  NEVER
+  imported
+  (slices.Sort
+  modernization
+  complete —
+  verified
+  sort-path
+  class).
+- ZERO
+  `log.Print`,
+  `log.Fatal`,
+  `log.SetOutput`,
+  `log.New`,
+  `log.Default` —
+  the
+  stdlib
+  log
+  surface
+  absent.
+- ZERO
+  `filepath.Abs`,
+  `filepath.Rel`,
+  `filepath.Base`,
+  `filepath.Dir`,
+  `filepath.Ext`,
+  `filepath.Clean`,
+  `filepath.IsAbs`,
+  `filepath.Split`,
+  `filepath.SplitList`,
+  `filepath.SplitExt`,
+  `filepath.Match`,
+  `filepath.Walk`,
+  `filepath.WalkDir`,
+  `filepath.VolumeName`,
+  `filepath.FromSlash`,
+  `filepath.ToSlash`,
+  `filepath.HasPrefix`,
+  `filepath.IsLocal`,
+  `filepath.Localize`,
+  `filepath.EvalSymlinks`×more —
+  the
+  full
+  path-
+  introspection
+  family
+  absent;
+  only
+  Join/
+  EvalSymlinks/
+  Glob
+  are
+  needed.
+- ZERO
+  `slog.Debug`,
+  `slog.Info`,
+  `slog.Warn`,
+  `slog.Error`,
+  `slog.Log`,
+  `slog.SetDefault`,
+  `slog.Default`,
+  `slog.With`,
+  `slog.Group`,
+  `slog.Any`,
+  `slog.Attr`,
+  `slog.String`,
+  `slog.Int`,
+  `slog.Bool`,
+  `slog.Duration`,
+  `slog.Float64`,
+  `slog.GroupValue`,
+  `slog.LogAttrs`,
+  `slog.NewLogLogger`,
+  `slog.DiscardHandler`,
+  `slog.LevelVar`,
+  `slog.SetLogLoggerLevel`,
+  `slog.Record`,
+  `slog.Value`,
+  `slog.Source`,
+  `slog.Kind` —
+  the
+  free
+  functions
+  absent;
+  all
+  calls
+  route
+  through
+  the
+  internal
+  logger's
+  own
+  `*slog.Logger`
+  handle.
+
+Verdict: TRUE.
