@@ -10114,3 +10114,7 @@ Cycle-2 checkpoint: this branch is 243 commits ahead of master, master is an anc
 ## Session 1881 update (Socratic pass 547 — payout_scheme enum parity)
 
 Claim verified: `pools[].payout_scheme` accepts exactly the documented set — empty or fpps/pplns/tides/solo (config.go:690–694), matching SPECIFICATION §3's schema row verbatim including file-only layering. TRUE.
+
+## Session 1882 update (Socratic pass 548 — SPECIFICATION §3 schema completeness)
+
+Claim verified: SPECIFICATION §3's config table covers all 20 yaml tags in internal/config — 14 top-level fields (bitcoin_address, bitcoin_addresses, data_dir, language, log_level, log_format, arbitration_hysteresis_pct, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, http_addr + pools/workers containers) and all 5 pools[]. subfields + workers.name, each with env var, default, and validation. G16's fix remains intact. TRUE.
