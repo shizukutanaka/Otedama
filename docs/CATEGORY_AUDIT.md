@@ -40669,3 +40669,130 @@ census:
   imports).
 
 Verdict: TRUE.
+
+## Session 3187 update (Socratic pass 1851 — runtime/debug/unsafe ledger)
+
+Claim under test: `runtime`
+is
+read-
+only
+introspection
+(`GOOS`,
+`NumCPU`,
+`Version`,
+`MemStats`,
+`NumGoroutine`)
+plus
+one
+test
+`GC`/`Goexit`;
+`reflect`
+is
+test-
+only
+`DeepEqual`;
+`unsafe`/`runtime/pprof`/`debug`
+are
+absent
+outside
+the
+opt-
+in
+pprof
+mux.
+
+Verification —
+census:
+
+- `runtime`
+  imports
+  ×19
+  files;
+  symbols:
+  `GOOS`×39,
+  `NumCPU`×10,
+  `ReadMemStats`×4,
+  `NumGoroutine`×4,
+  `Version`×3,
+  `MemStats`×3,
+  `GOARCH`×2,
+  `GC`×2
+  (test
+  only),
+  `Goexit`×1
+  (test
+  leak
+  check).
+  ZERO:
+  `GOMAXPROCS`,
+  `Gosched`,
+  `LockOSThread`,
+  `SetFinalizer`,
+  `SetCPUProfileRate`,
+  `BlockProfileRate`,
+  `MutexProfileFraction`,
+  `GoroutineProfile`,
+  `ThreadCreateProfile`,
+  `Breakpoint`,
+  `Caller`/`Callers`/`FuncForPC`,
+  `KeepAlive`
+  —
+  pure
+  introspection,
+  no
+  scheduler
+  or
+  lifetime
+  control.
+- `reflect`:
+  `DeepEqual`×2
+  —
+  `internal/arbitration/fuzz_test.go`
+  only;
+  ZERO
+  in
+  production
+  (no
+  `reflect`
+  import
+  outside
+  that
+  one
+  test
+  file).
+- `unsafe`:
+  ZERO
+  imports
+  anywhere.
+- `runtime/pprof`:
+  `Trace`/`Symbol`/`Profile`/`Index`/`Handler`/`Cmdline`
+  ×1
+  each —
+  the
+  opt-in
+  pprof
+  mux
+  table
+  in
+  `internal/httpserver`;
+  ZERO
+  `pprof.StartCPUProfile`/`WriteHeapProfile`/
+  `Do`/`ForLabels`/`Label` —
+  exposition
+  only,
+  never
+  capture
+  in
+  code.
+- `debug/*`:
+  ZERO
+  imports
+  (`debug/buildinfo`,
+  `dwarf`,
+  `elf`,
+  `gosym`,
+  `macho`,
+  `pe`,
+  `plan9obj`).
+
+Verdict: TRUE.
