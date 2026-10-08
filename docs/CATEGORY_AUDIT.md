@@ -17367,3 +17367,26 @@ Verdict: TRUE — no entry is schema-less; two
 documented schema generations exist (2000–2780
 `Claim verified:` vs ≥2781 tri-field) plus
 deliberate milestone blocks.
+
+## Session 2864 update (Socratic pass 1529 — merged-fix invariants on master)
+
+Claim under test: the four merged-fix invariants
+verified at s2842 still hold on master's current
+tip.
+
+Verification (`git show origin/master:` at
+40da2e515 — unchanged since s2843):
+
+- `CoinbasePaysScript` present at
+  internal/btccrypto/script.go:95.
+- `jitteredBackoff` present at
+  internal/engine/run.go:481 with its call site
+  at :650.
+- Cf/Zl/Zp sanitizer `unicode.In(r, unicode.Cc,
+  unicode.Cf, unicode.Zl, unicode.Zp)` present at
+  internal/poolproto/poolproto.go:461 and
+  cmd/otedama/config.go:203 (line moved 209→203
+  through later edits; the invariant holds).
+
+Verdict: TRUE — all four invariants intact;
+master still at 40da2e515.
