@@ -28065,3 +28065,108 @@ census:
   routed.
 
 Verdict: TRUE.
+
+## Session 3098 update (Socratic pass 1762 — exec/signal/syscall ledger)
+
+Claim under test: the
+process/exec surface
+is exec.Command ×5
+with fixed argv —
+and signal is a
+single NotifyContext
+wiring.
+
+Verification —
+census:
+
+- `exec.Command`×5 —
+  the daemon
+  service
+  commands
+  (systemctl,
+  launchctl,
+  sc.exe)
+  — all
+  fixed
+  binary +
+  fixed
+  argv
+  (verified
+  exec-argv
+  class).
+- `signal.NotifyContext`×1 —
+  the
+  single
+  signal
+  wiring
+  at
+  `cmd/otedama/
+  main.go`
+  (verified
+  signal-context
+  class).
+- `syscall.SIGTERM`×1 —
+  the
+  SIGTERM
+  constant
+  for
+  the
+  NotifyContext
+  set.
+- `os.Interrupt`×1 —
+  the
+  Ctrl-C
+  counterpart
+  in
+  the
+  NotifyContext
+  set.
+- ZERO
+  `exec.CommandContext`,
+  `exec.Cmd`
+  direct,
+  `exec.LookPath`,
+  `exec.Environ`,
+  `SysProcAttr`,
+  `exec.Start`,
+  `exec.Wait`,
+  `exec.Run` —
+  the
+  process-
+  lifecycle
+  surface
+  beyond
+  Command
+  is
+  absent.
+- ZERO
+  `syscall.SIGKILL`,
+  `SIGINT`,
+  `SIGUSR`,
+  `SIGHUP`,
+  `syscall.Fork`,
+  `syscall.Exec`,
+  `syscall.Kill`,
+  `syscall.Wait4`,
+  `syscall.Getpid`,
+  `syscall.Getppid`,
+  `syscall.umask`,
+  `syscall.Setuid` —
+  the
+  syscall
+  surface
+  stops
+  at
+  SIGTERM.
+- ZERO
+  `signal.Notify`,
+  `signal.Reset`,
+  `signal.Ignore`,
+  `signal.Stop` —
+  the
+  bare
+  signal
+  API
+  absent.
+
+Verdict: TRUE.
