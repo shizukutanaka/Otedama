@@ -11950,3 +11950,7 @@ Milestone gate re-run on the full audit branch at pass 1000: `gofmt -l internal 
 ## Session 2335 update (Socratic pass 1001 — decoder defensive contract)
 
 Claim verified: NewDecoder pins MaxFrameSize to the 16 MiB default (frame.go:255–260), and ReadFrame re-validates it defensively (:268–270 — a zero/negative field errors rather than unbounding the read); header decode+Validate precede any allocation, and the payload bound is checked BEFORE the buffer is allocated — memory-exhaustion announce attacks can't reach the make(). TRUE.
+
+## Session 2336 update (Socratic pass 1002 — counter/gauge type honesty)
+
+Claim verified: Counter is atomic.Uint64 (metrics.go:85–89) — no float64 precision ceiling exists and Inc/Add are exact at any magnitude; there is no decrement path (structurally monotonic). Gauge is float64 under sync.RWMutex (:91–98) — the only type that legitimately carries fractional values. isValidMetricName enforces [a-zA-Z_:][a-zA-Z0-9_:]* with the leading-digit guard via position i>0 (:104–115). TRUE.
