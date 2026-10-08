@@ -16222,3 +16222,28 @@ Verification — the complete import set:
 
 Verdict: TRUE — production has exactly one
 randomness provider and it is the CSPRNG.
+
+## Session 2813 update (Socratic pass 1479 — struct-embedding census)
+
+Claim under test: no anonymous embedding promotes an
+unintended method set or shadows a same-named method —
+the only promotion is the documented provider lifecycle.
+
+Verification — the complete embedding set:
+
+- Every `mu sync.Mutex` (dashboard.go:109, polling.go:24,
+  stats.go:371, worker.go:116, run_test) is a NAMED
+  field — no promotion, no method-set growth.
+- The sole real embedding is provider's pollingProvider
+  (polling.go:19-24): start/stop/loop/send lifecycle
+  promoted to MiningProvider and AkashProvider by design;
+  comment documents the promotion contract.
+- No anonymous interface embedding anywhere — no
+  accidentally-satisfying types.
+- readOnlyRW (test-only) and field-level io.Writer/
+  io.Reader are named fields, not embeds.
+- No same-named method exists on any outer type that the
+  promoted method set could shadow.
+
+Verdict: TRUE — embedding is confined to the documented
+provider lifecycle; no shadow or surprise promotion.
