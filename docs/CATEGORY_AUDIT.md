@@ -10616,3 +10616,7 @@ Claim verified (honest-status): the Noise NX handshake exists only as an alpha P
 ## Session 2006 update (Socratic pass 672 — ADR-009 ecosystem recheck)
 
 Live-verified: stratum-mining/stratum latest tag remains v1.12.0; sv2-apps latest tag remains v0.8.0. The normative open set is unchanged: sv2-spec #203 (non-custodial payouts extension — the SEQ0_255-vs-SEQ0_64K output-bound debate is still unresolved in-thread; plebhash argues economically rational pools must cap outputs anyway, citing legacy Sv1 firmware limits) and sibling #202 remain open. Nothing in the window changes Otedama's position: MaxTargetUnconstrained, subset-flags validation, and direct-coinbase TIDES verification all stay forward-compatible. TRUE.
+
+## Session 2007 update (Socratic pass 673 — engine device/worker bootstrap)
+
+Claim verified: device detection is honest about causes — a GPU-registration failure warns but never blocks, while an empty device list surfaces "detection interrupted" with ctx error rather than the misleading "no devices"; worker spawn filters strictly to SHA256d-capable devices and partitions the nonce space so each (worker, thread) owns a residue class — offset i*Threads, stride next-pow2(threads×workers), guarded total ≤ 2³¹ so the uint32 cast can't wrap (the 32-bit overflow class from #1389 stays closed); nominalMiningHashrate derives the declared vardiff seed from exactly the workers that will hash, and the built-in CPU driver advertises SHA256d+GeneralCompute truthfully. TRUE.
