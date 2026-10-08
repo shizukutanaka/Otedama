@@ -17256,3 +17256,28 @@ Verification (`grep -c '^## Session'` + tail):
   the new range.
 
 Verdict: TRUE — ledger sequence integrity holds.
+
+## Session 2859 update (Socratic pass 1524 — CI rollup re-verification)
+
+Claim under test: the latest CI rollup contains no
+NEW failure class beyond the two dispositioned
+ones (Go 1.20–1.23 pins — #1344 rejected;
+Dependency-graph repo-Settings toggle).
+
+Verification (`git_view_pr` + `git_pr_checks` +
+job log):
+
+- Rollup: 1 passed / **1 failed** / 1 pending.
+- The failed job is "Dependency Review"
+  (job 113277986554). Its log shows the single
+  error line: "Dependency review is not supported
+  on this repository. Please ensure that
+  Dependency graph is enabled" — this IS the
+  recorded dependency-graph/Settings-toggle class,
+  surfaced under its workflow job name.
+- No Go-pin failure visible in this rollup
+  (queue saturation: only 3 checks materialized);
+  nothing outside the dispositioned set.
+
+Verdict: TRUE — same two classes; no new failure
+mode appeared.
