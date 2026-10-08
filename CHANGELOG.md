@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1796 — ci.yml)
+- Removed `deploy-staging`/`deploy-production` — vestigial jobs applying nonexistent `k8s/` manifests for a foreign postgres/redis/ingress topology; deploy.yml owns deployment
 ### Fixed (session 1794 — code-review.yml)
 - Removed hollow `review` and `performance-check` jobs — unreachable Node.js scaffolds that posted a vacuous comment on every PR and referenced the forbidden `scripts/` tree
 - `common-issues` now greps `*.go` for TODO/FIXME (its JS-only secret/console greps were vacuous; secrets stay covered by trufflehog)
