@@ -16324,3 +16324,27 @@ Verification — the complete interface-parameter set:
 
 Verdict: TRUE — boxing is confined to startup and
 small-header call sites; no hot-path copy exists.
+
+## Session 2817 update (Socratic pass 1483 — recursion census)
+
+Claim under test: production has no recursion on
+external input — no stack-depth attack surface.
+
+Verification:
+
+- Mechanical self-call scan (every func body searched
+  for a call to its own name): ten candidates returned,
+  all ten are method-name collisions across different
+  receiver types (three stats.go `observe` methods on
+  hashrateWindow/uptimeAccountant/satsAccountant;
+  `New`, `Run`, `Add`, `Write`, `FromURL`,
+  `NewRateLimiter`, `DefaultWorkerConfig` — same-named
+  methods called on other objects, not self-calls).
+- No tree/graph walkers exist (JSON is decoded by the
+  stdlib; yaml by the yaml library — neither recurses
+  in-tree).
+- Parse paths are all iterative loops over bounded
+  buffers (frame decoder, V1 line parser).
+
+Verdict: TRUE — the class is absent; zero recursive
+functions in production.
