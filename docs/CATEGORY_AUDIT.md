@@ -13510,3 +13510,13 @@ All verified TRUE:
 - **.github/ISSUE_TEMPLATE/bug_report.yml**: `otedama doctor`/`otedama version`/`--bitcoin-address` real; the doctor-output placeholder `[✓] Configuration: loaded from …` matches the live format (`Status.symbol()` ✓ + check name `Configuration` + `loaded from %s` detail + maskAddress `bc1qar···5mdq` shape). TRUE.
 
 Root/dotfile sweep now covers every file at repo root and .github/ except workflows/* (all 9 audited file-by-file in earlier passes). TRUE.
+
+## Session 2700 update (Socratic pass 1366 — external-URL census)
+
+Probed every domain referenced in all *.md files (80 unique URLs, 40 unique domains + localhost examples):
+
+- All 40 domains resolve except two bare-domain 404s that are false alarms: `api.octopus.energy` (ADR-008) and `springfall2008.github.io` — the bare domain indexes 404 by design, but the referenced full paths `api.octopus.energy/v1/products/AGILE-18-02-21/...` and `springfall2008.github.io/batpred/` both return HTTP 200. TRUE.
+- `otedama.io` remains correctly absent from live docs (phantom removed session 1682; remaining mentions are CHANGELOG history). TRUE.
+- CLAUDE.md's own `legacy-v2` reference (line 76) is already ledger-recorded (s2659, RESEARCH_IMPROVEMENTS:2166 — maintainer-file convention: ledger-only, never edit the rules file). TRUE.
+
+No phantom URLs remain in the doc set. TRUE.
