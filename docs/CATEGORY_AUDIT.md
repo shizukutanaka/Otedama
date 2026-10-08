@@ -10506,3 +10506,7 @@ Claim verified: the payout scheme is stored in atomic.Pointer so a pool failover
 ## Session 1979 update (Socratic pass 645 — fanIn shutdown completeness)
 
 Claim verified: the merged quote/share channel cannot deadlock at shutdown — each per-input goroutine selects ctx on both the receive and the send, so a producer that is never written and never closed cannot pin the merge goroutine (and therefore `out`) past cancellation; `out` closes exactly once when all inputs drain or ctx fires; buffering is proportional to input count but capped at 64; one generic implementation serves both quote and share paths so there is no second copy to drift. TRUE.
+
+## Session 1980 update (Socratic pass 646 — ADR-009 ecosystem recheck)
+
+Ecosystem re-verified live: SRI latest tag remains **v1.12.0** (`git ls-remote` on stratum-mining/stratum — v1.8–v1.12 tail confirms); sv2-apps latest tag remains **v0.8.0** (ref 7f490743). sv2-spec normative open set is stable: #203 (push-based non-custodial JDP payouts) still open with the SEQ0_255-vs-B0_64K output-bound debate unresolved; sibling drafts #202/#195 remain open alternatives. Otedama's subset-flags validation, MaxTargetUnconstrained declaration, and direct-coinbase TIDES verification stay forward-compatible — no code delta required. TRUE.
