@@ -18348,3 +18348,28 @@ Verification (`rg '\[:\d|\[\d+:'`):
 
 Verdict: TRUE — every literal slice is on a
 fixed-size array or the args[1:] idiom.
+
+## Session 2908 update (Socratic pass 1573 — append-aliasing census)
+
+Claim under test: `append` results are stored
+back into the same owner — no aliasing
+hazard where a caller's backing array is
+mutated in place.
+
+Verification (112 append sites; spot-check on
+`.field = append(.field, …)` pattern):
+
+- All `x.field = append(x.field, v)` sites
+  are self-referential: arbitration
+  Assignments, stratumv2 pendingOrder,
+  parse MerkleBranch, stratumv1 preAuthQ,
+  metrics collectors — each appends into
+  its own field and stores back.
+- Zero `func(s []T) []T` helpers that
+  append to a caller's slice and return it
+  — the pattern that lets the caller
+  retain a stale length while the callee
+  mutated the shared backing.
+
+Verdict: TRUE — no append-aliasing hazard;
+every append owns its backing store.
