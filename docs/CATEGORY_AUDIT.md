@@ -9919,3 +9919,8 @@ Claim verified: the test.yml `fuzz` job runs `make fuzz`, which discovers target
 ## Session 1834 update (Socratic pass 500 — doctor check-count parity)
 
 Claim verified: CLAUDE.md documents "17 並行ヘルスチェック" and DefaultChecks returns exactly 17 (config, bitcoin-address, failover-addresses, data-dir, wallet, pool reachability/diversity/endpoint-diversity/encryption/tls-ca, payout-scheme, power-economics, profitability-floor, hardware, network, clock-skew, env-vars) — doc count matches implementation 1:1, all run through the panic-proofed fan-out (s1649). TRUE.
+
+## Session 1835 update (Socratic pass 501 — supported-language parity)
+
+Defects found and fixed:
+- config.yaml.example:90 claimed `Supported: en, ja, zh-CN, ko, es, fr, de, pt` — omitting ru and ar, both implemented in internal/i18n/messages/ru_ar.go, and listing `zh-CN` where the canonical catalog tag is `zh` (Base() accepts zh-CN, but the docs/API.md canonical list uses `zh`). Corrected to `en, ja, zh, ko, es, fr, de, pt, ru, ar` — matching the 10 Lang constants in message.go:104-113 and docs/API.md:191. CLAIM FALSE, corrected.

@@ -87,7 +87,7 @@ workers:
 # ── Language ─────────────────────────────────────────────────────────────────
 #
 # BCP 47 language tag for UI messages and log output.
-# Supported: en, ja, zh-CN, ko, es, fr, de, pt
+# Supported: en, ja, zh, ko, es, fr, de, pt, ru, ar
 # (Other tags are accepted and fall back to English.)
 # If empty, Otedama detects the language from the operating system.
 #
