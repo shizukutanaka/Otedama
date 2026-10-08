@@ -13829,3 +13829,26 @@ Verification:
   still correct identity-based matching).
 
 Verdict: TRUE — sentinel discipline holds end-to-end.
+
+## Session 2717 update (Socratic pass 1383 — fmt.Errorf wrap discipline)
+
+Claim under test: `fmt.Errorf` wraps Go errors with `%w` and only uses
+`%v` for non-error operands — so sentinel matching via `errors.Is`
+(s2715) is never silently broken by a format verb.
+
+Verification: every non-test `fmt.Errorf` containing `%v` with an
+error-looking argument — 11 sites reviewed line-by-line.
+
+- `%v` operands are all non-error values: difficulty/target floats
+  (hashrate.go:58, parse.go:332, sha256d.go ×3), Policy enum
+  (arbitration/engine.go:312), address-type string (btccrypto.go:297),
+  argv list (service.go:524), and `resp.errResult any` — the raw
+  JSON-RPC error payload from the pool (dialer.go:159,182; `any`, not
+  a Go error — wrapping it would be meaningless).
+- Where a real Go error travels, `%w` is always used alongside:
+  `dialer.go:159,182` (`%w: ErrHandshakeFailed`), `service.go:524`
+  (`%w` on exec err), `run.go:2092` (`%w` on derr), `btccrypto.go:297`
+  (`%w` on ErrUnknownScheme).
+
+Verdict: TRUE — `%w`/`%v` split is correct at all 11 sites; no error
+loses unwrap-ability to a `%v` verb.
