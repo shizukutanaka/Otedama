@@ -14582,3 +14582,28 @@ Verification: atomic field decl census + legacy-call grep.
   modernization completed in earlier passes holds at HEAD.
 
 Verdict: TRUE — atomic surface is uniformly typed; no bypass.
+
+## Session 2748 update (Socratic pass 1414 — channel-capacity census)
+
+Claim under test: every channel buffer is sized by a deliberate
+rule — producer-count fan-out, bounded burst, cap-1 latest-wins,
+or zero-capacity rendezvous.
+
+Verification: 19 `make(chan` sites enumerated.
+
+- Producer-count results: `len(f.sources)` (rates ×2),
+  `len(drivers)` (hal) — senders can never block; the aggregator
+  drains exactly that many.
+- Bounded delivery queues: jobsCh 8 (V1 + V2), quoteCh 16/32,
+  updateCh 8 (TUI), inCh 32 (pool-msg inbox), shares
+  `Threads*4` — absorb short bursts then backpressure the
+  producer, which is the intended stall signal.
+- cap-1 latest-wins: respCh (:704, readLoop never blocks on a
+  late RPC response), diffCh (:191, stale difficulty replaced
+  not queued).
+- Zero-capacity signals: done/cancelReady/fetchCall.done — pure
+  close-rendezvous, no buffering wanted.
+- submitLimiter tokens = submitBurst — the token bucket IS the
+  channel capacity.
+
+Verdict: TRUE — every capacity is a named policy, none accidental.
