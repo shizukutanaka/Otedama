@@ -16071,3 +16071,27 @@ Verification — the full non-constant-shift set:
 
 Verdict: TRUE — every variable shift is small-constant
 bounded or annotated; the ≥width hazard is absent.
+
+## Session 2807 update (Socratic pass 1473 — strconv.Atoi census)
+
+Claim under test: every Atoi either validates the result
+or lands on a fail-safe path.
+
+Verification — both production sites:
+
+- config.go:810 — pool-URL port: `p < 1 || p > 65535`
+  rejects immediately after parse (verified s2792).
+- stratumv1 parse.go:293 — `d.Port, _ = strconv.Atoi(s)`
+  inside parseReconnect is unchecked but fail-safe twice
+  over: (a) handleReconnect explicitly documents that the
+  pool-supplied Host:Port is NEVER followed (stratumv1
+  .go:463-464 — a hostile pool cannot redirect the
+  miner); only d.Wait is honored, clamped to
+  [0, maxReconnectWaitSeconds=300]. The unchecked Atoi
+  writes a dead field.
+- The method-only reconnect case is correctly tolerated:
+  bare "client.reconnect" with garbage params still
+  means "reconnect now" (parse.go:281).
+
+Verdict: TRUE — the only unchecked parse lands on a field
+the design never reads; all live parses are validated.
