@@ -10170,3 +10170,7 @@ Claim verified: every command TROUBLESHOOTING.md cites exists — `doctor`, `wal
 ## Session 1895 update (Socratic pass 561 — config-layer precedence re-verification)
 
 Claim verified: ResolveWithOrigins applies strictly ordered layers defaults→file→env→flags (config.go:419–422), each layer overriding only non-empty fields with per-field Origins tracking; the DataDir OS-default fallback fires only when no layer set it and correctly stays OriginDefault. Matches the documented four-layer model. TRUE.
+
+## Session 1896 update (Socratic pass 562 — completion-shell parity)
+
+Claim verified: `otedama completion` supports exactly bash/zsh/fish (completion.go:17, switch :30–37 rejects anything else), matching API.md:152–159 which documents the same three with identical install paths. No phantom shells. TRUE.
