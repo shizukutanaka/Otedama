@@ -28751,3 +28751,117 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3104 update (Socratic pass 1768 — binary complete ledger)
+
+Claim under test: the
+binary codec is
+LittleEndian-only —
+65 sites — with
+zero reflection-
+based Encode/
+Decode and zero
+varint surface.
+
+Verification —
+census:
+
+- `binary.LittleEndian`×65 —
+  the
+  entire
+  wire
+  codec:
+  every
+  uint/
+  fixed-
+  field
+  read
+  or
+  write
+  routes
+  through
+  the
+  same
+  byte
+  order
+  (verified
+  byte-order
+  class:
+  no
+  mixed
+  endianness).
+- ZERO
+  `binary.Write`,
+  `binary.Read`,
+  `binary.Size`,
+  `binary.Encode`,
+  `binary.Decode`,
+  `binary.Append` —
+  the
+  reflection-
+  based
+  codec
+  API
+  is
+  absent;
+  every
+  field
+  is
+  hand-
+  marshalled
+  at
+  explicit
+  offsets.
+- ZERO
+  `binary.PutUvarint`,
+  `binary.PutVarint`,
+  `binary.Uvarint`,
+  `binary.Varint`,
+  `binary.AppendUvarint`,
+  `binary.AppendVarint`,
+  `binary.ReadUvarint`,
+  `binary.ReadVarint` —
+  no
+  variable-
+  length
+  integer
+  surface
+  (SV2
+  uses
+  fixed
+  widths).
+- ZERO
+  `binary.BigEndian` —
+  no
+  BE
+  site
+  anywhere;
+  the
+  sole
+  BE
+  conversion
+  in
+  the
+  codebase
+  (nBits
+  exponent
+  byte)
+  is
+  done
+  by
+  explicit
+  byte
+  shifts,
+  not
+  a
+  codec.
+- `hash.Hash32`/`Hash64`
+  interface
+  types ×0 —
+  the
+  fnv
+  hasher
+  is
+  concrete.
+
+Verdict: TRUE.
