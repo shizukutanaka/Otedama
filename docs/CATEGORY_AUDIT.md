@@ -10542,3 +10542,7 @@ Claim verified: RuntimeCollector emits client_golang-compatible go_* names so st
 ## Session 1988 update (Socratic pass 654 — i18n fallback + degrade honesty)
 
 Claim verified: message resolution follows exact → base-tag → English, and a totally missing ID returns the conspicuous `!{id}!` placeholder plus an error — missing translations surface loudly in logs instead of silently rendering empty UI; RenderWith degrades to the raw template on template failure (UI never breaks) while still reporting the error; MissingTranslations feeds the CI completeness gate so the 10 priority languages cannot silently lag the English catalog; duplicate/nil catalogs are rejected at construction. TRUE.
+
+## Session 1989 update (Socratic pass 655 — logger singleton + ctx hygiene)
+
+Claim verified: the default logger is race-free and non-nil by construction — lazy init uses CAS so exactly one allocation wins under contention, FromContext can never return nil, and both SetDefault(nil) and IntoContext(nil) are no-ops so a typed-nil can never shadow the usable default; Discard sets level above LevelError to io.Discard for the TUI-owns-stdout case; the Adapter normalizes legacy level strings (incl. "warning") to structured levels with Info fallback. TRUE.
