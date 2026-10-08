@@ -13470,3 +13470,21 @@ host:port.
 - Remaining `public.stratum.slushpool.com` / `demand.sv2.io` mentions
   are historical CHANGELOG records and audit-ledger quotes — correct to
   leave (they document what was true then / the fix itself).
+
+## Session 2697 update (Socratic pass 1363 — AUDIT_CHECKLIST.md full re-verification)
+
+All 32 rows re-verified against live state; every claim passes:
+
+- Row 6 (TODO/FIXME): `git grep -En 'TODO|FIXME|XXX' -- '*.go' ':!*_test.go'` → zero hits.
+- Row 7 (test:impl ≥1.0): impl=22,744 lines vs test=40,418 lines → ratio 1.78.
+- Row 12 (SHA pinning): all `uses:` refs are `@v3`–`@v7`/`@v0.36.0` release tags, none SHA — the row's own **Gap** verdict remains accurate.
+- Row 13 (dependabot): gomod + github-actions + docker, all weekly — matches.
+- Row 15 (deps): go.mod direct set {x/crypto, x/sys, go.yaml.in/yaml/v3} — matches the corrected row text.
+- Row 16 (no vendor): no vendor/ directory.
+- Row 17 (no secrets in history): `git log -p` hits are ledger text and the checklist's own grep pattern, zero real credentials.
+- Row 24 (scrypt): `scryptN = 1<<17, scryptR = 8, scryptP = 1, keyLen=32` — matches.
+- Row 30 (ADRs): ADR-001..011 all present, README index parity (session 2685+).
+- Row 32 (CoC): CODE_OF_CONDUCT.md exists.
+- CI gate summary block: still accurate — Lint (golangci-lint incl. govet+staticcheck), Security Scan (gosec), Security Scanning (govulncheck), Test race matrix, Fuzz job (make fuzz), Benchmark artifact job. The Go 1.20–1.23 test-leg failures are the recorded #1344-class pin divergence, not a gate regression.
+
+No corrections needed — the file's own correction annotations are all still true.
