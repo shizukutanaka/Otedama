@@ -16438,3 +16438,24 @@ engine.LatencyTracker, clock.Fake, cappedLogFile.
 
 Verdict: TRUE — range-copy of a mutex type is
 unreachable; no mutex slice exists.
+
+## Session 2822 update (Socratic pass 1488 — degenerate-wrap census)
+
+Claim under test: no `fmt.Errorf("%w", err)` bare-wraps
+— a wrap that adds no context is a silent no-op that
+pretends to annotate.
+
+Verification:
+
+- `Errorf("%w"` (bare) — zero hits in production.
+- All 13 sites starting with `%w` are sentinel-first
+  wraps (`"%w: %q"`, `"%w: authorization rejected"`,
+  `"%w: %w"`) — the sentinel leads and context follows;
+  errors.Is resolves the sentinel while callers keep
+  the human-readable tail.
+- dialer.go:164's `%w: %w` double-wrap preserves both
+  chains (ErrHandshakeFailed + underlying cause) —
+  multi-error semantics, intentional.
+
+Verdict: TRUE — every wrap carries context; the
+degenerate bare-wrap class is absent.
