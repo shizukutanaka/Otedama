@@ -10414,3 +10414,7 @@ Claim verified: Decide runs on the 30 s ticker only — a fast-quoting provider 
 ## Session 1956 update (Socratic pass 622 — stream map freshness + yield honesty)
 
 Claim verified: quoteFreshness clamps zero/future-dated quotes to now so a bad timestamp can never make a dead stream immortal; pruneStaleStreams only expires streams with a recorded quote (pre-seeded entries exempt); updateStream feeds net (fee-adjusted) yield into arbitration — gross only when the provider declares no fee — translates nil AcceptedFamilies at the contract boundary, and never leaks a per-device quote's price to unquoted devices; streamsSlice merges YieldPerDevice across same-StreamID entries so every device keeps its own yield. TRUE.
+
+## Session 1957 update (Socratic pass 623 — applyAllocation device scoping)
+
+Claim verified: pauseDevice calls SetWork(nil) only on the worker whose DeviceID matches — the session-247 bug (idling one device silently paused all SHA256d devices) is structurally closed and multi-device-safe for future ASIC drivers; idle transitions log once via HeldIdle (no per-tick flood); mining↔non-mining switches pause/resume only the affected device; persistence across pool jobs comes from pauseSet, not the one-shot pause. TRUE.
