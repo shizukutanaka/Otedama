@@ -10434,3 +10434,7 @@ Claim verified: the hysteresis gate is a relative margin — incumbent score × 
 ## Session 1961 update (Socratic pass 627 — share-rate metrics reconciliation)
 
 Claim verified: otedama_shares_unaccounted reconciles local found vs pool-judged counts with a zero clamp (a stats tick racing an accept burst can never produce a meaningless negative); rejectReason creates counters lazily but only for the closed rejectClass enum — label cardinality is bounded; judged==0 short-circuits before the division so reject/stale rates are exact 0 rather than NaN; staleRate is computed against judged shares (pool-visible denominator), not found. TRUE.
+
+## Session 1962 update (Socratic pass 628 — TUI snapshot honesty)
+
+Claim verified: EstSatsEarned is labeled "est." (an integrated forecast, not pool-authoritative accounting — KNOWN_LIMITATIONS §9 contract honored on screen); Curtailed renders a deliberate-pause badge distinct from the Stalled fault indicator so an operator cannot mistake a price-driven pause for a broken miner; Update is non-blocking with drain-oldest so a slow terminal can never backpressure the engine; Stop waits for the render goroutine via WaitGroup before its own writes — no io.Writer race. TRUE.
