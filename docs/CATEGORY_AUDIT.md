@@ -13499,3 +13499,14 @@ All verified TRUE:
 - **install.sh**: CANDIDATES cover all three asset-naming conventions — verified against release.yml (`otedama-<os>-<arch>.tar.gz` + per-asset `.sha256` + combined `checksums.txt` it probes first), ci-cd bare binaries, and the goreleaser underscore form; sha256sum/shasum fallback; non-404 checksum fetch errors abort unless `--skip-verify`; cosign verification optional and honest; `--help` sed range covers the usage block; success message uses real commands (`otedama doctor`, `otedama run --bitcoin-address`, `otedama service install`). TRUE.
 
 Note: install.sh's quick-start still suggests `--wallet-passphrase "..."` on argv — the flag exists and works (runtime now warns per session-372/#493); usage hint is accurate, no correction needed.
+
+## Session 2699 update (Socratic pass 1365 — CODE_OF_CONDUCT + CLAUDE.md links + GH templates)
+
+All verified TRUE:
+
+- **CODE_OF_CONDUCT.md**: standard Contributor Covenant 2.1 text, matches AUDIT_CHECKLIST row 32. TRUE.
+- **CLAUDE.md reference links**: stratumprotocol.org, lightningdevkit.org, github.com/garrytan/gstack, www.apache.org/licenses/LICENSE-2.0, getalby.com (release-footer tipjar domain) — all resolve HTTP 200. TRUE.
+- **.github/pull_request_template.md**: every referenced path/command exists (CONTRIBUTING.md, CLAUDE.md, skills/tdd.md, CHANGELOG [Unreleased]; `go test -race`, `go vet`, `golangci-lint run`, `otedama doctor`); SPDX/DCO checklist consistent with CONTRIBUTING. TRUE.
+- **.github/ISSUE_TEMPLATE/bug_report.yml**: `otedama doctor`/`otedama version`/`--bitcoin-address` real; the doctor-output placeholder `[✓] Configuration: loaded from …` matches the live format (`Status.symbol()` ✓ + check name `Configuration` + `loaded from %s` detail + maskAddress `bc1qar···5mdq` shape). TRUE.
+
+Root/dotfile sweep now covers every file at repo root and .github/ except workflows/* (all 9 audited file-by-file in earlier passes). TRUE.
