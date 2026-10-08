@@ -19948,3 +19948,48 @@ Verdict: TRUE — gate suite green
 on devin/1791411357-audit-cycle-2
 after 9 additional ledger-only
 passes.
+
+## Session 2961 update (Socratic pass 1626 — strings-package census)
+
+Claim under test: `strings` usage
+is the standard idiom set
+(Contains/HasPrefix/Join/Trim)
+with no deprecated or exotic
+calls — NewReader and Builder
+are confined to display paths
+and tests.
+
+Verification (606 sites):
+
+- Top calls: `Contains` 411
+  (mostly the error-classification
+  + scheme checks audited at
+  s2887), `HasPrefix` 50,
+  `Builder` 30 (one prod site
+  + test builders), `Join` 27,
+  `Repeat` 25 (test),
+  `TrimSpace` 15.
+- The single production
+  `strings.Builder` at
+  config.go:223 is
+  `sanitizeForDisplay` — builds
+  a filtered copy of a config
+  value with `b.Grow(len(v))`
+  capacity hint, stripping
+  `unsafeDisplayRune`.
+- `strings.IndexByte` — one site
+  at poolproto.go:149 for the
+  StripUserinfo `@`-vs-`/`
+  position check (byte-position
+  invariant verified s2492).
+- Zero `strings.Title` (deprecated),
+  `Map`, `IndexRune`, `IndexFunc`,
+  `Compare`, `LastIndex`, `Clone`
+  in production.
+- `strings.NewReader` —
+  test-only (feeds io.Reader
+  into cmdWallet).
+
+Verdict: TRUE — the string API
+surface is the modern idiom
+set; no deprecated calls.
