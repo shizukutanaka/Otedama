@@ -11818,3 +11818,7 @@ Claim verified: no NaN/Inf can reach the metrics exposition — every Gauge.Set 
 ## Session 2302 update (Socratic pass 968 — failover-config validation parity)
 
 Claim verified: failover entries get primary-equivalent validation — config.go:647 validates every `bitcoin_addresses[i]` via the same `validateBitcoinAddress` checksum check as `bitcoin_address` (empty entries flagged), and appendPoolIssues applies `validatePoolURL` (host:port + no-userinfo, s486) plus the payout_scheme whitelist {fpps,pplns,tides,solo} to every pools[] entry. A typo in a backup config is caught at `config validate`, not at failover time. TRUE.
+
+## Session 2303 update (Socratic pass 969 — doctor status enum JSON contract)
+
+Claim verified: the Status iota enum serializes correctly — String() is exhaustive over pass/warn/fail/skip with an "unknown" fallback (no panic path); the JSON writer uses json.NewEncoder.Encode so enum strings and all text fields are escaped per spec; the text/JSON split remains correct (JSON fields can't carry live control chars because the only free-text values (Detail/Fix) go through SanitizePoolText at display boundaries, and JSON encoding escapes anyway). TRUE.
