@@ -13600,3 +13600,32 @@ Fix applied: one-line godoc annotations on `metrics.Registry` and
 read; `gofmt` clean; `go build` + `go test` green on both packages).
 
 Verdict: TRUE-with-fix.
+
+## Session 2707 update (Socratic pass 1373 — test-helper + stdlib-surface mini-census)
+
+Claim under test: test helpers taking `*testing.T` attribute failures to
+the caller site (`t.Helper()`), and five stdlib surfaces stay within
+their declared boundaries.
+
+Verification:
+
+- **`t.Helper()` census: zero misses.** Every helper function whose
+  first parameter is `t *testing.T` calls `t.Helper()` within its first
+  statements (checked all `*_test.go` across `internal/` + `cmd/` via
+  AST-adjacent scan). 50 `t.Helper()` call sites total; helpers like
+  `newFakePool`, `fakeV1Pool`, `newResponsivePool*` all comply, so a
+  `t.Fatal` inside a pool stub points at the calling test, not the
+  helper body.
+- **`math/rand`: test-only.** Three imports, all in `_test.go`
+  (`lightning/fuzz_test.go`, `arbitration/fuzz_test.go`,
+  `arbitration/engine_test.go` — deterministic seeds for shrinkable
+  fuzz cases and a seeded Decider-input generator). Production code is
+  crypto/rand-only, reconfirmed.
+- **stdlib `"log"`: zero imports** outside tests — `log/slog` via
+  `internal/logger` owns all production logging.
+- **`go:generate` directives: zero** — no codegen step exists to drift.
+- **`reflect` package: zero non-test imports** — the wire codecs are
+  hand-rolled LE (as audited in the wire-primitive passes), so no
+  reflect-driven marshalling exists to produce alignment/tag bugs.
+
+Verdict: TRUE on all five classes.
