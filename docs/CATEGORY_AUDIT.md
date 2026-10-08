@@ -15829,3 +15829,30 @@ Verification — all ~75 Fprint* sites in cmd/:
 Verdict: TRUE — the stdout/stderr contract is uniform;
 secrets prompts live on stderr where they can't be
 accidentally piped downstream.
+
+## Session 2797 update (Socratic pass 1462 — nil-channel census)
+
+Claim under test: no select can block forever on a channel
+that was never initialized, and no nil-channel
+select-disable idiom exists that could silently disable a
+case arm.
+
+Verification:
+
+- Zero `chan = nil` assignments and zero `var x chan`
+  declarations left nil in production code — 62 select
+  statements all read real channels or ctx.Done().
+- Every channel field is initialized at construction:
+  pending respCh created per-RPC with cap 1 (verified
+  s2783), jobsCh/shareCh/fan-in channels all make()-ed in
+  constructors; streams map entries hold non-nil chans.
+- The select-disable idiom (nil out a channel to remove a
+  case) is absent entirely — pause/idle handling uses
+  explicit boolean gates checked before dispatch, not
+  channel nil-ing.
+- A channel left nil by an early return cannot exist: all
+  channel-bearing structs are built by New*/new* functions
+  that make() them unconditionally.
+
+Verdict: TRUE — selects see only live channels; the
+nil-channel hazard class is structurally absent.
