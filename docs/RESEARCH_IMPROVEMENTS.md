@@ -193,8 +193,20 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    misconfig (two hostnames that are CNAMEs/round-robin for the same node).
 6. 🔵 **TemplateSource abstraction** — ADR-009 lets a URL scheme select
    pool/JDC/solo template provenance.
-7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
+7. 🔵 **Pool-share-of-hashrate awareness** — optionally inform the user when
    their chosen pool exceeds a large network share, nudging decentralisation.
+   — 🔵 **Scope refined (verified session 1740):** nothing on the stratum
+   wire exposes a pool's network share, so this needs an external pool-stats
+   source — which exists and is already trusted by Otedama: the hashrate
+   feed queries `mempool.space/api/v1/mining/hashrate/1d` (rates/hashrate.go:49),
+   and the same host serves `/api/v1/mining/pools/1w` (per-pool block
+   counts → share). The unsolved piece is *identity mapping*: the API
+   reports pool names ("Foundry USA", "AntPool") while config carries
+   pool URLs (`stratum+tcp://fp2.antpool.com:3333`); joining them requires
+   either a user-declared pool identity or a curated hostname→pool table —
+   a design decision (new config surface vs. a curated-map maintenance
+   liability) fit for an ADR, not a drive-by heuristic. Deferred pending
+   that design choice rather than implemented speculatively.
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
 9. ✅ **Block-template freshness metric** (session 93):
    `otedama_last_job_received_seconds` (Unix timestamp of last
