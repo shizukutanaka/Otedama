@@ -277,20 +277,35 @@ arXiv grounding (collected sessions 40–41 and here):
 4. 🔵 **Combinatorial-MAB logarithmic-regret budget allocation** — Zuo &
    Joe-Wong (arXiv:2105.04373); CUCB-DRA treats "allocate budget a to
    resource k" as a base arm and needs no closed-form reward model.
-5. 🟡 **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
+5. 🔵 **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
    near-logarithmic regret for bipartite user↔resource matching with
    Markov state; directly models device↔stream assignment when yields are
    autocorrelated. New grounding for A3's dynamics.
-6. 🟡 **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
+   — **Dispositioned (session 1744):** grounding material for ADR-010 A3,
+   not a defect — today's engine does assignment by hysteresis-guarded
+   greedy `Decide`, and the autocorrelated-yield regime this paper
+   addresses is what A3's dynamics section would formalise. 🔵
+   (planned/ADR-referenced), not 🟡 (newly surfaced gap).
+6. 🔵 **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
    transforms offline bi-criteria approximations into online CMAB with
    sublinear regret *and* sublinear constraint violation; the right frame
    if Otedama ever optimises yield subject to a hard power cap.
+   — **Dispositioned (session 1744):** conditional research, correctly
+   self-scoped — verified no hard power cap exists to violate. Power is
+   handled as a breakeven *floor*: `max(min_yield, powerFloor)`
+   (arbitrate.go:130-139, 206-208), a threshold below which a stream is
+   not worth running — not a constrained-optimisation surface. Becomes
+   relevant only if a power *cap* ships. 🔵.
 7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
 8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
 9. 🔵 **Beta-Bernoulli calibration** — ADR-010 A6.
-10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
+10. ❌ **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.
+    — **Dispositioned (session 1744):** out of scope, as the row itself
+    declared — Otedama is a single-node client by product definition and
+    no multi-node cooperation surface exists. Catalogued for the record;
+    ❌.
 11. ✅ **Arbitration Reason string matches Held flag in all cases** (session 174).
     Socratic probe found a misleading diagnostic: when the incumbent stream was
     already the best option (no challenger beats it), the engine returned
