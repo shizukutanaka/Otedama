@@ -18303,3 +18303,26 @@ Verification (15 sites):
 
 Verdict: TRUE — all sort outputs are
 deterministic across runs and inputs.
+
+## Session 2906 update (Socratic pass 1571 — new() census)
+
+Claim under test: `new()` is used only where a
+zero-value pointer is required for method
+calls — never for maps/slices/funcs.
+
+Verification (`rg '\bnew\('` — 8 sites):
+
+- big.Int/big.Float constructions in
+  sha256d bitmath (6 sites) — `new(big.Int).
+  SetUint64`, `new(big.Float).SetPrec` —
+  canonical API requires a mutable pointer.
+- `diff1Target = new(big.Int).Lsh(...)` —
+  package-level computed constant.
+- run.go:293 `new(atomic.Bool)` — curtail
+  gate needs a stable shared pointer.
+- Zero `new(map)`, `new(slice)`,
+  `new(chan)` — those would produce a nil
+  map/slice/chan pointer (useless).
+
+Verdict: TRUE — all 8 are canonical pointer
+constructions.
