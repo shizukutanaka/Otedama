@@ -13677,3 +13677,25 @@ Verification: `go list -deps ./cmd/otedama` — 221 packages total.
   `html/template`, `database/sql`, `go/types`** — none linked.
 
 Verdict: TRUE — the link surface equals the declared surface.
+
+## Session 2710 update (Socratic pass 1376 — compiler-directive census)
+
+Claim under test: the only compiler pragmas in the tree are the audited
+platform-split build tags; no hidden `linkname`/`embed`/`noinline`/
+`generate`/`cgo` escape hatches exist.
+
+Verification: `//go:` directive census across `internal/` + `cmd/`.
+
+- **Build tags: 6, forming two exhaustive disjoint partitions.**
+  `internal/hal/gpu_linux.go` (`linux`) + `gpu_stub.go` (`!linux`) cover
+  the GPU sysfs feature; `internal/tui/width_{unix,windows,other}.go`
+  (`unix` / `windows` / `!unix && !windows`) cover terminal-width
+  detection with a catch-all. No platform falls through to a missing
+  implementation — matching the s1092 build-tag parity pass.
+- **Zero escape-hatch directives**: no `//go:embed` (no embedded assets —
+  consistent with the no-assets design), no `//go:linkname` (no
+  symbol punning into unexported internals), no `//go:noinline`, no
+  `//go:generate` (s2707 confirmed), no `//go:cgo_*`, no `//line`
+  directives, no legacy `// +build` syntax.
+
+Verdict: TRUE.
