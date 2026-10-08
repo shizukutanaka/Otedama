@@ -20934,3 +20934,43 @@ des, md5, sha1, rc4 — no
 weak/absent primitives; no
 custom cipher code.
 Verdict: TRUE.
+
+## Session 2982 update (Socratic pass 1646 — absent-package census)
+
+Claim under test: the
+binary imports none of the
+heavy network/format/plugin
+packages it does not need.
+
+Verification — zero imports
+of all 15 candidates:
+
+- `compress/*`, `archive/*`,
+  `image/*` — no media/codec
+  surface.
+- `database/*` — no SQL
+  client; the
+  `OTEDAMA_DATABASE_*`
+  references in
+  KNOWN_LIMITATIONS are
+  aspirational notes, not
+  live imports.
+- `plugin`, `expvar`,
+  `net/rpc`, `net/smtp`,
+  `net/http/cgi` — no
+  dynamic loading, debug
+  endpoint, RPC, mail, or
+  CGI surface.
+- `mime`, `mime/multipart`
+  — no content-type
+  handling.
+- `text/scanner`,
+  `go/parser`, `go/ast`,
+  `html` — no Go source
+  parsing or HTML rendering
+  (TUI is ANSI strings).
+
+Verdict: TRUE — the
+dependency surface matches
+the product definition;
+nothing heavy drags in.
