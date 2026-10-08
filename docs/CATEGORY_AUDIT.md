@@ -10006,3 +10006,7 @@ Claim verified: `datum://` is parsed into `ProtocolDATUM` (poolproto.go:81,120) 
 ## Session 1854 update (Socratic pass 520 — KL §5 PQ-scaffold re-verification)
 
 Claim verified: btccrypto.go:68-72 defines `ErrSchemeNotImplemented` for ML-DSA/SPHINCS+ namespace stubs pending BIP-360 + stdlib crypto/mldsa; :248 documents call sites may already branch on the registry entry; only btccrypto.go + secp256k1.go reference the schemes — no active PQ path exists. "Scaffolded, not active" is exact. TRUE.
+
+## Session 1855 update (Socratic pass 521 — KL §13 revised-entry re-verification)
+
+Claim verified: §13's post-1658 status text matches current files exactly — deploy.yml:166-186 still carries `helm upgrade ... ./kubernetes/helm/otedama` (nonexistent chart path) gated behind `secrets.STAGING_KUBECONFIG` (unreachable by design, as documented); ci.yml contains zero deploy-staging/production jobs (deleted s1796, confirmed by empty grep). Go-pin failure class and the closed-pin-PR maintainer decision are described verbatim. TRUE.
