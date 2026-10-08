@@ -12805,3 +12805,7 @@ Claim verified: the branch-added `internal/stratum/encryptedframe_fuzz_test.go` 
 ## Session 2548 update (Socratic pass 1214 — install.sh syntax + version-injection recheck)
 
 Claim verified: `bash -n install.sh` clean; `make -n build` resolves ldflags to the live `internal/version` symbols (#1275 fix still working) — the dry-run shows `Version=v3.0.0-alpha.1`, `Commit=f1c74d22a` matching the current HEAD commit prefix exactly, `BuildDate` fresh; `make test` expands to `go test -race -timeout 5m ./...`. TRUE — release metadata injection is real, not a dead-symbol path.
+
+## Session 2549 update (Socratic pass 1215 — binary smoke re-verification)
+
+Claim verified: fresh `make build` produces a working binary — `otedama version` prints the injected metadata end-to-end (`v3.0.0-alpha.1 (7656af021) built 2026-10-08T07:35:20Z with go1.27.1 for darwin/arm64`), and `--help` enumerates the full command surface (run, version, config, service, doctor, wallet, completion) consistent with the CLAUDE.md architecture map including the #529 wallet subcommand. TRUE — the shipped binary reflects current code and real build metadata.
