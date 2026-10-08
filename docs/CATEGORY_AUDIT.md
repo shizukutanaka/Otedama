@@ -9820,3 +9820,7 @@ Claim re-verified: RESEARCH_IMPROVEMENTS Category 10 row 1 (P-256 Noise stub →
 ## Session 1810 update (Socratic pass 476 — mergeability checkpoint)
 
 Claim verified: the audit branch still merges cleanly — `origin/master` is an ancestor of HEAD (169 commits ahead), `git merge-tree --write-tree` reports no conflicts, working tree clean. TRUE. Also re-verified in this window: `skills/*.md` (6 files) reference only real targets/commands (`make test`, `make test-integration`, `make fuzz`, `go test ./...`, `go test -coverprofile`, `go test -fuzz`, golangci-lint/gosec/govulncheck) with no stale version pins.
+
+## Session 1811 update (Socratic pass 477 — ADR index + backlog disposition census)
+
+Claim verified: `docs/adr/README.md` lists all 11 ADRs with correct files and statuses (001–006 Accepted, 007–010 Proposed, 011 Accepted). The RESEARCH_IMPROVEMENTS backlog is fully dispositioned: the only live 🟡 rows are (a) :506 P-256 Noise stub — maintainer-review zone, confirmed-open s1809; (b) :951/:962 govulncheck hard-gate trackers — evergreen by design, 0 reachable vulns re-verified s1802; (c) :1203 SNIPPET GPU-spot lead — contested primary sources, stays recorded-as-lead; (:1041's 🟡 glyph is prose inside a folded annotation, the tracker itself at :816 is 🔵). Everything else is ✅/🔵/❌/folded. TRUE — no defect.
