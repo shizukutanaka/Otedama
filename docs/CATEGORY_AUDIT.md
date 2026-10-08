@@ -23126,3 +23126,53 @@ Verification — census:
   type identity).
 
 Verdict: TRUE.
+
+## Session 3025 update (Socratic pass 1689 — context ledger)
+
+Claim under test: every
+cancellation source is
+paired with an owned
+cancel; only the three
+documented roots create
+Background contexts.
+
+Verification — census:
+
+- `context.Context`×87
+  — first-param
+  throughout.
+- `context.WithTimeout`
+  ×7 — bounded scopes
+  (15s dial, 10s probe,
+  5s graceful stop —
+  all verified).
+- `context.WithCancel`×5
+  — lifecycle scopes,
+  each with an owned
+  cancel (deferred or
+  stored).
+- `context.CancelFunc`×3
+  — the stored cancels.
+- `context.Background`×3
+  — exactly the three
+  root wirings: run.go
+  (signal ctx), doctor
+  runner, service
+  dispatch.
+- `context.WithValue`×1
+  — the single value
+  site: logger's ctx
+  injection seam
+  (verified).
+- `context.Deadline
+  Exceeded`×2 +
+  `Canceled`×1 —
+  error classification
+  for dial-timeouts
+  vs cancels.
+- ZERO context.TODO.
+- ZERO ctx stored in
+  structs (verified
+  earlier).
+
+Verdict: TRUE.
