@@ -11746,3 +11746,7 @@ Claim verified: every atomic-typed field is accessed only through its atomic met
 ## Session 2284 update (Socratic pass 950 — decoded-discriminant census)
 
 Claim verified: every switch on a wire-decoded discriminant is strict, never silently tolerated — NewMiningJob's OPTION count accepts exactly 0 (absent) or 1 (present, length pre-checked) and rejects counts >1 with a sized error; unexpected MsgType values during SetupConnection/OpenMiningChannel are hard handshake errors (`unexpected msg 0x%02X during setup/channel open`); the session-layer dispatch keeps forward-compat at the frame layer (unknown types dropped per spec) while every semantic handler decodes strictly. No `default:` swallows a protocol violation. TRUE.
+
+## Session 2285 update (Socratic pass 951 — response-body census)
+
+Claim verified: every inbound HTTP response body in the tree is read through io.LimitReader — rates fetcher caps at 64 KiB (fetcher.go:436), the hashrate feed caps both the discard-drain and the parse read at maxHashrateBody (hashrate.go:209/212), and the doctor connectivity probe discards at 8 KiB (checks.go:925). No unbounded io.ReadAll/io.Copy touches a network body; a malicious or malformed upstream cannot exhaust memory through the response channel. TRUE.
