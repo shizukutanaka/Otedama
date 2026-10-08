@@ -18424,3 +18424,32 @@ Verification (~25 sites):
 
 Verdict: TRUE — every copy is length-
 consistent or the returned n is used.
+
+## Session 2911 update (Socratic pass 1576 — make() capacity census)
+
+Claim under test: `make()` with a variable
+length/capacity is bounded — no unbounded
+allocation driven by wire-supplied data.
+
+Verification (~30 sites):
+
+- All `len(...)`-derived sizes come from
+  already-validated inputs: `len(cfg.Pools)`,
+  `len(sha256d)`, `len(opts.providers)`,
+  `len(c.messages)`, `len(merged)` — local
+  config/registry collections.
+- Fixed-size buffers: noise nonce (12),
+  ipad/opad (blockSize), message wire
+  literals (`4+4+32+4+4`, `24`, `20`,
+  `16`) — compile-time constants.
+- `make([]byte, h.MsgLength)` (frame.go:296)
+  — MsgLength validated against
+  MaxFrameSize before this line.
+- `make([]byte, ctLen)` (noise.go:336) —
+  the preceding comment documents the
+  bound.
+- No `make` whose size is a bare
+  attacker-supplied integer.
+
+Verdict: TRUE — all variable-size makes
+are upstream-bounded.
