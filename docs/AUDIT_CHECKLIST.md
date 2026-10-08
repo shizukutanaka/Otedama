@@ -39,7 +39,7 @@ If any row does not pass, open a security advisory.
 | 12 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are major-version tag refs (`@v3`–`@v6`), not SHA pins — pinning is a hardening item, not present. **Correction (session 1711):** this row previously said "one `@master`" — all mutable HEAD refs were pinned to release tags in session 1692 |
 | 13 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 14 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install — **Gap:** cosign signatures are not yet produced by `release.yml` (VERIFY.md documents the unsigned status); an optional `verify-blob` path exists |
-| 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, stdlib |
+| 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Direct: `golang.org/x/crypto`, `golang.org/x/sys`, `go.yaml.in/yaml/v3` (+ their `golang.org/x/{net,term,text}` transitive set), stdlib — **Correction (session 2571):** this row omitted `x/sys` (internal/tui terminal syscalls) |
 | 16 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
 ## Secrets and credentials

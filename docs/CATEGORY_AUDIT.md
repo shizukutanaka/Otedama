@@ -12899,3 +12899,9 @@ Claim verified: the ADR diffs are honest — `docs/adr/README.md` updates ADR-00
 Claim verified: API.md diff is honest metric-catalog catch-up (documents the merged `shares_submitted_total`, `shares_submit_in_flight`, `devices_idle`, `effective_yield_sats_per_second`, `power_breakeven_floor_sats_per_second` gauges/counters). SPECIFICATION adds doctor's own 0/1/2 exit-code set and correctly demotes backlog row G3 to "partially resolved" (V1 now routes through poolproto). THREAT_MODEL gains the yaml-path migration + govulncheck hard-gate + measured advisory status.
 
 REAL FIX: THREAT_MODEL's rewritten mitigation undercounts the dependency boundary — "two third-party runtime dependencies" omitted `golang.org/x/sys v0.41.0` (real runtime dep, internal/tui terminal syscalls, acknowledged in go.mod comments + the ADR-003 README update this same branch). Corrected to three, both in the mitigation and the residual-risk line.
+
+## Session 2572 update (Socratic pass 1238 — checklist/deployment diff check + fix)
+
+Claim verified: AUDIT_CHECKLIST's corrections are all honest (staticcheck-via-golangci scoping, the ERE `\|` grep bug documented, Noise P-256 placeholder scope clarified, ADR-001..011 count, test-ratio script un-bcv'd). DEPLOYMENT adds the fsGroup fix for fresh-PVC root:root mounts (real operational defect corrected), drops the nonexistent `status="submitted"` label claim, and adds SLO guidance.
+
+REAL FIX: AUDIT_CHECKLIST row 15 (runtime-dependency audited set) had the same x/sys undercount as THREAT_MODEL — enumerated only crypto+yaml. Corrected to the three direct deps plus the `golang.org/x/{net,term,text}` transitive set, verified against `go mod graph`.
