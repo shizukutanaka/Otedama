@@ -9361,3 +9361,18 @@ Residuals: goreleaser `brews` points at `shizukutanaka/homebrew-tap` which may n
 **Claim verified: "no workflow step can execute a nonexistent script" — TRUE.** Census of all 8 workflows found exactly one script-path reference: `code-review.yml:71` `node scripts/code-review/generate-comment.js`. The file doesn't exist and `scripts/` is a CLAUDE.md forbidden path (can never be created). The step is gated behind `has_node == 'true'`, which requires a `package.json` — absent on this Go-only repo — so the step is unreachable and the `has_node != 'true'` fallback comment always runs instead. Same conditional-dead class as the previously recorded JS-only `common-issues`/`performance-check` no-ops.
 
 Residuals: if a `package.json` were ever added (not itself forbidden), the step would execute and fail on the missing `scripts/` file — a latent tripwire that only activates on an out-of-architecture change; noted, not a live defect.
+
+## Session 1703 update (Socratic pass 369)
+
+**Claim re-verified: KNOWN_LIMITATIONS §13's "what remains broken" list matches the actual workflows — partially STALE; corrected + three latent defects fixed.** Re-checking §13's enumerated residuals against the current workflow files found two claims outdated and three real latent defects:
+
+- §13 said `ci.yml` deploy-staging/production unconditionally `kubectl apply -f k8s/` — stale: both are now behind the `KUBE_CONFIG_{STAGING,PRODUCTION}` secret gate (session 1689), so they skip rather than fail. Wording corrected.
+- §13 said `release.yml` `build-packages` referenced nonexistent `scripts/*` files — stale: those references were already removed; the job only maps `otedama` + `config.yaml.example`.
+- §13 said lint was "pinned at three different versions" — converged on `v1.64.8` (see fixes below).
+
+**Defects fixed (3):**
+1. `test.yml`/`ci-cd.yml` `golangci-lint-action@v3` used `version: latest`, which now resolves to golangci-lint **v2** — config-incompatible with the v1-schema `.golangci.yml`. Pinned to `v1.64.8`, matching the Makefile. (Distinct from the rejected v2-migration: the lint config stays v1.)
+2. `ci.yml` curl-installed `v1.55.2`, divergent from the Makefile's `v1.64.8` — converged.
+3. `release.yml` `build-packages` passed `--license "MIT"` to fpm while LICENSE is Apache-2.0 — package metadata mislabeled; corrected to `Apache-2.0` for both DEB and RPM.
+
+Residuals (recorded, not fixable here): the lint jobs still fail before reaching golangci-lint on the Go-pin class (go.mod ≥1.24 vs pins ≤1.23); `build-packages` runs only on `v*` tags so the license fix is verified by inspection, not execution.

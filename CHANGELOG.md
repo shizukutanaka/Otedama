@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 1703 — lint ピン発散 + fpm ライセンス表記)
+- `test.yml`/`ci-cd.yml` の golangci-lint `version: latest` が v2（設定スキーマ非互換）へ解決 — Makefile の `v1.64.8` へ統一
+- `ci.yml` の curl インストールピン `v1.55.2` → `v1.64.8`（Makefile 一致）
+- `release.yml` build-packages の fpm `--license "MIT"` → `"Apache-2.0"`（実 LICENSE に一致）
+
+
 ### Fixed (session 1682 — install.sh が実在しない otedama.io を usage 例として記載)
 
 `install.sh` の usage ヘッダが `curl -sSL https://otedama.io/install.sh` を

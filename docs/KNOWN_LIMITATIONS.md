@@ -475,7 +475,7 @@ every line after it; content longer than `cols` is now truncated to fit.
 
 ## 13. Several CI workflows remain non-functional or misdescribed (revised session 1658)
 
-**Status after the session-1404/1649 repair pass:** the worst latches are
+**Status after the session-1404/1649 + 1689–1703 repair passes:** the worst latches are
 fixed — `deploy.yml`'s `test` job now runs real `go build`/`vet`/`test`
 (replacing an `npm ci`/`npm test` job that failed deterministically on a
 repo with no `package.json`), `code-review.yml`'s `setup-node` is gated on
@@ -511,25 +511,30 @@ cosmetic leftover).
   path that does not exist (no `kubernetes/` directory; CLAUDE.md's map
   documents `k8s/` as represented only by `docs/DEPLOYMENT.md` YAML
   examples), with no `KUBECONFIG` configured — unreachable by design.
-- **`ci.yml` `deploy-staging`/`deploy-production`** still
-  `kubectl apply -f k8s/01-namespace.yaml` … `08-ingress.yaml` — the
-  same nonexistent `k8s/` directory.
+- **`ci.yml` `deploy-staging`/`deploy-production`** still invoke
+  `kubectl apply -f k8s/*.yaml` — the same nonexistent `k8s/` directory —
+  but only behind the `KUBE_CONFIG_{STAGING,PRODUCTION}` secret gate
+  added in session 1689, so they skip (not fail) until those secrets and
+  the manifests exist together.
 - **`release.yml` `build-packages`** (fpm `.deb`/`.rpm`, runs only on
-  `v*` tags) references `scripts/post-install.sh`,
-  `scripts/pre-remove.sh`, `scripts/otedama.service`, and a root
-  `config.yaml` — none exist (no `scripts/` directory; only
-  `config.yaml.example`). The job would fail if a tag were cut.
+  `v*` tags) no longer references the nonexistent `scripts/` files — the
+  maintainer-script and systemd-unit references were removed and it
+  installs only `otedama` + `config.yaml.example` — but the packages it
+  produced until session 1703 mislabeled the project's Apache-2.0
+  license as `MIT` in the fpm metadata (fixed).
 - **`ci-cd.yml` as a whole** remains dead duplicate weight: a second
   pipeline that hardcodes `GO_VERSION: '1.21'`, a `1.20`/`1.21` matrix
   below `go.mod`'s minimum, and `kubectl apply -f k8s/deployment.yaml`
   — nonexistent path. Deleting the file is the obvious resolution;
   whether the duplicate pipeline exists at all is the maintainer's call.
-- **golangci-lint is pinned at three different versions.** `ci.yml`
-  curl-installs `v1.55.2`; `test.yml`/`ci-cd.yml` use
-  `golangci-lint-action@v3`; the Makefile pins `v1.64.8`. Upstream is on
-  v2 (a new `version: "2"` config schema), so upgrading requires
-  migrating `.golangci.yml` plus all pin sites together — a maintainer
-  decision, recorded after a v2-migration PR was closed unmerged.
+- **golangci-lint is pinned at v1.x everywhere** — session 1703
+  converged the three divergent sites on the Makefile's `v1.64.8`
+  (`ci.yml` curl install was `v1.55.2`; `test.yml`/`ci-cd.yml` used
+  `golangci-lint-action@v3` with `version: latest`, which now resolves
+  to a config-incompatible v2). Upstream remains on v2 (a new
+  `version: "2"` config schema); a `.golangci.yml` schema migration is a
+  maintainer decision, recorded after a v2-migration PR was closed
+  unmerged.
 - **The Dependency Review job fails for every PR** until Dependency
   graph is enabled for the repository (Settings → Code security and
   analysis → Dependency graph). This is a repository-setting change no
