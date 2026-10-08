@@ -11774,3 +11774,7 @@ Claim verified: subprocess children (systemctl/launchctl/sc.exe via runCmd) inhe
 ## Session 2291 update (Socratic pass 957 — goroutine-fanout census)
 
 Claim verified: every bounded-fanout goroutine swarm is sized by an operator-controlled list, not remote input — the doctor reachability probe spawns len(config.Pools) goroutines (operator-authored config; config carries no pool-count ceiling but this is self-bounded trusted input, not an adversarial channel), the 17 health checks spawn exactly 17. Remote-triggered goroutines do not exist: pool frames never spawn a goroutine. TRUE.
+
+## Session 2292 update (Socratic pass 958 — merged-invariant spot check)
+
+Claim verified: the merged hardening invariants hold on this branch — worker-partition totals are still computed in uint64 with the ≤2^31 stride guard (setup.go:90, the 32-bit-overflow fix), and pool coinbases are still verified against CoinbasePaysScript with one-shot warnings on both malformed and doesn't-pay outcomes (run.go:1686ff, the TIDES/solo payout verification). No regression against the merged-fix contract. TRUE.
