@@ -24856,3 +24856,50 @@ tags in production:
   tag (verified).
 
 Verdict: TRUE.
+
+## Session 3057 update (Socratic pass 1721 — module-integrity re-verification)
+
+Claim under test: the
+module surface is
+still minimal and
+verified — 2 direct
+deps, godebug pins
+intact, zero drift.
+
+Verification:
+
+- `go mod verify` —
+  all modules
+  verified.
+- Direct requires:
+  `go.yaml.in/yaml/v3
+  v3.0.5` (maintained
+  continuation, MIT/
+  Apache-2.0) +
+  `golang.org/x/crypto
+  v0.48.0` (scrypt
+  KDF, BSD-3) — both
+  carry rationale
+  comments per
+  CLAUDE.md.
+- `go mod tidy -diff`
+  — empty (zero
+  drift).
+- godebug pins:
+  `panicnil=0`,
+  `randautoseed=1`,
+  `tlsmlkem=1` —
+  the documented
+  GODEBUG_NOTES set.
+- `go 1.24.0`
+  floor — the
+  toolchain pin
+  verified earlier.
+- ZERO replace /
+  exclude /
+  retract
+  directives —
+  no module
+  overrides.
+
+Verdict: TRUE.
