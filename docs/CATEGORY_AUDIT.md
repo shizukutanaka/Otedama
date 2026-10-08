@@ -12054,3 +12054,7 @@ Claim verified: NewHashrateMonitor defaults a degenerate maxStall<1 to 3 so a si
 ## Session 2361 update (Socratic pass 1027 — publishBTCRate observed-vs-unobserved honesty)
 
 Claim verified: the publish boundary never emits an unobserved zero — rate guarded >0, skew guarded >0 (0 = documented "not yet observed") (stats.go:511–516); rate age published only everFetched so a pre-fetch meaningless zero can't masquerade as a fresh feed, and a stalled feed is visible via growing age even while the value looks healthy (:518–521); SourceHealth publishes the constant total always but ok/total only once fetched so silent erosion (1-of-3 median) is visible before outright failure (:523–528); publishDifficulty no-ops diff<=0 (:536–538). TRUE.
+
+## Session 2362 update (Socratic pass 1028 — estimated-share-interval math)
+
+Claim verified: publishDifficulty computes E[seconds between shares] = difficulty × 2^32 / hashrate at stats.go:541–543 — the share-work definition where 1 share ≈ 2^32 hashes per unit difficulty; diff<=0 early-returns so a degenerate input can't write a misleading interval; hashrate<=0 publishes 0 rather than a divide-by-zero or a meaningless sentinel — "cannot estimate" is honest zero, not fabricated. TRUE.
