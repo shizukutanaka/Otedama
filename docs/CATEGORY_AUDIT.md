@@ -16899,3 +16899,25 @@ Verification:
 Verdict: TRUE — branch integrity and merge state
 unchanged; all prior verdicts still apply to the
 current tree.
+
+## Session 2841 update (Socratic pass 1507 — ledger self-integrity spot check)
+
+Claim under test: the audit ledger itself remains
+structurally sound — sequential headers, no
+truncation, no duplicate session numbers at the
+head.
+
+Verification:
+
+- 2008 `## Session` blocks, 16,901 lines; tail
+  headers run sequentially 2829→2840 with no gap
+  or duplicate at the head.
+- Every block carries its pass label and a verdict
+  (TRUE / corrected / Issue recorded) — the
+  append-only ledger convention holds.
+- Prior numbering anomalies remain the only five
+  (recorded in-ledger at s2600-era passes); none
+  added since.
+
+Verdict: TRUE — ledger integrity confirmed at the
+head; earlier anomalies documented and closed.
