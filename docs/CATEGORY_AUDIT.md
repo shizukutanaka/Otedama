@@ -22072,3 +22072,57 @@ Verification — census:
   — type refs only.
 
 Verdict: TRUE.
+
+## Session 3004 update (Socratic pass 1668 — x/ module usage ledger)
+
+Claim under test: the
+external-dependency
+surface is exactly the 3
+declared direct modules,
+each at a single
+justified seam.
+
+Verification — census
+(production files):
+
+- `x/crypto/scrypt` —
+  seedstore.go wallet KDF
+  (one call site, the
+  audited KDF boundary).
+- `x/crypto/pbkdf2` —
+  seed.go BIP-39 seed
+  derivation (spec-
+  mandated KDF).
+- `x/crypto/chacha20
+  poly1305` — noise.go
+  Noise AEAD (CODEOWNERS;
+  verdict only).
+- `x/sys/unix` — tui/
+  width_unix.go terminal
+  ioctl.
+- `x/sys/windows` — tui/
+  width_windows.go (the
+  cross-platform twin).
+- `x/text/language` —
+  i18n locale detection
+  (BCP-47 parsing).
+- Exactly 6 import sites
+  across 4 modules:
+  x/crypto ×3 seams,
+  x/sys ×2, x/text ×1.
+- ZERO x/net direct use
+  despite its transitive
+  presence — confirmed
+  earlier (the earlier
+  "2→3 deps" doc fix
+  aligns go.mod's
+  declared set with this
+  census).
+- No other module
+  directories appear in
+  any import block.
+
+Verdict: TRUE — the
+dependency surface is
+minimal, pinned, and
+each seam justified.
