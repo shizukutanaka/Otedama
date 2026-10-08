@@ -18809,3 +18809,32 @@ Verification (8 sites):
 
 Verdict: TRUE — network reads are
 buffer-capped; no unbounded ReadBytes.
+
+## Session 2926 update (Socratic pass 1591 — encoding/json census)
+
+Claim under test: every `json.Unmarshal`
+decodes into a fresh local — no stale
+field carryover between parses.
+
+Verification (~30 sites):
+
+- All Unmarshal targets are per-call
+  `var` declarations: `var p []json.
+  RawMessage` at each parse*, `var ns
+  notifyStrings` in unmarshalNotify-
+  Params, `var en1 string` / `var sz int`
+  in parseSetExtranonce, `var d
+  reconnectDirective` in parseReconnect.
+- The notify unmarshal fills a fresh
+  `notifyStrings` field-by-field —
+  each notification gets a new `ns`,
+  no shared target between calls.
+- `json.NewEncoder(stdout)` (version,
+  config) — one-shot output, correct.
+- `json.RawMessage` used for the outer
+  params array then per-element
+  Unmarshal — the correct two-phase
+  pattern for heterogeneous arrays.
+
+Verdict: TRUE — every decode target is
+fresh per call; no unmarshal-reuse.
