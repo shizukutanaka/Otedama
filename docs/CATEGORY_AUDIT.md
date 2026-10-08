@@ -11922,3 +11922,7 @@ Claim verified: every unrecognized input fails at startup, never at runtime — 
 ## Session 2328 update (Socratic pass 994 — HTTP server lifecycle honesty)
 
 Claim verified: httpserver.Start (server.go:110–132) fails synchronously on listen error (bound addr recorded only after success), serves in background with unexpected errors stored in serveErr for polling, and a dedicated goroutine translates ctx cancellation into Stop() — a graceful Shutdown with a 5s in-flight budget (:138–144). run.go startHTTPServer degrades honestly: ""→no server, non-loopback→explicit warning naming pprof exposure, listen failure→warn+continue (mining unaffected). TRUE.
+
+## Session 2329 update (Socratic pass 995 — frame/channel-id double-layer contract)
+
+Claim verified: Header.Validate (frame.go:128–136) enforces both the U24 ceiling AND the MinimumChannelPayload floor when ChannelMsg is set — and Frame.ChannelID (:146–160) re-checks independently (rejects non-channel messages and short payloads even on a Frame built without Validate), so a caller skipping Validate still can't read a bogus channel id. TRUE.
