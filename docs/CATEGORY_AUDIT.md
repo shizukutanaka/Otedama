@@ -11918,3 +11918,7 @@ Claim verified: appendNumericIssues (config.go:701–743) rejects NaN/±Inf on e
 ## Session 2327 update (Socratic pass 993 — CLI rejection posture)
 
 Claim verified: every unrecognized input fails at startup, never at runtime — fs.Parse rejects unknown flags → stderr + exitUsage (main.go:77–81); unknown subcommand → message + did-you-mean + usage + exitUsage (:140–145); help detection scans every token (correct for space-separated flag values) and stops only at literal `--` (:87–99). TRUE.
+
+## Session 2328 update (Socratic pass 994 — HTTP server lifecycle honesty)
+
+Claim verified: httpserver.Start (server.go:110–132) fails synchronously on listen error (bound addr recorded only after success), serves in background with unexpected errors stored in serveErr for polling, and a dedicated goroutine translates ctx cancellation into Stop() — a graceful Shutdown with a 5s in-flight budget (:138–144). run.go startHTTPServer degrades honestly: ""→no server, non-loopback→explicit warning naming pprof exposure, listen failure→warn+continue (mining unaffected). TRUE.
