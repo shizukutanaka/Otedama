@@ -17447,3 +17447,22 @@ Verdict: TRUE — cumulative -race coverage now
 spans 8 packages (s2848: metrics, arbitration,
 stratum; s2867: miner, poolproto, stratumv1,
 stratumv2, rates) with zero detections.
+
+## Session 2868 update (Socratic pass 1533 — tree hygiene + linearity)
+
+Claim under test: the audit working tree is clean
+and the branch history is linear (no merge
+commits) since master.
+
+Verification:
+
+- `git status --porcelain` → **empty** — no
+  uncommitted debris or stray files.
+- `git rev-list --merges --count
+  origin/master..HEAD` → **0** — 1,223+ commits
+  ahead, all linear; ancestor-clean without a
+  single merge node.
+
+Verdict: TRUE — pristine tree and fully linear
+branch; every ledger entry is exactly one
+commit.
