@@ -10078,3 +10078,7 @@ Claim verified: README's command table (lines 84–93) enumerates all seven disp
 ## Session 1872 update (Socratic pass 538 — OTEDAMA_* env parity re-verified)
 
 Claim re-verified: code declares exactly 15 OTEDAMA_* env vars (config layer + wallet/run); user docs name the same set. The three apparent doc-only hits (`OTEDAMA_DATABASE_*`, `OTEDAMA_BITCOIN_ADDRESSES`, `OTEDAMA_X`) are CATEGORY_AUDIT/KNOWN_LIMITATIONS prose about *deliberately absent* vars (removed postgres boilerplate, file-only field, sanitize example) — not live references. TRUE (re-confirmation of the session-1071 parity verdict).
+
+## Session 1873 update (Socratic pass 539 — config.yaml.example key-subset parity)
+
+Claim verified: every top-level key in config.yaml.example (bitcoin_address, data_dir, language, log_format, log_level, name, pools, workers) exists in internal/config's yaml-tag set — the example contains zero phantom keys. Absent advanced fields (bitcoin_addresses, arbitration_hysteresis_pct, curtail_below_btc_usd, power_watts, min_yield_sats_per_sec, http_addr, tls_ca_file, payout_scheme, user/password/url under pools) are intentionally non-minimal and documented in docs/api-reference instead. TRUE.
