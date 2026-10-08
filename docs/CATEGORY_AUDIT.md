@@ -10158,3 +10158,7 @@ Claim verified: the httpserver mux registers exactly the documented surface — 
 ## Session 1892 update (Socratic pass 558 — research-backlog census re-verification)
 
 Claim verified: RESEARCH_IMPROVEMENTS.md marker counts unchanged since the s1821 census — ✅102 · 🔵88 · 🟡14 · ❌7 — with the same live 🟡 rows (P-256 Noise stub maintainer zone :506, govulncheck evergreen :951/:962, unverified GPU-spot snippet :1203). No drift. TRUE.
+
+## Session 1893 update (Socratic pass 559 — DEPLOYMENT env/surface parity)
+
+Claim verified: every OTEDAMA_* env var DEPLOYMENT.md uses (BITCOIN_ADDRESS, DATA_DIR, WALLET_PASSPHRASE) resolves in code, and every flag in its examples (--config/--data-dir/--http-addr/--log-file plus the service-install set) is a real registered flag; the doc makes no false completeness claims. TRUE.
