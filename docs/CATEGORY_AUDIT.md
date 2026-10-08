@@ -26401,3 +26401,83 @@ census:
   pair.
 
 Verdict: TRUE.
+
+## Session 3080 update (Socratic pass 1744 — errors/sync surface ledger)
+
+Claim under test: the
+error vocabulary is
+New/Is/Join/As in
+their idiomatic
+roles, and the
+sync surface is
+typed-atomics +
+paired Mutex/
+WaitGroup/Once.
+
+Verification —
+census:
+
+- `errors.New`×36 —
+  leaf errors.
+- `errors.Is`×22 —
+  sentinel
+  matching only
+  (verified
+  sentinel
+  class).
+- `errors.Join`×2 —
+  the compound
+  error sites.
+- `errors.As`×1 —
+  the typed
+  extraction.
+- ZERO
+  `errors.Unwrap`
+  — no custom
+  wrapper types;
+  `%w` carries
+  the chain.
+- `sync.Mutex`×21 +
+  `RWMutex`×8 —
+  all Lock/
+  Unlock via
+  defer or the
+  documented
+  caller-holds
+  contract
+  (verified
+  mutex
+  class).
+- `sync.WaitGroup`×8 —
+  all Add/Done/
+  Wait paired
+  (verified).
+- `sync.Once`×4 —
+  the
+  idempotent-
+  close sites
+  (verified).
+- `sync.Pool`×2 +
+  `sync.Map`×1 —
+  the hasher
+  pool and the
+  set-semantics
+  map.
+- `atomic`: `Uint64`×10,
+  `Bool`×10,
+  `Pointer`×8,
+  `Int64`×1 —
+  typed API
+  only; ZERO
+  bare
+  AddUint64/
+  LoadInt64
+  free
+  functions.
+- ZERO `sync.Cond`
+  — no
+  condition-
+  variable
+  waits.
+
+Verdict: TRUE.
