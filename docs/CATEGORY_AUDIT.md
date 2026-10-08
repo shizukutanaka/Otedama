@@ -22404,3 +22404,52 @@ Verification — census:
 Verdict: TRUE — the
 stdlib profile is modern
 but conservative.
+
+## Session 3011 update (Socratic pass 1675 — os/exec + syscall ledger)
+
+Claim under test: all
+subprocess calls use
+fixed binaries with
+constant argv, and
+syscall use is a
+constant only.
+
+Verification — census:
+
+- `exec.Command` ×5,
+  all in daemon/
+  service.go:
+  `systemctl` ×2,
+  `launchctl` ×1,
+  `sc.exe` ×1, plus the
+  `runCmd` seam (:522).
+- Every call passes a
+  literal binary name and
+  constant argv — no
+  user/config input is
+  interpolated into the
+  command or its args.
+- `runCmd` is a var
+  seam for test stubbing
+  (documented at :519) —
+  real OS calls only in
+  production paths.
+- `cmd.CombinedOutput()`
+  in the helper — no
+  stdout/stderr pipes
+  leaked.
+- ZERO `exec.Cmd` field
+  mutation, ZERO
+  `os/exec` elsewhere
+  (doctor probes are
+  pure Go, verified).
+- ZERO `sh -c`/`bash -c`
+  or shell indirection.
+- `syscall` — exactly
+  ONE reference:
+  `syscall.SIGTERM`
+  constant (the service-
+  install signal); no
+  other syscall calls.
+
+Verdict: TRUE.
