@@ -49,12 +49,9 @@ doc-vs-code整合性の維持**である。
    リカバリフレーズ提示がまさにそれだった（docs 4箇所が「表示される」と
    明記、実装は0件）。**docの主張を見つけたら、その挙動を実際に実行する
    本番コード経路をgrepで確認する**こと。
-2. **依存3件更新**（モジュール取得可能な環境でのみ）: 順に
-   `go get golang.org/x/crypto@latest` → toolchainをgo1.25.xへ →
-   `gopkg.in/yaml.v3`を`go.yaml.in/yaml/v3`へ移行（import書換は
-   internal/config周辺のみの見込み・grepで全数確認・ライセンス確認後）。
-   各ステップで検証ループ。yaml移行の回帰ゲートは`TestConfigFile_*`一式。
-   完了後 govulncheck でゼロ到達を記録。
+2. ~~**依存3件更新**~~ ✅ 解消済み（訂正 session 2681: yaml.v3→go.yaml.in/yaml/v3
+   v3.0.5 移行は #444、x/crypto は #1359 で v0.48.0 へバンプ済み。残るのは
+   toolchain bump（go 1.25+）のみで、これはメンテナ判断）。
 3. **doc相互参照の継続検査**: markdownリンク・backtickファイル参照が実在
    ファイルに解決するか、SPECIFICATIONのギャップ表番号・KNOWN_LIMITATIONSの
    §番号の相互参照が一致するか。（session 253時点で全解決済み — 変更後に再検査。）
