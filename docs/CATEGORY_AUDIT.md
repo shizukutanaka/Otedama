@@ -11934,3 +11934,7 @@ Claim verified: CoinbasePaysScript (script.go:95–134) parses the real tx layou
 ## Session 2331 update (Socratic pass 997 — Decide determinism end-to-end)
 
 Claim verified: Decide is byte-deterministic — input devices are copied then sorted by Identity.ID (engine.go:332–336, no caller-slice mutation), candidates sorted by policy score desc with StreamID as the deterministic tie-break (:407–414), and non-finite/non-positive yields collapse to 0 in Effective() (:96–105) so a bad quote can never win the sort or poison totals. Previous assignments are keyed only when provided. TRUE.
+
+## Session 2332 update (Socratic pass 998 — numeric-env SSOT honesty)
+
+Claim verified: numericEnvVars (config.go:357–381) is a single source of truth driving BOTH applyEnvLayer (:538–547) and EnvWarnings (:398–407) — so a set-but-unparseable OTEDAMA_* float can never vanish silently: it's ignored in resolution AND always reported by the warning path (printed by both config validate and config show). Layer order file<env<flags<datadir-default holds. TRUE.
