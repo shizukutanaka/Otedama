@@ -11990,3 +11990,7 @@ Claim verified: HashRateString is a strict non-overlapping tier ladder (TH→GH�
 ## Session 2345 update (Socratic pass 1011 — SV2 fixed-width codec symmetry)
 
 Claim verified: fixed-layout message codecs are strict mirrors — SubmitSharesStandard (24B) and SubmitSharesSuccess (20B) each write fields at the same LE offsets the decoder reads, and every Decode rejects len<required BEFORE any binary read (messages.go:256–310) so truncated payloads can't misalign into valid-looking structs; SubmitSharesError carries a bounded STR0_255 tail. TRUE.
+
+## Session 2346 update (Socratic pass 1012 — applyJob boundary completeness)
+
+Claim verified: the V1 job-application path guards every boundary — v1JobTarget rejects bad nBits/difficulty before any worker sees the job (run.go:2132–2135); rollNTime rolls stale pool ntime forward to wall clock while keeping future ntime verbatim (SRI 1.12.0 ntime_start compliance; :2176–2186); the pause set is honored per worker (:2151–2154); v1JobWireID uses ParseUint-then-FNV so "1a" can't silently truncate into a colliding numeric ID, and the pool always receives its original opaque string (:2162–2171); the 8/s+burst-32 submit cap bounds difficulty-collapse floods (:2202–2210). TRUE.
