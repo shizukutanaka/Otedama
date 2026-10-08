@@ -10066,3 +10066,7 @@ Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 (11 files, conti
 ## Session 1869 update (Socratic pass 535 — G18 metric-unit naming verified)
 
 Claim verified: SPECIFICATION row G18 questioned ms-vs-s consistency. Production metric census: every duration metric carries an explicit unit suffix — `*_seconds` family (productive, uptime, clock_skew, rate_age, last_job, last_reject, share_interval, start_time) plus `otedama_submit_latency_milliseconds` whose ms unit is in the name itself; yield metrics consistently `*_sats_per_second`. No unitless time metric exists, so no silent ms/s confusion is possible on the wire. The deferred naming-convention decision is effectively moot: the shipped convention is already unambiguous-per-metric.
+
+## Session 1870 update (Socratic pass 536 — ADR-009 ecosystem recheck)
+
+Ecosystem re-verified live: sv2-apps latest tag is **v0.8.0** (`git ls-remote`, ref 7f490743 — the GitHub /releases page truncates at v0.7.0; tag confirmed directly). sv2-spec #203 (non-custodial payouts, push-based JDP extension) remains open with the SEQ0_255-vs-64K output-count debate unresolved. sv2-spec #238 (optional SetupConnection flags negotiation — bits 0-15 required / 16-31 optional, success echoes accepted) remains open; Otedama's offered-flags subset validation (session 1247) is forward-compatible with it. Standing P0 unchanged: no `mining.configure` client-side (tProxy shipped BIP323 version-rolling in v0.8.0).
