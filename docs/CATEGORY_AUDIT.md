@@ -19623,3 +19623,42 @@ Verdict: TRUE — every time call
 is either measurement, a paired
 timer, or a documented 10ms
 yield; no unbounded sleep.
+
+## Session 2953 update (Socratic pass 1618 — sync beyond Mutex/Map/Once)
+
+Claim under test: beyond the
+audited Mutex/Map/Once, only
+`sync.WaitGroup` and one
+`sync.Pool` exist — no Cond,
+ErrGroup, or Locker surface.
+
+Verification:
+
+- `sync.WaitGroup` — 8 sites,
+  all goroutine-fan-out:
+  worker.go:165 (thread spawn),
+  polling.go:26 (poll goroutine),
+  fanin.go:31 (provider fan-in),
+  doctor.go:231 +
+  checks.go:361 (check fan-out),
+  dashboard.go:122 (render
+  worker), registry.go:152
+  (detector fan-out),
+  hashrate.go:145 (feed).
+  Every WaitGroup is a local
+  `var wg` — never a package-level
+  shared instance.
+- `sync.Pool` — one site
+  (noise_pool.go:27): `hashPool`
+  for sha256 hashers; pooled
+  Reset discipline verified at
+  s2943.
+- Zero `sync.Cond`, `sync.Locker`,
+  `sync.Map` (outside the
+  already-verified 4 sites),
+  `sync.OnceFunc`/`OnceValue`.
+
+Verdict: TRUE — WaitGroup fan-out
++ one hasher pool are the only
+sync primitives beyond the
+audited set.
