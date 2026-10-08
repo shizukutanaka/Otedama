@@ -21078,3 +21078,69 @@ Verification:
   power math.
 
 Verdict: TRUE.
+
+## Session 2985 update (Socratic pass 1649 — net-package surface)
+
+Claim under test: the
+`net/*` surface is bounded
+dialers, one listener, and
+no `net/url` — pool URLs
+go through the manual
+scheme+host:port boundary
+validators.
+
+Verification (production
+only):
+
+- `net.Dialer` ×4 — V1
+  dialer, V2 dialer, engine
+  connect, doctor probes
+  (5s/3s per-attempt
+  timeouts verified
+  earlier).
+- `net.Listen` ×1 —
+  httpserver bind (sync
+  failure surfaced
+  honestly).
+- `net.SplitHostPort` ×3 —
+  config pool-URL
+  validation + doctor
+  check.
+- `net.ParseIP` ×1 —
+  loopback classification
+  for the --http-addr /
+  --pprof warnings.
+- `net.DefaultResolver.
+  LookupHost` ×1 — doctor
+  DNS probe.
+- `net.ErrClosed` ×2 —
+  clean-shutdown detection.
+- `net.Conn`/`net.Listener`
+  — wire types only.
+- ZERO `net/url` — pool
+  URLs are parsed by the
+  manual StripScheme +
+  host:port boundary
+  validators, which is
+  stricter than url.Parse
+  for this surface
+  (userinfo/path/fragment
+  are rejected, not
+  ignored).
+- ZERO `net/netip`,
+  `net/mail`,
+  `net/textproto`.
+- `net/http` sites —
+  httpserver + 3 outbound
+  clients (all 10s timeout
+  + redirect-refuse).
+- `net/http/pprof` — opt-in
+  private mux only.
+- `net/http/httptest` —
+  test-only.
+- `net.Pipe` — appears only
+  in a comment describing
+  the V1 dialer's test
+  seam.
+
+Verdict: TRUE.
