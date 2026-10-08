@@ -22541,3 +22541,52 @@ Verification — census:
   ListenUDP — TCP only.
 
 Verdict: TRUE.
+
+## Session 3014 update (Socratic pass 1678 — directives + GODEBUG ledger)
+
+Claim under test: the
+compiler-directive
+surface is exactly the
+six platform build tags
+— no embed, generate,
+linkname, or GODEBUG
+pins.
+
+Verification — census:
+
+- `//go:build` ×6 —
+  width_windows.go
+  (windows), width_unix.go
+  (unix), width_other.go
+  (!unix && !windows),
+  gpu_linux.go +
+  gpu_linux_test.go
+  (linux), gpu_stub.go
+  (!linux) — the exact
+  platform-tag set
+  verified at the
+  s2909/s2920 tag-parity
+  pass.
+- ZERO `//go:embed` —
+  the BIP-39 wordlist is
+  a checked-in Go source
+  (init-time SHA-256
+  integrity pin), not
+  an embedded asset.
+- ZERO `//go:generate` —
+  nothing is generated.
+- ZERO `//go:linkname`/
+  `noinline`/`noescape`/
+  `nosplit`/
+  `nowritebarrier` —
+  no compiler-hint
+  escape hatches.
+- ZERO GODEBUG pins —
+  GODEBUG_NOTES.md
+  documents the
+  deliberate decision
+  (x509sha1/tlsmaxrsasize
+  etc. stay at upstream
+  defaults).
+
+Verdict: TRUE.
