@@ -15082,3 +15082,25 @@ Verification: 15 close() call sites on 14 distinct channels.
 Verdict: TRUE — single-closer everywhere; the two multi-path
 candidates are serialized by delete-then-close under the map's
 mutex.
+
+## Session 2768 update (Socratic pass 1434 — mutex-copy census)
+
+Claim under test: no struct containing sync.Mutex/RWMutex is ever
+copied — copied guards silently shard the lock domain.
+
+Verification: 29 mutex declarations across the tree; every
+mutex-bearing type is used exclusively through pointers
+(*session, *Registry, *Dashboard, *Metrics, *Fetcher,
+*pollingState, *Counter/Value receivers on TUI/dashboard).
+run.go:370/:378 declare `sync.Mutex{}` as locals captured by
+closures — a pointer-stable address taken once, never copied.
+
+Compiler-level confirmation: `go vet -copylocks ./internal/...
+./cmd/...` reports zero findings at HEAD — no value receiver on a
+mutex type, no `return v` of a locked struct, no literal
+duplication.
+
+Verdict: TRUE — lock domains are shard-free; the one class vet
+can't fully see (map values holding Mutex) is absent: all maps
+store value types or pointers-to-locked-structs, never
+Mutex-containing values.
