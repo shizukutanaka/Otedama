@@ -10146,3 +10146,7 @@ Claim verified: `service install`'s six flags (config, data-dir, bitcoin-address
 ## Session 1889 update (Socratic pass 555 — locale-set parity)
 
 Claim verified: the message catalog ships exactly the 10 languages API.md:191 documents (en/ja/zh/ko/es/fr/de/pt/ru/ar — Lang* census confirms all ten have real catalogs), matching CLAUDE.md's "主要10言語" claim. TRUE.
+
+## Session 1890 update (Socratic pass 556 — milestone checkpoint)
+
+Cycle-2 checkpoint at pass 556: branch 253 commits ahead of master (40da2e515, unchanged — master is an ancestor, clean merge). This pass-block's enumeration parity sweep continued through SPECIFICATION §3 schema (all 20 yaml tags), exit-code contract (doctor 0/1/2 defect fixed s1883), README Go-version note (stale two-part declaration fixed s1884), CONTRIBUTING→Makefile, API.md flags/metrics/locales — 2 real doc defects found and corrected, the rest TRUE.
