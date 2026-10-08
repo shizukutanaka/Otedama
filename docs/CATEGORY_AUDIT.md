@@ -17826,3 +17826,28 @@ Mkdir in production):
 
 Verdict: TRUE — permission discipline holds at
 every write surface.
+
+## Session 2887 update (Socratic pass 1552 — exec-argv census)
+
+Claim under test: every exec.Command uses a
+fixed binary name + slice argv — nothing ever
+passes through a shell.
+
+Verification (`rg exec.Command`):
+
+- 5 call sites, all in internal/daemon/
+  service.go: systemctl (189, 244), launchctl
+  (338), sc.exe (432), plus the runCmd helper
+  (522).
+- All argv are literal flags plus the constant
+  unit name / launchd label — no user-supplied
+  string reaches argv.
+- No `sh -c`/`cmd /c` anywhere: args go through
+  exec.Command's argv array, never a shell
+  parser (sc.exe's own binPath= mini-parser is
+  quoted by serviceArgs, audited s2356).
+- runCmd is a var seam for tests — production
+  path still exec.Command.
+
+Verdict: TRUE — process-spawn surface is
+argv-bound and injection-free.
