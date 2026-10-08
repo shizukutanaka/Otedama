@@ -10678,3 +10678,7 @@ Closed surfaces in this stretch: single-source pool scheme table + userinfo reda
 ## Session 2021 update (Socratic pass 687 — simulated-provider honesty)
 
 Claim verified: the Akash provider can never be mistaken for real income — the "(simulated)" suffix is load-bearing in the provider name itself (visible in the TUI, logs, and `config show`), every quote is the honest midpoint of the configured range with no randomness or time-varying process, the GPU+GeneralCompute family filter means no CPU is ever quoted inference yield, an empty device set still publishes a zero-yield GPU-scoped quote so arbitration excludes cleanly rather than stalling, confidence degrades 0.85→0.6 when the rate source is stale, and the 20% platform fee splits gross from net. TRUE.
+
+## Session 2022 update (Socratic pass 688 — mining-yield quote honesty)
+
+Claim verified: the mining quote can never overstate — the yield formula is the true expectation (hashrate share × 3.125 BTC/600 s), non-SHA256d devices are skipped outright, a wired-but-stale network-hashrate feed drops confidence to the same degraded tier as a stale price feed rather than claiming full confidence on a dated reading, live measured hashrate wins only when positive (static family estimate otherwise), and the solo payout scheme removes the 1% haircut honestly — an all-or-nothing reward carries no pool cut — with the scheme pointer swapped atomically per session so a failover to a differently-schemed pool reprices the next quote. TRUE.
