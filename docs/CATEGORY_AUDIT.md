@@ -12793,3 +12793,7 @@ Claim verified: docs/ holds 14 topical files + 12 ADR files (11 ADRs + index REA
 ## Session 2545 update (Socratic pass 1211 — ledger-sequence integrity spot check)
 
 Claim verified: the ledger now holds 1,712 `## Session` blocks; the most recent 20 headers (s2525–s2544) form a strictly increasing contiguous sequence with zero numbering collisions — the collision class recorded at s2518 (s877/1203/1269) has not recurred since numbering was put under the single-append discipline. TRUE — ledger self-consistency maintained.
+
+## Session 2546 update (Socratic pass 1212 — scorecard.yml self-consistency audit)
+
+Claim verified: the branch-added scorecard.yml (the only workflow the branch adds) is internally consistent — fires on push to `master`, weekly cron, and manual dispatch; minimal `contents: read` permission; `publish_results: false` paired with SARIF artifact upload exactly as its header explains (advisory-only, no repo-settings dependency, avoiding the Dependency-Review "Dependency graph is disabled" failure class it documents); `ossf/scorecard-action@v2.4.4` SHA-pin style matches repo convention for actions; concurrency group + timeout-minutes bounded. TRUE — the added workflow is honest, minimal, and non-blocking by design.
