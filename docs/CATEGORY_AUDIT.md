@@ -43709,3 +43709,129 @@ symbols):
   sites.
 
 Verdict: TRUE.
+
+## Session 3208 update (Socratic pass 1870 — unicode/utf8 final ledger)
+
+Claim under test:
+the
+text
+boundary
+is
+the
+small
+sanitize
+set
+(Cc+Cf+Zl+Zp+IsControl+IsSpace)
++
+`utf8.ValidString`;
+no
+manual
+rune
+decoding,
+case
+mapping,
+or
+utf16.
+
+Verification —
+census
+(complete):
+
+- `unicode.Zp`×2,
+  `unicode.Zl`×2,
+  `unicode.Cf`×2,
+  `unicode.Cc`×2 —
+  the
+  `unicode.In(r,
+  Cc,
+  Cf,
+  Zl,
+  Zp)`
+  category-
+  range
+  check
+  in
+  the
+  pool/
+  config
+  text
+  sanitizers
+  (extended
+  by
+  #1341
+  to
+  cover
+  format
+  +
+  separator
+  classes,
+  defeating
+  bidi
+  +
+  zero-
+  width
+  injection).
+- `unicode.IsControl`×1 —
+  daemon
+  `quoteToken`
+  covers
+  C1
+  controls
+  the
+  `In(...Cc)`
+  misses
+  (#809).
+- `unicode.IsSpace`×1 —
+  HAL
+  `Identity.Validate`
+  whitespace
+  rejection
+  (all
+  Unicode
+  spaces,
+  not
+  just
+  ASCII —
+  #594).
+- `utf8.ValidString`×1 —
+  BIP-39
+  wordlist
+  integrity:
+  rejects
+  invalid
+  UTF-8
+  before
+  catalog
+  compare.
+- ZERO:
+  `unicode.Is`/
+  `IsLetter`/`IsDigit`/`IsNumber`/`IsPrint`/`IsPunct`/`IsSymbol`/`IsMark`/`IsGraphic`,
+  `unicode.To`/`ToUpper`/`ToLower`/`ToTitle`/`SimpleFold`,
+  `unicode.SpecialCase`,
+  manual
+  `utf8.DecodeRune*`/`RuneLen`/`RuneCount`/`EncodeRune`/`AppendRune`,
+  `utf8.RuneError`/`RuneSelf`/`MaxRune`
+  constants,
+  `utf16`
+  (every
+  text
+  is
+  UTF-8
+  validated,
+  never
+  decoded
+  rune-
+  by-
+  rune),
+  `golang.org/x/text`
+  (ASCII+
+  Unicode-
+  category
+  checks
+  suffice —
+  no
+  normalization/
+  collation
+  needed).
+
+Verdict: TRUE.
