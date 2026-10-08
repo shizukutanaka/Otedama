@@ -19092,3 +19092,31 @@ Verification:
 Verdict: TRUE — template input is
 trusted bundle text; text/template
 is the correct package.
+
+## Session 2936 update (Socratic pass 1601 — encoding/* census)
+
+Claim under test: the `encoding/*`
+packages are limited to binary, hex,
+and json — no gob/base64/xml/csv/
+asn1/pem misuse.
+
+Verification:
+
+- `encoding/binary` → 6 sites, all
+  LittleEndian primitives (already
+  verified LE-only at s2908).
+- `encoding/hex` → 5 sites, all
+  length-checked decoders (verified
+  s2815).
+- `encoding/json` → 7 sites, all
+  fresh `var` targets per call
+  (verified s2926).
+- **Zero** `encoding/gob`, `base64`,
+  `xml`, `csv`, `asn1`, `pem` — PEM
+  CA loading goes through
+  `x509.CertPool.AppendCertsFromPEM`
+  which takes raw bytes, not a
+  `pem.Decode` misuse.
+
+Verdict: TRUE — only the three
+pre-verified encoders are used.
