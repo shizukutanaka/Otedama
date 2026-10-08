@@ -11006,3 +11006,7 @@ Claim verified: EncryptSeed/DecryptSeed can't leak material or oracle the passph
 ## Session 2102 update (Socratic pass 768 — wallet save + passphrase rotation)
 
 Claim verified: wallet save can't leave a torn or residue file — the write goes temp → write → fsync → close → chmod 0600 → atomic rename in that order, and every failure branch removes the temp file so a crash mid-save leaves either the old wallet or nothing, never a partial wallet.dat; ChangePassphrase decrypts with the old passphrase BEFORE any write (a wrong old phrase errors without touching the file — nobody can re-wrap the seed to their own phrase without knowing the old one), rejects an empty new phrase, and re-saves through the same atomic path with fresh salt+nonce. TRUE.
+
+## Session 2103 update (Socratic pass 769 — hashrate stall monitor)
+
+Claim verified: HashrateMonitor can't cry wolf or go mute — a stall only warns after maxStall CONSECUTIVE samples below the floor (a transient dip resets the counter on the next healthy sample, so single-point noise never pages); the warned flag makes the alert fire exactly once per stall episode instead of spamming every sample; and recovery both logs "hashrate recovered" once AND re-arms the flag so a later stall episode warns again — the tripwire auto-reloads rather than staying silent forever. TRUE.
