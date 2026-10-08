@@ -11866,3 +11866,7 @@ Claim verified: label values can't corrupt the exposition — escapeLabel (:383)
 ## Session 2314 update (Socratic pass 980 — milestone gate re-verified)
 
 Milestone re-check at pass 980: `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, and `go test -count=1` green on metrics/rates/arbitration/engine/poolproto(all 3). The branch stays buildable and all covered packages' suites pass at the current tip. TRUE.
+
+## Session 2315 update (Socratic pass 981 — HTTP handler write-error posture)
+
+Claim verified: the two write-error postures are each correct for their payload — healthz/readyz/index discard `io.WriteString` errors deliberately (`_, _ =`; nothing actionable once the client disconnects), while the metrics exposition checks every Fprintf and aborts on error (metrics.go:290/293/298) so a truncated scrape can't masquerade as complete. TRUE.
