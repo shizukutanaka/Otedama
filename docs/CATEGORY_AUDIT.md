@@ -43835,3 +43835,124 @@ census
   needed).
 
 Verdict: TRUE.
+
+## Session 3209 update (Socratic pass 1871 — runtime/pprof final ledger)
+
+Claim under test:
+`runtime`
+is
+read-
+only
+introspection
+(GOOS/
+NumCPU/
+MemStats/
+NumGoroutine/
+Version);
+`net/http/pprof`
+is
+opt-
+in
+private
+mux
+only;
+no
+`runtime/debug`
+control
+or
+`runtime/trace`.
+
+Verification —
+census:
+
+- `runtime`:
+  `GOOS`×39
+  (platform
+  dispatch
+  +
+  test
+  skips),
+  `NumCPU`×10
+  (worker
+  fan-
+  out
+  default),
+  `ReadMemStats`×4
+  +
+  `MemStats`×3
+  +
+  `NumGoroutine`×4
+  (go_*
+  runtime
+  collectors),
+  `Version`×3
+  (`go_info`
+  label +
+  version
+  report),
+  `GOARCH`×2.
+- `runtime.GC`×2 —
+  test-
+  only
+  leak
+  checks
+  forcing
+  collection;
+  `runtime.Goexit`×1 —
+  a
+  test
+  goroutine
+  exit
+  helper.
+  Neither
+  reaches
+  production
+  tuning.
+- `net/http/pprof`×1
+  import
+  in
+  `internal/httpserver/server.go:47`
+  —
+  `pprof.Index`/`Cmdline`/`Handler`/`Profile`/`Symbol`/`Trace`
+  six
+  symbols
+  mounted
+  on
+  the
+  **private**
+  mux,
+  gated
+  behind
+  `--pprof`,
+  with
+  a
+  non-
+  loopback
+  warning
+  (#504).
+- ZERO:
+  `runtime/debug`
+  (`SetGCPercent`/`SetMemoryLimit`/`FreeOSMemory`/`PrintStack`/`SetTraceback`/`WriteHeapDump`
+  —
+  no
+  GC
+  tuning
+  or
+  heap
+  dumps),
+  `runtime/trace`,
+  `runtime.GOMAXPROCS`/`LockOSThread`/`UnlockOSThread`/`SetCPUProfileRate`/`BlockProfileRate`/`MutexProfileFraction`/`SetFinalizer`/`KeepAlive`
+  misuse,
+  `runtime.Gosched`-
+  spin,
+  `runtime.Caller`/
+  stack
+  introspection,
+  `runtime.MemProfile*`,
+  `runtime/trace`-region
+  instrumentation,
+  `debug.SetGCPercent`-style
+  env
+  overrides.
+
+Verdict: TRUE.
