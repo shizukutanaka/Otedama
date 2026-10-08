@@ -10118,3 +10118,7 @@ Claim verified: `pools[].payout_scheme` accepts exactly the documented set — e
 ## Session 1882 update (Socratic pass 548 — SPECIFICATION §3 schema completeness)
 
 Claim verified: SPECIFICATION §3's config table covers all 20 yaml tags in internal/config — 14 top-level fields (bitcoin_address, bitcoin_addresses, data_dir, language, log_level, log_format, arbitration_hysteresis_pct, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, http_addr + pools/workers containers) and all 5 pools[]. subfields + workers.name, each with env var, default, and validation. G16's fix remains intact. TRUE.
+
+## Session 1883 update (Socratic pass 549 — SPECIFICATION exit-code table)
+
+Defect found and fixed: SPECIFICATION §2's exit-code table presented 0/1/64/78 as the script-reliable contract but omitted `doctor`'s distinct result-graded set (0 pass/skip, 1 warn, 2 fail — doctor.go:111), so a script mapping `1` → "runtime failure" would misclassify a doctor warning. Added the doctor set to §2 with its Report.ExitCode reference.

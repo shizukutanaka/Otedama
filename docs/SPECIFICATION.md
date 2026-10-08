@@ -48,7 +48,9 @@ otedama <command> [flags]
 
 Scripts may rely on these. `run` returns `78` if the resolved config fails
 validation, `64` for flag-parse errors, `1` for a runtime error, `0` on clean
-shutdown (SIGINT/SIGTERM).
+shutdown (SIGINT/SIGTERM). `doctor` uses its own result-graded set instead —
+`0` all checks passed or skipped, `1` at least one warning, `2` at least one
+failure (`Report.ExitCode`).
 
 ## 3. Configuration
 

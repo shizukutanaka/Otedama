@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1883 — docs/SPECIFICATION.md)
+
+- SPECIFICATION §2 exit-code table now documents `doctor`'s result-graded
+  codes (0 pass/skip, 1 warn, 2 fail) alongside the general 0/1/64/78 contract.
+
 ### Fixed (session 1866 — CLAUDE.md)
 
 - Branch-strategy text now names the real default branch `master` in both places (the repo has no `main` ref); GitHub Flow semantics unchanged.
