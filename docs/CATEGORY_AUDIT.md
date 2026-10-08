@@ -15880,3 +15880,32 @@ Verification — all 6 sites (stratumv1 is the only hex wire):
 
 Verdict: TRUE — no silently-truncated or nil wire field;
 every decode enforces both error and byte length.
+
+## Session 2799 update (Socratic pass 1464 — tls.Config census)
+
+Claim under test: every tls.Config literal enforces
+verification with a modern version floor; no downgrade or
+skip-verify path exists.
+
+Verification — the complete set:
+
+- Exactly two builder pairs, structurally identical:
+  stratumv1/tls.go:31-51 and stratum/tls.go:34-55 —
+  defaultTLSConfig = {MinVersion: TLS1.2}; the extra-CA
+  variant clones the system pool, appends the PEM bundle,
+  hard-fails on undecodable PEM (fail-closed), still
+  MinVersion TLS1.2.
+- Zero InsecureSkipVerify anywhere in the tree.
+- ServerName comes from the dial address (tls.Dial
+  family) — certificate identity always checked against
+  the configured pool host; userinfo redaction verified
+  separately.
+- dialer.go:120 "MinVersion: 2" is the SV2 *protocol*
+  version field in SetupConnection (uint16 wire type), not
+  a tls.Config — distinct constant domain.
+- No plaintext fallback: stratum+tls:// and
+  stratum+v2tls:// construct TLS-only dial paths; the
+  plain-TCP scheme can never reach the TLS builders.
+
+Verdict: TRUE — one TLS posture: TLS≥1.2, verify-always,
+system-roots-plus-additive, fail-closed CA parsing.
