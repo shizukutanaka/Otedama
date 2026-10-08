@@ -11782,3 +11782,7 @@ Claim verified: the merged hardening invariants hold on this branch — worker-p
 ## Session 2293 update (Socratic pass 959 — rpc-id precision census)
 
 Claim verified: V1 response-id correlation cannot lose precision — rpcMessage.ID is `any`; uintID() converts float64/int/int64/string to u64; pending-ledger keys are our own small sequential u64 ids, so any matching response id fits float64's 2^53 exact-integer range and round-trips losslessly. A fractional/negative/non-numeric id truncates to a non-existent key and is dead-lettered (the pending entry then reaps at the 60s call timeout — bounded). TRUE.
+
+## Session 2294 update (Socratic pass 960 — milestone gate)
+
+Claim verified: milestone pass 960 — local gate re-run and green: `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1 ./internal/engine/ ./internal/arbitration/ ./internal/miner/ ./internal/stratum/...` all ok (engine 25.2s). ~330 verdict passes cumulative on this branch. TRUE.
