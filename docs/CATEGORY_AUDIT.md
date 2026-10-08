@@ -10876,3 +10876,7 @@ Claim verified: the decoder can't be memory-exhausted or emit inconsistent frame
 ## Session 2070 update (Socratic pass 736 — wire primitive bounds)
 
 Claim verified: the wire primitives can't produce or accept malformed encodings — appendStr0_255/appendB0_255/appendB0_32 error when the value exceeds the representable length (255/255/32); every decoder reads the length prefix first and allocates only that many bytes via io.ReadFull (a short read is an error, not a partial slice); and B0_32 deliberately has NO reader — Postel's law applied consciously: strict on encode (we emit only spec-conformant ≤32 bytes), lenient on decode (getB0_255 accepts a non-conformant 33–255-byte extranonce rather than dropping a workable connection — bounded either way). TRUE.
+
+## Session 2071 update (Socratic pass 737 — handshake codec positionality)
+
+Claim verified: the handshake codec is positionally honest — MaxTargetUnconstrained emits the real all-ones U256 because the spec layout is fixed (omitting it would misalign the frame); decoders attribute errors to the exact field (ReqID/User/NominalHashrate/MaxTarget each wrap their own error); GroupChannelID is decoded even though a single-standard-channel client never consumes it — the bytes are real wire fields and reading them keeps the frame positionally correct; and the Extranonce Postel split is applied consistently (appendB0_32 strict on encode, getB0_255 lenient on decode, both bounded). (Maintainer-gated package — verdict only.) TRUE.
