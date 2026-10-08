@@ -10058,3 +10058,7 @@ Defects found and fixed: CLAUDE.md's branch-strategy text named `main` twice ("`
 ## Session 1867 update (Socratic pass 533 — CONTRIBUTING make-target parity)
 
 Claim verified: CONTRIBUTING.md references exactly four make targets (setup/build/lint/test); all four exist in the Makefile's 32-target inventory. No phantom commands in the contributor guide. TRUE.
+
+## Session 1868 update (Socratic pass 534 — ADR inventory parity)
+
+Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 (11 files, contiguous numbering, no gaps) plus the index README — CLAUDE.md's "ADR-001〜011" is exact. TRUE.
