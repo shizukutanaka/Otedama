@@ -13719,3 +13719,20 @@ the gosec set carries prose justification on the sites that need it
 (e.g. service.go:407 %q-vs-Windows-path, runtime.go:63 label quoting).
 
 Verdict: FALSE (one dead bare-nolint) → fixed; convention now uniform.
+
+## Session 2712 update (Socratic pass 1378 — gosec-suppression justification audit)
+
+Claim under test: each of the 51 `//nolint:gosec` suppressions
+identifies why the flagged construct is safe.
+
+Verification: 50/51 carry an inline `// reason` after the directive.
+The lone site without a trailing reason —
+`internal/httpserver/server.go:47` (`"net/http/pprof" //nolint:gosec`) —
+is instead justified by the four-line comment block immediately above
+it: the import is *not* a blank import (which would register
+`/debug/pprof` on `http.DefaultServeMux`); handlers are wired
+explicitly onto the private mux behind the `--pprof` flag. That is a
+stronger justification than a one-word trailing note and matches the
+s903 httpserver verdict.
+
+Verdict: TRUE — 51/51 suppressions are self-documenting.
