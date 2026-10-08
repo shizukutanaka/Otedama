@@ -27265,3 +27265,86 @@ census:
   zero.
 
 Verdict: TRUE.
+
+## Session 3090 update (Socratic pass 1754 — strconv complete ledger)
+
+Claim under test: the
+strconv surface is
+ParseUint/FormatUint
+wire conversions
+plus the env/config
+ParseFloat — all
+bit-size faithful.
+
+Verification —
+census:
+
+- `strconv.FormatUint`×10 —
+  the wire
+  number
+  encoding
+  (U24, U32,
+  U64
+  stringify).
+- `strconv.ParseUint`×7 —
+  the wire
+  number
+  decoding —
+  all
+  bitSize
+  32
+  (verified
+  bitsize
+  class).
+- `strconv.ParseFloat`×6 —
+  the
+  env/config
+  numeric
+  parse
+  (verified
+  ParseFloat
+  class).
+- `strconv.Atoi`×2 —
+  the
+  port
+  parse
+  (range-
+  checked).
+- `strconv.Quote`×1 —
+  the
+  service
+  argv
+  quoting.
+- `strconv.Itoa`×1 —
+  residual.
+- ZERO
+  `ParseBool`,
+  `ParseInt`,
+  `ParseComplex`,
+  `FormatBool`,
+  `FormatInt`,
+  `FormatFloat`,
+  `FormatComplex`,
+  `Sscanf`,
+  `AppendXxx`,
+  `CanBackquote`,
+  `QuotedPrefix`,
+  `Unquote`,
+  `UnquoteChar`,
+  `IsGraphic`,
+  `IsPrint`,
+  `NumError` —
+  the
+  non-wire
+  surface is
+  absent.
+- ZERO
+  manual
+  base
+  conversions
+  (no
+  hex↔dec
+  hand
+  loops).
+
+Verdict: TRUE.
