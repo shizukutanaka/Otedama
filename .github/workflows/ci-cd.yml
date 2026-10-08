@@ -138,16 +138,17 @@ jobs:
     
     - name: Build for multiple platforms
       run: |
+        LDFLAGS="-s -w -X 'github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }}' -X 'github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}' -X 'github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
         # Linux
-        GOOS=linux GOARCH=amd64 go build -o dist/otedama-linux-amd64 cmd/otedama/*.go
-        GOOS=linux GOARCH=arm64 go build -o dist/otedama-linux-arm64 cmd/otedama/*.go
+        GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-linux-amd64 ./cmd/otedama
+        GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/otedama-linux-arm64 ./cmd/otedama
         
         # Windows
-        GOOS=windows GOARCH=amd64 go build -o dist/otedama-windows-amd64.exe cmd/otedama/*.go
+        GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-windows-amd64.exe ./cmd/otedama
         
         # macOS
-        GOOS=darwin GOARCH=amd64 go build -o dist/otedama-darwin-amd64 cmd/otedama/*.go
-        GOOS=darwin GOARCH=arm64 go build -o dist/otedama-darwin-arm64 cmd/otedama/*.go
+        GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-darwin-amd64 ./cmd/otedama
+        GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/otedama-darwin-arm64 ./cmd/otedama
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
