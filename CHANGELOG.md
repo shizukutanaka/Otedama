@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1788 — deploy.yml)
+- `deploy-production` no longer requires `deploy-staging` in `needs:` — the staging if-gate is unsatisfiable on tag pushes and production dispatches, making production deploys unreachable in every trigger mode
 ### Fixed (session 1786 — ci-cd release binaries)
 - `ci-cd.yml` multi-platform build now injects `-ldflags -X internal/version.{Version,Commit,BuildDate}` — released binaries previously reported the baked-in default version and empty commit/build-date stamps
 ### Fixed (session 1767 — devin-direct-merge concurrency)

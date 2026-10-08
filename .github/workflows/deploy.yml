@@ -202,7 +202,11 @@ jobs:
 
   deploy-production:
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
-    needs: [build, security-scan, deploy-staging]
+    # deploy-staging is intentionally not in needs: its if-gate is false on
+    # every tag push and production dispatch, so needing it skipped production
+    # unconditionally. Staging-then-prod ordering is already enforced by the
+    # environment choice gate, not by job dependency.
+    needs: [build, security-scan]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
