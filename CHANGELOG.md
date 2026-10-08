@@ -33,6 +33,15 @@ claims no longer describe shipped behavior and were never errata'd):
   connections dispatch through `poolproto` since session 91.
 - "six parallel checks" for `otedama doctor` — the check set has grown
   to 17.
+- "Supply chain: all GitHub Actions are SHA-pinned" — no Action is
+  SHA-pinned; every `uses:` is a @v3–@v6 major-version tag (same gap
+  recorded in docs/AUDIT_CHECKLIST.md).
+- "Cosign keyless signing for release artifacts" — release.yml emits no
+  signatures; install.sh retains optional cosign verification but there
+  is nothing signed to verify.
+- `legacy-v2` branch — referenced by the 2.1.9 and Earlier Versions
+  entries, but no such ref exists on origin; the v2.x source is not
+  carried in this repository's branch set.
 
 ### Fixed (session 2647 — audit-cycle backlog entries)
 
