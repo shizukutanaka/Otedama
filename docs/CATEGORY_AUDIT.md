@@ -13784,3 +13784,26 @@ Verification:
 Verdict: TRUE — suppression surface fully accounted for:
 117 total = 62 errcheck + 51 gosec + 3 gocritic + 1 nilerr,
 all named, all justified (this pass closes s2711–s2714's census).
+
+## Session 2715 update (Socratic pass 1381 — errors.Is target census)
+
+Claim under test: every `errors.Is(err, X)` second argument is a
+declared sentinel — never a fresh or computed error value that could
+never match (the classic `errors.Is` foot-gun).
+
+Verification: 19 non-test `errors.Is` call sites, 10 distinct targets.
+
+- **Stdlib sentinels (16)**: `os.ErrNotExist`×6, `flag.ErrHelp`×5,
+  `context.DeadlineExceeded`×2, `io.EOF`, `http.ErrServerClosed`,
+  `context.Canceled`, `bufio.ErrBufferFull` — all exported package
+  vars with stable identity.
+- **Custom sentinels (3)** — verified declared as package-level
+  `var ... = errors.New(...)`: `lightning.ErrWrongPassphrase`
+  (seedstore.go:38), `btccrypto.ErrNotBech32` + `ErrNotBase58`
+  (btccrypto.go:78,83).
+- **Zero computed/comparison targets** — no `errors.Is(err, errX)`
+  where errX is a local value, and zero `==`-style sentinel
+  comparisons remain in non-test code (the s1157/errors.Is convention
+  migration holds).
+
+Verdict: TRUE.
