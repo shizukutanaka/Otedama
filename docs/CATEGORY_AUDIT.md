@@ -12082,3 +12082,7 @@ Claim verified: session.Close is idempotent via closeOnce — ctxCancel, cancelP
 ## Session 2368 update (Socratic pass 1034 — numeric validation ordering)
 
 Claim verified: appendNumericIssues checks math.IsNaN/IsInf on all five economic float fields BEFORE any range comparison (config.go:702–717) — the ordering matters because x<0 is false for NaN, so a non-finite value would otherwise sail through every range check and poison arbitration math downstream (documented rationale inline); each range check then quotes the offending value (hysteresis [0,1), curtail/min-yield/power/price >=0 with "0 = disabled" semantics stated in the message) (:718–743). TRUE.
+
+## Session 2369 update (Socratic pass 1035 — log_level/log_format enum validation)
+
+Claim verified: appendLogIssues enum-gates log_level to debug/info/warn/error and log_format to text/json, each issue quoting the offending value (config.go:660–678); the "" case is explicitly unreachable post-Resolve (defaults supply "info"/"text") but guarded anyway — a hand-built Config that skips Resolve can't silently smuggle an invalid value into the logger sink (which would otherwise degrade to a default or misparse); both messages name the legal set so the fix is self-evident. TRUE.
