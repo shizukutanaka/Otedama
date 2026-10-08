@@ -17619,3 +17619,23 @@ Verification:
 
 Verdict: TRUE — the cross-compile matrix holds
 on the branch tip.
+
+## Session 2877 update (Socratic pass 1542 — binary smoke)
+
+Claim under test: a freshly built binary from
+the branch tip boots and answers the basic
+CLI surfaces honestly.
+
+Verification (`go build ./cmd/otedama` → run):
+
+- `otedama version` → `v3.0.0-alpha.1-dev
+  (unknown) built unknown with go1.27.1 for
+  darwin/arm64` — honest dev/unknown markers
+  when ldflags are absent.
+- `otedama --help` → lists all 6 subcommands
+  (run/version/config/service/doctor/wallet).
+- `otedama doctor --help` → flag surface intact
+  (-bitcoin-address, -config, -data-dir, -json).
+
+Verdict: TRUE — the shipped binary boots and
+its command surface matches the documentation.
