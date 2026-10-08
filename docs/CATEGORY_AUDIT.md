@@ -18955,3 +18955,24 @@ Verification:
 
 Verdict: TRUE — zero weak crypto;
 all primitives are modern.
+
+## Session 2931 update (Socratic pass 1596 — syscall census)
+
+Claim under test: no direct syscalls
+bypass the stdlib — `syscall` is
+imported only for the SIGTERM constant.
+
+Verification (1 site):
+
+- `syscall.SIGTERM` at run.go:196 —
+  paired with `os.Interrupt` in the
+  single `signal.NotifyContext`
+  graceful-shutdown wiring.
+- Zero `syscall.Syscall`,
+  `syscall.RawSyscall`,
+  `syscall.ForkExec`, `syscall.Exec`,
+  `syscall.Kill`, `syscall.Mmap` —
+  no direct kernel calls.
+
+Verdict: TRUE — syscall is imported
+only for the SIGTERM name.
