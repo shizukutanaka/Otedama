@@ -34274,3 +34274,138 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3143 update (Socratic pass 1807 — encoding/binary detail ledger)
+
+Claim under test: the
+binary
+codec
+surface is
+pure
+little-endian
+hand-rolled
+read/write —
+with
+BigEndian
+and every
+reflection-
+based
+codec
+API
+zero.
+
+Verification —
+census:
+
+- `binary.LittleEndian.Uint32`×29 —
+  the
+  dominant
+  wire
+  decode
+  (frame
+  fields,
+  headers,
+  job
+  ids).
+- `binary.LittleEndian.PutUint32`×23 —
+  the
+  dominant
+  wire
+  encode.
+- `binary.LittleEndian.Uint16`×4 +
+  `PutUint16`×3 —
+  u16
+  fields.
+- `binary.LittleEndian.PutUint64`×3 +
+  `Uint64`×1 —
+  u64
+  fields
+  (nonces,
+  targets).
+- `binary.LittleEndian.AppendUint32`×1 +
+  `AppendUint16`×1 —
+  the
+  Go1.19+
+  append
+  API
+  adoption.
+- Total:
+  65
+  little-endian
+  operations,
+  matching
+  the
+  "LE
+  only"
+  wire
+  convention
+  (Stratum
+  V2
+  is
+  LE
+  on
+  the
+  wire;
+  Bitcoin
+  header
+  fields
+  are
+  LE).
+- ZERO
+  `binary.BigEndian.*`
+  —
+  no
+  big-endian
+  decode/
+  encode
+  anywhere.
+- ZERO
+  `binary.Read`,
+  `binary.Write`,
+  `binary.Size`,
+  `binary.Decode`,
+  `binary.Encode`,
+  `binary.NativeEndian`,
+  `binary.AppendByteOrder` —
+  the
+  reflection-
+  based
+  codec
+  API
+  is
+  absent;
+  every
+  field
+  is
+  explicitly
+  sized
+  (bound-
+  before-
+  read
+  verified
+  in
+  the
+  decoder
+  classes).
+- ZERO
+  `binary.Uvarint`,
+  `Varint`,
+  `PutUvarint`,
+  `PutVarint`,
+  `ReadUvarint`,
+  `ReadVarint`,
+  `AppendUvarint`,
+  `AppendVarint` —
+  varint
+  encoding
+  absent
+  (SV2
+  uses
+  fixed
+  fields
+  and
+  u16/u24
+  length
+  prefixes).
+
+Verdict: TRUE.
