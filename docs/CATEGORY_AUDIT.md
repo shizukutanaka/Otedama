@@ -17733,3 +17733,29 @@ Verification (`rg` over internal/ + cmd/):
 
 Verdict: TRUE — all security-relevant
 randomness comes from crypto/rand.
+
+## Session 2883 update (Socratic pass 1548 — HTTP-client posture census)
+
+Claim under test: every outbound HTTP client
+refuses redirects and bounds the request; no
+code touches http.Get/DefaultClient.
+
+Verification (`rg` over internal/ + cmd/):
+
+- 3 outbound clients, all with `Timeout` +
+  `CheckRedirect` refusal: rates/fetcher.go:182
+  (10s), rates/hashrate.go:110 (10s),
+  doctor/checks.go:875 clockSkewDefaultClient.
+- Rationale documented inline at each site:
+  hardcoded HTTPS endpoints, so any 30x is an
+  https→http downgrade attack.
+- Zero `http.Get`/`http.Post`/`http.DefaultClient`
+  call sites.
+- Server side (httpserver/server.go:100-103):
+  ReadHeader 5s, Read 10s, Write 10s, Idle 60s —
+  slowloris-bounded.
+- Doctor network probes use net.Dialer timeouts
+  (checks.go:372 5s, :845 3s).
+
+Verdict: TRUE — uniform no-redirect + bounded
+posture across every HTTP surface.
