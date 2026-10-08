@@ -23496,3 +23496,56 @@ Verification — census:
   env mutation.
 
 Verdict: TRUE.
+
+## Session 3032 update (Socratic pass 1696 — encoding/hex + yaml ledger)
+
+Claim under test: hex
+decoding is always
+length-checked and the
+only structured decoder
+beyond JSON is the
+pinned YAML package.
+
+Verification — census:
+
+- `hex.DecodeString`×6 —
+  every call validates
+  the decoded length
+  afterward (the
+  hex-decode-bound
+  class verified this:
+  extranonce, nbits,
+  coinbase inputs all
+  compare len() to the
+  expected size before
+  use).
+- `hex.EncodeToString`×4
+  — display/digest
+  formatting only.
+- `yaml.NewDecoder`×1 —
+  the config loader's
+  single decode site
+  via go.yaml.in/yaml/v3
+  (the archived
+  gopkg.in/yaml.v3 was
+  migrated in a merged
+  earlier PR).
+- Production imports:
+  `encoding/binary`
+  (LE codec — counted
+  earlier), `encoding/
+  hex`, `encoding/
+  json` only.
+- ZERO encoding/gob/
+  xml/asn1/csv/pem in
+  production —
+  `encoding/pem`
+  appears only in
+  tests (TLS fixture
+  loading).
+- ZERO base64/base32
+  in production —
+  wire formats are
+  hex + raw JSON.
+
+Verdict: TRUE.
