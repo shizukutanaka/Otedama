@@ -13312,3 +13312,7 @@ Verified TRUE: Dependabot + unsigned-release corrections (session 492) still acc
 ## Session 2670 update (Socratic pass 1336 — SUSTAINABILITY §3 subsidy claim)
 
 Corrected §3's "block subsidy は計算式で導出…既に対応済み" — FALSE: `internal/provider/mining.go:131` is a hardcoded `blockRewardBTC = 3.125` constant; the yield estimator has no block-height source (V1 mining.notify carries none) so formula derivation is impossible until Track D node integration lands. Doc now records the intent + correction. Other sections verified TRUE: §5 SHA-pin/cosign 未実施 disclosure accurate (all @vN tags, no signatures), §9 fuzz census "23 targets/14 files/9 pkgs, stratum 7個" — stratum has exactly 7, §6/§7 flag names + Renovate-swap + OTel-scope claims accurate, §10 Apache/DCO/SECURITY status corrected inline. claim corrected: docs/SUSTAINABILITY.md
+
+## Session 2671 update (Socratic pass 1337 — DEPLOYMENT.md service sections)
+
+Verified TRUE: systemd hardening block (NoNewPrivileges/ProtectHome=read-only/PrivateTmp/Restart=on-failure/RestartSec=10s) exactly matches generated unit (service.go:280-289, test-pinned); launchd KeepAlive present (:373); Windows `sc.exe create Otedama` + `DisplayName=Otedama Mining Service` + `start=auto` exact (:407-410); k8s example `--http-addr=0.0.0.0:9090`, uid/fsGroup 65532, OTEDAMA_* env names all consistent with Dockerfile+config; session-485 Windows-event-log correction honest. claim verified: docs/DEPLOYMENT.md — TRUE
