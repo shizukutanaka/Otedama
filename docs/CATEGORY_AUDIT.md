@@ -24903,3 +24903,52 @@ Verification:
   overrides.
 
 Verdict: TRUE.
+
+## Session 3058 update (Socratic pass 1722 — error-construction ledger)
+
+Claim under test: the
+static/dynamic split
+is clean — literals
+through errors.New,
+formatting through
+fmt.Errorf, checks
+through Is/As.
+
+Verification — census:
+
+- `errors.New`×36 —
+  every call takes a
+  string literal
+  (verified by
+  negative match:
+  zero
+  `errors.New(fmt.…)`)
+  — the verb-free
+  literal convention
+  landed.
+- `fmt.Errorf`×260 —
+  formatted errors
+  carrying context;
+  %w appears at the
+  wrap sites
+  (verified).
+- `errors.Is`×22 —
+  all sentinel
+  comparisons.
+- `errors.As`×1 —
+  the typed
+  extraction.
+- `errors.Join`×2 —
+  the composite
+  sites.
+- ZERO `errors.Unwrap`
+  — unwrapping is
+  always through
+  Is/As (never
+  single-step).
+- ZERO `fmt.Errorf`
+  without a verb —
+  grep-verified
+  earlier.
+
+Verdict: TRUE.
