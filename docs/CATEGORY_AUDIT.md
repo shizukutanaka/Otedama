@@ -12106,3 +12106,7 @@ Claim verified: Uninstall dispatches per-GOOS and is the mirror of install — s
 ## Session 2374 update (Socratic pass 1040 — MILESTONE: full gate re-verified)
 
 Milestone re-verification at pass 1040 (post-s2373): `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1` on the 10 scoped packages all ok (metrics 0.014s, rates 1.806s, arbitration 0.025s, engine 25.618s, poolproto 0.018s, stratumv1 0.510s, stratumv2 0.422s, miner 0.038s, tui 1.167s, httpserver 1.019s). Gate remains green — 1031 passes with verdicts recorded, defects only fixed on proof.
+
+## Session 2375 update (Socratic pass 1041 — V1 session wiring + readLoop teardown)
+
+Claim verified: the reader is bufio.NewReaderSize(conn.raw, maxLineBytes) so oversized lines are bounded at the buffer itself, not just checked after the fact (stratumv1.go:189); readLoop defers BOTH closeChannels and cancelPending — on any exit (EOF, network error, oversized line, ctx cancel) the sole closer and the sole pending-canceller each run exactly once and waiters never leak (:211–218); a cooperative ctx check tops the loop plus a generous 5-minute read deadline per read so a wedged-but-alive pool can't hang the session (:220–230); outbound channels are bounded (jobsCh 8 / diffCh 1 / noticeCh 8) with non-blocking sends that drop rather than stall the read loop (:190–192); start() wraps ctx so Close can signal the loop (:197–201). TRUE.
