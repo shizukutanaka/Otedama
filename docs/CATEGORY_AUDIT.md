@@ -13908,3 +13908,26 @@ Verification at HEAD (post s2711–s2719 merges):
 
 Verdict: TRUE — milestone gate green; the ledger's claimed
 invariants hold at the current tip.
+
+## Session 2721 update (Socratic pass 1387 — runtime.GOOS string census)
+
+Claim under test: platform-gate string literals are valid GOOS names —
+a typo ("darwin " / "window" / "macos") compiles but silently never
+matches.
+
+Verification: all `runtime.GOOS` comparison sites.
+
+- Valid literals only: `"windows"`×3 (doctor checks.go:221,283 +
+  config DefaultDataDir), `"linux"`×1 (checks.go:809),
+  `"darwin"` (config.go:604). No misspellings.
+- `config.DefaultDataDir` dispatch is exhaustively correct:
+  windows→%APPDATA%, darwin→~/Library/Application Support,
+  default→XDG_DATA_HOME with home fallback — per-OS first-principles
+  behavior (s471 covered the XDG layer; literals now verified too).
+- `daemon/service.go:40` keeps the `var goos = runtime.GOOS`
+  injectable seam documented; production dispatch uses the var (so
+  tests can exercise other-platform branches), and user-facing
+  `unsupported platform %q` errors report the real value.
+- `version.go:58` uses GOOS/GOARCH only for reporting, not gating.
+
+Verdict: TRUE.
