@@ -24306,3 +24306,57 @@ Verdict: TRUE —
 fully pure-Go,
 statically-linked
 releases.
+
+## Session 3047 update (Socratic pass 1711 — init() ledger)
+
+Claim under test: every
+init() is pure
+registration or
+invariant pinning —
+no side effects.
+
+Verification — census
+of all 4 `init()`:
+
+- stratumv2/dialer.go:
+  31 — registers the
+  V2 dialer into the
+  poolproto registry.
+- stratumv1.go:758 —
+  registers the V1
+  dialer.
+- btccrypto/
+  secp256k1.go:48 —
+  registers the
+  secp256k1 payout
+  scheme into the
+  bounded scheme
+  registry.
+- english_wordlist.go:
+  35 — computes and
+  panics on the
+  BIP-39 wordlist
+  SHA-256 at init
+  (the integrity
+  pin).
+- All four are
+  package-local
+  register or
+  verify-only:
+  verified the
+  init-side-effect
+  class earlier —
+  zero I/O, zero
+  network, zero
+  env mutation, zero
+  shared-state
+  writes beyond
+  the registry map
+  guards.
+- ZERO TestMain
+  init-style
+  side channels —
+  test setup is
+  per-test.
+
+Verdict: TRUE.
