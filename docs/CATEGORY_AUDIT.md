@@ -9355,3 +9355,9 @@ Residuals: `checksums.txt` is created after `build-binaries` finishes, so there 
 **Also verified — dormant-config census (all TRUE):** (a) `.goreleaser.yaml` is invoked by no workflow — verified by grep; it is a local `goreleaser release` path whose archive/checksum names do match install.sh's candidate list (`otedama_<ver>_<os>_<arch>.tar.gz`, `otedama_<ver>_checksums.txt`); (b) `before.hooks: go generate ./...` is a harmless no-op (zero `//go:generate` directives in the tree); (c) VERIFY.md's "not yet live" banner was stale post-s1698/1699 — updated to state that aggregate `checksums.txt` now ships from both release.yml and ci.yml while cosign/SBOM remain absent (transit-corruption coverage, not tamper provenance).
 
 Residuals: goreleaser `brews` points at `shizukutanaka/homebrew-tap` which may not exist — same opt-in class as release.yml's HOMEBREW_TAP_REPO gate; only reachable when someone runs goreleaser manually.
+
+## Session 1702 update (Socratic pass 368)
+
+**Claim verified: "no workflow step can execute a nonexistent script" — TRUE.** Census of all 8 workflows found exactly one script-path reference: `code-review.yml:71` `node scripts/code-review/generate-comment.js`. The file doesn't exist and `scripts/` is a CLAUDE.md forbidden path (can never be created). The step is gated behind `has_node == 'true'`, which requires a `package.json` — absent on this Go-only repo — so the step is unreachable and the `has_node != 'true'` fallback comment always runs instead. Same conditional-dead class as the previously recorded JS-only `common-issues`/`performance-check` no-ops.
+
+Residuals: if a `package.json` were ever added (not itself forbidden), the step would execute and fail on the missing `scripts/` file — a latent tripwire that only activates on an out-of-architecture change; noted, not a live defect.
