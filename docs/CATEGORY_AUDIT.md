@@ -11062,3 +11062,7 @@ Claim verified: the package-level logger can't race, double-initialize, or be ni
 ## Session 2116 update (Socratic pass 782 — fanIn shutdown completeness)
 
 Claim verified: the generic fan-in can't wedge a producer, close early, or leak — the out buffer is bufFactor×N clamped to [1,64] (bounded, never zero-capacity-starved); every producer exits on ctx.Done at BOTH the receive and the forward send (a stalled downstream can't pin a producer goroutine); the dedicated closer waits on wg so out is closed only after the last producer exits — send-on-closed and close-before-final-send are both structurally impossible; and an input closing yields a clean goroutine exit, so all N producers converge to wg.Wait deterministically. TRUE.
+
+## Session 2117 update (Socratic pass 783 — metrics name validation + exposition atomicity)
+
+Claim verified: an invalid metric/label name can never reach the wire — isValidMetricName/isValidLabelName enforce the Prometheus character classes character-by-character with the leading-digit prohibition indexed by position (`i > 0`, so a rune-width-aware check, not a byte-index lie); validateLabelNames panics at registration time — fail-fast at development, never a corrupted scrape in production; WriteText holds RLock through the whole snapshot and formats every value while locked, so a scrape can never interleave a half-updated series; entries are emitted sorted (deterministic exposition); and formatFloat renders NaN/±Inf per the exposition spec rather than a non-parseable decimal. TRUE.
