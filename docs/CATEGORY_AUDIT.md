@@ -13328,3 +13328,7 @@ All 17 sections + resolution markers still accurate at session 2673: active sect
 ## Session 2674 update (Socratic pass 1340 — milestone gate)
 
 MILESTONE re-verification at session 2674: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/miner/stratum/poolproto+stratumv1+stratumv2/arbitration/config — all 8 packages pass. claim verified: milestone gate — TRUE
+
+## Session 2675 update (Socratic pass 1341 — skills/release-procedure.md)
+
+claim corrected: skills/release-procedure.md — three false clusters fixed in place. (a) "mainブランチ"×2 → `master` (no `main` ref exists). (b) Stage-4's "GPG署名・SBOM含めます" — release.yml has neither (signing lives only in the aspirational .goreleaser.yaml); "Docker Hub公開" — actual registry is ghcr.io via ci-cd.yml semver tags `3.0.0`/`3.0`+sha, so the claimed `otedama:v3.*`/`latest` tag set was doubly wrong. (c) Stage-5's "Snap/AUR も自動化" — only update-homebrew exists (and is dormant unless vars.HOMEBREW_TAP_REPO is set). Verified TRUE alongside: tag push → release.yml trigger (`on: push: tags: ['v*']`), checksums job emits per-asset .sha256 + combined checksums.txt (matches install.sh probe contract), stage-2 `docs/releases/` path is prescriptive create-as.
