@@ -13324,3 +13324,7 @@ Verified TRUE: "workers spawn one per runtime.NumCPU(), GOMAXPROCS caps parallel
 ## Session 2673 update (Socratic pass 1339 — KNOWN_LIMITATIONS re-verification)
 
 All 17 sections + resolution markers still accurate at session 2673: active sections (§1 simulated AI yield, §2 Noise-unwired→v2tls, §4 GPU-detect-only, §5 PQ-scaffold, §6 receive-only Lightning, §8 no-ASIC-detect, §13 CI Go-pin failures — #1344-class remains broken by maintainer decision, §14 DATUM reserved-scheme fail-fast, §17 install.sh no compatible release — remote tags still only v2.1.4–v2.1.9) all match shipped code; RESOLVED sections have no regressions. claim verified: docs/KNOWN_LIMITATIONS.md — TRUE
+
+## Session 2674 update (Socratic pass 1340 — milestone gate)
+
+MILESTONE re-verification at session 2674: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/miner/stratum/poolproto+stratumv1+stratumv2/arbitration/config — all 8 packages pass. claim verified: milestone gate — TRUE
