@@ -11970,3 +11970,7 @@ Claim verified: HAL Registry's edge behavior is fully honest — zero value is d
 ## Session 2340 update (Socratic pass 1006 — V1 extranonce parse strictness)
 
 Claim verified: the V1 extranonce boundary is strict — extranonce1OK rejects empty AND non-hex (parse.go:202–208) before the silent-skip downstream path can see it; parseSetExtranonce type-checks every element then bounds en2 size (:210–228); parseSubscribeResult validates envelope shape and checks en2Size on the float BEFORE int() conversion, closing the 64.5/-0.5 truncation bypass (:318+); notices go through the shared sanitizer at a 256-rune cap (:236–240). TRUE.
+
+## Session 2341 update (Socratic pass 1007 — admin-surface handler honesty)
+
+Claim verified: every admin handler reports honestly — readyz is a true tri-state driven only by the SetReady atomic (server.go:177–186); Addr() returns the real bound address post-listen, configured value before (:150–157); ServeError() exposes the parked goroutine error for supervisors (:163–168); metrics nil-registry → 500 not an empty page (:189–193); the index handler 404s any path other than exactly "/" (:198–205), no catch-all. TRUE.
