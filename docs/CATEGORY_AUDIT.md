@@ -36753,3 +36753,155 @@ go.mod:
   ADR-003).
 
 Verdict: TRUE.
+
+## Session 3158 update (Socratic pass 1822 — embed + unsafe + runtime + syscall + signal detail ledger)
+
+Claim under test: zero
+embed,
+zero
+unsafe,
+runtime
+is
+read-only
+introspection,
+syscall
+is
+exactly
+one
+constant,
+signal
+is
+exactly
+one
+context
+helper.
+
+Verification —
+census:
+
+- ZERO
+  `embed.FS`,
+  `embed.String`,
+  `embed.Bytes`
+  —
+  no
+  embedded
+  assets
+  (i18n
+  messages
+  are
+  Go
+  maps).
+- ZERO
+  `unsafe.Pointer`,
+  `Sizeof`,
+  `Alignof`,
+  `Offsetof`,
+  `Add`,
+  `Slice`,
+  `String`,
+  `StringData`,
+  `SliceData`
+  —
+  escape
+  hatch
+  entirely
+  absent.
+- `runtime.GOOS`×10 —
+  platform
+  branches
+  (daemon
+  service
+  kind,
+  width
+  fallback,
+  doctor
+  checks).
+- `runtime.NumCPU`×6 —
+  worker
+  count
+  derivation
+  +
+  sysfs
+  caps.
+- `runtime.Version`×2,
+  `runtime.GOARCH`×1 —
+  `go_info`
+  metric
+  +
+  version
+  snapshot.
+- `runtime.ReadMemStats`×2 +
+  `runtime.MemStats`×1 +
+  `runtime.NumGoroutine`×1 —
+  the
+  go_*
+  collector.
+- ZERO
+  `runtime.GC`,
+  `GOMAXPROCS`,
+  `SetFinalizer`,
+  `KeepAlive`,
+  `Stack`,
+  `Caller`,
+  `Callers`,
+  `CallersFrames`,
+  `FuncForPC`,
+  `PProfLabel`,
+  `SetMutexProfileFraction`,
+  `SetBlockProfileRate`,
+  `SetCPUProfileRate`,
+  `StartTrace`,
+  `StopTrace`,
+  `FreeOSMemory`,
+  `Gosched`,
+  `Goexit`,
+  `GoroutineProfile`,
+  `debug.SetGCPercent`
+  —
+  read-only
+  introspection
+  only;
+  no
+  tuning
+  overrides.
+- `syscall.SIGTERM`×1 —
+  the
+  sole
+  syscall
+  token
+  (daemon
+  service
+  signal
+  constant);
+  zero
+  `Syscall`,
+  `RawSyscall`,
+  `ForkExec`,
+  `Kill`,
+  `Umask`,
+  `Errno`
+  variants
+  (all
+  syscall
+  work
+  goes
+  through
+  x/sys).
+- `signal.NotifyContext`×1 —
+  the
+  single
+  graceful-
+  shutdown
+  wiring
+  at
+  `run.go`;
+  zero
+  `signal.Notify`,
+  `signal.Stop`,
+  `signal.Reset`,
+  `signal.Ignore`,
+  `NotifyFunc`
+  variants.
+
+Verdict: TRUE.
