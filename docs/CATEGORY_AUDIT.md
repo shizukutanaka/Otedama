@@ -11870,3 +11870,7 @@ Milestone re-check at pass 980: `gofmt -l internal cmd` clean, `go build ./...` 
 ## Session 2315 update (Socratic pass 981 — HTTP handler write-error posture)
 
 Claim verified: the two write-error postures are each correct for their payload — healthz/readyz/index discard `io.WriteString` errors deliberately (`_, _ =`; nothing actionable once the client disconnects), while the metrics exposition checks every Fprintf and aborts on error (metrics.go:290/293/298) so a truncated scrape can't masquerade as complete. TRUE.
+
+## Session 2316 update (Socratic pass 982 — version defaults honesty)
+
+Claim verified: un-ldflags'd builds report themselves honestly — `Version = "v3.0.0-alpha.1-dev"` matches the VERSION file's v3.0.0-alpha.1 prefix with an explicit -dev marker; Commit/BuildDate default to "unknown" rather than fake values; Get() always fills GoVersion/Platform from runtime. No stale or misleading default. TRUE.
