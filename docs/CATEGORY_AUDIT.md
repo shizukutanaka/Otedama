@@ -13296,3 +13296,7 @@ All 11 index rows match: filenames exist, H1 titles in each ADR match the index 
 ## Session 2666 update (Socratic pass 1332 — oss-fuzz readiness claims)
 
 Verified .github/oss-fuzz-integration.md package coverage: doc lists 9 package paths for "23 targets" — actual `func Fuzz` census = 23 targets in 14 test files across exactly those 9 dirs (stratum, poolproto/stratumv1, miner, lightning, btccrypto, config, arbitration, rates, cmd/otedama). Perfect parity; readiness criteria unchanged (no public v3.0.0 tag yet, upstream PR unfilled). claim verified: .github/oss-fuzz-integration.md — TRUE
+
+## Session 2667 update (Socratic pass 1333 — ROADMAP.md current-state claims)
+
+Re-verified: all ✅-marked items match shipped code (poolproto split + V1 dialer production path, BIP-39 2048-word list w/ SHA-256 pin, arbitration alpha state); unmarked items are still open (secp256k1 real impl, DATUM dialer, JDP) — consistent with KNOWN_LIMITATIONS. SRI mention "v1.11.0" at :26 is a dated session-251 snapshot (self-bounding; ADR-009 tracks current v1.12.0). "~1,940 solo-hours / 88% over budget" arithmetic is the max-bound case (86.5% precise — acceptable rounding in an estimate). claim verified: ROADMAP.md — TRUE
