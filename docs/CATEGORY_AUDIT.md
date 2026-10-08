@@ -30561,3 +30561,122 @@ census:
   `errors.Is`.
 
 Verdict: TRUE.
+
+## Session 3120 update (Socratic pass 1784 — fmt method-level ledger)
+
+Claim under test: the
+fmt surface is
+Errorf/Sprintf/
+Fprintf/Fprintln/
+Fprint — with
+Print-family-
+to-stdout and
+Scan-family
+absent.
+
+Verification —
+site census:
+
+- `fmt.Errorf`×260 —
+  the
+  error
+  constructors
+  (verified
+  error-
+  construct
+  class).
+- `fmt.Sprintf`×211 —
+  formatting
+  (metric
+  exposition,
+  log
+  fields,
+  unit
+  templates,
+  usage
+  text).
+- `fmt.Fprintf`×74 +
+  `fmt.Fprintln`×16 +
+  `fmt.Fprint`×10 —
+  stream
+  writers
+  (stdout/
+  stderr/
+  conn/
+  bufio/
+  http).
+- `fmt.Sscanf` —
+  COMMENT-
+  only
+  at
+  `rates/
+  fetcher.go:52`
+  documenting
+  the
+  deliberate
+  strconv.ParseFloat
+  choice
+  (greedy-
+  scan
+  rationale);
+  no
+  code
+  site.
+- ZERO
+  `fmt.Print`,
+  `fmt.Println`,
+  `fmt.Printf`,
+  `fmt.Scan`,
+  `fmt.Scanf`,
+  `fmt.Scanln`,
+  `fmt.Sscan`,
+  `fmt.Sscanln`,
+  `fmt.Fscan`,
+  `fmt.Fscanf`,
+  `fmt.Fscanln`,
+  `fmt.Append`,
+  `fmt.Appendf`,
+  `fmt.Appendln`,
+  `fmt.Sprint`,
+  `fmt.Sprintln`,
+  `fmt.GoStringer`,
+  `fmt.State`,
+  `fmt.Formatter` —
+  CLI
+  output
+  always
+  names
+  its
+  stream
+  (`Fprint*`
+  to
+  os.Stdout/
+  os.Stderr);
+  interactive
+  input
+  uses
+  `bufio.Reader`
+  not
+  Scan;
+  `Sprintf`
+  covers
+  the
+  sole
+  concatenation
+  need.
+- Method-
+  receiver
+  fmt
+  family
+  (Stringer
+  `String()`,
+  GoStringer)
+  is
+  interface
+  implementation —
+  outside
+  this
+  prefix
+  census.
+
+Verdict: TRUE.
