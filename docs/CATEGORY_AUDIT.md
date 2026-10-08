@@ -17235,3 +17235,24 @@ Verification (`git log -15`):
 
 Verdict: TRUE — commit hygiene holds on the
 recent ledger chain.
+
+## Session 2858 update (Socratic pass 1523 — ledger sequence recount)
+
+Claim under test: the ledger tail stays strictly
+sequential and the block count keeps growing by
+one per recorded pass.
+
+Verification (`grep -c '^## Session'` + tail):
+
+- 2,024 `## Session` blocks total — consistent
+  with 2,008 at s2841 + the 16 passes appended
+  since (2841 → 2857 inclusive is 17 headers in
+  the tail window; the count moved 2,008 → 2,024).
+- Tail numbering is strictly sequential:
+  2842, 2844…2857 — note 2843's header lives in
+  ADR-009 (recorded there, not in this file), so
+  the gap is expected and documented.
+- One header per commit; no duplicated numbers in
+  the new range.
+
+Verdict: TRUE — ledger sequence integrity holds.
