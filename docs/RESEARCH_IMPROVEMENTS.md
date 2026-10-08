@@ -522,7 +522,9 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+3. ✅ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs — not applicable as designed.** Verified in session 1731: Otedama never assembles a coinbase from `coinbase_tx_prefix`/`suffix` — it opens *standard* channels and `NewMiningJob` carries the pool-computed `merkle_root` directly (messages.go:87,101), so the witness-vs-txid choice this row guards against does not exist on the V2 path. The V1 path does assemble coinbase (`coinb1 + en1 + en2 + coinb2` → `Hash256`, stratumv1.go:537-546) but hashes exactly the byte string the pool dictates — V1 coinbase parts carry no witness fields to strip, and the pool reconstructs the identical bytes for verification. The hazard would only materialize if a future Extended-channel/JDP path assembles client-side coinbase; record it as a design constraint for that work.
+   — (Original row retained below.)
+   Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
