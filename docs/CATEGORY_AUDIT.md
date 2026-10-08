@@ -13212,3 +13212,7 @@ All claims verified TRUE — GOVERNANCE.md's Dependabot-not-Renovate correction 
 ## Session 2645 update (Socratic pass 1311 — ROADMAP parity)
 
 All claims verified TRUE — engine dispatch at run.go:822 routes V1 URLs to `runSessionV1` (poolproto.DialURL load-bearing) while the V2 path still uses `stratum.NewDecoder(conn)` directly at run.go:887; `poolproto/stratumv2` Dialer exists with init-registration + Dial/Negotiate but remains unwired into the session loop — the "✅部分完了" statuses are exactly accurate; BIP-39 complete (2048-word SHA-256-verified embed); Sigstore keyless correctly listed as future work; session-251 notes (Bitcoin Core v30 IPC mining interface, DATUM = SV1-transport reuse of stratumv1) consistent with ADR-009/poolproto reservations.
+
+## Session 2646 update (Socratic pass 1312 — RESEARCH_IMPROVEMENTS drift recheck)
+
+All claims verified TRUE — census counts stable since s1284: 88 🔵 ADR-tracked rows, 7 ❌ scope-rejected (multi-algo, pool server, custodial escrow, federated multi-agent — each matches a CLAUDE.md prohibition verbatim), 102 ✅ shipped; `engine.parseHost` datum:// claim is live code (run.go:2191, dispatched at :837); datum:// recognized-but-fail-fast at poolproto.go:120 ⟷ run.go:825-833 — Category-4 rows (JDC, solo-bitcoind, OCEAN DATUM, TemplateSource) all correctly remain 🔵; session-1740 scope-refinement note for pool-share awareness is self-consistent.
