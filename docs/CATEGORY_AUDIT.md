@@ -12102,3 +12102,7 @@ Claim verified: call() registers a cap-1 respCh under pendingMu (stratumv1.go:70
 ## Session 2373 update (Socratic pass 1039 — daemon uninstall symmetry)
 
 Claim verified: Uninstall dispatches per-GOOS and is the mirror of install — systemd runs `systemctl --user disable --now` best-effort (stops the running unit too; a failed disable does not block removal) then `os.Remove(unit path)` returns the authoritative result so a missing file surfaces as a real error (service.go:114–124, :230–236); launchd runs `launchctl unload -w` best-effort then removes the plist with the same authoritative contract (:324–330); file removal is the honest oracle — systemd needs no explicit daemon-reload for a unit that no longer exists. TRUE.
+
+## Session 2374 update (Socratic pass 1040 — MILESTONE: full gate re-verified)
+
+Milestone re-verification at pass 1040 (post-s2373): `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1` on the 10 scoped packages all ok (metrics 0.014s, rates 1.806s, arbitration 0.025s, engine 25.618s, poolproto 0.018s, stratumv1 0.510s, stratumv2 0.422s, miner 0.038s, tui 1.167s, httpserver 1.019s). Gate remains green — 1031 passes with verdicts recorded, defects only fixed on proof.
