@@ -20219,3 +20219,34 @@ is confined to filepath.Join
 on local-controlled segments +
 EvalSymlinks for the two
 places that canonicalize.
+
+## Session 2967 update (Socratic pass 1632 — container/* census)
+
+Claim under test: zero `container/*`
+imports — every queue, ring, or
+priority structure is hand-rolled
+with slices plus explicit bounds.
+
+Verification:
+
+- `rg 'container/'` — zero
+  production hits.
+- `list.List`, `ring.Ring`,
+  `heap.*` — zero.
+- The known bounded structures:
+  - LatencyTracker ring buffer —
+    fixed-capacity slice, wrap
+    by index (verified s2734).
+  - V2 job FIFO — pending map
+    capped at pendingCap=64
+    (verified s2379).
+  - V1 job queue — slice drained
+    by CleanJobs (verified s2378).
+  - Submit channel — cap-1 respCh
+    per pending entry (verified
+    s2378).
+
+Verdict: TRUE — no stdlib
+container use; every bounded
+structure is a slice with an
+explicit ceiling.
