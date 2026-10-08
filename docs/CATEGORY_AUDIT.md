@@ -29936,3 +29936,102 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3115 update (Socratic pass 1779 — runtime/pprof complete ledger)
+
+Claim under test: the
+runtime surface is
+read-only introspection
+— GOOS/NumCPU/
+Version/MemStats/
+NumGoroutine —
+with the tuning/
+finalizer API absent;
+pprof is the six
+opt-in handlers.
+
+Verification —
+census:
+
+- `runtime.GOOS`×10 +
+  `runtime.GOARCH`×1 —
+  platform
+  branching
+  (verified
+  platform-
+  tag
+  class).
+- `runtime.NumCPU`×6 +
+  `runtime.NumGoroutine`×1 +
+  `runtime.ReadMemStats`×2 +
+  `runtime.MemStats`×1 +
+  `runtime.Version`×2 —
+  read-only
+  introspection
+  (worker
+  count +
+  go_*
+  exposition +
+  version
+  subcommand).
+- `pprof.Index`/`Cmdline`/`Profile`/`Symbol`/`Trace`/`Handler`×1
+  each —
+  the
+  six
+  opt-in
+  routes
+  behind
+  `--pprof`
+  on the
+  private
+  mux
+  (verified
+  pprof
+  class).
+- ZERO
+  `runtime.GC`,
+  `GOMAXPROCS`,
+  `SetFinalizer`,
+  `Goexit`,
+  `Gosched`,
+  `Breakpoint`,
+  `Caller`,
+  `Callers`,
+  `FuncForPC`,
+  `Func`,
+  `SetMutexProfileFraction`,
+  `SetBlockProfileRate`,
+  `SetCPUProfileRate`,
+  `MemProfileRate`,
+  `Stack`,
+  `ThreadCreateProfile`,
+  `GoroutineProfile`,
+  `HeapProfile`,
+  `BlockProfile`,
+  `MutexProfile`,
+  `CPUProfile`,
+  `UnlockOSThread`,
+  `LockOSThread`,
+  `SetCgoTraceback`,
+  `KeepAlive`,
+  `SetPanicOnFault`,
+  `SetTraceback`,
+  `CoverageMetaData` —
+  every
+  tuning/
+  mutation
+  surface
+  absent.
+- ZERO
+  `debug` —
+  the
+  whole
+  debug
+  package
+  absent
+  (verified
+  debug-
+  surface
+  class).
+
+Verdict: TRUE.
