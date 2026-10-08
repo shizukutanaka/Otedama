@@ -12853,3 +12853,7 @@ Claim verified: the doctor diff is exactly the reviewed payload — panic→Fail
 ## Session 2560 update (Socratic pass 1226 — remaining code-payload deep check)
 
 Claim verified: every remaining code diff on the branch is the reviewed payload — worker.go's cancelReady rendezvous (started.Load() fast-path + publication wait before reading w.cancel + unconditional done wait — the Start/Stop race is structurally closed); config.go's env-warning surfacing in `config show` + safeDisplay on log_level/log_format; run.go's honest pprof flag text; hashrate.go's CheckRedirect refusal (s2251 invariant with +25 lines regression test); messages.go's DispatchFrame godoc (s2515); +165-line encrypted-frame fuzz file (verified functional at s2547); +43 lines subcommand tests. TRUE — 100% of the branch's code payload accounted for, zero unexplained diff.
+
+## Session 2561 update (Socratic pass 1227 — master movement + mergeability watch)
+
+Claim verified: `origin/master` remains at `40da2e51` (#1404); clean `git merge-tree` (no conflicts); branch now 924 commits ahead with all diffs inside the audited 46-file payload. TRUE — mergeability holds; ledger growth has not introduced conflict surface.
