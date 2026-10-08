@@ -36182,3 +36182,184 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3155 update (Socratic pass 1819 — flag + filepath + unicode/utf8 detail ledger)
+
+Claim under test: flag
+handling is
+subcommand
+FlagSets
+only,
+filepath
+is
+Join-
+dominated,
+and
+unicode
+is
+exactly
+the
+sanitizer
+category
+set.
+
+Verification —
+census:
+
+- `flag.NewFlagSet`×5 +
+  `ContinueOnError`×5 +
+  `ErrHelp`×5 +
+  `FlagSet`×3 —
+  every
+  subcommand
+  gets
+  its
+  own
+  ContinueOnError
+  FlagSet
+  with
+  ErrHelp
+  detection.
+- ZERO
+  `flag.Parse`,
+  `flag.String`,
+  `Bool`,
+  `Int`,
+  `Duration`,
+  `Var`,
+  `Func`,
+  `Lookup`,
+  `Visit`,
+  `VisitAll`,
+  `PrintDefaults`,
+  `Usage`,
+  `CommandLine`,
+  `TextVar`,
+  `Getter`,
+  `BoolFunc` —
+  the
+  global
+  flag
+  package
+  state
+  is
+  untouched;
+  the
+  single
+  `flag.Parse`
+  hit
+  is
+  a
+  doc
+  comment.
+- `filepath.Join`×32 —
+  the
+  dominant
+  path
+  op
+  (all
+  local-
+  control
+  segments,
+  verified
+  file-
+  write
+  class).
+- `filepath.EvalSymlinks`×2 —
+  `gpu_linux.go:80` +
+  `service.go:88`
+  canonicalization.
+- `filepath.Separator`×2,
+  `filepath.Glob`×1 —
+  `wallet.go:268`
+  stale-
+  temp
+  sweep.
+- ZERO
+  `filepath.Abs`,
+  `Clean`,
+  `IsAbs`,
+  `Split`,
+  `Walk`,
+  `WalkDir`,
+  `Rel`,
+  `Match`,
+  `Dir`,
+  `Base`,
+  `Ext`,
+  `VolumeName`,
+  `Localize`,
+  `IsLocal`,
+  `FromSlash`,
+  `ToSlash`,
+  `SplitList`,
+  `HasPrefix` —
+  no
+  path
+  normalization
+  or
+  walking
+  beyond
+  the
+  three
+  sites.
+- `unicode.Cc`×2 +
+  `Cf`×2 +
+  `Zl`×2 +
+  `Zp`×2 +
+  `In`×2 +
+  `IsSpace`×1 +
+  `IsControl`×1 +
+  `utf8.ValidString`×1 —
+  exactly
+  the
+  post-
+  #1341/
+  #809
+  sanitize
+  set:
+  control +
+  format +
+  separator
+  categories,
+  `unicode.In`
+  range
+  checks,
+  space/
+  control
+  predicates,
+  and
+  wordlist
+  validity.
+- ZERO
+  `unicode.Is`,
+  `IsLetter`,
+  `IsDigit`,
+  `IsNumber`,
+  `IsUpper`,
+  `IsLower`,
+  `ToUpper`,
+  `ToLower`,
+  `To`,
+  `SimpleFold`,
+  `Ranges`,
+  `CaseRanges`,
+  `utf8.RuneCountInString`,
+  `utf8.DecodeRune*`,
+  `utf8.EncodeRune`,
+  `utf8.AppendRune`,
+  `utf8.FullRune`,
+  `utf8.RuneStart`,
+  `utf8.RuneLen`,
+  `utf8.Valid` —
+  no
+  manual
+  rune
+  decode
+  and
+  no
+  case-
+  folding
+  internals.
+
+Verdict: TRUE.
