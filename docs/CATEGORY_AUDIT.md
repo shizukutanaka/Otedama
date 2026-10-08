@@ -10682,3 +10682,7 @@ Claim verified: the Akash provider can never be mistaken for real income — the
 ## Session 2022 update (Socratic pass 688 — mining-yield quote honesty)
 
 Claim verified: the mining quote can never overstate — the yield formula is the true expectation (hashrate share × 3.125 BTC/600 s), non-SHA256d devices are skipped outright, a wired-but-stale network-hashrate feed drops confidence to the same degraded tier as a stale price feed rather than claiming full confidence on a dated reading, live measured hashrate wins only when positive (static family estimate otherwise), and the solo payout scheme removes the 1% haircut honestly — an all-or-nothing reward carries no pool cut — with the scheme pointer swapped atomically per session so a failover to a differently-schemed pool reprices the next quote. TRUE.
+
+## Session 2023 update (Socratic pass 689 — provider lifecycle plumbing)
+
+Claim verified: the shared polling lifecycle has no leak or race path — launch checks already-started BEFORE prepare, so a rejected double-start can't mutate the device set the running loop reads; the quote channel is closed by the loop goroutine itself (the sole writer) after exit; Stop cancels, waits, then recreates the channel under lock — a clean restart path with no concurrent writer; and sendQuote drops the oldest buffered quote rather than blocking the publish loop, so arbitration always sees the freshest estimate. TRUE.
