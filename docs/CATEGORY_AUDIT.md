@@ -22962,3 +22962,61 @@ Verification — census:
   production.
 
 Verdict: TRUE.
+
+## Session 3022 update (Socratic pass 1686 — time ledger)
+
+Claim under test: the
+clock surface is
+bounded timers and
+tickers — no leaked
+channels, no hot
+sleeps.
+
+Verification — census
+(earlier run's GOOS/
+NumCPU hits were the
+`time.` suffix inside
+`runtime.` — rescoped
+with a word boundary):
+
+- `time.Now`×45/
+  `Since`×17 — the
+  honest timestamps
+  everywhere.
+- `time.Second`×36/
+  `Minute`×9/
+  `Millisecond`×5/
+  `Duration`×26 — all
+  constant bounds.
+- `time.NewTicker`×10 —
+  every ticker paired
+  with Stop (verified).
+- `time.NewTimer`×3 —
+  every timer stopped
+  explicitly; run.go:677
+  documents the
+  deliberate
+  NewTimer-over-After
+  choice (pre-1.23
+  pending-fire pitfall).
+- `time.After`×3 —
+  only inside selects
+  (run.go:1673 the
+  pool-requested wait);
+  no unbounded
+  channel-lifetime.
+- `time.Sleep`×1 —
+  worker.go:282's 10ms
+  idle backoff, the
+  deliberate non-busy
+  wait.
+- `time.UTC`×2/
+  `Date`×2 — the
+  deterministic
+  formatting.
+- ZERO time.AfterFunc,
+  ZERO time.Tick
+  (leaking ticker
+  factory).
+
+Verdict: TRUE.
