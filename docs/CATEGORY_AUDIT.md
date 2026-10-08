@@ -13112,3 +13112,7 @@ All verified TRUE: OTEDAMA_BITCOIN_ADDRESS / OTEDAMA_WALLET_PASSPHRASE env names
 ## Session 2620 update (Socratic pass 1286 — TROUBLESHOOTING.md parity)
 
 All verified TRUE: wallet verify/change-passphrase verbs exist (cmd/otedama/wallet.go:41-43); `service status` three-state Installed/Running output; doctor flag set is exactly {config, bitcoin-address, data-dir, json} — no --log-level, matching the doc's correction that `otedama --log-level=debug doctor` fails as unknown subcommand while `run --log-level=debug` is valid; GOMAXPROCS sizing advice (post-#515 replacement for the phantom --worker-threads flag); pool-latency advice consistent with doctor's probe output.
+
+## Session 2621 update (Socratic pass 1287 — ADR-007 current-state claims)
+
+All TRUE: (a) WalletManager's complete public surface is {Seed, Fingerprint, Mnemonic, IsNew, ChangePassphrase} + construction — purely seed/mnemonic storage/retrieval, no BOLT12/offer machinery anywhere in internal/lightning (the only "offer" hit is BIP-39 wordlist entry #1283); (b) AES-256-GCM seedstore (verified many passes); (c) receive-only posture consistent with KNOWN_LIMITATIONS §6; (d) non-custodial boundary statements consistent with CLAUDE.md prohibitions. The ADR is explicitly "Proposed" roadmap — no stale present-tense overclaims found.
