@@ -10510,3 +10510,7 @@ Claim verified: the merged quote/share channel cannot deadlock at shutdown — e
 ## Session 1980 update (Socratic pass 646 — ADR-009 ecosystem recheck)
 
 Ecosystem re-verified live: SRI latest tag remains **v1.12.0** (`git ls-remote` on stratum-mining/stratum — v1.8–v1.12 tail confirms); sv2-apps latest tag remains **v0.8.0** (ref 7f490743). sv2-spec normative open set is stable: #203 (push-based non-custodial JDP payouts) still open with the SEQ0_255-vs-B0_64K output-bound debate unresolved; sibling drafts #202/#195 remain open alternatives. Otedama's subset-flags validation, MaxTargetUnconstrained declaration, and direct-coinbase TIDES verification stay forward-compatible — no code delta required. TRUE.
+
+## Session 1981 update (Socratic pass 647 — arbitration tick sequencing)
+
+Claim verified: each tick prunes stale streams before deciding, carries prevAlloc through Decide failure (a transient error cannot reset hysteresis), mirrors every gauge from the actual applied allocation (including a zero power floor — a dead rate feed cannot leave a stale positive floor on display), rebuilds the activity map under its own lock with idle devices excluded, logs idle transitions once per change, and — critically — reconciles the shared pause set BEFORE applyAllocation so the pause survives the very next pool job rather than reverting on the tick's own SetWork(nil). TRUE.
