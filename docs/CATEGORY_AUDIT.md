@@ -21496,3 +21496,57 @@ Verification — census:
   intended.
 
 Verdict: TRUE.
+
+## Session 2993 update (Socratic pass 1657 — sync/atomic ledger)
+
+Claim under test: the
+sync/atomic surface is
+entirely typed modern
+primitives with verified
+pairing — no bare
+functions, no sync.Cond,
+no legacy atomics.
+
+Verification — census:
+
+- `sync.Mutex` ×21 +
+  `sync.RWMutex` ×8 — all
+  Lock/Unlock defer-paired
+  (verified s2839+);
+  lock-order DAG clean.
+- `sync.WaitGroup` ×8 —
+  Add/Done pairs verified;
+  wg.Wait before teardown
+  in all spawners.
+- `sync.Once` ×4 —
+  idempotent closes
+  (closeOnce patterns).
+- `sync.Pool` ×2 — noise
+  hasher pool (Reset-on-
+  borrow verified) + one
+  scratch pool.
+- `sync.Map` ×1 — set-
+  theoretic ops only
+  (LoadOrStore/Range).
+- `sync.Cond` — ZERO
+  (broadcast replaced by
+  channel/snapshot
+  patterns).
+- atomic.* all typed:
+  Uint64×10 (rates,
+  submit caps, nonce,
+  float-bits gauges),
+  Bool×10 (liveness flags),
+  Pointer×8 (logger
+  singleton, snapshot
+  swaps), Int64×1.
+- Zero bare atomic
+  functions (AddUint64/
+  StoreBool etc.) — the
+  modernized-typed check
+  from s892 holds.
+- No sync primitives in
+  arbitration (pure) or
+  btccrypto (stateless).
+
+Verdict: TRUE.
