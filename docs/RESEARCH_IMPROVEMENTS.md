@@ -233,8 +233,20 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    cannot pin its freshness clock forward. A dead provider silently ages
    out of `Decide`'s input and its devices return to the surviving
    streams — exactly the stop-routing behaviour asked for.
-4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
+4. 🔵 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
+   — **Scope-refined (session 1755):** verified the mechanism boundary —
+   `internal/hal/gpu_linux.go` enumerates via sysfs DRM and reports PCI
+   vendor/model honestly (SHA256d=false since no compute dispatch exists
+   anywhere, the fix documented in the package doc). Suitability scoring
+   needs two layers that do not exist: (a) a compute-capability probe —
+   sysfs exposes `mem_info_vram_total`/`_used` only for amdgpu; NVIDIA
+   needs nvidia-smi/CUDA, which the package doc explicitly rejects (no
+   CGO/OpenCL dependency surface); and (b) any real inference workload to
+   map GPUs onto (Akash provider is the disclosed simulation,
+   KNOWN_LIMITATIONS §1). The honest current state — detect, classify,
+   declare incapable — is the designed stop-routing behaviour; the scoring
+   layer is an ADR/v4.0 decision, not a defect.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
 6. ✅ **Spot-price volatility guard** — hysteresis exists in arbitration and
    now has a user-configurable knob: `arbitration_hysteresis_pct` (YAML) /

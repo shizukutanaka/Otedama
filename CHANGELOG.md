@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Added (session 1754 — OpenSSF Scorecard ワークフロー)
+
+- `.github/workflows/scorecard.yml`: scorecard-action@v2.4.4 を master
+  プッシュ＋週次で実行（`contents: read` のみ、結果は SARIF アーティファクト
+  として保存 — コードスキャン dashboard 公開は repo 設定非依存を維持するため
+  無効化）。THREAT_MODEL の依存説明も訂正（yaml は go.yaml.in/yaml/v3、
+  govulncheck アドバイザリ状況ブロック追加: 到達可能脆弱性 0）。
+
 ### Added (session 1753 — Noise 暗号化フレーム長プレフィックスのファズ)
 
 - `FuzzEncryptedConn_Read` / `FuzzEncryptedConn_LengthPrefix`
