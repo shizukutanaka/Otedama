@@ -19174,3 +19174,34 @@ Verification:
 Verdict: TRUE — no programmatic
 profiling API; the go_* collector
 reads MemStats + NumGoroutine.
+
+## Session 2939 update (Socratic pass 1604 — tls.Config census)
+
+Claim under test: every `tls.Config`
+forces MinVersion ≥ TLS 1.2 and
+never sets `InsecureSkipVerify` —
+TLS cannot silently downgrade or
+skip verification.
+
+Verification (4 constructor sites):
+
+- `stratum/tls.go:35` —
+  `{MinVersion: tls.VersionTLS12}`
+  (system roots).
+- `stratum/tls.go:55` —
+  `{RootCAs: pool, MinVersion:
+  tls.VersionTLS12}` (custom CA).
+- `stratumv1/tls.go:32`, `:51` —
+  the same pair for the V1 adapter.
+- Zero `InsecureSkipVerify` —
+  cert verification is never off.
+- Zero `CipherSuites`/`CurvePreferences`
+  — Go's secure defaults stand.
+- The other MinVersion/MaxVersion
+  hits are SV2 protocol fields
+  (SetupConnection version range),
+  unrelated to TLS.
+
+Verdict: TRUE — TLS 1.2+ always,
+verification always on, default
+cipher suites.
