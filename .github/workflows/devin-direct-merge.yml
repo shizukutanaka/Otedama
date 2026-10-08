@@ -2,6 +2,9 @@ name: Trigger Devin Via Comment
 
 on:
   pull_request:
+    # コメント本文は "masterブランチとの競合" 固定 — 他ブランチ宛のPRでは
+    # 誤った案内を投げないよう対象ブランチをmasterへ限定
+    branches: [master]
     types: [synchronize, opened]
 
 permissions:

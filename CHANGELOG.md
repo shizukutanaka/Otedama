@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1714 — devin-direct-merge 対象ブランチゲート)
+
+- `devin-direct-merge.yml` を `branches: [master]` へ限定 — 非 master 宛 PR への
+  誤った競合コメント（本文が master 固定）を防止。
+
 ### Fixed (session 1712 — Makefile ツールピン発散)
 
 - `make setup`/`docs-serve`/skip-hint の `@latest` 4+1 件を CI 整合の固定バージョンへ
