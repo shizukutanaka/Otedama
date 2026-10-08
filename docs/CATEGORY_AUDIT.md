@@ -29867,3 +29867,72 @@ census
   primitives.
 
 Verdict: TRUE.
+
+## Session 3114 update (Socratic pass 1778 — errors complete ledger)
+
+Claim under test: the
+errors surface is
+New + Is + Join +
+one As — with
+Unwrap absent.
+
+Verification —
+census:
+
+- `errors.New`×36 —
+  the
+  leaf
+  errors
+  (verb-
+  free
+  literals
+  route
+  here;
+  fmt.Errorf
+  covers
+  the
+  rest —
+  verified
+  error-
+  construct
+  class).
+- `errors.Is`×22 —
+  sentinel
+  comparisons
+  (verified
+  sentinel-
+  eq
+  class).
+- `errors.Join`×2 —
+  the
+  two
+  multi-
+  error
+  aggregations
+  (config
+  validate +
+  doctor
+  fanout).
+- `errors.As`×1 —
+  the
+  single
+  typed-
+  error
+  extraction.
+- `err.Error()`×6 —
+  text
+  extraction
+  at
+  log/
+  display
+  boundaries.
+- ZERO
+  `errors.Unwrap`,
+  `errors.Join`×more,
+  `errors.Is`×stray,
+  `errors.As`×stray,
+  `errors.Errorf` —
+  residual
+  absent.
+
+Verdict: TRUE.
