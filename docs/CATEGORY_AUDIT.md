@@ -10474,3 +10474,7 @@ Claim verified: the working tree is gofmt-clean, `go build ./...` and `go vet ./
 ## Session 1971 update (Socratic pass 637 — rate aggregation integrity)
 
 Claim verified: concurrent Fetch calls coalesce behind a single-flight leader whose waiters still respect their own ctx; implausible non-zero readings are dropped before the median; with exactly two surviving sources a >4× disagreement distrusts the pair (an average has no outlier rejection to offer); even-n medians average the two middle values (no high-source bias); all-source failure returns the concrete per-source causes via errors.Join; redundancy health (lastOKSources, fetchAttempts) is persisted whether or not the fetch succeeds — silent median-erosion stays visible. TRUE.
+
+## Session 1972 update (Socratic pass 638 — fetchOne boundary hygiene)
+
+Claim verified: fetchOne measures clock skew from the HTTP Date header before reading the body, so a non-200 response still contributes a valid skew observation; the body is capped at 64 KiB (no unbounded read against a hostile or malfunctioning source); a non-200 status returns an error that still carries the measured skew; the request is ctx-bound so a hung source is killed by the fetcher's deadline, and the User-Agent honestly identifies the client. TRUE.
