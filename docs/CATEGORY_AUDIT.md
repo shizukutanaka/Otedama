@@ -9780,3 +9780,7 @@ Drift found and corrected: §13 still listed ci.yml's k8s deploy jobs as existin
 ## Session 1800 update (Socratic pass 466 — ci-cd.yml vestigial deploy job)
 
 Defect found and fixed: ci-cd.yml's `deploy` job ran `kubectl apply -f k8s/deployment.yaml` + `kubectl set image`/`rollout status` on every master push — the `k8s/` tree is forbidden and absent, so any configured KUBE_CONFIG secret turned a routine merge into a deterministically failing kubectl against a nonexistent manifest. Removed; `needs:` graph re-verified dangling-free. KNOWN_LIMITATIONS §13's ci-cd bullet updated to reflect the job's removal (the file's remaining dead weight is the Go-pin/duplicate-pipeline class — recorded maintainer decision).
+
+## Session 1801 update (Socratic pass 467 — docs/DEPLOYMENT.md k8s section audit)
+
+Claim verified: the Kubernetes YAML in DEPLOYMENT.md — the documented replacement for the absent `k8s/` tree — is fully product-consistent: single-replica otedama Deployment (correct — no sharding), `OTEDAMA_BITCOIN_ADDRESS`/`OTEDAMA_DATA_DIR`/`OTEDAMA_WALLET_PASSPHRASE` are real config env names (config.go:516,532), uid/fsGroup 65532 matches the distroless nonroot image (Dockerfile:31,53), `/healthz`+`/readyz` probes on :9090 match httpserver routes, ServiceMonitor selects `app: otedama`/`port: metrics`, resource limits reasonable for a daemon, and the quoted metric names (`otedama_hashrate_hashes_per_second`, `otedama_shares_submitted_total`, `otedama_pool_connection_state`, `otedama_submit_latency_milliseconds`) all exist in the registry. TRUE — no defect.
