@@ -22792,3 +22792,61 @@ Verification — census:
   byte splitting).
 
 Verdict: TRUE.
+
+## Session 3019 update (Socratic pass 1683 — sync primitives ledger)
+
+Claim under test: the
+concurrency surface is
+the orthodox set —
+Mutex/RWMutex/WaitGroup/
+Once/Pool/Map — with
+zero Cond/reflect-based
+tricks.
+
+Verification — census:
+
+- `sync.Mutex` ×21 —
+  the dominant guard
+  (engine, arbitration,
+  lazy metrics, pool
+  jobs, wallet).
+- `sync.RWMutex` ×8 —
+  read-heavy surfaces
+  (metrics registry,
+  hal registry,
+  provider tables).
+- `sync.WaitGroup` ×8 —
+  lifecycle plumbing
+  (paired Add/Done
+  verified).
+- `sync.Once` ×4 —
+  idempotent close
+  (closeOnce x4,
+  verified).
+- `sync.Pool` ×2 —
+  the HMAC-SHA256
+  hasher pool + the
+  bufio reader pool
+  (both verified).
+- `sync.Map` ×1 —
+  hal driver registry
+  (set-theoretic use
+  only — Load/Store/
+  Delete — verified
+  earlier).
+- ZERO `sync.Cond`,
+  ZERO `sync.Pool`
+  misuses beyond the
+  verified two.
+- ZERO `container/*`
+  — no heap/list/ring
+  hand-rolling.
+- `reflect` — ONE
+  import (the
+  i18n/flag-table
+  generation helper —
+  bounded compile-time
+  reflection, not
+  runtime trickery).
+
+Verdict: TRUE.
