@@ -11786,3 +11786,7 @@ Claim verified: V1 response-id correlation cannot lose precision — rpcMessage.
 ## Session 2294 update (Socratic pass 960 — milestone gate)
 
 Claim verified: milestone pass 960 — local gate re-run and green: `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1 ./internal/engine/ ./internal/arbitration/ ./internal/miner/ ./internal/stratum/...` all ok (engine 25.2s). ~330 verdict passes cumulative on this branch. TRUE.
+
+## Session 2295 update (Socratic pass 961 — TTY/stdout contract)
+
+Claim verified: the TUI owns stdout only when stdout is a real terminal — isTerminal uses os.ModeCharDevice (stdlib-only, correct on every platform), run.go:161 auto-sets noTUI on pipes/files/service-manager captures, and there is deliberately no flag to force TUI on non-TTY. During TUI the logger never writes to stdout (sink matrix: discard / file only); each frame is a single io.WriteString(d.w, sb) so frames can't interleave byte-wise. TRUE.
