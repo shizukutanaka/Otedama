@@ -23819,3 +23819,61 @@ included test files):
   fanin.go:56.
 
 Verdict: TRUE.
+
+## Session 3038 update (Socratic pass 1702 — defer ledger)
+
+Claim under test: every
+defer is an ownership
+pair or a documented
+teardown — no deferred
+free-statement
+accumulation.
+
+Verification — census
+(top defer forms):
+
+- `defer func() { ...`
+  ×9 — composite
+  teardown (close +
+  drain + flag).
+- `defer wg.Done`×6 +
+  `defer cancel`×6 —
+  lifecycle pairing.
+- `defer zeroBytes`×5 —
+  the lightning
+  secret-wipe
+  convention on every
+  key-handling
+  function.
+- `defer ticker.Stop`×5
+  + `t.Stop`×3 +
+  `statsTicker.Stop`×2
+  — timer lifecycle.
+- Mutex/RW unlock
+  pairs — every Lock
+  has its deferred
+  Unlock (verified in
+  lock-pairing).
+- `defer close(...)`×3 —
+  channel teardown.
+- `defer stopLimiter`×2.
+- Long tail: f.Close,
+  f.Sync, resp.Body.
+  Close, file.Close —
+  all verified as
+  deferred-capture
+  correct (the
+  defer-arg-eval
+  class audited
+  receiver binding).
+- ZERO defer-in-hot-
+  loop (defer-in-loop
+  class verified —
+  the only in-loop
+  defers are the
+  per-handler HTTP
+  closures where
+  function scope
+  ends per request).
+
+Verdict: TRUE.
