@@ -23,9 +23,9 @@ If any row does not pass, open a security advisory.
 | 1 | Source builds without warnings on Go 1.24+ | `go build ./...` at repo root | Exit code 0, no output — **Correction (session 488):** this row said "Go 1.22+" but `go.mod` requires ≥1.24 (`godebug tlsmlkem` fails to parse under older toolchains) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
-| 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
+| 4 | `staticcheck` findings are clean | `golangci-lint run` (staticcheck is enabled inside the linter set) | Exit code 0 — **Correction (session 1779):** the standalone `staticcheck` binary is not provisioned by `make setup`; the check runs through golangci-lint's `staticcheck` linter |
 | 5 | `golangci-lint` is clean | `golangci-lint run` | Exit code 0 |
-| 6 | No `TODO`/`FIXME`/`XXX` in committed code | `grep -rE 'TODO\|FIXME\|XXX' --include='*.go' .` | Empty or annotated with issue number |
+| 6 | No `TODO`/`FIXME`/`XXX` in committed code | `grep -rE 'TODO|FIXME|XXX' --include='*.go' .` | Empty or annotated with issue number — **Correction (session 1711):** the previous pattern `'TODO\|FIXME\|XXX'` was wrong under `-E` (ERE): `\|` is a literal pipe, so the grep searched for one literal string and silently passed |
 | 7 | Test:implementation ratio ≥ 1.0 | `find internal cmd -name '*_test.go' \| xargs wc -l` vs `! -name '*_test.go'` | Ratio ≥ 1.0 |
 | 8 | All exported symbols have godoc | `go doc -all ./... \| grep -v '^func '`, visual inspection | Every exported name documented |
 | 9 | SPDX-License-Identifier on every Go file | `find internal cmd -name '*.go' -exec sh -c 'head -3 "$1" \| grep -q SPDX \|\| echo "$1"' _ {} \;` | No output |
@@ -36,10 +36,10 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 10 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 11 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 12 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are tag refs (`@v4`, one `@master`), not SHA pins — pinning is a hardening item, not present |
+| 12 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Gap:** all `uses:` are major-version tag refs (`@v3`–`@v6`), not SHA pins — pinning is a hardening item, not present. **Correction (session 1711):** this row previously said "one `@master`" — all mutable HEAD refs were pinned to release tags in session 1692 |
 | 13 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 14 | Release artefacts are integrity-verified | `install.sh` | SHA-256 `checksums.txt` verified before install — **Gap:** cosign signatures are not yet produced by `release.yml` (VERIFY.md documents the unsigned status); an optional `verify-blob` path exists |
-| 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, stdlib |
+| 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Direct: `golang.org/x/crypto`, `golang.org/x/sys`, `go.yaml.in/yaml/v3` (+ their `golang.org/x/{net,term,text}` transitive set), stdlib — **Correction (session 2571):** this row omitted `x/sys` (internal/tui terminal syscalls) |
 | 16 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
 ## Secrets and credentials
@@ -59,7 +59,7 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 23 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
 | 24 | Key derivation uses scrypt | `internal/lightning/seedstore.go` | `scrypt.Key(..., N=131072 (2^17), r=8, p=1, keyLen=32)` |
-| 25 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
+| 25 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Handshake implemented and tested — **Correction (session 1711):** this row lacks scope: the Noise path is a P-256 placeholder that is wire-incompatible with real SV2 endpoints and is not wired into any live connection (KNOWN_LIMITATIONS §2); auditors should not read it as deployed pool-auth encryption |
 | 26 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
 | 27 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
 | 28 | No home-grown cryptography | All crypto from `golang.org/x/crypto` or stdlib | Code review |
@@ -69,7 +69,7 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 29 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
-| 30 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
+| 30 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001..ADR-011 present — **Correction (session 1713):** this row previously listed only ADR-001..003; eleven ADRs now exist |
 | 31 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
 | 32 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
 
@@ -120,7 +120,8 @@ echo "[3] vet"
 go vet ./...
 
 echo "[4] staticcheck"
-staticcheck ./... || true  # warn, don't fail
+# The standalone staticcheck binary is not provisioned by make setup;
+# its checks run inside golangci-lint in the next step.
 
 echo "[5] golangci-lint"
 golangci-lint run || true
@@ -131,9 +132,8 @@ echo "[6] grep TODO/FIXME/XXX"
 echo "[7] test:impl ratio"
 impl=$(find internal cmd -name '*.go' ! -name '*_test.go' -exec cat {} + | wc -l)
 test=$(find internal cmd -name '*_test.go' -exec cat {} + | wc -l)
-ratio=$(echo "scale=3; $test / $impl" | bc)
-echo "ratio: $ratio"
-[ "$(echo "$ratio >= 1.0" | bc)" = "1" ]
+echo "impl=$impl test=$test"
+[ "$test" -ge "$impl" ]
 
 echo "All green."
 ```

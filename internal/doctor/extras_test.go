@@ -1145,6 +1145,16 @@ func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
 	}
 }
 
+func TestCheckPoolTLSCA_V2TLSSchemePasses(t *testing.T) {
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2tls://p.example.com:34254", TLSCAFile: ca},
+	}}
+	if r := checkPoolTLSCA(&cfg).Run(context.Background()); r.Status != StatusPass {
+		t.Errorf("status = %v, want Pass (v2tls honors tls_ca_file)", r.Status)
+	}
+}
+
 // ============================================================================
 // checkPayoutScheme — payout scheme advisory check
 // ============================================================================
@@ -1964,5 +1974,33 @@ func TestIsFingerprint(t *testing.T) {
 		if got := isFingerprint(s); got != want {
 			t.Errorf("isFingerprint(%q) = %v, want %v", s, got, want)
 		}
+	}
+}
+
+func TestRunner_PanickingCheckBecomesFailResult(t *testing.T) {
+	r := &Runner{Checks: []Check{
+		{Name: "ok", Run: func(context.Context) Result {
+			return Result{Status: StatusPass, Detail: "fine"}
+		}},
+		{Name: "boom", Run: func(context.Context) Result {
+			panic("simulated check crash")
+		}},
+	}}
+	rep := r.Run(context.Background())
+	if len(rep.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(rep.Results))
+	}
+	if rep.Results[0].Status != StatusPass {
+		t.Fatalf("healthy check lost: %v", rep.Results[0].Status)
+	}
+	res := rep.Results[1]
+	if res.Status != StatusFail {
+		t.Fatalf("panicking check status = %v, want StatusFail", res.Status)
+	}
+	if res.Name != "boom" {
+		t.Fatalf("panicking check name = %q, want boom", res.Name)
+	}
+	if !strings.Contains(res.Detail, "panicked") {
+		t.Fatalf("detail %q does not report the panic", res.Detail)
 	}
 }

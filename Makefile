@@ -51,10 +51,10 @@ help: ## Display this help message
 setup: ## Install development tools
 	@echo "Installing development tools..."
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-	$(GO) install github.com/securego/gosec/v2/cmd/gosec@latest
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
-	$(GO) install github.com/google/go-licenses@latest
-	$(GO) install mvdan.cc/gofumpt@latest
+	$(GO) install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	$(GO) install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+	$(GO) install github.com/google/go-licenses/v2@v2.0.1
+	$(GO) install mvdan.cc/gofumpt@v0.12.0
 	@echo "Development tools installed."
 
 .PHONY: deps
@@ -175,13 +175,13 @@ security: ## Run security scanners
 	@if command -v gosec >/dev/null 2>&1; then \
 		gosec -severity medium ./...; \
 	else \
-		echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@latest')"; \
+		echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0')"; \
 	fi
 	@echo "Running govulncheck..."
 	@if command -v govulncheck >/dev/null 2>&1; then \
 		govulncheck ./...; \
 	else \
-		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@v1.1.4')"; \
 	fi
 	@echo "Security scan complete."
 
@@ -191,7 +191,7 @@ licenses: ## Check dependency licenses
 		go-licenses check ./... \
 			--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0; \
 	else \
-		echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses@latest')"; \
+		echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses/v2@v2.0.1')"; \
 	fi
 
 .PHONY: validate
@@ -210,7 +210,7 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	@if command -v govulncheck >/dev/null 2>&1; then \
 		govulncheck ./...; \
 	else \
-		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"; \
+		echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@v1.1.4')"; \
 	fi
 	@echo "==> [5/8] golangci-lint run"
 	@command -v golangci-lint >/dev/null 2>&1 \
@@ -222,9 +222,8 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	@echo "==> [7/8] test:impl ratio"
 	@impl=$$(find internal cmd -name '*.go' ! -name '*_test.go' -exec cat {} + | wc -l); \
 	tst=$$(find internal cmd -name '*_test.go' -exec cat {} + | wc -l); \
-	ratio=$$(echo "scale=3; $$tst / $$impl" | bc); \
-	echo "    impl=$$impl test=$$tst ratio=$$ratio"; \
-	if [ $$(echo "$$ratio < 1.0" | bc) = "1" ]; then \
+	echo "    impl=$$impl test=$$tst"; \
+	if [ "$$tst" -lt "$$impl" ]; then \
 		echo "    test:impl ratio below 1.0 threshold" && exit 1; \
 	fi
 	@echo "==> [8/8] SPDX headers on every Go file"
@@ -240,7 +239,7 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	fi
 	@echo ""
 	@echo "All audit checks passed. See docs/AUDIT_CHECKLIST.md for the"
-	@echo "full 30-item checklist (manual verification items remain)."
+	@echo "full 32-item checklist (manual verification items remain)."
 
 # --------------------------------------------------------------------------
 # Docker
@@ -248,10 +247,18 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 
 .PHONY: docker-build
 docker-build: ## Build Docker image
-	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest .
+	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) .
 
 .PHONY: docker-run
 docker-run: ## Run Otedama in Docker
+	@test -f config.yaml || ( \
+		echo "config.yaml not found — copy config.yaml.example and set your"; \
+		echo "pools/address first. (Without it Docker bind-mounts an empty"; \
+		echo "DIRECTORY at /etc/otedama/config.yaml and config load fails.)"; \
+		exit 1)
 	docker run --rm -it \
 		-v $(PWD)/config.yaml:/etc/otedama/config.yaml:ro \
 		$(PROJECT):latest
@@ -267,13 +274,15 @@ docker-push: ## Push Docker image to registry
 
 .PHONY: docs
 docs: ## Generate documentation
-	$(GO) doc -all ./... > $(DOCS_DIR)/api-reference.txt
+	@$(GO) list ./... | while read -r pkg; do \
+		$(GO) doc -all "$$pkg" || exit 1; \
+	done > $(DOCS_DIR)/api-reference.txt
 	@echo "Documentation generated at $(DOCS_DIR)/"
 
 .PHONY: docs-serve
 docs-serve: ## Serve documentation locally on port 6060
 	@echo "Starting documentation server at http://localhost:6060/pkg/$(MODULE)/"
-	$(GO) run golang.org/x/tools/cmd/godoc@latest -http=:6060
+	$(GO) run golang.org/x/tools/cmd/godoc@v0.50.0 -http=:6060
 
 # --------------------------------------------------------------------------
 # Release
@@ -284,15 +293,23 @@ release-check: validate ## Verify readiness for release
 	@echo "Verifying release readiness..."
 	@test -f CHANGELOG.md || (echo "CHANGELOG.md missing" && exit 1)
 	@test -f VERSION || (echo "VERSION file missing" && exit 1)
-	@grep -q "^## \[$(VERSION)\]\|^## \[Unreleased\]" CHANGELOG.md || \
-		(echo "CHANGELOG.md does not contain entry for $(VERSION)" && exit 1)
+	@VNUM="$(VERSION)"; VNUM="$${VNUM#v}"; \
+	grep -q "^## \[v*$${VNUM}\]" CHANGELOG.md || \
+		(echo "CHANGELOG.md does not contain a dated entry for $(VERSION)" && exit 1)
 	@echo "Release checks passed."
+
+# macOS ships `shasum -a 256`, not GNU sha256sum — resolve whichever exists.
+SHA256SUM := $(shell command -v sha256sum 2>/dev/null || \
+	(command -v shasum >/dev/null 2>&1 && echo "shasum -a 256"))
 
 .PHONY: release-build
 release-build: release-check build-all ## Build release artifacts
 	@mkdir -p $(DIST_DIR)
+	@if [ -z "$(SHA256SUM)" ]; then \
+		echo "No sha256 tool found (need sha256sum or shasum)" && exit 1; \
+	fi
 	@echo "Creating checksums..."
-	@cd $(DIST_DIR) && sha256sum $(PROJECT)-* > checksums.txt
+	@cd $(DIST_DIR) && $(SHA256SUM) $(PROJECT)-* > checksums.txt
 	@echo "Release artifacts in $(DIST_DIR)/"
 
 .PHONY: tag

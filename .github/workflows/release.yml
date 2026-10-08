@@ -5,6 +5,14 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  # One run per tag; never cancel an in-flight release.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 env:
   GO_VERSION: '1.23.x'
 
@@ -12,6 +20,9 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 15
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
@@ -35,24 +46,26 @@ jobs:
 
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release
+        name: Release
         body: |
           ## What's Changed
           ${{ steps.changelog.outputs.changelog }}
           
           ## Installation
-          See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT_GUIDE.md) for installation instructions.
+          See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT.md) for installation instructions.
         draft: false
         prerelease: false
 
   build-binaries:
     name: Build Binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
     needs: create-release
     strategy:
       matrix:
@@ -93,19 +106,25 @@ jobs:
         go build -ldflags "$LDFLAGS" -o otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} ./cmd/otedama
         tar czf otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} README.md LICENSE
 
+    - name: Generate checksum
+      run: sha256sum "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" > "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256"
+
     - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
-        asset_name: otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
-        asset_content_type: application/gzip
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" --clobber
+
+    - name: Upload Release Checksum
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256" --clobber
 
   build-packages:
     name: Build Distribution Packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
     needs: create-release
     steps:
     - name: Checkout code
@@ -121,7 +140,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y rpm ruby ruby-dev build-essential
-        sudo gem install fpm
+        sudo gem install fpm -v 1.18.0
 
     - name: Build Linux binary
       env:
@@ -135,69 +154,79 @@ jobs:
         VERSION=${{ needs.create-release.outputs.version }}
         fpm -s dir -t deb \
           -n otedama \
-          -v $VERSION \
+          -v "${VERSION#v}" \
           --description "Otedama - P2P Mining Pool Software" \
           --url "https://github.com/shizukutanaka/Otedama" \
           --maintainer "Otedama Project" \
-          --license "MIT" \
+          --license "Apache-2.0" \
           --vendor "Otedama Project" \
-          --after-install scripts/post-install.sh \
-          --before-remove scripts/pre-remove.sh \
           ./otedama=/usr/bin/otedama \
-          ./scripts/otedama.service=/etc/systemd/system/otedama.service \
-          ./config.yaml=/etc/otedama/config.yaml
+          ./config.yaml.example=/etc/otedama/config.yaml
 
     - name: Create RPM package
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
         fpm -s dir -t rpm \
           -n otedama \
-          -v $VERSION \
+          -v "${VERSION#v}" \
           --description "Otedama - P2P Mining Pool Software" \
           --url "https://github.com/shizukutanaka/Otedama" \
           --maintainer "Otedama Project" \
-          --license "MIT" \
+          --license "Apache-2.0" \
           --vendor "Otedama Project" \
-          --after-install scripts/post-install.sh \
-          --before-remove scripts/pre-remove.sh \
           ./otedama=/usr/bin/otedama \
-          ./scripts/otedama.service=/etc/systemd/system/otedama.service \
-          ./config.yaml=/etc/otedama/config.yaml
+          ./config.yaml.example=/etc/otedama/config.yaml
 
     - name: Upload DEB package
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama_${{ needs.create-release.outputs.version }}_amd64.deb
-        asset_name: otedama_${{ needs.create-release.outputs.version }}_amd64.deb
-        asset_content_type: application/vnd.debian.binary-package
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=${{ needs.create-release.outputs.version }}
+        gh release upload "${{ github.ref_name }}" "otedama_${VERSION#v}_amd64.deb" --clobber
 
     - name: Upload RPM package
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./otedama-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-        asset_name: otedama-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-        asset_content_type: application/x-rpm
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=${{ needs.create-release.outputs.version }}
+        gh release upload "${{ github.ref_name }}" "otedama-${VERSION#v}-1.x86_64.rpm" --clobber
+
+  checksums:
+    name: Publish combined checksums.txt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-binaries
+    permissions:
+      contents: write
+    steps:
+      # install.sh probes "checksums.txt" first; per-asset .sha256 files
+      # alone can't be verified by it. Hash the published assets themselves.
+      - name: Build combined checksums file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ github.ref_name }}" -p "otedama-*.tar.gz" -D assets --clobber
+          cd assets
+          sha256sum otedama-*.tar.gz > checksums.txt
+          gh release upload "${{ github.ref_name }}" checksums.txt --clobber
 
   update-homebrew:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [create-release, build-binaries]
+    if: vars.HOMEBREW_TAP_REPO != ''
     steps:
     - name: Checkout Homebrew tap
       uses: actions/checkout@v4
       with:
-        repository: otedama/homebrew-tap
-        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ vars.HOMEBREW_TAP_REPO }}
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     - name: Update Homebrew formula
       uses: peter-evans/create-pull-request@v5
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         path: .
         commit-message: Update Otedama to ${{ needs.create-release.outputs.version }}
         title: Update Otedama to ${{ needs.create-release.outputs.version }}

@@ -15,7 +15,7 @@ OSS-Fuzz inclusion. The actual integration requires a PR to
 
 1. Otedama has a public release tag (v3.0.0 or later non-alpha).
 2. The maintainer has 30 minutes to file the upstream PR.
-3. At least three `Fuzz*` functions exist in the codebase — met: 21
+3. At least three `Fuzz*` functions exist in the codebase — met: 23
    targets across `internal/stratum`, `internal/poolproto/stratumv1`,
    `internal/miner`, `internal/lightning`, `internal/btccrypto`,
    `internal/config`, `internal/arbitration`, `internal/rates`, and
@@ -33,9 +33,9 @@ in the OSS-Fuzz repository (not in Otedama's own repo):
 ```yaml
 homepage: "https://github.com/shizukutanaka/Otedama"
 language: go
-primary_contact: "monu@example.com"
+primary_contact: "CHANGEME@example.com"  # substitute the maintainer's real contact before submitting
 auto_ccs:
-  - "monu@example.com"
+  - "CHANGEME@example.com"
 sanitizers:
   - address
 fuzzing_engines:

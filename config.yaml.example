@@ -50,7 +50,11 @@ bitcoin_address: ""
 #   stratum+tcp://      Stratum V1 plain        (not recommended)
 #
 pools:
-  - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
+  # (Correction, session 2693: the prior example host
+  # "public.stratum.slushpool.com" no longer resolves — NXDOMAIN. The
+  # documented Braiins Pool Stratum V2 endpoint is stratum.braiins.com,
+  # whose :3336 port answers TCP today; verified resolving and open.)
+  - url: "stratum+v2://stratum.braiins.com:3336"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.
@@ -65,29 +69,30 @@ pools:
     # payout_scheme: "tides"
     #
     # tls_ca_file (optional) is a path to a PEM bundle of extra certificate
-    # authorities to trust for this pool's stratum+tls:// certificate, for a
-    # pool presenting a private-CA or self-signed cert. System roots are always
-    # used as well, and certificate verification is never disabled. No effect
-    # on non-TLS schemes.
+    # authorities to trust for this pool's stratum+tls:// or stratum+v2tls://
+    # certificate, for a pool presenting a private-CA or self-signed cert.
+    # System roots are always used as well, and certificate verification is
+    # never disabled. No effect on non-TLS schemes.
     # tls_ca_file: "/etc/otedama/pool-ca.pem"
 
   # Failover: list pools in priority order. Otedama tries the first;
   # if a connection fails or drops, it rotates to the next immediately,
   # and only applies reconnect backoff once every pool has been tried.
-  # Uncomment to add a backup:
-  # - url: "stratum+v2tls://demand.fun:3336"
+  # Uncomment and substitute a real backup pool URL to enable failover
+  # (the earlier "demand.fun" placeholder does not resolve — NXDOMAIN):
+  # - url: "stratum+v2://<your-backup-pool>:3336"
   #   password: "x"
 
 # ── Workers ──────────────────────────────────────────────────────────────────
 workers:
   # Human-readable worker name sent to the pool for identification.
-  # Defaults to the hostname if empty.
+  # If empty, the bare payout address is sent as the user identity.
   name: ""
 
 # ── Language ─────────────────────────────────────────────────────────────────
 #
 # BCP 47 language tag for UI messages and log output.
-# Supported: en, ja, zh-CN, ko, es, fr, de, pt
+# Supported: en, ja, zh, ko, es, fr, de, pt, ru, ar
 # (Other tags are accepted and fall back to English.)
 # If empty, Otedama detects the language from the operating system.
 #

@@ -3,10 +3,10 @@
 # Otedama one-line installer.
 #
 # Usage:
-#   curl -sSL https://otedama.io/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
 #
 # Or with explicit options:
-#   curl -sSL https://otedama.io/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
 #
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
@@ -61,7 +61,11 @@ require() {
 
 require curl
 require tar
-require sha256sum || require shasum
+# Either is fine — verification below falls back to `shasum -a 256`.
+# (die() inside require() exits the script, so `require A || require B`
+# would never evaluate the right-hand side.)
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
+    || die "missing required command: sha256sum or shasum"
 
 # ---------- OS + arch detection ----------
 

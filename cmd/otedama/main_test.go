@@ -197,7 +197,7 @@ func TestVersion_Plain(t *testing.T) {
 
 func TestVersion_JSON(t *testing.T) {
 	var out, err bytes.Buffer
-	run([]string{"version", "--json"}, &out, &err) //nolint
+	run([]string{"version", "--json"}, &out, &err)
 	var v map[string]any
 	if e := json.Unmarshal(out.Bytes(), &v); e != nil {
 		t.Fatalf("JSON invalid: %v", e)

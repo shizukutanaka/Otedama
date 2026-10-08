@@ -51,7 +51,7 @@ import (
 // startup banner, and the doctor reachability check all reference this
 // constant rather than repeating the literal, so the default can never
 // drift out of sync between subsystems.
-const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
+const DefaultPoolURL = "stratum+v2://stratum.braiins.com:3336"
 
 // Config is the complete runtime configuration for Otedama.
 //
@@ -89,8 +89,8 @@ type Config struct {
 	// list them explicitly here.
 	Pools []PoolConfig `yaml:"pools"`
 
-	// Workers controls how Otedama names itself to pools. If empty,
-	// a hostname-derived name is used automatically.
+	// Workers controls how Otedama names itself to pools. If the name is
+	// empty, the bare payout address is sent as the user identity.
 	Workers WorkerConfig `yaml:"workers"`
 
 	// Language is the IETF BCP 47 language tag for UI messages and logs,
@@ -231,19 +231,21 @@ type PoolConfig struct {
 	PayoutScheme string `yaml:"payout_scheme"`
 
 	// TLSCAFile is an optional path to a PEM file of certificate authorities
-	// to trust for this pool's stratum+tls:// or stratum+v2tls:// connection,
-	// in addition to the system root store. Use it for a pool that presents a private-CA or
-	// self-signed certificate, so the connection can be verified rather than
-	// either failing or being run in the clear. Empty means "system roots
-	// only". It has no effect on non-TLS schemes. Certificate verification is
+	// to trust for this pool's TLS connection, in addition to the system
+	// root store. Use it for a pool that presents a private-CA or
+	// self-signed certificate, so the connection can be verified rather
+	// than either failing or being run in the clear. Empty means "system
+	// roots only". It is honored for stratum+tls:// (V1) and
+	// stratum+v2tls:// (V2); the plaintext schemes ignore it, and `doctor`
+	// warns when it is set on one of them. Certificate verification is
 	// always performed; this never disables it.
 	TLSCAFile string `yaml:"tls_ca_file"`
 }
 
 // WorkerConfig controls how Otedama identifies itself to pools.
 type WorkerConfig struct {
-	// Name is the worker name reported to pools. If empty, the hostname
-	// is used.
+	// Name is the worker name reported to pools. If empty, the pool sees
+	// only the payout address (no ".name" suffix is appended).
 	Name string `yaml:"name"`
 }
 

@@ -134,8 +134,8 @@ log_format: text
 language: en
 data_dir: ~/.local/share/otedama
 pools:
-  - url: stratum+v2://public.stratum.slushpool.com:3336
-  - url: stratum+v2://demand.sv2.io:34254
+  - url: stratum+v2://stratum.braiins.com:3336
+  - url: stratum+v2://backup-pool.example.com:3336
 workers:
   name: cpu-worker
 `)

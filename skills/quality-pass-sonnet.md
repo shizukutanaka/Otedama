@@ -31,11 +31,11 @@ doc-vs-code整合性の維持**である。
 | 短所 | ブロック要因 |
 |---|---|
 | CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`tlsmlkem`=Go 1.24 knob） | `.github/workflows/`へのpush権限なし |
-| 依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ・CVE到達不能／toolchain 1.24でcontainermaxprocs未享受） | 実行環境がsum.golang.orgを拒否しgo get不可 |
+| ~~依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ）~~ ✅ 解消済み（訂正 session 2679: go.yaml.in/yaml/v3 v3.0.5 へ移行済み #444、x/crypto v0.48.0 へバンプ済み #1359。toolchain が go 1.24 で containermaxprocs 未享受の点のみ残存） | toolchain bump はメンテナ判断 |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
+| ~~`wallet`サブコマンドなし／`ChangePassphrase`に導線なし~~ ✅ 解消済み（訂正 session 2679: `otedama wallet` サブコマンド（verify + rotate）が #529 で出荷済み） | — |
 | Noise NX未配線／secp256k1スタブ／Akashシミュレーション／DATUM未実装 | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
-| TUI 80カラム固定／ASIC検出なし／CIにfuzzなし | KNOWN_LIMITATIONS §15/§8/§13 |
+| TUI 80カラム固定／ASIC検出なし | KNOWN_LIMITATIONS §15/§8（「CIにfuzzなし」行は session 1266（#1347）で test.yml に fuzz ジョブが追加され解消済み — 訂正 session 2679） |
 
 ## 2. Sonnet優先タスクキュー（手順が明確なもの）
 
@@ -49,12 +49,9 @@ doc-vs-code整合性の維持**である。
    リカバリフレーズ提示がまさにそれだった（docs 4箇所が「表示される」と
    明記、実装は0件）。**docの主張を見つけたら、その挙動を実際に実行する
    本番コード経路をgrepで確認する**こと。
-2. **依存3件更新**（モジュール取得可能な環境でのみ）: 順に
-   `go get golang.org/x/crypto@latest` → toolchainをgo1.25.xへ →
-   `gopkg.in/yaml.v3`を`go.yaml.in/yaml/v3`へ移行（import書換は
-   internal/config周辺のみの見込み・grepで全数確認・ライセンス確認後）。
-   各ステップで検証ループ。yaml移行の回帰ゲートは`TestConfigFile_*`一式。
-   完了後 govulncheck でゼロ到達を記録。
+2. ~~**依存3件更新**~~ ✅ 解消済み（訂正 session 2681: yaml.v3→go.yaml.in/yaml/v3
+   v3.0.5 移行は #444、x/crypto は #1359 で v0.48.0 へバンプ済み。残るのは
+   toolchain bump（go 1.25+）のみで、これはメンテナ判断）。
 3. **doc相互参照の継続検査**: markdownリンク・backtickファイル参照が実在
    ファイルに解決するか、SPECIFICATIONのギャップ表番号・KNOWN_LIMITATIONSの
    §番号の相互参照が一致するか。（session 253時点で全解決済み — 変更後に再検査。）

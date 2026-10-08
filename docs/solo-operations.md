@@ -56,6 +56,8 @@ GitHub Actionsを以下の原則で設計する：
 | CHANGELOG生成 | git-cliff | tag push時 |
 | SBOMの生成 | syft | tag push時 |
 
+**訂正 (session 2652)**：上表は設計目標であり、現行リリースパイプラインとは一致しない。実際の `release.yml` は goreleaser を一切呼ばず、tar + sha256sum + `gh release upload` の素朴な構成で、署名 (cosign)・git-cliff・syft SBOM のいずれもワークフローに存在しない（いずれも目標として記述されている）。現行スキャナー在庫は security.yml の gosec ×14・codeql ×12・trivy ×13・semgrep ×5・trufflehog ×2 であり、表中の「gosec, govulncheck, CodeQL push毎」は security.yml の push トリガと一致する。GHCR push は tag push ではなく push 駆動（ci.yml `DOCKER_REGISTRY: ghcr.io`）。Dependabot は週次、`govulncheck` は push 駆動で実用十分。
+
 **goreleaser設定例：**
 ```yaml
 # .goreleaser.yaml の核心部分
@@ -235,7 +237,7 @@ jobs:
 - Signed-Releases（cosign未設定 → 低スコア）**訂正 (session 488)**: `.goreleaser.yaml` に cosign 設定は残るが `release.yml` が goreleaser を一切呼ばないため dead code — 署名リリースは存在せず Scorecard では低スコアのまま
 - Branch-Protection（mainブランチのPR必須ルール → 設定必要）
 - Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → 未設定）**訂正 (session 488)**: `.github/workflows/` にファズジョブは一切存在しない — `make fuzz` はローカル実行のみ
+- Fuzzing（go test -fuzz → 設定済み）**訂正 (session 488 → 更新 session 2636)**: session 488 時点ではファズジョブ無しと記載したが、`test.yml` に `make fuzz` を実行する `fuzz` ジョブが存在する（session 1266 で導入）。Scorecard の Fuzzing チェックは緑化可能な状態
 
 ### 2.3 インシデント対応の事前設計
 
@@ -654,7 +656,7 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
 対策：
-- `govulncheck` は週次自動実行**未**設定（訂正 session 488：CI に govulncheck/osv-scanner ジョブは一切存在せず Makefile ローカルのみ — 第2層の週次ワークフロー例がそのまま必要）
+- `govulncheck` は push/PR 毎に自動実行**済**（訂正 session 488 → 更新 session 2636：session 1265 で `security.yml` に govulncheck ジョブを導入済み — 週次スケジュールは未設定だが push 駆動で実用十分）
 - LDKのセキュリティアドバイザリをGitHub Watch経由で監視
 - ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
 
@@ -673,7 +675,7 @@ LDKに重大な脆弱性が発見された場合、
 前述のtj-actions事件のように、使用するGitHub Actionsへの攻撃。
 
 対策：
-- 全ActionをSHAピン留め（ci.ymlで実施済み）
+- 全ActionをSHAピン留め（ci.ymlで実施済み）**訂正 (session 2652)**: 「実施済み」は誤り — ci.yml を含む全ワークフローの `uses:` は `@v3`〜`@v6` のメジャーバージョンタグで、SHA ピンは一件も存在しない（docs/AUDIT_CHECKLIST.md の行でも gap として記録済み）。tj-actions 型の耐性としては本表記が目標状態のままである。
 - `Dependabot for Actions` を有効化して自動更新
 - SBOMを全リリースに同梱
 

@@ -15,7 +15,7 @@ Otedama handles software that directly concerns user funds and privacy. We treat
 | v3.0.x (latest) | Yes | 全てのセキュリティ修正を提供 |
 | v3.0.x-beta | Yes | ベータ期間中の重大脆弱性のみ |
 | v3.0.x-alpha | No | アルファ版は自己責任での使用 |
-| v2.1.9 (legacy) | Partial | 重大な脆弱性のみ、2026年10月まで |
+| v2.1.9 (legacy) | No | 計画された `legacy-v2` メンテナンスブランチは未作成（訂正 session 2668 — リモートに該当refが存在せず、「重大な脆弱性のみ2026年10月まで」は実効しない）。v2.x 利用者は v3.0 への移行を |
 | v2.1.8以前 | No | サポート終了 |
 
 v2系列の継続利用者は、可能な限り早くv3.0への移行を推奨いたします。移行手順は `docs/MIGRATING-FROM-V2.md` を参照してください。

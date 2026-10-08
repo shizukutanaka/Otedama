@@ -159,13 +159,16 @@ periodically — both are operator choices, not code.
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
-**Mitigation:** Only two third-party runtime dependencies:
-`golang.org/x/crypto` and `gopkg.in/yaml.v3` (plus the Go standard
-library). All GitHub Actions pinned by SHA. Dependabot auto-updates
-with review. govulncheck runs in CI. See ADR-003.
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
-with review. govulncheck runs in CI. See ADR-003.
+**Mitigation:** Only three third-party runtime dependencies:
+`golang.org/x/crypto`, `golang.org/x/sys`, and `go.yaml.in/yaml/v3`
+(plus the Go standard library). Dependabot auto-updates with review. govulncheck is a hard
+CI gate in security.yml (no `continue-on-error`). See ADR-003.
+
+**Advisory status (verified 2026-10-08, govulncheck v1.1.4, source
+mode):** 0 reachable vulnerabilities; 18 module-level findings exist
+in required modules but no reachable call path exists into any of
+them. No advisory IDs currently apply to the shipped call graph —
+re-record on each dependency bump or on any govulncheck CI failure.
 
 **Residual risk (CI supply chain):** GitHub Actions are referenced by
 release tags (`@v4`, `@v5`, …), not commit SHAs, so a compromised or
@@ -173,7 +176,7 @@ re-tagged upstream action could execute in CI. Pinning `uses:` entries
 to full-length SHAs is a tracked hardening item.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
-one of the two direct dependencies remains possible. We have no
+one of the three direct dependencies remains possible. We have no
 mitigation other than early detection.
 
 ---

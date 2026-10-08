@@ -13,6 +13,8 @@
 
 `internal/arbitration/` in Otedama v3.0.0-alpha.1 is a **pure stateless comparator**: pull two quotes (mining yield, AI inference yield), pick the larger with 5% hysteresis. ~150 LOC. Intentionally simple — the first version.
 
+> **Erratum (session 2623, does not alter the proposal):** This baseline understates the alpha as shipped. The v3.0.0-alpha.1 import already carried a ~400-LOC `Decide` that produces a **per-device `Allocation`** over N candidate streams with a `Policy` enum (`PolicyMaximizeEarnings`, `PolicyStackBTC`, …) — not a two-quote winner-take-all — and hysteresis is a caller-supplied `HysteresisMargin` measured in policy-score space, not a fixed 5%. Feature A5's "per-device routing" ask is therefore partially already met (family-gated assignment exists; per-device *suitability scoring* is the open part). The remaining A-features are unaffected.
+
 By 2028, this engine should make **per-device, predictive, switching-cost-aware, Bayesian-calibrated, adversarially-robust** decisions while remaining a single binary with no external ML framework. The math is mostly standard; the value is integrating it cleanly.
 
 **Why now (not "in 10 years"):**

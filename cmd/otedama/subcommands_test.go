@@ -239,6 +239,49 @@ func TestConfigShow_NoArgs(t *testing.T) {
 	}
 }
 
+// TestConfigShow_SanitizesLogFields covers the safeDisplay treatment of the
+// log_level/log_format fields: `config show` never runs Validate, so a config
+// file carrying control characters in those values would otherwise echo them
+// to the terminal verbatim (ANSI injection through a file the operator opens
+// precisely to inspect).
+func TestConfigShow_SanitizesLogFields(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	// Double-quoted YAML scalars decode \x1b into a real ESC byte, which is
+	// what reaches the config show output path.
+	content := "log_level: \"info\\x1b[2J\"\nlog_format: \"text\\x1b[?25l\"\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--config", cfgPath}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show exit = %d, want 0 (stderr: %s)", code, errb.String())
+	}
+	if strings.ContainsRune(out.String(), '\x1b') {
+		t.Errorf("config show echoed a control character to stdout:\n%q", out.String())
+	}
+}
+
+// TestConfigShow_SurfacesMalformedEnvWarning pins that `config show` warns
+// on stderr when a numeric OTEDAMA_* env var can't parse — previously the
+// value silently resolved to the default with no hint, hiding exactly the
+// information the operator ran `config show` to find.
+func TestConfigShow_SurfacesMalformedEnvWarning(t *testing.T) {
+	t.Setenv("OTEDAMA_POWER_WATTS", "abc")
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show"}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show exit = %d, want 0 (stderr: %s)", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "OTEDAMA_POWER_WATTS") {
+		t.Errorf("config show did not surface the malformed env warning; stderr:\n%s", errb.String())
+	}
+	if !strings.Contains(out.String(), "power_watts:                0") {
+		t.Errorf("config show did not fall back to the default; stdout:\n%s", out.String())
+	}
+}
+
 func TestConfigShow_JSON_HTTPAddrFromFlagAndOrigin(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := run([]string{

@@ -242,6 +242,11 @@ spec:
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        # A fresh PVC mounts root:root; fsGroup grants the nonroot uid
+        # (65532) write access to /var/lib/otedama for wallet.dat.
+        fsGroup: 65532
+        fsGroupChangePolicy: "OnRootMismatch"
       containers:
       - name: otedama
         image: ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
@@ -377,7 +382,12 @@ spec:
 All exported metrics live under the `otedama_` prefix:
 
 - `otedama_hashrate_hashes_per_second` — gauge, live aggregate hash rate
-- `otedama_shares_total{status}` — counter, shares submitted/accepted/rejected
+- `otedama_shares_total{status}` — counter, pool-reported shares
+  (`status` is `accepted` or `rejected` only; **correction, session
+  1727:** submitted shares are a separate metric,
+  `otedama_shares_submitted_total` — this row previously implied a
+  `status="submitted"` label that does not exist)
+- `otedama_shares_submitted_total` — counter, shares sent to the pool
 - `otedama_pool_connection_state` — gauge, 0=disconnected, 1=connecting, 2=connected
 - `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
 - `otedama_arbitration_switches_total` — counter, workload reroutes (mining ↔ AI)
@@ -425,6 +435,25 @@ Minimal alert set:
   annotations:
     summary: "Share rejection rate above 5% on {{ $labels.instance }}"
 ```
+
+### SLO guidance
+
+Suggested service-level objectives for a healthy deployment. These are
+guidance values, not guarantees — tune to your pool's vardiff behaviour
+and link quality. The alerts above implement the first three.
+
+| Objective | Target | Metric / signal |
+|-----------|--------|-----------------|
+| Process availability | `otedama_up` = 1 ≥ 99% per 30d | scrape `up` / `otedama_up` |
+| Pool connectivity | `otedama_pool_connection_state` = 2 ≥ 99% per 24h | `otedama_pool_connection_state` |
+| Share acceptance | rejects ≤ 5% of submits per 10m window | `otedama_shares_total{status}` ratio |
+| Submit latency | p50 < 200 ms, p99 < 500 ms per 24h | `otedama_submit_latency_milliseconds{quantile}` |
+
+Submit round-trip time is the leading driver of stale shares — the
+slower a share's accept, the likelier the job it answers has been
+superseded. A sustained p99 above ~500 ms warrants checking the pool
+endpoint, path quality, or the per-session submit limiter before
+concluding the pool is at fault.
 
 ---
 

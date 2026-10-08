@@ -159,10 +159,13 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and on every PR, uploading
-`benchmark.txt` as the `benchmark-results` workflow artifact. **Correction
-(session 484):** this item previously claimed CI posts a comparison
-to PRs — no comparison job or PR comment exists today.
+CI runs benchmarks on every push to `master` and on every PR, uploading
+`benchmark-results.txt` as the `benchmark-results` workflow artifact.
+**Correction (session 484):** this item previously claimed CI posts a
+comparison to PRs — no comparison job or PR comment exists today.
+**Correction (session 2661):** the trigger branch name was `main`
+(the repo's default is `master`, and there is no `main` ref) and the
+uploaded file is `benchmark-results.txt`, not `benchmark.txt`.
 
 ## Hardware used for published numbers
 

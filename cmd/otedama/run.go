@@ -86,7 +86,7 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 	fs.StringVar(&f.HTTPAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	fs.BoolVar(&f.pprofEnabled, "pprof", false,
-		"(run only) Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
+		"(run only) Mount Go pprof profiling at /debug/pprof/ — intended for loopback/private addresses; a warning is printed when --http-addr is non-loopback.")
 	fs.BoolVar(&f.showOrigin, "origin", false,
 		"(config show only) Annotate each value with the layer that set it (default/file/env/flag).")
 	fs.BoolVar(&f.jsonOut, "json", false,
