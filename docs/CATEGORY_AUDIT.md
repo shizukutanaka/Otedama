@@ -16415,3 +16415,26 @@ Verdict: gate green. Since s2800, six additional census
 classes verified TRUE (repeat-bound, double-
 bookkeeping, interface-boxing, recursion, atomic-RMW,
 lock-reentry) with zero defects.
+
+## Session 2821 update (Socratic pass 1487 — range-copy mutex census)
+
+Claim under test: no mutex-bearing struct is ever
+copied by a `for _, v := range` — a value copy of a
+sync type splits the lock from its data.
+
+Verification — the complete mutex-struct set (8):
+metrics.Registry, rates.Fetcher, hal.Registry,
+tui.Dashboard, arbitrationLoopOpts,
+engine.LatencyTracker, clock.Fake, cappedLogFile.
+
+- Zero `[]T` slices of any of these exist (grep
+  confirmed no slice types declared over them).
+- hal/registry.go:183 ranges `res.devices` — a
+  []Device interface slice; copying an interface
+  header copies no mutex.
+- All eight are used exclusively through pointers or
+  package-owned receivers — consistent with the
+  s2781 mutex-copy census (vet copylocks clean).
+
+Verdict: TRUE — range-copy of a mutex type is
+unreachable; no mutex slice exists.
