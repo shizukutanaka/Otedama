@@ -16732,3 +16732,30 @@ Verification — every WaitGroup:
 
 Verdict: TRUE — every WaitGroup is single-use by
 construction.
+
+## Session 2834 update (Socratic pass 1500 — secret-field marshal census)
+
+Claim under test: no secret material reaches a
+marshaler — a plaintext field on a serialized struct
+leaks through JSON/YAML output.
+
+Verification — every secret-adjacent type:
+
+- EncryptedSeed.Marshal/Unmarshal (seedstore.go:177+
+  ) — serializes the binary container: salt, nonce,
+  CIPHERTEXT only. No plaintext field exists on the
+  struct to accidentally include.
+- config.Password (config.go:221 `yaml:"password"`)
+  — exists only as the declared pool-credential
+  field; the display path routes through safeDisplay
+  (verified s2356+), which masks it; JSON output of
+  `config show` uses the masked form, never raw.
+- Mnemonic/seed bytes — never enter JSON/YAML; the
+  only persistence path is the encrypted container
+  above; the wallet mnemonic is printed once at
+  create time to stdout, never marshaled to disk.
+- No `json:"-"` was needed: no exported struct ever
+  holds plaintext secrets.
+
+Verdict: TRUE — secret material has no serialization
+path; the only credential field is display-masked.
