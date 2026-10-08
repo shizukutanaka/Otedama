@@ -20513,3 +20513,48 @@ Verdict: TRUE — outbound HTTP
 is bounded (10s Client.Timeout
 or 5s ctx), redirect-refusing,
 and hardcoded-endpoint-only.
+
+## Session 2973 update (Socratic pass 1638 — httptest + x509 census)
+
+Claim under test: `httptest` is
+test-only; `x509` is system
+cert-pool loading only in
+production.
+
+Verification:
+
+- `httptest` — zero production
+  imports; test sites in
+  dialer_test.go (NewTLSServer
+  for TLS path tests) and
+  extras_test.go (NewServer/
+  NewUnstartedServer for
+  doctor probes).
+- `x509` production — one site:
+  stratum/tls.go:48-50 —
+  `x509.SystemCertPool()` with
+  `x509.NewCertPool()` fallback
+  when the system store is
+  unavailable; the pool then
+  receives the caller's extra
+  CA PEMs (verified s2919).
+- `x509` test — CreateCertificate
+  + ParseCertificate + CertPool
+  for self-signed test certs
+  (stratum/tls_test.go:26-50,
+  dialer_test.go:1269) —
+  proper scaffolding, no
+  production reach.
+- Zero `x509.ParsePKCS1*`,
+  `MarshalPKCS*`, `CreateCRL`,
+  `Verify` direct calls —
+  handshake verification is
+  delegated to the tls
+  package's own chain check
+  (verified InsecureSkipVerify
+  absent at s2932).
+
+Verdict: TRUE — x509 surface is
+system roots + extra CA append;
+all verification is delegated
+to crypto/tls.
