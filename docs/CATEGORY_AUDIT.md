@@ -11978,3 +11978,7 @@ Claim verified: every admin handler reports honestly — readyz is a true tri-st
 ## Session 2342 update (Socratic pass 1008 — daemon argv/quoting contract)
 
 Claim verified: serviceArgv is the canonical slice — fixed "run" plus only the flags actually set, no injected extras (service.go:452–472); serviceArgs joins it per-element through quoteToken which quotes only on whitespace/quote/control char (:480–487, :496–502 — unicode.IsControl covers C1 since s809) and documents the real attack: a raw newline would escape the ExecStart= line into a new unit directive (e.g. weaker ProtectHome=); launchd consumes the slice directly so values with spaces survive as single <string> elements. TRUE.
+
+## Session 2343 update (Socratic pass 1009 — wire encode/decode round-trip honesty)
+
+Claim verified: the header wire layer is a strict inverse — EncodeHeader validates before any write (frame.go:171–185); EncodeFrame bounds payload > MaxMessageLength first, re-derives MsgLength from the real payload (never trusts the header field), re-validates, then emits (:195–210); DecodeHeader rejects truncation before any read and reassembles the U24 LE as the exact mirror (:217–228); ChannelID() double-checks channel bit + MinimumChannelPayload before the LE load (:153–161); every ReadFrame payload is freshly allocated, caller-owned, never aliased to the header scratch (:144–148). TRUE.
