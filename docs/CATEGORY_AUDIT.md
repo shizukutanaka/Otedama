@@ -22260,3 +22260,46 @@ Verification — census:
   separately).
 
 Verdict: TRUE.
+
+## Session 3008 update (Socratic pass 1672 — path vs filepath ledger)
+
+Claim under test: every
+path operation is
+filepath — the slash-
+only `path` package is
+never misapplied to the
+filesystem.
+
+Verification — census:
+
+- `filepath.Join` ×32 —
+  all segments are local-
+  controlled (datadir,
+  wallet.dat, service-def
+  dirs, config paths);
+  none carry external
+  input verbatim.
+- `filepath.EvalSymlinks`
+  ×2 — daemon unit-dir
+  resolution + GPU sysfs
+  symlink normalization.
+- `filepath.Separator`
+  ×2, `filepath.Glob` ×1
+  — platform-correct
+  handling.
+- ZERO `"path"` imports
+  — confirmed correct:
+  the only URL paths are
+  the five fixed routes
+  (literal strings);
+  nothing treats a URL
+  path as a filesystem
+  path or vice versa.
+- ZERO filepath.Walk/
+  WalkDir in production —
+  directory enumeration
+  is only the wallet
+  stale-temp sweep
+  (verified earlier).
+
+Verdict: TRUE.
