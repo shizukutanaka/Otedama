@@ -10322,3 +10322,7 @@ Claim verified: setActivePayout never exposes a raw address — only the masked 
 ## Session 1933 update (Socratic pass 599 — share-rate reconciliation)
 
 Claim verified: updateShareRates computes otedama_shares_unaccounted as found−judged clamped at 0 (a stats tick racing an accept burst can transiently show judged>found — a negative would be meaningless), divides reject/stale rates only when judged>0, reads the stale reason counter under its own mutex, and returns (rate, judged) so callers gate warnings on actual evidence. TRUE.
+
+## Session 1934 update (Socratic pass 600 — reject-reason accounting)
+
+Claim verified: rejectByReason's dedicated mutex (added s509/#591) guards every map access — lazy counter creation in rejectReason and the stale-rate read in updateShareRates both hold it; categories come only from rejectClass's closed set so label cardinality stays bounded; touchLastReject pairs each reason with its last-occurrence gauge so operators can tell a live failure mode from a stale one. TRUE.
