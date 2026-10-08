@@ -11010,3 +11010,7 @@ Claim verified: wallet save can't leave a torn or residue file — the write goe
 ## Session 2103 update (Socratic pass 769 — hashrate stall monitor)
 
 Claim verified: HashrateMonitor can't cry wolf or go mute — a stall only warns after maxStall CONSECUTIVE samples below the floor (a transient dip resets the counter on the next healthy sample, so single-point noise never pages); the warned flag makes the alert fire exactly once per stall episode instead of spamming every sample; and recovery both logs "hashrate recovered" once AND re-arms the flag so a later stall episode warns again — the tripwire auto-reloads rather than staying silent forever. TRUE.
+
+## Session 2104 update (Socratic pass 770 — config file load path)
+
+Claim verified: the config-file load can't silently misconfigure — KnownFields(true) makes a typo'd yaml key a hard decode error surfaced on stderr (never an ignored field); a missing file cleanly yields the zero Config for the defaults layer, but a non-ENOENT open failure and any parse failure both warn rather than being swallowed — only an io.EOF empty file decodes to zero quietly; and the default-path search honors the documented precedence OTEDAMA_CONFIG → XDG_CONFIG_HOME → ~/.config/otedama/config.yaml. TRUE.
