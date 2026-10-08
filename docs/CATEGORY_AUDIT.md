@@ -16483,3 +16483,29 @@ Verification — all six sites:
 
 Verdict: TRUE — every zero-capable timestamp is
 IsZero-guarded before comparison; no year-1 alias.
+
+## Session 2824 update (Socratic pass 1490 — strconv radix census)
+
+Claim under test: every strconv parse of wire data uses
+the radix the protocol declares — hex fields cannot
+silently truncate at a '0x' or 'a' boundary and decimal
+fields cannot misparse hex.
+
+Verification — complete strconv site inventory:
+
+- Hex-radix (base 16): parse.go:94/:99/:103 — the V1
+  notify version/nbits/ntime fields, which ARE hex on
+  the wire. Correct.
+- Decimal-radix (base 10): stratumv1.go:690 (JSON-RPC
+  id normalizer), dialer.go:436 + run.go:2168 (V2/V1
+  job IDs — numeric per spec), parse.go:293 (port).
+  Correct.
+- ParseFloat (64): rates fetcher :105, hashrate :68,
+  config numeric-env :405/:549 — JSON/env numbers.
+  Correct, and each result is further range-checked
+  (already censused s2387+).
+- No ParseUint base 0 anywhere (would accept 0x and
+  silently change meaning).
+
+Verdict: TRUE — every wire field parses at its
+protocol-declared radix; no 0x-vs-decimal confusion.
