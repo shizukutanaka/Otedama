@@ -9308,3 +9308,15 @@ Method: cross-checked every `git log`/`git describe`/`git tag` call site in all 
 **Already true:** release.yml create-release, code-review.yml, devin-direct-merge.yml, and security.yml already declare `fetch-depth: 0`; all other checkouts only build/test the pushed tree and need no history.
 
 Residuals: none new.
+
+## Session 1697 update (Socratic pass 363)
+
+**Claim verified: "the two always-on PR helper workflows are fork-safe and behave sanely on this repo" — TRUE after one fix.**
+
+**devin-direct-merge.yml — TRUE.** `pull_request` (not `pull_request_target`) trigger, so fork code never runs with secrets or a write token; the conflict comment is gated on `head.repo.full_name == github.repository` (fork PRs can't receive a write token anyway — correct skip rather than fail); `mergeable` UNKNOWN is retried 3×5s instead of being misread as non-conflicting; `/fix-conflict` is posted only on CONFLICTING status.
+
+**code-review.yml — TRUE after fix.** The `common-issues` greps and `performance-check` are gated no-ops on this Go repo (`has_node` detection gates every Node step; the unconditional summary/upload steps are harmless). Defect found: `Post PR comment` and `Comment outdated dependencies` (`github-script` `issues.createComment`) ran unconditionally — on a fork PR the token is read-only so the step 403s and the whole check fails deterministically. Applied the same `head.repo.full_name == github.repository` gate devin-direct-merge.yml already uses.
+
+**Also verified:** `actions/dependency-review-action@v4` in the `dependency-review` job remains the known repo-Settings failure class (Dependency graph disabled) — recorded, not gated (it's a real signal once enabled).
+
+Residuals: `review` job's `fetch-depth: 0` is unnecessary (no git-history reads) — left as harmless; fork PRs still get an empty code-review comment path skipped entirely, which is the intended posture.

@@ -8271,3 +8271,7 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Fixed (session 1696 — リリースノート空化)
 
 - ci.yml `release` ジョブの checkout に `fetch-depth: 0` を追加 — タグ履歴不取得で `git describe` が失敗し "What's Changed" が空になる欠陥を修正
+
+### Fixed (session 1697 — code-review フォークPR失敗)
+
+- code-review.yml の `Post PR comment` / `Comment outdated dependencies` へフォークPRゲート追加 — read-only トークンでの `issues.createComment` が 403 で決定論的失敗する問題を修正
