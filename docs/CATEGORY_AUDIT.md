@@ -23649,3 +23649,53 @@ Float64frombits):
   explicit.
 
 Verdict: TRUE.
+
+## Session 3035 update (Socratic pass 1699 — test-infrastructure ledger)
+
+Claim under test: test
+helpers use the
+idiomatic t.* surface
+— helper annotation,
+owned cleanup,
+bounded parallelism.
+
+Verification — census
+of *_test.go only:
+
+- `t.Error`×2364 +
+  `t.Fatal`×1079 —
+  assertions.
+- `t.Helper`×50 —
+  every shared helper
+  declares itself.
+- `t.Cleanup`×36 —
+  teardown goes
+  through Cleanup,
+  never defer-in-
+  goroutine.
+- `t.Run`×52 —
+  subtests.
+- `t.Parallel`×19 —
+  the parallel set,
+  whose shared-state
+  audit passed
+  earlier (no
+  unguarded fixture
+  writes).
+- `t.Skip`×82 —
+  platform/env-gated
+  tests (GPU sysfs,
+  OS-specific,
+  net-dependent).
+- `t.Log`×31,
+  `t.Deadline`×3.
+- ZERO `t.Fatal` calls
+  from spawned
+  goroutines
+  (verified — the
+  goroutine-t audit
+  found all t.Fatal
+  on the test
+  goroutine itself).
+
+Verdict: TRUE.
