@@ -664,6 +664,28 @@ wallet under a mistyped `--data-dir`. New exported helpers
 `lightning.WalletFilePath` / `FingerprintFilePath` expose the on-disk names.
 `internal/lightning` is a funds-adjacent area — CODEOWNERS review applies.
 
+## 17. `install.sh` has no compatible release yet — every published tag predates the v3 asset-naming contract
+
+**Status:** open — resolves itself when the first `v*` tag is cut and the
+v3 release pipeline publishes its assets.
+
+The install script resolves `latest` via the GitHub API, then probes for
+assets named `otedama_<ver>_<os>_<arch>.tar.gz` /
+`otedama-<os>-<arch>.exe` / `otedama-<os>-<arch>` /
+`otedama-<os>-<arch>.tar.gz` (see `install.sh`, `CANDIDATES`). Those are
+the names the v3 release pipeline (`release.yml`, `ci-cd.yml`) publishes.
+
+**Current reality:** the newest tag is `v2.1.9`, whose only asset is
+`Otedama2.1.9.zip` — a legacy-generation name that matches none of the
+candidates. Running the README install command therefore exits cleanly
+with `no release asset matched (tried: ...)`. The failure is honest and
+diagnosable, but the documented install path cannot succeed until the
+first v3 tag exists.
+
+**Not a regression:** the script deliberately refuses to guess — a wrong
+asset is worse than a clear error. Once a `v*` tag is pushed, the same
+command works unchanged.
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

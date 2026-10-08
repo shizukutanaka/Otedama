@@ -9404,3 +9404,7 @@ Residuals: none.
 ## Session 1708 update (Socratic pass 374 — ADR-009 recheck)
 
 Ecosystem re-verified: sv2-spec normative open set unchanged — #238/#234/#203/#198 all open (confirmed via individual PR pages; the list-page markup misreports state). #238's optional-flags split keeps Otedama's subset validation forward-compatible. SRI v1.12.0 + sv2-apps v0.8.0 unchanged. No action required.
+
+## Session 1709 update (Socratic pass 375 — install.sh live-asset parity)
+
+Claim verified: install.sh's candidate asset names match what the v3 release pipeline publishes — TRUE against code, but the live check surfaced a user-facing gap worth disclosing: `releases/latest` resolves to v2.1.9, whose sole asset (`Otedama2.1.9.zip`) is a legacy-generation name matching none of the candidates. The README install path fails cleanly (`no release asset matched`) until the first `v*` tag exists. Recorded as KNOWN_LIMITATIONS §17 — self-resolving on first v3 release, no code change.
