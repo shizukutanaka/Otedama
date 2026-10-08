@@ -28170,3 +28170,119 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3099 update (Socratic pass 1763 — sync/atomic complete ledger)
+
+Claim under test: the
+sync surface is
+Mutex/RWMutex/
+WaitGroup/Once/
+Pool/Map — and
+atomic is typed
+API only.
+
+Verification —
+census:
+
+- `sync.Mutex`×21 —
+  the
+  hot
+  guards
+  (verified
+  mutex
+  class).
+- `sync.RWMutex`×8 —
+  the
+  read-
+  hot
+  guards.
+- `sync.WaitGroup`×8 —
+  the
+  spawn
+  joins
+  (verified
+  wg-pairing
+  class).
+- `sync.Once`×4 —
+  the
+  idempotent
+  closes
+  (verified
+  sync.Once
+  class).
+- `sync.Pool`×2 —
+  the
+  pooled
+  hashers
+  +
+  buffer
+  reuse
+  (verified
+  sync.Pool
+  class).
+- `sync.Map`×1 —
+  the
+  set-
+  semantic
+  cache.
+- `atomic.Uint64`×10 +
+  `atomic.Bool`×10 +
+  `atomic.Pointer`×8 +
+  `atomic.Int64`×1 —
+  all
+  typed
+  API
+  (verified
+  atomic-typed
+  class:
+  bare
+  `atomic.AddUint64`/
+  `LoadUint64`/
+  `StoreUint64`/
+  `atomic.Value`
+  absent).
+- ZERO
+  `sync.Cond`,
+  `sync.Broadcast`,
+  `sync.Wait`,
+  `sync.Signal` —
+  no
+  condition-
+  variable
+  surface.
+- ZERO
+  `sync.Locker`
+  interface
+  type —
+  mutex
+  used
+  structurally
+  only.
+- ZERO
+  `atomic.CompareAndSwap`,
+  `atomic.Add`,
+  `atomic.Swap`,
+  `atomic.Load`,
+  `atomic.Store`
+  legacy
+  free-
+  function
+  forms —
+  typed
+  only.
+- ZERO
+  `atomic.Int32`,
+  `Int64`,
+  `Uint32`,
+  `Float64`,
+  `Duration`
+  mixed —
+  the
+  types
+  present
+  are
+  the
+  types
+  needed.
+
+Verdict: TRUE.
