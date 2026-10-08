@@ -21273,3 +21273,52 @@ Verification:
   driven comparators.
 
 Verdict: TRUE.
+
+## Session 2989 update (Socratic pass 1653 — os-package ledger)
+
+Claim under test: the `os`
+surface is reads-biased —
+every mutation is either
+accounted-for production
+code or test-only.
+
+Verification — full census:
+
+- Reads: Getenv×16, Stat×10,
+  ReadFile×8, ReadDir×2,
+  Open/OpenFile, ReadDir,
+  UserHomeDir×7, Stdin×4,
+  ModeCharDevice, Args,
+  Executable, ErrNotExist×6.
+- Writes (all previously
+  verified): WriteFile×4
+  (service defs 0644,
+  config), MkdirAll×5
+  (0700 where sensitive),
+  Remove×9 (temp sweep +
+  service uninstall),
+  Rename×2 + CreateTemp +
+  Chmod (wallet atomic
+  save), OpenFile (capped
+  log rotate).
+- Stdio: Stdout×6, Stderr×4 —
+  sink wiring only.
+- `os.Exit` — exactly ONE
+  call site: main.go:110
+  `os.Exit(run(os.Args[1:],
+  os.Stdout, os.Stderr))`.
+  No library-level exits.
+- Zero production
+  mutation-only APIs:
+  Setenv/Clearenv/Chown/
+  Symlink/Link/Truncate/
+  Chtimes all test-only
+  (HOME fixtures, sysfs
+  fakes, stale-file ages).
+- os.Interrupt — signal
+  wiring; os/signal +
+  os/exec audited
+  separately (fixed argv,
+  single NotifyContext).
+
+Verdict: TRUE.
