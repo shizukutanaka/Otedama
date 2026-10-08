@@ -110,9 +110,11 @@ V2-capable-pool list it appears in remains directionally right
 The same sweep found the other example hostnames were dead too —
 `public.stratum.slushpool.com` (config.yaml.example, docs/API.md) and
 `demand.fun` (config.yaml.example's commented failover line) were also
-NXDOMAIN. Those are corrected in place: `stratum+v2tls://
-stratum.braiins.com:3336` is the documented Braiins Pool V2 endpoint,
-verified resolving and accepting TCP on :3336 today.
+NXDOMAIN. Those are corrected in place: `stratum+v2://
+stratum.braiins.com:3336` is the documented Braiins Pool V2 endpoint
+(Braiins Academy: stratum2+tcp defaults to :3336; the port accepts TCP
+today and does not speak TLS, so the scheme is `stratum+v2://`, not
+`stratum+v2tls://`).
 
 ## Related
 

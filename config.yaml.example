@@ -54,7 +54,7 @@ pools:
   # "public.stratum.slushpool.com" no longer resolves — NXDOMAIN. The
   # documented Braiins Pool Stratum V2 endpoint is stratum.braiins.com,
   # whose :3336 port answers TCP today; verified resolving and open.)
-  - url: "stratum+v2tls://stratum.braiins.com:3336"
+  - url: "stratum+v2://stratum.braiins.com:3336"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.
@@ -80,7 +80,7 @@ pools:
   # and only applies reconnect backoff once every pool has been tried.
   # Uncomment and substitute a real backup pool URL to enable failover
   # (the earlier "demand.fun" placeholder does not resolve — NXDOMAIN):
-  # - url: "stratum+v2tls://<your-backup-pool>:3336"
+  # - url: "stratum+v2://<your-backup-pool>:3336"
   #   password: "x"
 
 # ── Workers ──────────────────────────────────────────────────────────────────

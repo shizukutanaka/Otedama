@@ -13431,3 +13431,42 @@ Census: every hostname-shaped literal in *.go/*.md/*.yaml/*.sh (113 unique names
 claim corrected ×1: docs/RESEARCH_IMPROVEMENTS.md:205's illustrative pool URL "fp2.antpool.com:3333" is NXDOMAIN (AntPool's live endpoint is stratum.antpool.com, resolving today) — corrected inline.
 claim verified TRUE for the rest: all *.example.com names are RFC-2606 placeholders (correct as examples); app.kubernetes.io + monitoring.coreos.com are label-key prefixes not dialables; *.sh/*.info hits are filenames not hostnames; otedama.dev/.io hits are substrings of metric names and of CHANGELOG entries recording the *already-fixed* session-1682 phantom; ast.ai is a substring of Vast.ai (research lead, not an endpoint claim); demand.sv2.io/demand.fun/public.stratum.slushpool.com remain only inside test fixtures (never dialed) and historical ledger/ADR errata text (append-only).
 class note: phantom-hostname sweep is now a recurring census class; today's yield was 5 dead hostnames across 5 files (corrected session 2693) + 1 here.
+
+## Session 2696 update (Socratic pass 1362 — DefaultPoolURL defect + v2tls scheme correction)
+
+**Finding — a REAL defect this time.** The port/endpoint census
+that followed the hostname sweep reached `internal/config/config.go:54`:
+`const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"`
+— the built-in fallback pool used when `pools:` is empty pointed at the
+same NXDOMAIN hostname corrected in the docs last session. An
+unconfigured binary could never resolve its own default. Fixed to
+`stratum+v2://stratum.braiins.com:3336`.
+
+**Second-order correction.** While choosing the replacement endpoint the
+new TLS probe showed stratum.braiins.com:3336 does NOT speak TLS
+(`wrong version number` on handshake) — :3336 is Braiins' Noise-V2
+port (Braiins Academy: "for Stratum V2 the default port 3336 is
+used"). The `stratum+v2tls://` scheme introduced into
+config.yaml.example in session 2693 was therefore wrong; corrected to
+`stratum+v2://` in config.yaml.example (primary + commented backup),
+and ADR-002's erratum text was amended to record the correct scheme.
+The authority-pubkey path form (`stratum2+tcp://…/pubkey`) cannot be
+expressed — validatePoolTarget deliberately accepts only bare
+host:port.
+
+- `internal/config/config.go:54` — `DefaultPoolURL` now
+  `stratum+v2://stratum.braiins.com:3336` (resolves; TCP :3336 open;
+  Noise-V2 port per Braiins docs).
+- `config.yaml.example:57,83` — v2tls→v2 scheme correction.
+- `docs/adr/ADR-002-stratum-v2-only.md` erratum — corrected to the
+  `stratum+v2://` scheme with the TLS-probe evidence.
+- `cmd/otedama/config_loading_test.go:137-138` — the doc-fixture mirror
+  also carried the two dead hostnames; synced to the corrected example
+  (`stratum.braiins.com` + an RFC-2606 backup name). Fixtures are never
+  dialed, but dead real names in tests are the same rot class.
+- Verified: `go test ./internal/config ./cmd/otedama ./internal/doctor
+  ./internal/engine` all green; gofmt clean; `TestDefaultPoolURL_*` pins
+  only the scheme prefix, no literal-host coupling.
+- Remaining `public.stratum.slushpool.com` / `demand.sv2.io` mentions
+  are historical CHANGELOG records and audit-ledger quotes — correct to
+  leave (they document what was true then / the fix itself).

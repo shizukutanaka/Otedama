@@ -51,7 +51,7 @@ import (
 // startup banner, and the doctor reachability check all reference this
 // constant rather than repeating the literal, so the default can never
 // drift out of sync between subsystems.
-const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
+const DefaultPoolURL = "stratum+v2://stratum.braiins.com:3336"
 
 // Config is the complete runtime configuration for Otedama.
 //
