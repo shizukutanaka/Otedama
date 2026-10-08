@@ -16785,3 +16785,27 @@ Verification:
 
 Verdict: TRUE — the one join preserves member
 identity and is consumed order-free.
+
+## Session 2836 update (Socratic pass 1502 — copy-mutate census)
+
+Claim under test: no `new := *old` struct copy that is
+then mutated and returned — a field added later to
+the struct would silently be dropped on that path.
+
+Verification:
+
+- Structural scan for struct-deref copies
+  (`x := *obj`): ONE hit — stratumv1.go:624
+  `workerName = *u`, which dereferences a *string*
+  (credential username), not a struct. Not the class.
+- Every layer-copy in the codebase is explicit
+  field-by-field (config's default→file→env→flags
+  layering assigns each named field), so a new field
+  fails loudly as unset rather than silently
+  inheriting.
+- The job/pool state machines never clone-and-mutate
+  a whole struct; jobs map replacement is wholesale
+  (storeBoundedJob / tip-invalidation, s2815).
+
+Verdict: TRUE — the class is absent; field inheritance
+cannot drift.
