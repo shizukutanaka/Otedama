@@ -13541,3 +13541,14 @@ Re-diffed `origin/master...HEAD` in full: 68 files, +7210/−904.
 - Wall-clock bypass census: 40 `time.Now()` call sites outside internal/clock and tests, across 13 files (engine, rates, doctor, provider, poolproto×3, lightning, miner). All are wall-clock observability or I/O deadlines — conn deadlines, metrics epoch stamps, hash-window/uptime/sats observers that take `time.Now()` as a parameter (so they remain unit-testable), reconnect jitter. TRUE.
 - **Issue recorded (no fix — design drift):** `Options.Clock` is injected, defaulted (`run.go:206-207`), and consumed at exactly one site (`startTime := opts.Clock.Now()`, `run.go:217`). No test injects it; all other engine time reads bypass the seam. The abstraction is honest (plumbed, not dead) but effectively decorative — either the 40 sites route through it (a large re-plumbing, likely rejected as churn) or the field stays as a documented seam for future determinism needs. Recording per the record-first rule; not modifying.
 - Dependency Review CI failure re-confirmed as the recorded class: `Dependency review is not supported on this repository` — requires Settings→Dependency graph, unfixable from code. TRUE.
+
+## Session 2704 update (Socratic pass 1370 — CI failure-class re-enumeration)
+
+Re-checked failing jobs on the PR after the latest push; confirmed every failure is a recorded class, plus enumerated the full Go-pin failure surface:
+
+- `Lint` (ci.yml) — NEW log evidence, SAME recorded class: `GO_VERSION: '1.23.x'` (ci.yml:23) + `GOTOOLCHAIN=local` vs `go.mod requires go >= 1.24.0`; golangci-lint itself installs fine (v1.64.8) then dies on package loading.
+- `Test (ubuntu-latest, 1.22.x)` — ci.yml:114 matrix, same class.
+- `Fuzz` — same class (prior log evidence).
+- `Dependency Review` — repo Settings→Dependency graph disabled; action exits with "not supported on this repository".
+- Full pin surface: ci.yml pins 1.23.x (env) + 1.22.x/1.23.x (matrix); ci-cd.yml independently pins 1.21 (env:21) + 1.20/1.21 (matrix:33) — the same broken class lives in TWO workflows. #1344 raised the pins once and was closed unmerged → recorded rejection; do not re-propose.
+- PR #1405 mergeable (no conflicts) at 0db281502.
