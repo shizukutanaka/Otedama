@@ -13284,3 +13284,7 @@ Corrected: the session-495 erratum described the go.mod layout as "`go 1.22` + `
 ## Session 2663 update (Socratic pass 1329 — stale go.mod layout descriptions)
 
 Corrected docs/SUSTAINABILITY.md:28 — still described "`go 1.22` baseline + `toolchain go1.24.0` pin" but the toolchain line was removed when the language floor caught up; go.mod now declares `go 1.24.0` directly. Same stale-layout class as the CONTRIBUTING.md fix (s2662). Verified TRUE meanwhile: GODEBUG_NOTES.md's "previously carried" phrasing is accurate history, BENCHMARKS Go-1.22 measurement environment carries an honest caveat, RESEARCH_IMPROVEMENTS ledger rows are historical records. claim corrected: docs/SUSTAINABILITY.md
+
+## Session 2664 update (Socratic pass 1330 — .github templates)
+
+PR template: every referenced path exists (CONTRIBUTING.md, CLAUDE.md, skills/tdd.md, CHANGELOG.md, NOTICE), SPDX-header convention matches actual .go files, DCO -s matches practice. bug_report.yml: doctor output placeholder `[✓] Configuration:` matches doctor.Print format, `v3.0.0-alpha.1` placeholder matches current version, OS dropdown covers shipped targets (glibc/musl linux, arm64+amd64 macOS, Win10/11). feature_request.yml: scope options map 1:1 to real domains. One soft claim noted: "doctor resolves ~80% of issues" is unverifiable-but-hedged guidance. claim verified: .github/pull_request_template.md + .github/ISSUE_TEMPLATE/* — TRUE
