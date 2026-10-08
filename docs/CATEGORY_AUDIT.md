@@ -11770,3 +11770,7 @@ Claim verified: the sv2-spec normative open set is unchanged — #238 (optional 
 ## Session 2290 update (Socratic pass 956 — env-inheritance census)
 
 Claim verified: subprocess children (systemctl/launchctl/sc.exe via runCmd) inherit the parent env including OTEDAMA_WALLET_* secrets — this is not an escalation: the child's /proc/<pid>/environ is readable to exactly the same uid that could read the parent's, which is the documented threat boundary for env-delivered secrets (the reason env is preferred over argv, which leaks via /proc cmdline to all users). No argv contains a secret and no daemon code references the passphrase vars. TRUE.
+
+## Session 2291 update (Socratic pass 957 — goroutine-fanout census)
+
+Claim verified: every bounded-fanout goroutine swarm is sized by an operator-controlled list, not remote input — the doctor reachability probe spawns len(config.Pools) goroutines (operator-authored config; config carries no pool-count ceiling but this is self-bounded trusted input, not an adversarial channel), the 17 health checks spawn exactly 17. Remote-triggered goroutines do not exist: pool frames never spawn a goroutine. TRUE.
