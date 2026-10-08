@@ -11238,3 +11238,7 @@ Claim verified: the V2 poolproto dial can't hang past its bound and the handshak
 ## Session 2160 update (Socratic pass 826 — milestone gate)
 
 Milestone gate (last run s2140): gofmt clean across the tree; `go build ./...` and `go vet ./...` clean; `go test` green on stratum, miner, engine, poolproto, poolproto/stratumv1, poolproto/stratumv2, config, doctor (all cached — no code has changed since the last green run; every commit this stretch was docs/CATEGORY_AUDIT.md only).
+
+## Session 2161 update (Socratic pass 827 — V1 TLS dial helper)
+
+Claim verified: the V1 TLS path can't silently weaken — defaultTLSConfig pins MinVersion TLS 1.2 (no downgrade); tlsConfigWithExtraCAs returns nil for an empty PEM so the caller falls through to the system default rather than a config with no roots; a SystemCertPool failure falls back to a fresh pool so extra CAs still install (the extra CA is the authoritative addition, system roots are best-effort); AppendCertsFromPEM=false means the PEM contained no parseable certificate — an unreadable CA file is an explicit error, not a silent "no extra CAs"; and dialTLS uses tls.Dialer with the supplied config so ServerName verification applies to the address being dialed (TLS 1.2 minimum applies regardless of which config wins). TRUE.
