@@ -21432,3 +21432,67 @@ Verification:
   0x/0o prefixes).
 
 Verdict: TRUE.
+
+## Session 2992 update (Socratic pass 1656 — strings/bytes surface)
+
+Claim under test: the
+`strings`/`bytes` surface
+is dominated by bounded
+prefix/membership checks
+with modern idioms — no
+allocation-heavy or
+direction-confused calls.
+
+Verification — census:
+
+- `strings.HasPrefix` ×27 —
+  the dominant call:
+  scheme dispatch, enum
+  prefixes, message-type
+  routing.
+- `strings.Join` ×15 /
+  `Contains` ×13 /
+  `TrimSpace` ×11 — label
+  formatting, substring
+  probes, input
+  normalization.
+- `strings.Builder` ×10 —
+  exposition + log
+  builders.
+- `strings.Repeat` ×7 —
+  all bounded (TUI pad,
+  address masks).
+- `CutPrefix` ×5 — modern
+  idiom; `NewReplacer` ×3
+  — sanitize tables incl.
+  the Cf/Zl/Zp stripper.
+- `EqualFold` ×2,
+  `ContainsAny` ×2,
+  `ContainsRune` ×2,
+  `ContainsFunc` ×1,
+  `Map` ×1 — membership +
+  rune-level sanitize.
+- `Split` ×3 / `Fields` ×1
+  / `Index*` ×6 —
+  tokenization seams.
+- `ToLower` ×6 / `ToUpper`
+  ×1 — case normalization.
+- `Trim*` ×3 — direction/
+  cutset verified earlier.
+- `bytes.Equal` ×2 only —
+  secret compares all go
+  through subtle.
+  ConstantTimeCompare
+  (verified); zero
+  `bytes.Buffer` — earlier
+  buffer-absence census
+  confirmed.
+- Zero `strings.Replacer`
+  built per call — all
+  three are package-level.
+- Zero direction bugs:
+  no `TrimLeft(x, "a")`
+  where `TrimPrefix`
+  intended.
+
+Verdict: TRUE.
