@@ -10410,3 +10410,7 @@ Claim verified: pauseSet is a sync.Map with a single writer (the arbitration loo
 ## Session 1955 update (Socratic pass 621 — arbitration tick)
 
 Claim verified: Decide runs on the 30 s ticker only — a fast-quoting provider cannot drive re-allocation churn; stale streams are pruned before each Decide; a failed Decide returns prevAlloc so hysteresis is never reset by a transient error; the effective floor is max(config min-yield, power-breakeven); the shared pause set is rewritten before applyAllocation so a new pause survives the next pool job; idle transitions log once on change. TRUE.
+
+## Session 1956 update (Socratic pass 622 — stream map freshness + yield honesty)
+
+Claim verified: quoteFreshness clamps zero/future-dated quotes to now so a bad timestamp can never make a dead stream immortal; pruneStaleStreams only expires streams with a recorded quote (pre-seeded entries exempt); updateStream feeds net (fee-adjusted) yield into arbitration — gross only when the provider declares no fee — translates nil AcceptedFamilies at the contract boundary, and never leaks a per-device quote's price to unquoted devices; streamsSlice merges YieldPerDevice across same-StreamID entries so every device keeps its own yield. TRUE.
