@@ -21144,3 +21144,52 @@ only):
   seam.
 
 Verdict: TRUE.
+
+## Session 2986 update (Socratic pass 1650 — fmt-package surface)
+
+Claim under test: the `fmt`
+surface is all structured —
+error formatting, injected-
+writer output, zero direct
+stdout calls in library
+code.
+
+Verification:
+
+- `fmt.Errorf` ×260 — the
+  dominant error
+  constructor (verb-free
+  sites already migrated to
+  errors.New in #1185).
+- `fmt.Sprintf` ×211 —
+  error/text building
+  (strconv used where
+  reflection isn't needed —
+  #1241).
+- `fmt.Fprintf` ×74 +
+  `fmt.Fprint(ln)` ×26 —
+  all write to injected
+  writers (usage, doctor,
+  TUI, config display).
+- ZERO direct
+  `fmt.Print*`/`fmt.Println`
+  in internal/ — every
+  human-facing print goes
+  through an injected
+  writer or the logger;
+  stdout/stderr separation
+  verified earlier.
+- ZERO `fmt.Sscanf`/
+  `fmt.Scan*` — the only
+  hit is a comment in
+  rates/fetcher.go:52
+  documenting why
+  `strconv.ParseFloat` was
+  chosen (Sscanf greedily
+  accepts "95000foo").
+- No `fmt.Stringer` leaks —
+  String() methods don't
+  embed secrets (session-718
+  stringer-leak verdict).
+
+Verdict: TRUE.
