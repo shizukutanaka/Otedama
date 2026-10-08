@@ -1943,3 +1943,19 @@ ls-remote used instead — same effective sources):
   standing P0 gap evidence (Otedama's V1 client sends no
   `mining.configure` and cannot request a version mask).
 - No drift since session 1730.
+
+### Session 2843 recheck (ecosystem)
+
+Web search + repo listing re-verified the standing state — no drift:
+
+- sv2-spec: normative open set unchanged — **#238** (optional
+  SetupConnection flags; Otedama's subset-flag validation remains
+  forward-compatible), **#234** (authority key mgmt docs),
+  **#203** (non-custodial payout extension), **#198**
+  (`coinbase_witness`). The June-2026 merges (#194 error codes,
+  sv2-apps #531 sync-API migration) remain the last normative
+  movement — already tracked.
+- SRI: still **v1.12.0** (2026-09-17) — no newer tag.
+- sv2-apps: still **v0.8.0** (2026-09-17) — tProxy's BIP323
+  version-rolling mask remains the standing P0 client-side gap
+  (Otedama's V1 client sends no `mining.configure`).
