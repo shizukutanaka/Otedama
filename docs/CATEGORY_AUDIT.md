@@ -14854,3 +14854,26 @@ by lexical owner.
   accumulation of defers against the caller's frame.
 
 Verdict: TRUE — all defers are function/goroutine-scoped.
+
+## Session 2759 update (Socratic pass 1425 — address-capture census)
+
+Claim under test: no address of a range/loop variable escapes into
+a container or closure — the shared-backing aliasing class.
+
+Verification: trailing-`&name` sites + range-loop usage.
+
+- The only `&v` sites live in messages.go's frameDecoders dispatch
+  table (:453–:525+): each closure declares `v` fresh
+  (`v, err := DecodeX(p)`) then stores `&v` — a per-call local
+  escaping to the heap by design, never a loop variable.
+- 114 `for _, x := range` loops: no `append(..., &x)`, no
+  `go func() { use x }` captures of the loop variable as an
+  address — goroutine fan-out passes values (`go func(idx int)`)
+  or uses the index parameter.
+- Belt-and-suspenders: go.mod's go 1.24 floor means range
+  variables are per-iteration fresh anyway; the code doesn't rely
+  on that — it's structurally correct even under pre-1.22
+  semantics.
+
+Verdict: TRUE — zero aliasing captures; the dispatch-table &v is
+the correct escape idiom.
