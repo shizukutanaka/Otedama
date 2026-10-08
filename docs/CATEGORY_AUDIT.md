@@ -16509,3 +16509,30 @@ Verification — complete strconv site inventory:
 
 Verdict: TRUE — every wire field parses at its
 protocol-declared radix; no 0x-vs-decimal confusion.
+
+## Session 2825 update (Socratic pass 1491 — trim-direction census)
+
+Claim under test: TrimPrefix/TrimSuffix and
+HasPrefix/HasSuffix operate on the correct side —
+a suffix operation on a prefix datum silently fails.
+
+Verification — complete site inventory:
+
+- TrimSuffix: sole site english_wordlist.go:36 strips
+  the trailing newline before Split — correct side
+  (data terminator lives at the end). No TrimPrefix
+  at all.
+- HasPrefix classifications all read the correct side:
+  base58/bech32 prefixes ("1","3","bc1","bc1p","bc1q")
+  live at the string start; scheme prefixes
+  (stratum+tcp/tls/v2tls) start the URL; "renderD"
+  starts device-node names; miningStreamPrefix starts
+  stream IDs.
+- poolproto.go:102 scheme matching uses `s.prefix`
+  against the URL start — consistent with
+  StripScheme's documented contract.
+- No HasSuffix misuse (the only suffix op is the
+  newline trim).
+
+Verdict: TRUE — every affix operation reads the side
+the data actually lives on.
