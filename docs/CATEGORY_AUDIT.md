@@ -13204,3 +13204,7 @@ All claims verified TRUE — `.sweep.sh`/`scripts/` absent from the working tree
 ## Session 2643 update (Socratic pass 1309 — workflow residue recheck)
 
 Residue state matches the documented record — branch filters now include `master` on all push/PR jobs across ci.yml/ci-cd.yml/test.yml/security.yml (session-1270 fix intact); deploy.yml remains main-only by design (dormant, trigger branch doesn't exist — recorded); its needs-chain is sane (test→build→security-scan→deploy-production→post) and the test job correctly uses `go-version-file: go.mod` rather than a stale pin. Remaining sub-floor Go pins (ci-cd `1.21`, ci `1.23.x`, release `1.23.x`) are the recorded #1344-class rejected fix — KNOWN_LIMITATIONS §13 carries them verbatim; no new drift found.
+
+## Session 2644 update (Socratic pass 1310 — GOVERNANCE + SECURITY parity)
+
+All claims verified TRUE — GOVERNANCE.md's Dependabot-not-Renovate correction matches `.github/dependabot.yml` (configured ecosystems exist); the dead-cosign disclosure (release.yml never invokes goreleaser → nothing is signed today) is verbatim accurate; SECURITY.md's supported-versions table is honest (v3.0.x-alpha marked "No — self-responsibility", v2.1.9 partial until Oct 2026); GitHub Private Vulnerability Reporting named primary channel with PGP deferred until Foundation (no phantom email/key); `docs/MIGRATING-FROM-V2.md` link live; no `migrate-from-v2` phantom command; ZKP-auth disclosure consistent with CLAUDE.md's absent-path rule.
