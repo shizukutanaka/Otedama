@@ -20403,3 +20403,63 @@ Verdict: TRUE — encoding use
 is confined to the three
 codecs (binary LE, hex, JSON)
 with all inputs bounded.
+
+## Session 2971 update (Socratic pass 1636 — net + tls census)
+
+Claim under test: `net` surface
+is tiny — `net.Dialer` +
+`net.Listen` (httpserver +
+tests) only; `netip` absent;
+`tls.Dialer` carries
+MinVersion TLS1.2.
+
+Verification:
+
+- `net.Dialer` — 3 production
+  sites:
+  - engine/run.go:877 —
+    `d.Timeout = poolDialTimeout`
+    (the V1 pool dial bound).
+  - stratumv2/dialer.go:76 —
+    `var dialer net.Dialer` —
+    bounded by the engine's
+    ctx timeout (verified
+    s2930).
+  - doctor/checks.go:372 —
+    `net.Dialer{Timeout: 5s}`
+    for the per-pool probe.
+- `net.Listen` — 1 production
+  site at
+  httpserver/server.go:111
+  (admin HTTP); all other
+  sites are tests.
+- `net.SplitHostPort` +
+  `net.ParseIP` — 2 sites at
+  run.go:367+375 for the
+  `--http-addr` loopback
+  classifier.
+- `net.Pipe` — test-only.
+- `netip` — zero imports.
+- `tls.Dialer` —
+  stratum/tls.go:67 with
+  `Config: cfg` where cfg
+  always carries
+  MinVersion=TLS1.2
+  (verified s2932).
+- `tls.Listen` — test-only.
+- Zero `net.Dial`,
+  `DialContext`,
+  `DialTimeout`,
+  `ResolveTCPAddr`,
+  `LookupHost`, `LookupIP`
+  in production (Dialer
+  methods used; the
+  package-level convenience
+  forms are absent).
+
+Verdict: TRUE — the net
+surface is confined to
+net.Dialer with explicit
+timeout, net.Listen for the
+admin server, and tls.Dialer
+with MinVersion=TLS1.2.
