@@ -15723,3 +15723,28 @@ Verification — all 14 sites:
 
 Verdict: TRUE — every parse is base/bitsize-correct with
 bounds checked or failure-safe.
+
+## Session 2793 update (Socratic pass 1459 — integer-division census)
+
+Claim under test: every `/` operator either promotes to
+float64 before dividing or truncates only where the lost
+sub-unit is immaterial.
+
+Verification — all ~11 division sites:
+
+- Float-correct: median computations (fetcher.go:396,
+  hashrate.go:185 — rates/vals are float64), ai_inference
+  (Min+Max)/2.0, reject/stale rates
+  (float64(int)/float64(judged) with judged>0 guard),
+  stats.go:170 float64/dt, worker.go:237
+  float64(hashes)/uptime.Seconds(), latency
+  Microseconds()/1000.0.
+- Integer-truncating (1 site): run.go:482 reconnect-backoff
+  jitter `int64(d) * 2 * pct / 100` — the multiplier lands
+  before the divisor, so truncation loses ≤1ns on a
+  seconds-scale sleep: immaterial.
+- Big-integer math (nBits/target/difficulty) lives in
+  math/big — no int division anywhere near it.
+
+Verdict: TRUE — no division loses a semantically meaningful
+unit.
