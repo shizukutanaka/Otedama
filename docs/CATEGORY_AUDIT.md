@@ -10134,3 +10134,7 @@ Claim verified: every make target CONTRIBUTING.md cites (setup/build/test/lint �
 ## Session 1886 update (Socratic pass 552 — API.md metrics parity)
 
 Claim verified: docs/API.md's metrics table lists exactly the 46 production `otedama_*` series (the 4 extra code hits — hashrate_hps, x, y, z — are test-file literals, not registered production metrics). Every documented name resolves to a real registration. TRUE.
+
+## Session 1887 update (Socratic pass 553 — API.md flag parity)
+
+Claim verified: docs/API.md's run-flag table covers all 15 flags registered in run.go's FlagSet (incl. --wallet-mnemonic-passphrase, --pprof); config show's --origin/--json, version --json, service install's flag set, and doctor's --json are each documented in their own sections. TRUE.
