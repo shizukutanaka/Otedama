@@ -12981,3 +12981,7 @@ This completes the branch-payload audit: all 46 diff files verified. Totals: 2 d
 ## Session 2589 update (Socratic pass 1255 — doctor check-count parity)
 
 Claim verified: the doctor registry defines exactly 17 named checks (checks.go: Configuration, Bitcoin address, Failover payout addresses, Data directory, Lightning wallet, Pool reachability, Pool diversity, Pool endpoint diversity, Pool connection encryption, Pool TLS CA files, Power & cost config, Environment variables, Profitability floor, Pool payout schemes, Hardware, Network, System clock accuracy) — matching the "17 並行ヘルスチェック" claim in CLAUDE.md and the check-count references in docs/API.md + CATEGORY_AUDIT. TRUE.
+
+## Session 2590 update (Socratic pass 1256 — i18n catalog completeness census)
+
+Census: 15 message ID constants in en.go; every priority-language catalog contains exactly 15 keyed entries (ja/zh/ko/es = 15 each, other_langs = 45 for fr/de/pt, ru_ar = 30 for ru/ar — 150 total). Completeness is not claimed-on-faith: TestAllIDs_MatchesEnglishCatalog pins AllIDs to the English map, per-language missing-ID errors are asserted, and MissingTranslations is exercised. TRUE — full bidirectional parity with the "10 言語" claim, all human-reviewed catalogs complete.
