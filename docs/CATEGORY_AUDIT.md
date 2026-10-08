@@ -11926,3 +11926,7 @@ Claim verified: httpserver.Start (server.go:110–132) fails synchronously on li
 ## Session 2329 update (Socratic pass 995 — frame/channel-id double-layer contract)
 
 Claim verified: Header.Validate (frame.go:128–136) enforces both the U24 ceiling AND the MinimumChannelPayload floor when ChannelMsg is set — and Frame.ChannelID (:146–160) re-checks independently (rejects non-channel messages and short payloads even on a Frame built without Validate), so a caller skipping Validate still can't read a bogus channel id. TRUE.
+
+## Session 2330 update (Socratic pass 996 — coinbase payout evasion resistance)
+
+Claim verified: CoinbasePaysScript (script.go:95–134) parses the real tx layout (version → optional segwit marker → vin/scriptSig → vout) and compares each output's scriptPubKey positionally — a pool can't fake the payout via OP_RETURN/scriptSig/witness bytes. Every length is checked against remaining bytes (:113, :126) and malformed input errors rather than returning a silent false. TRUE.
