@@ -10820,3 +10820,7 @@ Claim verified (fresh-lens re-verification of s1653): the layering can't silentl
 ## Session 2056 update (Socratic pass 722 — config.Validate completeness)
 
 Claim verified: validation reports every problem, not just the first — issues are aggregated across address/log/pool/numeric groups into one error listing all of them; NaN/±Inf are rejected by explicit predicate checks BEFORE range comparisons (a NaN compares false against every bound and would otherwise sail through into the arbitration math); every failover address is validated, not just the primary — a typo in a backup is caught at config time rather than discovered the day failover actually reaches it; payout addresses pass real checksum verification through btccrypto.ValidateAddress (length + mainnet prefix shape alone can't catch a same-charset typo); and pool entries validate both URL shape and the payout_scheme enum. TRUE.
+
+## Session 2057 update (Socratic pass 723 — pool URL boundary)
+
+Claim verified: a malformed pool URL fails at config load, not at first dial — the scheme set is closed (stratum+tcp / +tls / +v2 / +v2tls — any other scheme errors with the valid list); the post-scheme target must be host:port with no userinfo, path, query, or whitespace (a credential-embedded or path-carrying URL can't reach the dialer verbatim); the port must parse to 1–65535; and every constraint is checked at config time because Otedama passes the target verbatim to StripScheme + dial with no default port. config package fully re-verified this stretch. TRUE.
