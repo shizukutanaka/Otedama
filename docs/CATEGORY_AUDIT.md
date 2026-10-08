@@ -10530,3 +10530,7 @@ Claim verified: a /metrics scrape is self-consistent — WriteText holds RLock w
 ## Session 1985 update (Socratic pass 651 — registration-time whole-scrape protection)
 
 Claim verified: the registry rejects, at registration (panic on compile-time-constant names), the two defect classes that would otherwise reject the *entire* Prometheus scrape — a malformed label name (one bad line discards the whole response) and a metric name carrying both counter and gauge TYPEs; duplicate name+labels registration is idempotent (returns the existing series) so double-registration at startup cannot split a metric; counters are atomic.Uint64, gauges mutex-guarded, and label names are correctly stricter than metric names (no colon). TRUE.
+
+## Session 1986 update (Socratic pass 652 — HTTP management surface)
+
+Claim verified: the server mounts a private mux (pprof is invoked as handler functions, never blank-imported onto DefaultServeMux — a process-wide leak channel); all four timeouts are configured (5s header timeout is the slowloris bound); readiness is a true tri-state that the engine drives only after the pool handshake, not a static "started"; an unexpected Serve termination is captured into serveErr for supervisor detection rather than vanishing; Stop is a bounded graceful shutdown; the index handler answers "/" only and 404s everything else; the doc honestly states no-auth-by-design with a pprof exposure warning. TRUE.
