@@ -9436,3 +9436,7 @@ Claim verified: the branch's cumulative changes compose correctly under the race
 ## Session 1716 update (Socratic pass 382 — ADR index/status parity)
 
 Claim verified: `docs/adr/README.md`'s index matches the ADR files' own status headers — TRUE. Census: 11 files, index lists 11 rows with correct links; in-file Status headers count 7×Accepted (001–006 + 011) and 4×Proposed (007–010), matching the table exactly, including ADR-002's "partially superseded by ADR-006" qualifier (the V1-dialer errata recorded in-file). Also verified: `.sweep.sh` from an earlier session's edit list is not in `git ls-files` — a transient helper never committed, leaving no residue; the README's external link is the standard cognitect Nygard-template citation. No defects.
+
+## Session 1717 update (Socratic pass 383 — PR/issue template reference parity)
+
+Claim verified: `.github/pull_request_template.md` and `ISSUE_TEMPLATE/*.yml` reference only real commands, docs, and conventions — TRUE. Verified: every checklist command exists (`go test -race`, `go vet`, `golangci-lint run`, `otedama doctor`, `otedama version`, `otedama run --bitcoin-address`); referenced docs exist (`CONTRIBUTING.md`, `CLAUDE.md`, `skills/tdd.md`); the two-line SPDX header + DCO `-s` + Conventional-Commits requirements match what `make audit` step 8 and the repo convention actually enforce; both issue templates parse as YAML and cite the real default config path (`~/.config/otedama/config.yaml` — consistent with the XDG resolution shipped in s725). No defects.
