@@ -26266,3 +26266,72 @@ signal; branch
 remains docs-ledger
 + small fixes
 only.
+
+## Session 3078 update (Socratic pass 1742 — io/bufio surface ledger)
+
+Claim under test: the
+io surface is the
+abstraction pair —
+Reader/Writer
+everywhere, ReadFull
+for fixed-length
+scratch, LimitReader
+bounding external
+input — with zero
+ioutil leftovers.
+
+Verification —
+census:
+
+- `io.Writer`×45 +
+  `io.Reader`×24 +
+  `io.ReadWriter`×3 +
+  `io.Closer`×2 —
+  the interface
+  substrate.
+- `io.ReadFull`×16 —
+  the fixed-
+  length read
+  contract
+  (verified
+  short-read
+  class).
+- `io.LimitReader`×4 —
+  external-input
+  bounds
+  (verified
+  bound class).
+- `io.WriteString`×5,
+  `io.Discard`×3,
+  `io.MultiWriter`×1 —
+  the writers.
+- `io.ReadAll`×2 +
+  `io.Copy`×2 —
+  the drain
+  sites (both
+  bounded
+  upstream).
+- `io.EOF`×5 +
+  `ErrUnexpectedEOF`×1 +
+  `ByteReader`×1 —
+  the error
+  vocabulary.
+- `bufio.Reader`×4 +
+  `NewReader`×2 +
+  `NewReaderSize`×1 +
+  `ErrBufferFull`×2 —
+  the V1 line
+  reader with
+  the line
+  ceiling.
+- ZERO `ioutil.*` —
+  the deprecated
+  package is
+  fully absent.
+- ZERO `io.SectionReader`,
+  `TeeReader`,
+  `OffsetWriter`,
+  `Pipe` —
+  unneeded.
+
+Verdict: TRUE.
