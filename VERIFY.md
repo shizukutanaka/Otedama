@@ -19,18 +19,42 @@ today.
 
 ## What to verify
 
-For each release, four artifacts can be verified:
+For each release, up to four artifacts can be verified. Today only the
+first two exist; items 3–4 ship only once the goreleaser pipeline is
+wired into CI.
 
-1. The **binary** itself (e.g. `otedama_v3.0.0-alpha.1_linux_amd64.tar.gz`).
-2. The **checksums file** (`checksums.txt`) listing SHA-256 of every
-   binary in the release.
+1. The **binary** itself. Asset names differ by pipeline: today's
+   `release.yml` uploads `otedama-<os>-<arch>.tar.gz`; the intended
+   goreleaser flow uploads `otedama_<ver>_<os>_<arch>.tar.gz`.
+2. The **checksums** — today a plain `checksums.txt` (SHA-256 of every
+   archive) plus per-asset `<name>.tar.gz.sha256` sidecars; under
+   goreleaser the file is `otedama_<ver>_checksums.txt`.
 3. The **Sigstore signature** of the checksums file
    (`checksums.txt.sig` + `checksums.txt.pem`) or the equivalent
-   `*.bundle` file.
+   `*.bundle` file — **not yet shipped**.
 4. The **SBOM** files (`*.sbom.cyclonedx.json` and `*.sbom.spdx.json`)
-   listing every dependency.
+   listing every dependency — **not yet shipped**.
 
-## Quick verification (most users)
+## Verification that works today (unsigned pipeline)
+
+The current `release.yml` uploads unsigned archives plus `checksums.txt`
+and per-asset `.sha256` sidecars. Checksums detect transit corruption
+but cannot prove provenance — obtain them from the release page directly
+and treat a mismatch as a do-not-run signal:
+
+```bash
+VERSION="v3.0.0-alpha.1"
+ARCHIVE="otedama-linux-amd64.tar.gz"   # today's name: otedama-<os>-<arch>.tar.gz
+gh release download "${VERSION}" --repo shizukutanaka/Otedama   -p "${ARCHIVE}" -p "checksums.txt" -p "${ARCHIVE}.sha256"
+
+sha256sum --check --ignore-missing checksums.txt
+sha256sum --check "${ARCHIVE}.sha256"
+```
+
+For provenance, rebuild from source (see below) — there is no signature
+to check today.
+
+## Signed-pipeline verification (once goreleaser ships signed releases)
 
 ```bash
 # Pick the version you downloaded.
@@ -85,16 +109,17 @@ cosign verify-blob \
 The `--offline` flag tells cosign to verify using only the bundle's
 embedded signed timestamp, without contacting any external service.
 
-## SBOM verification
+## SBOM verification (once the goreleaser pipeline ships)
 
-Each release ships two SBOMs:
+The intended goreleaser flow ships two SBOMs per release — none are
+published today:
 
 - `otedama_<ver>_<os>_<arch>.sbom.cyclonedx.json` (CycloneDX 1.6) — preferred for security
   scanners (`grype`, `osv-scanner`).
 - `otedama_<ver>_<os>_<arch>.sbom.spdx.json` (SPDX 3.0.1) — preferred for license-compliance
   workflows.
 
-Both are signed alongside `checksums.txt` and can be verified with the
+Both will be signed alongside `checksums.txt` and verifiable with the
 same `cosign verify-blob` invocation above.
 
 To check the binary you have for known vulnerabilities:
@@ -133,8 +158,9 @@ git clone --depth=1 --branch "${VERSION}" \
   https://github.com/shizukutanaka/Otedama.git
 cd Otedama
 
-# 2. Verify the tag's GPG signature (signed by the maintainer).
-git tag -v "${VERSION}"
+# 2. (Tags are not GPG-signed today — skip signature verification;
+#    the tag name alone pins the revision. If maintainer signing is
+#    added later, `git tag -v "${VERSION}"` would check it here.)
 
 # 3. Build with reproducible flags.
 CGO_ENABLED=0 \
@@ -166,9 +192,9 @@ long-running projects:
   has not changed since 2021 and is not expected to change.
 
 For artifacts older than five years, retain a copy of the cosign binary
-that was current at the time of release alongside the artifact. The
-project retains tagged copies of its `cosign` build version in each
-release's `cosign.txt` file.
+that was current at the time of release alongside the artifact. (The
+goreleaser flow is expected to record the cosign version per release;
+no `cosign.txt` file is shipped by today's pipeline.)
 
 ## What if Sigstore goes down
 
@@ -182,10 +208,10 @@ but is not infallible. If `cosign verify-blob` fails with network errors:
   maintainer's mirror), verify the binary against it directly.
 - **Wait** — Sigstore outages are typically resolved within hours.
 
-The checksums file itself is multiply protected: signed by Sigstore,
-recorded in the public Rekor transparency log, included in the GitHub
-release page, and reproducible from source. Compromising all of these
-simultaneously requires nation-state-level resources.
+Once signing ships, the checksums file will be multiply protected:
+signed by Sigstore, recorded in the public Rekor transparency log,
+included in the GitHub release page, and reproducible from source.
+Today it has only the release-page and rebuild paths.
 
 ## Reporting verification failures
 
