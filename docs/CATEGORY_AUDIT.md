@@ -36363,3 +36363,188 @@ census:
   internals.
 
 Verdict: TRUE.
+
+## Session 3156 update (Socratic pass 1820 — math + math/big + math/rand detail ledger)
+
+Claim under test: the
+numeric
+surface is
+non-finite
+guards +
+float-bit
+tricks +
+big
+target
+math,
+with
+zero
+math/rand
+usage.
+
+Verification —
+census:
+
+- `math.IsInf`×13 +
+  `math.IsNaN`×6 —
+  the
+  non-finite
+  guard
+  fleet
+  (config
+  validate,
+  rate
+  parse,
+  yield
+  clamp,
+  price
+  sanity).
+- `math.Float64bits`×4 +
+  `Float64frombits`×3 +
+  `Float32bits`×2 +
+  `Float32frombits`×1 —
+  the
+  bit-safe
+  float
+  marshals
+  (`wire.go:163-167`
+  deliberately
+  avoids
+  pointer
+  casts,
+  and
+  nBits↔target
+  conversions).
+- `math.Trunc`×1 —
+  `parse.go:331`
+  V1
+  extranonce2_size
+  float-
+  truncation
+  check
+  (#384
+  bound).
+- `math.Abs`×1 —
+  `checks.go:949`
+  clock-
+  skew
+  measure.
+- `math.Max`×1 —
+  `engine.go:503`
+  zero-
+  safe
+  divisor.
+- `math.Inf`×1 —
+  `sha256d.go:263`
+  zero-
+  difficulty
+  →
+  +Inf
+  target.
+- `big.Int`×7 +
+  `big.NewInt`×5 +
+  `big.Float`×4 +
+  `big.NewFloat`×1 —
+  the
+  256-bit
+  target/
+  difficulty
+  arithmetic
+  (all
+  big
+  values
+  live
+  in
+  miner/
+  btccrypto;
+  zero
+  `big.Rat`,
+  `ProbablyPrime`,
+  `Exp`/`Pow`,
+  `Mod`/`Quo`
+  overflow
+  patterns
+  audited
+  clean).
+- `crypto/rand.Reader`×11 +
+  `rand.Int`×2 —
+  every
+  random
+  draw
+  is
+  crypto/rand
+  (reconnect
+  jitter
+  ×2
+  at
+  `run.go:486`
+  +
+  `setup.go:297`).
+- ZERO
+  `math/rand`
+  —
+  no
+  `rand.Intn`,
+  `rand.New`,
+  `rand.Seed`,
+  `rand.Shuffle`,
+  `rand.Float64`,
+  `rand.PCG`,
+  `rand.ChaCha8`,
+  `rand.Read`
+  anywhere
+  in
+  production
+  (the
+  verified
+  rand-
+  provenance
+  class).
+- ZERO
+  `math/bits` —
+  no
+  `LeadingZeros`,
+  `TrailingZeros`,
+  `OnesCount`,
+  `RotateLeft`,
+  `Len`,
+  `Add`,
+  `Mul`,
+  `Div`
+  intrinsics
+  (nBits
+  work
+  uses
+  big.Int
+  shifts).
+- ZERO
+  `math.Pow`,
+  `Sqrt`,
+  `Exp`,
+  `Log`,
+  `Log2`,
+  `Hypot`,
+  `Mod`,
+  `Rem`,
+  `Nextafter`,
+  `FMA`,
+  `Modf`,
+  `Copysign`,
+  `Signbit`,
+  `E`,
+  `Pi`,
+  `Ln2`,
+  `MaxFloat64`,
+  `SmallestNonzero*` —
+  the
+  scientific
+  math
+  surface
+  is
+  absent
+  by
+  design
+  (integer
+  mining
+  math).
+
+Verdict: TRUE.
