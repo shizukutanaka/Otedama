@@ -11002,3 +11002,7 @@ MILESTONE GATE (s2100): gofmt clean; go build ./... clean; go vet ./... clean; g
 ## Session 2101 update (Socratic pass 767 — seed encryption store)
 
 Claim verified: EncryptSeed/DecryptSeed can't leak material or oracle the passphrase — an empty passphrase is rejected; salt and nonce come from the injected reader (crypto/rand by default) with io.ReadFull completeness; scrypt(N,r,p) → 32-byte AES-256-GCM is the only path (no DIY crypto, per CLAUDE.md); every secret buffer — pass, derived key, plaintext — is zeroed by defer on BOTH paths; a GCM open failure collapses to the generic ErrWrongPassphrase (no distinguishing error leaks whether auth or format failed); the EncryptedSeed version gate is fail-closed; and the decrypted length is verified 64 bytes before it enters the fixed-size Seed. TRUE.
+
+## Session 2102 update (Socratic pass 768 — wallet save + passphrase rotation)
+
+Claim verified: wallet save can't leave a torn or residue file — the write goes temp → write → fsync → close → chmod 0600 → atomic rename in that order, and every failure branch removes the temp file so a crash mid-save leaves either the old wallet or nothing, never a partial wallet.dat; ChangePassphrase decrypts with the old passphrase BEFORE any write (a wrong old phrase errors without touching the file — nobody can re-wrap the seed to their own phrase without knowing the old one), rejects an empty new phrase, and re-saves through the same atomic path with fresh salt+nonce. TRUE.
