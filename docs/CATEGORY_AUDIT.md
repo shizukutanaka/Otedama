@@ -11886,3 +11886,7 @@ Claim verified: the grind hot loop can never stall on a slow share consumer — 
 ## Session 2319 update (Socratic pass 985 — sysfs read bound)
 
 Claim verified: HAL's lone `os.ReadFile` (gpu_linux.go:168, inside readSysFile) needs no size cap — sysfs attribute files are kernel-generated, ≤PAGE_SIZE, and can't be grown or replaced by an unprivileged user; reads happen only at enum time, never on the hot path. The "unbounded read" class doesn't apply here. TRUE.
+
+## Session 2320 update (Socratic pass 986 — empty DataDir contract)
+
+Claim verified: when no platform data dir can be resolved, `DefaultDataDir` returns "" rather than a fake path — and the "" value is a documented contract (config.go:424–430): `engine.setupWallet` treats it as "not configured" and skips wallet init instead of writing secrets into an arbitrary directory. Graceful degradation with no silent bad-path writes (residual disclosed in KNOWN_LIMITATIONS). TRUE.
