@@ -10454,3 +10454,7 @@ Claim verified: one windowed hashrate is computed per stats tick and drives the 
 ## Session 1966 update (Socratic pass 632 — rate/accountant primitives)
 
 Claim verified: hashrateWindow differentiates cumulative counts into a current rate (a lifetime average can never hit the stall floor — stall detection structurally possible), saturates to 0 on counter reset (reconnect), and primes its baseline on first observation; uptimeAccountant carries the sub-second remainder across non-uniform ticks so productive time stays exact; satsAccountant only integrates rate×elapsed over productive intervals — the estSats estimate can never run backwards or accrue during idle/stalled/curtailed periods. TRUE.
+
+## Session 1967 update (Socratic pass 633 — LatencyTracker exactness)
+
+Claim verified: the tracker is a mutex-guarded ring buffer of fixed capacity (bounded memory, newest samples overwrite oldest); negative samples are rejected; Quantile is an exact nearest-rank on a sorted copy of the retained window — no streaming-estimator error, and the single code path clamps every q (≤0→min, ≥1→max) without an out-of-range index. TRUE.
