@@ -11826,3 +11826,7 @@ Claim verified: the Status iota enum serializes correctly — String() is exhaus
 ## Session 2304 update (Socratic pass 970 — TUI write-target injection)
 
 Claim verified: the dashboard can never interleave with logger stdout — the package contains zero os.Stdout/os.Stderr/fmt.Print* references; every write (frame at :262, cursor controls at :424–432, clean-line at :163) goes through the injected `d.w` io.Writer from NewDashboard(w). Terminal-width detection (:583) type-asserts the injected writer to *os.File and falls back when it isn't one — no hardcoded stdout dependency. TRUE.
+
+## Session 2305 update (Socratic pass 971 — shutdown defer ordering)
+
+Claim verified: Run()'s teardown is LIFO-consistent — dashboard/HTTP stops first, then providers (mining then Akash), then workers stop last (:351–352 provider Stops, :269–273 worker loop registered earlier so it runs last). No use-after-stop: providers can briefly tick against idle workers during unwind, which is a benign zero-quote state; ctx cancellation is the dominant stop signal everywhere, so the defer order only polishes the tail. TRUE.
