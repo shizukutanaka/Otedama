@@ -11854,3 +11854,7 @@ Claim verified: both rate fetchers' StartBackground (fetcher.go:450, hashrate.go
 ## Session 2311 update (Socratic pass 977 — exposition float formatting)
 
 Claim verified: the metrics writer's float rendering is Prometheus-canonical even in edge cases (metrics.go:411–424) — NaN→"NaN", +Inf→"+Inf", -Inf→"-Inf" via math predicates (not magnitude checks, so 1e308 isn't mis-rendered), everything else %g. Gauges never receive non-finite input anyway (s2301), but the writer itself is correct if they ever did. TRUE.
+
+## Session 2312 update (Socratic pass 978 — counter monotonicity)
+
+Claim verified: Prometheus counters can never decrease — `Counter` exposes only Inc() and Add(uint64) (metrics.go:189–192); no Dec/Sub/negative-delta path exists, so a decrement is unrepresentable. The Set(0) sites (:577, :623–624) are gauges (rates/index state), which are free to move. Counter invariant holds structurally, not by convention. TRUE.
