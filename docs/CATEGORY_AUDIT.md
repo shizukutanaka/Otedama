@@ -17688,3 +17688,27 @@ Verdict: TRUE — message round-trips hold under
 ~3.4M adversarial inputs; cumulative fuzz
 coverage now spans 4 of the 7 stratum targets
 with zero crashes.
+
+## Session 2881 update (Socratic pass 1546 — TLS-bypass census)
+
+Claim under test: no TLS verification bypass
+exists in production code.
+
+Verification (`rg` over internal/ + cmd/,
+excluding tests):
+
+- `InsecureSkipVerify` → **zero hits**.
+- Every `tls.Config` sets `MinVersion:
+  tls.VersionTLS12` (stratum/tls.go:35,55;
+  stratumv1/tls.go:32,51) — twin sites, same
+  floor.
+- `RootCAs` used only for the documented CA-file
+  path — chain verification stays enabled.
+- No custom VerifyConnection /
+  VerifyPeerCertificate — default verification
+  is never weakened.
+- Other `MinVersion` hits are the SV2
+  protocol-version field (unrelated to TLS).
+
+Verdict: TRUE — no downgrade or bypass path in
+any TLS configuration.
