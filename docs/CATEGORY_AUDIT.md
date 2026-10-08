@@ -19120,3 +19120,33 @@ Verification:
 
 Verdict: TRUE — only the three
 pre-verified encoders are used.
+
+## Session 2937 update (Socratic pass 1602 — pprof/debug census)
+
+Claim under test: pprof is opt-in
+and bound to the private mux only —
+it cannot leak onto
+`http.DefaultServeMux`.
+
+Verification:
+
+- `expvar` → zero imports.
+- `net/http/pprof` imported at
+  httpserver/server.go:47 with an
+  explanatory comment + `nolint:gosec`
+  — the package is imported for its
+  handler functions, NOT
+  blank-imported (blank import would
+  self-register onto DefaultServeMux).
+- The 6 standard pprof routes are
+  mounted at `mux.HandleFunc(
+  "/debug/pprof/*")` — the server's
+  own mux, only when `pprofEnabled`.
+- The `--pprof` CLI flag defaults
+  false and warns when
+  `--http-addr` is non-loopback.
+- Zero `_ "net/http/pprof"` — the
+  dangerous form is absent.
+
+Verdict: TRUE — pprof is opt-in,
+private-mux, with a loopback warning.
