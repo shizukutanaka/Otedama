@@ -29663,3 +29663,126 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3112 update (Socratic pass 1776 — time complete ledger)
+
+Claim under test: the
+time surface is
+Now/Duration math/
+Ticker/Timer —
+with parsing and
+location APIs
+absent.
+
+Verification —
+census
+(`[^A-Za-z]time\.`
+boundary to
+exclude
+`runtime.*`
+suffixes):
+
+- `time.Now`×45 +
+  `time.Since`×17 —
+  the
+  clock
+  reads
+  (clock
+  abstraction
+  routes
+  the
+  rest).
+- `time.Duration`×26 +
+  `time.Second`×36 +
+  `time.Minute`×9 +
+  `time.Millisecond`×5 —
+  the
+  duration
+  constants.
+- `time.NewTicker`×10 +
+  `time.NewTimer`×3 +
+  `time.After`×3 +
+  `time.Sleep`×1 —
+  the
+  timer
+  class
+  (verified
+  timer-
+  leak
+  class:
+  every
+  Ticker/Timer
+  Stop()s).
+- `time.Time`×28 +
+  `time.UTC`×2 +
+  `time.Date`×2 —
+  the
+  value/
+  zone
+  surface
+  (UTC-only —
+  verified
+  timezone
+  class).
+- ZERO
+  `time.Parse`,
+  `ParseDuration`,
+  `ParseInLocation`,
+  `Unix`,
+  `UnixNano`,
+  `UnixMilli`,
+  `UnixMicro`,
+  `UnixDate`,
+  `RFC3339`,
+  `DateTime`,
+  `DateOnly`,
+  `TimeOnly`,
+  `Layout`,
+  `ANSIC`,
+  `Kitchen`,
+  `Stamp`,
+  `Tick`,
+  `AfterFunc`,
+  `Until`,
+  `NewLocation`,
+  `FixedZone`,
+  `LoadLocation`,
+  `Local`,
+  `Month`,
+  `Weekday`,
+  `Location`,
+  `Ticker`/`Timer`
+  type
+  refs,
+  `Nanosecond`,
+  `Microsecond`,
+  `Hour`,
+  `Days`,
+  `Duration.Before` —
+  the
+  parse/
+  zone/
+  legacy
+  API
+  absent.
+- Method
+  surface
+  (.Seconds()/
+  .Milliseconds()/
+  .String()/
+  .Before()/
+  .After()/
+  .Add()/
+  .Sub())
+  is
+  receiver
+  calls —
+  not
+  part
+  of
+  this
+  package-
+  prefix
+  census.
+
+Verdict: TRUE.
