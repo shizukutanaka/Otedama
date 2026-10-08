@@ -39470,3 +39470,138 @@ census:
   census.
 
 Verdict: TRUE.
+
+## Session 3178 update (Socratic pass 1842 — io/bufio/bytes ledger)
+
+Claim under test: all
+stream
+reads
+are
+`ReadFull`/
+`ReadAll`-
+bounded
+with
+`LimitReader`
+ceilings;
+writers
+bypass
+`bufio`
+by
+design
+(deadline
+atomicity);
+`bytes`
+is
+test-
+dominated
+`Buffer`
+construction.
+
+Verification —
+census:
+
+- `io`:
+  `Writer`×58,
+  `Reader`×25,
+  `ReadFull`×18,
+  `EOF`×13,
+  `Discard`×9,
+  `ReadAll`×8
+  (each
+  under
+  a
+  `LimitReader`
+  or
+  fixed
+  scratch),
+  `ErrUnexpectedEOF`×8,
+  `WriteString`×5,
+  `ReadWriter`×4,
+  `LimitReader`×4,
+  `Copy`×4,
+  `MultiReader`×3,
+  `ErrClosedPipe`×2,
+  `Closer`×2,
+  `MultiWriter`×1,
+  `ByteReader`×1.
+  ZERO:
+  `io.Pipe`,
+  `io.NopCloser`,
+  `io.Seek`/`ReaderAt`/`WriterTo`,
+  `io.ReadAtLeast`,
+  `io.CopyBuffer`,
+  `io.OffsetWriter`,
+  `io.PipeReader`/`PipeWriter` —
+  no
+  random
+  access,
+  no
+  pipe
+  plumbing
+  (channels
+  carry
+  producer→consumer).
+- `bufio`:
+  `NewReader`×31,
+  `Reader`×4,
+  `ErrBufferFull`×2,
+  `NewReaderSize`×1
+  —
+  readers
+  only.
+  ZERO:
+  `bufio.Scanner`,
+  `bufio.Writer`,
+  `bufio.NewWriter`,
+  `bufio.ReadWriter` —
+  writes
+  are
+  unbuffered
+  `conn.Write`
+  so
+  each
+  frame
+  gets
+  its
+  own
+  write
+  deadline
+  atomically.
+- `bytes`:
+  `Buffer`×214
+  (test
+  dominated),
+  `Equal`×57,
+  `NewReader`×23,
+  `Repeat`×13,
+  `NewBuffer`×4,
+  `Reader`×3,
+  `Contains`×2,
+  `NewBufferString`×1,
+  `HasPrefix`×1.
+  ZERO:
+  `bytes.Compare`,
+  `Fields`,
+  `Split`,
+  `Replace`,
+  `Index`,
+  `Cut`,
+  `Trim`,
+  `Join`,
+  `Map`,
+  `Clone`,
+  `Grow` —
+  string-
+  side
+  helpers
+  (`strings.*`)
+  cover
+  text;
+  byte
+  slices
+  are
+  wire
+  buffers
+  only.
+
+Verdict: TRUE.
