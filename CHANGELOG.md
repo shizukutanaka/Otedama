@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1719 — security.yml ハードコード IP チェック)
+
+- `security.yml` の compliance-check が正当な IP リテラル（`127.0.0.1` ヘルプ/
+  ドキュメント文字列、意図的な doctor 到達プローブ `1.1.1.1:53`、テスト
+  フィクスチャ全般）に毎回マッチし決定論的に失敗 → 非テストソースへ絞り、
+  許可リスト（ループバック＋プローブ）を明示。新規ハードコード IP は依然失敗。
+
 ### Fixed (session 1718 — test.yml 成果物グロブ)
 
 - `test.yml` build ジョブの成果物アップロードが `otedama-*`（リポジトリ直下）を
