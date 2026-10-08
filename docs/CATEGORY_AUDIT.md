@@ -10868,3 +10868,7 @@ Claim verified: the dormant adapter mirrors the live path's semantics — readLo
 ## Session 2068 update (Socratic pass 734 — milestone gate)
 
 Milestone gate re-run: gofmt clean (no files listed), `go build ./...` clean, `go vet ./...` clean, and `go test` green across the packages re-verified this stretch — internal/config, daemon, hal, lightning, poolproto (+stratumv1/stratumv2), btccrypto. This stretch's 12 verdict-only commits touched docs/CATEGORY_AUDIT.md only, so the green confirms the tree stayed build-clean throughout.
+
+## Session 2069 update (Socratic pass 735 — frame codec boundary)
+
+Claim verified: the decoder can't be memory-exhausted or emit inconsistent frames — ReadFrame bounds header+payload against MaxFrameSize BEFORE allocating (a peer announcing a huge U24 payload is rejected pre-allocation); MaxFrameSize must be positive (NewDecoder defaults it); the header itself validates MsgLength≤U24-max and channel_msg requires ≥4-byte payload before ChannelID extraction; EncodeFrame overwrites MsgLength with the real payload length so a caller can't accidentally emit a header disagreeing with its payload; each frame's Payload is freshly allocated and caller-owned (no scratch aliasing between reads); and clean EOF is distinguished from mid-frame truncation (io.ErrUnexpectedEOF). (stratum/* is maintainer-gated — verdict only.) TRUE.
