@@ -31966,3 +31966,187 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3128 update (Socratic pass 1792 — flag/unicode complete ledger)
+
+Claim under test: the
+flag surface is
+per-subcommand
+NewFlagSet +
+ErrHelp +
+ContinueOnError —
+the
+dispatch
+pattern;
+unicode is the
+sanitizer range
+set +
+IsSpace/IsControl +
+utf8.ValidString.
+
+Verification —
+census:
+
+- `flag.NewFlagSet`×5 +
+  `flag.FlagSet`×3 +
+  `flag.ContinueOnError`×5 +
+  `flag.ErrHelp`×5 +
+  `flag.Parse`×1 +
+  `flag.Flag`×1 —
+  each
+  subcommand
+  owns
+  a
+  FlagSet
+  (verified
+  flag-
+  surface
+  class);
+  flag.Parse×1
+  is
+  the
+  package-
+  level
+  convenience
+  in
+  main.
+- `unicode.Cc`×2 +
+  `unicode.Cf`×2 +
+  `unicode.Zl`×2 +
+  `unicode.Zp`×2 +
+  `unicode.In`×2 —
+  the
+  sanitizer
+  range
+  tables
+  (#1341:
+  control +
+  format +
+  line/
+  para
+  separators).
+- `unicode.IsSpace`×1 +
+  `unicode.IsControl`×1 +
+  `utf8.ValidString`×1 —
+  the
+  wallet/
+  identity
+  char
+  gates.
+- ZERO
+  `flag.Bool`,
+  `flag.Int`,
+  `flag.Int64`,
+  `flag.Uint`,
+  `flag.Uint64`,
+  `flag.Float64`,
+  `flag.String`,
+  `flag.Duration`,
+  `flag.Var`,
+  `flag.TextVar`,
+  `flag.Func`,
+  `flag.BoolFunc`,
+  `flag.Args`,
+  `flag.NArg`,
+  `flag.Arg`,
+  `flag.NFlag`,
+  `flag.Parsed`,
+  `flag.PrintDefaults`,
+  `flag.Visit`,
+  `flag.VisitAll`,
+  `flag.Lookup`,
+  `flag.Set`,
+  `flag.UnquoteUsage`,
+  `flag.CommandLine`,
+  `flag.PanicOnError`,
+  `flag.ExitOnError`,
+  `flag.Usage`,
+  `flag.Getter`,
+  `flag.Value`×refs —
+  the
+  package-level
+  flag
+  state
+  machine
+  absent;
+  every
+  flag
+  is
+  declared
+  on
+  the
+  per-subcommand
+  FlagSet
+  via
+  its
+  methods.
+- ZERO
+  `unicode.IsDigit`,
+  `IsLetter`,
+  `IsLower`,
+  `IsUpper`,
+  `IsTitle`,
+  `IsPunct`,
+  `IsSymbol`,
+  `IsMark`,
+  `IsNumber`,
+  `IsGraphic`,
+  `IsPrint`,
+  `IsOneOf`,
+  `To`,
+  `ToLower`,
+  `ToUpper`,
+  `ToTitle`,
+  `SimpleFold`,
+  `SpecialCase`,
+  `CaseRange`,
+  `TurkishCase`,
+  `AzeriCase`,
+  `Categories`,
+  `Properties`,
+  `Scripts`,
+  `FoldCategory`,
+  `FoldScript`,
+  `GraphicRanges`,
+  `PrintRanges`,
+  `Other_Alphabetic`,
+  `White_Space`×table —
+  the
+  tables
+  beyond
+  the
+  sanitizer
+  set
+  absent.
+- ZERO
+  `utf8.Valid`,
+  `ValidRune`,
+  `RuneCount`,
+  `RuneCountInString`,
+  `RuneLen`,
+  `RuneStart`,
+  `RuneSelf`,
+  `RuneError`,
+  `MaxRune`,
+  `UTFMax`,
+  `FullRune`,
+  `FullRuneInString`,
+  `DecodeRune`,
+  `DecodeRuneInString`,
+  `DecodeLastRune`,
+  `DecodeLastRuneInString`,
+  `EncodeRune`,
+  `AppendRune` —
+  the
+  decoder
+  family
+  absent;
+  range-over-
+  string
+  and
+  `utf8.ValidString`
+  cover
+  the
+  need.
+
+Verdict: TRUE.
