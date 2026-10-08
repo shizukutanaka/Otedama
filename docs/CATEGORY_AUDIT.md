@@ -10686,3 +10686,7 @@ Claim verified: the mining quote can never overstate — the yield formula is th
 ## Session 2023 update (Socratic pass 689 — provider lifecycle plumbing)
 
 Claim verified: the shared polling lifecycle has no leak or race path — launch checks already-started BEFORE prepare, so a rejected double-start can't mutate the device set the running loop reads; the quote channel is closed by the loop goroutine itself (the sole writer) after exit; Stop cancels, waits, then recreates the channel under lock — a clean restart path with no concurrent writer; and sendQuote drops the oldest buffered quote rather than blocking the publish loop, so arbitration always sees the freshest estimate. TRUE.
+
+## Session 2024 update (Socratic pass 690 — yield type contract)
+
+Claim verified: the yield contract holds at both ends — provider-side Yield.Effective collapses non-finite and non-positive inputs to 0 and clamps confidence at 1.0, so a quote violating the documented [0,1] contract cannot inflate its own score (mirroring the arbitration-side Effective); SatsPerSecond returns 0 on non-positive inputs rather than emitting a negative yield; and the Provider interface's own contract is honest — Start-once, Quotes-closed-on-stop, Stop-always-safe — which the shared lifecycle machinery enforces (s2023). TRUE.
