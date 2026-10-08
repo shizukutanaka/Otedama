@@ -15030,3 +15030,28 @@ Verification: 17 `for {` sites, classified by exit edge:
 
 Verdict: TRUE — no spin without a cancellation edge; every
 blocking select carries an owner-termination case.
+
+## Session 2766 update (Socratic pass 1432 — WaitGroup pairing census)
+
+Claim under test: every wg.Add has a guaranteed matching
+wg.Done on all exit paths, and no wg.Add races with wg.Wait.
+
+Verification: 7 WaitGroups in non-test code.
+
+- Fan-out groups (hashrate.go:145, registry.go:152,
+  checks.go:361, doctor.go:231, fanin.go:31, worker.go:165):
+  each does `wg.Add(1)` in the parent's spawn loop — never
+  inside the child — then `defer wg.Done()` at the child's top,
+  so every spawn path including early-returns pairs off.
+- Lifetime groups (tui d.wg, provider p.wg): `wg.Add(1)` inside
+  Start (before the goroutine launches — Add cannot race with
+  the eventual Wait in Stop), `defer wg.Done()` at goroutine
+  head.
+- All Wg reuse follows the same contract: a group is either
+  function-scoped (fresh var, Wait before return) or
+  owner-scoped (Start adds once, Stop waits once).
+- Zero `Add` calls occurring after a `Wait` could have begun on
+  the same group instance.
+
+Verdict: TRUE — Add-before-spawn + defer-Done-at-head is
+uniform; the Add/Wait race class is structurally absent.
