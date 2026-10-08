@@ -13288,3 +13288,7 @@ Corrected docs/SUSTAINABILITY.md:28 — still described "`go 1.22` baseline + `t
 ## Session 2664 update (Socratic pass 1330 — .github templates)
 
 PR template: every referenced path exists (CONTRIBUTING.md, CLAUDE.md, skills/tdd.md, CHANGELOG.md, NOTICE), SPDX-header convention matches actual .go files, DCO -s matches practice. bug_report.yml: doctor output placeholder `[✓] Configuration:` matches doctor.Print format, `v3.0.0-alpha.1` placeholder matches current version, OS dropdown covers shipped targets (glibc/musl linux, arm64+amd64 macOS, Win10/11). feature_request.yml: scope options map 1:1 to real domains. One soft claim noted: "doctor resolves ~80% of issues" is unverifiable-but-hedged guidance. claim verified: .github/pull_request_template.md + .github/ISSUE_TEMPLATE/* — TRUE
+
+## Session 2665 update (Socratic pass 1331 — docs/adr/README index parity)
+
+All 11 index rows match: filenames exist, H1 titles in each ADR match the index descriptions, and Status fields agree exactly (Accepted: 001-006 + 011; Proposed: 007-010; index's "partially superseded by ADR-006" on 002 is consistent with file-level Accepted). No phantom ADR numbers (012+ absent from both index and directory). claim verified: docs/adr/README.md — TRUE
