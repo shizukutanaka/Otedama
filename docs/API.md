@@ -159,7 +159,7 @@ otedama completion zsh  > "${fpath[1]}/_otedama"
 otedama completion fish > ~/.config/fish/completions/otedama.fish
 ```
 
-Passing an unsupported shell exits with a usage error (2).
+Passing an unsupported shell exits with a usage error (64, EX_USAGE).
 
 Suitable as a container healthcheck command:
 ```yaml

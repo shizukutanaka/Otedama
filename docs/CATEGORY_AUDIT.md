@@ -12989,3 +12989,12 @@ Census: 15 message ID constants in en.go; every priority-language catalog contai
 ## Session 2591 update (Socratic pass 1257 — subcommand surface parity)
 
 Three-way parity verified: main.go dispatches exactly 7 subcommands (run/version/config/service/doctor/wallet/completion — main.go:119-131), CLAUDE.md architecture map lists all 7, and docs/API.md documents all 7. No undocumented or phantom subcommands on any side. TRUE.
+
+## Session 2592 update (Socratic pass 1258 — exit-code parity; REAL doc fix)
+
+Claim verified against main.go:52-55 (exitOK=0, exitRuntime=1, exitUsage=64/EX_USAGE, exitConfig=78/EX_CONFIG) and doctor.ExitCode (0 pass / 1 warn / 2 fail):
+
+- API.md doctor exit codes (0/1/2) — matches ExitCode() exactly. TRUE.
+- API.md `config validate` exit 78 — matches exitConfig. TRUE.
+- API.md SIGINT-130 — signal.NotifyContext restores default disposition on first signal; a second SIGINT terminates via default action = 128+2. TRUE.
+- API.md "unsupported shell exits with a usage error (2)" — FALSE: cmdCompletion returns exitUsage=64 (completion.go:38), not 2. FIXED: API.md corrected to "64, EX_USAGE".
