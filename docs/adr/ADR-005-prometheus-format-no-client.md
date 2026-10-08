@@ -19,10 +19,11 @@ Adopting `client_golang`:
 - ties the project's release schedule to upstream client releases;
 - exposes summary, histogram, and exemplar types Otedama doesn't use.
 
-For Otedama's needs — counters and gauges, ten metric definitions —
+For Otedama's needs — counters and gauges, ~50 metric definitions
+(engine/metrics.go) —
 the Prometheus *text exposition format* is documented and stable, and
-implementing it ourselves is on the order of 250 lines of straightforward
-code.
+implementing it ourselves is on the order of 425 lines of straightforward
+code (plus ~140 more for the optional runtime collector).
 
 ## Decision
 
@@ -77,10 +78,12 @@ Otedama does not use them. If a future need arises, we will reconsider.
 
 ### Neutral
 
-- **No labels normalization.** `client_golang` validates that label
-  names match `[a-zA-Z_][a-zA-Z0-9_]*` at registration. We trust the
-  caller. Otedama only registers a handful of labels at known call
-  sites, so the risk is low.
+- **Label/metric name validation we wrote ourselves.** `client_golang`
+  validates names at registration; our registry does too —
+  `isValidMetricName` (`[a-zA-Z_:][a-zA-Z0-9_:]*`) and
+  `isValidLabelName` (stricter, no colon) fail fast at registration
+  (metrics.go:102-140), since one malformed label would make
+  Prometheus discard the entire scrape.
 
 ## Alternatives Considered
 
@@ -95,7 +98,7 @@ for Otedama's modest metrics surface.
 designed for the same niche we are filling. We chose to write our own
 for two reasons:
 
-1. We cannot validate every dependency's behavior. Owning ~250 lines
+1. We cannot validate every dependency's behavior. Owning ~425 lines
    of code is cheaper than auditing an external library.
 2. Our metric needs are stable and small. The library's full feature
    set would be unused.

@@ -13372,3 +13372,7 @@ claim verified: docs/adr/ADR-001-non-custodial-wallet.md (102 lines) — TRUE. E
 ## Session 2685 update (Socratic pass 1351 — docs/adr/ADR-004 full pass)
 
 claim corrected ×3: (a) render ticker "default 250 ms" — actual `time.NewTicker(time.Second)` (dashboard.go:188); (b) "~400 lines" drifted to 607; (c) "No automatic resize handling — lines wrap" is stale — `detectWidth`/`terminalWidth` (dashboard.go:572-588, width_{unix,windows,other}.go, shipped in #497) re-detects width every render and truncates lines; (d) function list named `headerLine` — actual is `header`. Verified TRUE alongside: ANSI sequences (:424/:428/:432), padRight/visibleLen/shortenURL exist, --no-tui flag exists (run.go:74), indicator glyphs ✓/✗ present.
+
+## Session 2686 update (Socratic pass 1352 — docs/adr/ADR-005 full pass)
+
+claim corrected ×3: (a) "ten metric definitions" — engine/metrics.go now registers 49 series; (b) "on the order of 250 lines" — metrics.go is 425 lines (+139 runtime.go); (c) Neutral row claimed "No labels normalization — we trust the caller" — stale: `isValidMetricName`/`isValidLabelName` enforce the same regexes as client_golang at registration (metrics.go:102-140). Verified TRUE alongside: Registry/Counter/Gauge types, WriteText 0.0.4 format, label escaping, RuntimeCollector exists but unregistered on the default registry (#1158 rejected — claim still accurate), HELP/TYPE emit + sorted samples, formatFloat NaN/+Inf/-Inf.
