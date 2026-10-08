@@ -13520,3 +13520,9 @@ Probed every domain referenced in all *.md files (80 unique URLs, 40 unique doma
 - CLAUDE.md's own `legacy-v2` reference (line 76) is already ledger-recorded (s2659, RESEARCH_IMPROVEMENTS:2166 — maintainer-file convention: ledger-only, never edit the rules file). TRUE.
 
 No phantom URLs remain in the doc set. TRUE.
+
+## Session 2701 update (Socratic pass 1367 — milestone: full gate + dep freshness)
+
+**Milestone gate re-run (all green):** `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/config/doctor/poolproto{,/stratumv1,/stratumv2}/stratum/metrics/cmd — all PASS. TRUE.
+
+**Dependency freshness census:** go.yaml.in/yaml/v3 at latest (v3.0.5). x/crypto v0.48.0 and x/sys v0.41.0 are behind latest (v0.57.0 / v0.48.0) but pinned at the maximum compatible with the go.mod go1.24 floor — proxy.golang.org confirms x/crypto v0.49+ requires go1.25.0, v0.57.0 requires go1.26.0; x/sys v0.42+ requires go1.25.0, v0.48.0 requires go1.26.0. The bump remains a maintainer call on raising the Go floor (recorded s2584). TRUE.
