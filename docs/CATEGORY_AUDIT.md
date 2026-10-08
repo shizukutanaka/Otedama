@@ -13156,3 +13156,7 @@ All TRUE: wallet-at-rest row — AES-256-GCM (seedstore.go aes.NewCipher over sc
 ## Session 2631 update (Socratic pass 1297 — AUDIT_CHECKLIST parity)
 
 All TRUE: Go-floor row corrected to 1.24+ matches go.mod (tlsmlkem godebug parse); row-15 dep set {x/crypto, x/sys, go.yaml.in/yaml/v3} + x/{net,term,text} transitive confirmed live (`go list -m` → yaml.v3 v3.0.5, x/sys v0.41.0); staticcheck-via-golangci correction intact; no phantom rows (90% coverage lives in CLAUDE.md, not here). All prior session corrections (488/1779/2571) preserved and still accurate.
+
+## Session 2632 update (Socratic pass 1298 — MIGRATING-FROM-V2 claims parity)
+
+**FIX APPLIED:** dependencies row claimed "v3 has 2 (`x/crypto`, `yaml.v3`)" — stale: go.mod has 3 direct requires ({go.yaml.in/yaml/v3, golang.org/x/crypto, golang.org/x/sys}; x/sys for internal/tui terminal syscalls, tracked since session-2571). Corrected to "3 direct modules" naming all three. Remaining claims verified TRUE: 4-scheme table matches poolproto.go:116-119, SHA-256d-only, `otedama service install`, Noise+V1/V2 split, wallet crypto description.
