@@ -10374,3 +10374,7 @@ Claim verified: RenderWith renders through Render (requested-lang → English fa
 ## Session 1946 update (Socratic pass 612 — submit-rate limiter mechanics)
 
 Claim verified: submitLimiter is an 8/s + burst-32 token bucket that starts full, refills via a ctx-scoped ticker (stopped on exit), and takes non-blocking — a tokenless share is dropped not queued (it would be stale by send time anyway); the cap sits far above any honest pool's credit rate so it only binds during a difficulty→0 flood; the whole structure is session-scoped so it is destroyed with the session — no cross-session leakage. TRUE.
+
+## Session 1947 update (Socratic pass 613 — poolproto dispatch surface)
+
+Claim verified: StripScheme is the single canonical dial-target extractor (doctor delegates to it — no per-package parsing drift); StripUserinfo redacts only an '@' inside the authority segment and returns malformed URLs unchanged so redaction can never corrupt diagnostics; the Dialer registry is init-time only and panics on nil/ProtocolUnknown/duplicate registration — programmer errors fail loud at startup, not mid-run; Lookup returns ErrUnknownProtocol for unlinked protocols. TRUE.
