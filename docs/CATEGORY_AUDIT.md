@@ -17040,3 +17040,21 @@ Verification on a fresh `go build ./cmd/otedama`:
 
 Verdict: TRUE — binary contract holds on the
 current tree.
+
+## Session 2848 update (Socratic pass 1513 — race-detector spot check)
+
+Claim under test: the concurrency-heavy packages
+remain race-free under the detector — metrics
+(atomic counters + registry mutex), arbitration
+(stream merge), stratum (frame codec + transport).
+
+Verification: `go test -race -count=1` on
+internal/metrics, internal/arbitration,
+internal/stratum — all PASS, no DATA RACE reports.
+
+This re-arms the earlier -race sweeps on the
+current tree after the accumulated commits; the
+three packages cover the mutex/atomic/WaitGroup
+idioms the sweeps verified.
+
+Verdict: TRUE — zero races detected.
