@@ -10538,3 +10538,7 @@ Claim verified: the server mounts a private mux (pprof is invoked as handler fun
 ## Session 1987 update (Socratic pass 653 — go_* runtime collector fidelity)
 
 Claim verified: RuntimeCollector emits client_golang-compatible go_* names so stock Grafana dashboards work unmodified, and honestly documents its one semantic divergence — go_gc_duration_seconds becomes a _total counter (plus go_gc_cycles_total) since no summary type exists, preserving the rate() queries dashboards actually use; the Go version is captured once at construction (build identity cannot drift at scrape time) and is label-escaped via escapeLabel rather than %q (Go quoting ≠ Prometheus quoting). TRUE.
+
+## Session 1988 update (Socratic pass 654 — i18n fallback + degrade honesty)
+
+Claim verified: message resolution follows exact → base-tag → English, and a totally missing ID returns the conspicuous `!{id}!` placeholder plus an error — missing translations surface loudly in logs instead of silently rendering empty UI; RenderWith degrades to the raw template on template failure (UI never breaks) while still reporting the error; MissingTranslations feeds the CI completeness gate so the 10 priority languages cannot silently lag the English catalog; duplicate/nil catalogs are rejected at construction. TRUE.
