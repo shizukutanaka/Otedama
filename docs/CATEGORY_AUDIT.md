@@ -18254,3 +18254,25 @@ Verification (`rg 'sync.Once'` — 4 sites):
 
 Verdict: TRUE — Once usage is canonical and
 race-correct.
+
+## Session 2904 update (Socratic pass 1569 — signal-handling census)
+
+Claim under test: process signal handling is
+a single canonical NotifyContext wiring.
+
+Verification (`rg 'signal\.|SIGINT|SIGTERM|
+os.Interrupt'` production):
+
+- Exactly 1 site — run.go:194:
+  `signal.NotifyContext(ctx, os.Interrupt,
+  syscall.SIGTERM)` + `defer cancel()`.
+- The root context is the cancellation
+  parent for every consumer (engine,
+  http server, miner workers); signal
+  semantics cannot be missed.
+- No SIGHUP handling — correct for a CLI
+  daemon (reload unsupported is the
+  honest stance).
+
+Verdict: TRUE — single canonical wiring;
+no orphaned signal channels.
