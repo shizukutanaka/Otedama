@@ -18162,3 +18162,17 @@ Verification (`rg '.Close\(\)'` production):
 Verdict: TRUE — every discarded Close error is
 structurally safe; the one durability-
 sensitive close (wallet temp) is checked.
+
+## Session 2900 update (Socratic pass 1565 — milestone gate re-check)
+
+Milestone re-check at pass ~1565:
+
+- `gofmt -l internal/ cmd/` → clean.
+- `go build ./...` → clean.
+- `go vet ./...` → clean.
+- `go test -count=1` on miner / stratum /
+  stratumv1 / engine → **4/4 PASS**
+  (engine 25.5s).
+
+Verdict: TRUE — branch state remains green
+across format/build/vet/test gates.
