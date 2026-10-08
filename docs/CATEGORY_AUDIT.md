@@ -15182,3 +15182,39 @@ Verification:
 
 Verdict: TRUE — overflow surfaces either reject early or compute
 in arbitrary precision with an explicit >256-bit reject.
+
+## Session 2772 update (Socratic pass 1438 — filesystem-TOCTOU census)
+
+Claim under test: no security-relevant decision is made from a
+stat() result that an adversary can invalidate before use.
+
+Verification: 10 os.Stat sites, all in the single-user datadir /
+service-manager domains where the threat model only includes the
+owner's own filesystem (0700 datadir, local service paths) —
+cross-uid races are out of scope for wallet.dat and unit paths.
+
+- wallet.go:150 — create-vs-load fork: ErrNotExist→createNew,
+  else loadExisting; a vanished file produces an honest open
+  error, never a clobber (Stat-first verified s2431).
+- wallet.go:171 — fingerprint sidecar recreate-if-absent: the
+  conditional preserves an observed-existing file; note — the
+  gap between stat and os.WriteFile means a concurrent creator
+  of the same private file could be overwritten. Bounded to
+  same-uid co-writers of a 0700 datadir; maintainer-gated file,
+  recorded for accuracy (the "never overwrites" comment covers
+  the intended single-writer semantics, not a hard O_EXCL).
+- wallet.go:274 — stale temp sweep: ModTime<cutoff → remove;
+  worst case removes a file newer than observed — file class is
+  our own .tmp residue.
+- checks.go:67/:199/:264 — probes report existence/mode; report-
+  only, no decision downstream.
+- service.go:241/:335 — installed-status probes; report-only.
+- cmd/wallet.go:168/:195 — Stat-first before verify/rotate
+  prevents accidental file creation; subsequent ops open or
+  error honestly.
+
+Verdict: TRUE — no exploitable check-then-use; every stat feeds
+either a report or a fork whose loser path fails loudly. One
+bounded comment-accuracy note recorded (fingerprint recreate is
+single-writer semantics, not O_EXCL-atomic) — maintainer domain,
+ledger-noted rather than patched.
