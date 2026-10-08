@@ -17390,3 +17390,22 @@ Verification (`git show origin/master:` at
 
 Verdict: TRUE — all four invariants intact;
 master still at 40da2e515.
+
+## Session 2865 update (Socratic pass 1530 — module integrity re-verify)
+
+Claim under test: the module graph is still clean
+— every cached module verifies against its
+recorded hash and `go mod tidy` produces zero
+diff.
+
+Verification:
+
+- `go mod verify` → "all modules verified"
+  (module cache hashes match go.sum exactly).
+- `go mod tidy -diff` → **empty output** — no
+  missing or unused requirement drifted in since
+  s2845.
+
+Verdict: TRUE — zero module drift; the
+3-dependency surface (x/crypto, x/sys,
+go.yaml.in/yaml/v3) is intact.
