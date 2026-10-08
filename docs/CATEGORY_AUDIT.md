@@ -13152,3 +13152,7 @@ All TRUE: 17 sections re-verified; open set = {1,2,4,5,6,8,13,14,17} unchanged. 
 ## Session 2630 update (Socratic pass 1296 — THREAT_MODEL crypto-claim parity)
 
 All TRUE: wallet-at-rest row — AES-256-GCM (seedstore.go aes.NewCipher over scrypt-derived key), scrypt N=2^17=131072 r=8 p=1 (seedstore.go:69-71, godoc cites BIP-38 derivation), atomic tempfile+rename + 0600 (wallet.go save path). FIPS posture note's "AES-256-GCM is FIPS-validated construction; the gap is scrypt" accurate. Sibling claims (TLS verify always-on, redirect refusal on outbound clients, SanitizePoolText boundary, LimitReader on HTTP bodies) previously re-verified this cycle and unchanged.
+
+## Session 2631 update (Socratic pass 1297 — AUDIT_CHECKLIST parity)
+
+All TRUE: Go-floor row corrected to 1.24+ matches go.mod (tlsmlkem godebug parse); row-15 dep set {x/crypto, x/sys, go.yaml.in/yaml/v3} + x/{net,term,text} transitive confirmed live (`go list -m` → yaml.v3 v3.0.5, x/sys v0.41.0); staticcheck-via-golangci correction intact; no phantom rows (90% coverage lives in CLAUDE.md, not here). All prior session corrections (488/1779/2571) preserved and still accurate.
