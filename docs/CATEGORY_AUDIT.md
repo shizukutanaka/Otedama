@@ -20463,3 +20463,53 @@ net.Dialer with explicit
 timeout, net.Listen for the
 admin server, and tls.Dialer
 with MinVersion=TLS1.2.
+
+## Session 2972 update (Socratic pass 1637 — net/http client census)
+
+Claim under test: 3 outbound
+`http.Client` sites, all with
+explicit bound + `CheckRedirect`
+refusing https→http downgrade;
+no `http.Get`/`http.DefaultClient`
+use.
+
+Verification:
+
+- `internal/rates/fetcher.go`
+  `httpClient` — `Timeout:
+  10*time.Second` +
+  `CheckRedirect` returning
+  `fmt.Errorf("rates: redirects
+  are not followed")`.
+- `internal/rates/hashrate.go`
+  `httpClient` — same posture
+  (10s + refuse redirect).
+- `internal/doctor/checks.go`
+  `clockSkewDefaultClient` —
+  `CheckRedirect` refuses; the
+  timeout comes from the
+  per-request `WithTimeout(
+  ctx, 5*time.Second)` at
+  checks.go:895 — ctx is the
+  bound, not Client.Timeout.
+  Injectable via
+  `clockSkewHTTPClient` for
+  tests.
+- `http.NewRequestWithContext`
+  — 3 production sites, all
+  `http.MethodGet` +
+  `http.NoBody`.
+- `http.Get`/`http.Post`/
+  `http.DefaultClient` —
+  test-only.
+- User-Agent header set at
+  doctor/checks.go:905 —
+  "Otedama/3.0.0-alpha
+  (doctor)" — honest
+  identification, not
+  impersonation.
+
+Verdict: TRUE — outbound HTTP
+is bounded (10s Client.Timeout
+or 5s ctx), redirect-refusing,
+and hardcoded-endpoint-only.
