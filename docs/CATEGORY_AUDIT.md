@@ -13032,3 +13032,7 @@ Census: all 21 Go package directories contain at least one _test.go file (71 tes
 ## Session 2600 update (Socratic pass 1266 — ecosystem recheck)
 
 ADR-009 tracking re-verified via git ls-remote: SRI latest tag remains v1.12.0, sv2-apps latest remains v0.8.0 — no upstream drift since the last recheck. ADR-009's claims remain current. TRUE.
+
+## Session 2601 update (Socratic pass 1267 — ADR-003 dependency-claim re-verification)
+
+Read the full ADR-003: its "exactly three external runtime dependencies" list (stdlib counted, gopkg.in/yaml.v3 named) is stale-looking but deliberately append-only — Erratum 1 (session 251) records the yaml.org archival + migration recommendation, Erratum 2 (session 1236) records the completed go.yaml.in migration AND the x/sys whitelist addition (internal/tui width_*). Actual go.mod: exactly 3 direct requires (go.yaml.in/yaml/v3 v3.0.5, x/crypto v0.48.0, x/sys v0.41.0) = the effective policy stated in Erratum 2 verbatim. THREAT_MODEL's "three direct dependencies" matches. The ADR-011 secp256k1 amendment remains permitted-but-unshipped (P-256 stub disclosed). TRUE — no drift.
