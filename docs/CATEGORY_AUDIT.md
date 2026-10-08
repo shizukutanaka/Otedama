@@ -12937,3 +12937,7 @@ Claim verified: `origin/master` still at `40da2e51` (unchanged this stretch); th
 ## Session 2580 update (Socratic pass 1246 — x/sys usage + uid consistency)
 
 Claim verified: `golang.org/x/sys` is imported by exactly two files — `internal/tui/width_unix.go` (`x/sys/unix` terminal-size ioctl) and `internal/tui/width_windows.go` (`x/sys/windows`) — matching go.mod line 31's stated rationale and nothing else. The uid-65532 contract is consistent across all three surfaces: Dockerfile `chown 65532:65532` + `USER nonroot:nonroot` (distroless nonroot = 65532), DEPLOYMENT `fsGroup: 65532`, `runAsUser: 65532`. TRUE.
+
+## Session 2581 update (Socratic pass 1247 — CHANGELOG head entries vs branch diffs)
+
+Claim verified: the CHANGELOG's newest `[Unreleased]` entries each map to a real verified branch change — README `go 1.24.0` claim, SPECIFICATION §2 doctor exit-code set (0/1/2 via Report.ExitCode), CLAUDE.md master-branch + wallet + scorecard + quality-pass corrections, SPECIFICATION G3 "partially resolved" (V1 through poolproto since session 91), CONTRIBUTING translation-fallback honesty, config.yaml.example canonical `zh`/`ru`/`ar` list. TRUE.
