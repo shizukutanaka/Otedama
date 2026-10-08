@@ -19033,3 +19033,32 @@ Verification (3 clients):
 
 Verdict: TRUE — all 3 clients refuse
 redirects and bound the request.
+
+## Session 2934 update (Socratic pass 1599 — flag-package census)
+
+Claim under test: flag parsing is
+per-subcommand — no global FlagSet
+state, no `flag.Parse` in init, no
+shared `flag.String` package vars.
+
+Verification:
+
+- Every subcommand uses
+  `flag.NewFlagSet(name,
+  flag.ContinueOnError)` — doctor,
+  wallet, run, service install,
+  version, config. ContinueOnError
+  means usage errors return, not
+  os.Exit(2) from inside the flag
+  package.
+- Zero `flag.Parse()` at package
+  level, zero `flag.String`/`Bool`/
+  `Int` package vars — nothing leaks
+  argv state across subcommands.
+- main.go:96 documents the `--`
+  terminator semantics (flag.Parse
+  stops at `--` too, so hasHelpFlag
+  must not double-count it).
+
+Verdict: TRUE — per-subcommand
+FlagSets, no global argv state.
