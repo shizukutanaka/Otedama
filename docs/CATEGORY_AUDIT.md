@@ -14015,3 +14015,31 @@ Verification: exactly one non-test `time.Sleep` in the tree —
   doesn't wait for the sleeper; the sleeper polls the mutex).
 
 Verdict: TRUE — single idle-yield, cancellation-bounded.
+
+## Session 2726 update (Socratic pass 1392 — merged-#1399 invariant re-verification)
+
+Claim under test: the merged coinbase-payment check (PR #1399) still
+holds — a pool's coinbase transaction is verified to pay the
+configured address before jobs are applied.
+
+Verification at HEAD: `btccrypto.CoinbasePaysScript` called from the
+V1 job path at `run.go:1685-1705` whenever both `payoutScript` and
+`job.CoinbaseTx` are non-empty.
+
+- Three-state verdict is correct: decode error → once-warn
+  "malformed"; `!pays` → once-warn that names the scheme and explains
+  "shares may fund the pool's wallet, not yours"; pays →
+  `payoutMissingWarned = false` re-arm (warns again on the next bad
+  episode). Same warn-once-per-episode discipline as the starvation
+  and silence monitors.
+- `payoutAddr` is masked via `maskAddr` before logging — the address
+  is not leaked full-length into the log.
+- Only site needed: V1-style pools (tides/solo/direct-coinbase
+  schemes) deliver `CoinbaseTx` in the job. V2/JDP keeps coinbase
+  assembly template-side, so no pool-controlled coinbase can reach
+  this path — the single call site is exhaustive.
+- Address-in-user invariant (#1401) is a separate gate at config
+  time; this one is the runtime re-verification.
+
+Verdict: TRUE — runtime coinbase verification intact, exhaustive at
+its single entry point.
