@@ -9947,3 +9947,8 @@ Ecosystem findings recorded:
 ## Session 1840 update (Socratic pass 506 — i18n bundle wiring)
 
 Claim verified: the 10-language path is complete end-to-end — Lang constants (message.go:104-113) → per-language catalog constructors → `messages.NewBundle()` (bundle.go:19-41 builds English mandatory + 9 optional catalogs, silently skipping any that fail so one bad catalog can't block startup) → `DetectLang` (exact tag → base-tag fallback → English) → `DetectLangFromEnv` (POSIX locale). `bundle.MissingTranslations()` exists for completeness verification. TRUE — language catalog, detection, and fallback all aligned.
+
+## Session 1841 update (Socratic pass 507 — machine-translation claim)
+
+Defects found and fixed:
+- CONTRIBUTING.md:92 claimed non-major languages are covered by machine translation ("その他の言語は機械翻訳で対応しています") — false: the tree ships exactly 10 hand-written catalogs and `DetectLang` falls back to English for everything else (verified s1840). No MT catalogs or runtime MT path exist. Corrected to state the English fallback honestly and invite new-catalog contributions. CLAUDE.md:102's parallel "1,000+ 言語" statement is the rulebook's own aspirational scope note — left as-is (maintainer document). CLAIM FALSE, corrected.
