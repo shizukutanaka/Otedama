@@ -10186,3 +10186,7 @@ Claim verified: docs/adr/ holds exactly ADR-001…011 and the README index lists
 ## Session 1899 update (Socratic pass 565 — CONTRIBUTING/DCO parity)
 
 Claim verified: CONTRIBUTING.md's required commands (setup/build/test/lint) all exist as Makefile targets, and its DCO `git commit -s` requirement matches actual history — recent commits carry Signed-off-by trailers. TRUE.
+
+## Session 1900 update (Socratic pass 566 — milestone checkpoint)
+
+Pass-566 checkpoint on the parity sweep: `go build ./...`, `go vet ./...`, and `gofmt -l` all clean on the current HEAD (f875de3a8). The doc-spec parity block (passes 547–565) covered schema, flags, metrics, locales, endpoints, env, and doc-command surfaces with two real defects corrected (SPECIFICATION exit-code set, README Go-version narrative); everything else verified TRUE.
