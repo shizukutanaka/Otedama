@@ -8378,3 +8378,9 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   `dev/unknown` と名乗っていた欠陥を修理。
 - `.goreleaser.yaml`: `dockers` 両アーチに `VERSION`/`COMMIT`/`BUILD_DATE`
   build-arg を追加（同欠陥の2系統目）。
+
+### Fixed (session 1775 — make docker-build version stamping)
+
+- `Makefile`: `docker-build` に `VERSION`/`COMMIT`/`BUILD_DATE`
+  build-arg を追加 — タグが `$(VERSION)` を名乗るのにイメージ内バイナリは
+  `dev/unknown` を報告していた（s1773 と同型の3系統目）。

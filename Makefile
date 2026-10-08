@@ -248,7 +248,10 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 
 .PHONY: docker-build
 docker-build: ## Build Docker image
-	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest .
+	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) .
 
 .PHONY: docker-run
 docker-run: ## Run Otedama in Docker
