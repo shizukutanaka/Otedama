@@ -14898,3 +14898,29 @@ wrap verbs (%w for chains, %v for payloads), defer-in-loop
 the frameDecoders &v idiom verified as per-call escape).
 
 Status: ledger-only cycle continues; no defects found.
+
+## Session 2761 update (Socratic pass 1427 — string↔[]byte census)
+
+Claim under test: byte↔string conversions are all semantically
+required — no gratuitous copies, none in loops.
+
+Verification: all conversions listed (13 `[]byte(s)`; zero
+`string([]byte)` — bytes never round-trip back to strings).
+
+- API-necessary writes: wallet.go:172/:227, service.go:217/:318 —
+  os.WriteFile/os.Write requires []byte; single-shot per call.
+- KDF/HMAC material: seed.go:300/301/318, seedstore.go:102/:135 —
+  passphrase/mnemonic → key bytes; each is per-derivation, plus
+  secret-buffer wiping where required.
+- Hash inputs: btccrypto.go:365 (tag), noise.go:120
+  (protocolName), run.go:2172 (jobID → FNV), english_wordlist:40
+  (one-shot init-time SHA-256 pin).
+- cmd/otedama/wallet.go:149 — two conversions feeding
+  subtle.ConstantTimeCompare (the API demands []byte); one-shot
+  per invocation.
+- None occurs inside a `for` body; the only hot-path-adjacent one
+  (run.go:2172) is a per-job key derivation, not per-share.
+
+Verdict: TRUE — every conversion is an API boundary or one-shot;
+the asymmetric direction (strings→bytes only) means no stale-view
+aliasing risk either.
