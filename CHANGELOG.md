@@ -8384,3 +8384,9 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 - `Makefile`: `docker-build` に `VERSION`/`COMMIT`/`BUILD_DATE`
   build-arg を追加 — タグが `$(VERSION)` を名乗るのにイメージ内バイナリは
   `dev/unknown` を報告していた（s1773 と同型の3系統目）。
+
+### Fixed (session 1777 — release-check vacuous gate)
+
+- `Makefile`: `release-check` の CHANGELOG ゲートを修理 — `## [v...]` の
+  v 接頭不一致と `[Unreleased]` 常時マッチの2重欠陥で、バージョン節の
+  存在を実質検査していなかった。`v` 除去＋日付付き節を必須化。

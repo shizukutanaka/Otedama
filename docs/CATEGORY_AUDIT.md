@@ -9684,3 +9684,7 @@ Defect found and fixed: `make docker-build` tagged the image `$(VERSION)` but pa
 ## Session 1776 update (Socratic pass 442 — ADR-009 ecosystem recheck)
 
 Claim verified: no ecosystem drift since session 1730 — TRUE. sv2-spec normative open set stable (#238 optional-flag negotiation, #234 authority-key docs, #203 non-custodial payouts, #198 coinbase_witness; #232/#186/#103 cosmetic); Otedama's subset-flag validation remains forward-compatible with #238. SRI v1.12.0 and sv2-apps v0.8.0 both unchanged (re-pulled via ls-remote after the REST API hit its rate limit). ADR-009 ecosystem log updated.
+
+## Session 1777 update (Socratic pass 443 — release-check changelog gate was vacuous; fixed)
+
+Defect found and fixed: `make release-check`'s changelog gate could never fail — two compounded bugs. (a) The pattern `^## \[$(VERSION)\]` expanded with VERSION's leading "v" (`v3.0.0-alpha.1`) while every CHANGELOG heading strips it (`## [3.0.0-alpha.1]`), so the versioned alternative could never match anything. (b) The `|^## \[Unreleased\]` alternative always matches (the Unreleased section permanently exists), so the OR short-circuited green on every release — the skill's own procedure expects a dated versioned section to exist by release time, i.e. the check's intent was strictness it never delivered. Fixed: strips VERSION's "v" and requires `^## \[v*<ver>\]` — verified to match the real `## [3.0.0-alpha.1]` entry and fail-closed on a nonexistent version. (make-level invocation untestable locally — gofumpt absent — but the grep itself was verified directly.)

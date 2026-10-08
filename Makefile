@@ -292,8 +292,9 @@ release-check: validate ## Verify readiness for release
 	@echo "Verifying release readiness..."
 	@test -f CHANGELOG.md || (echo "CHANGELOG.md missing" && exit 1)
 	@test -f VERSION || (echo "VERSION file missing" && exit 1)
-	@grep -q "^## \[$(VERSION)\]\|^## \[Unreleased\]" CHANGELOG.md || \
-		(echo "CHANGELOG.md does not contain entry for $(VERSION)" && exit 1)
+	@VNUM="$(VERSION)"; VNUM="$${VNUM#v}"; \
+	grep -q "^## \[v*$${VNUM}\]" CHANGELOG.md || \
+		(echo "CHANGELOG.md does not contain a dated entry for $(VERSION)" && exit 1)
 	@echo "Release checks passed."
 
 # macOS ships `shasum -a 256`, not GNU sha256sum — resolve whichever exists.
