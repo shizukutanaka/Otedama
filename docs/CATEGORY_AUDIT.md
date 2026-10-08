@@ -36905,3 +36905,213 @@ census:
   variants.
 
 Verdict: TRUE.
+
+## Session 3159 update (Socratic pass 1823 — os detail ledger)
+
+Claim under test: the
+`os`
+package
+surface
+is
+the
+documented
+minimal
+set —
+process
+I/O +
+file
+lifecycle +
+home-dir
+lookup,
+with
+exactly
+one
+real
+`os.Exit`
+and
+one
+`os.Args`
+read.
+
+Verification —
+census:
+
+- `os.Getenv`×16 —
+  env
+  reads
+  (config
+  layer
+  +
+  XDG
+  fallbacks).
+- `os.Stat`×10 —
+  existence/
+  mode
+  probes
+  (wallet.dat,
+  config
+  file,
+  tlsca,
+  dir
+  gates).
+- `os.File`×10 —
+  the
+  file
+  type
+  in
+  signatures.
+- `os.Remove`×9 —
+  temp
+  sweep,
+  stale
+  wallet
+  temps,
+  service
+  files.
+- `os.ReadFile`×8 +
+  `os.WriteFile`×4 +
+  `os.OpenFile`×1 +
+  `os.Open`×1 +
+  `os.CreateTemp`×1 +
+  `os.ReadDir`×2 +
+  `os.MkdirAll`×5 +
+  `os.Chmod`×1 +
+  `os.Rename`×2 —
+  the
+  whole
+  file-I/O
+  fleet
+  (atomic
+  wallet
+  writes
+  via
+  temp+rename).
+- `os.UserHomeDir`×7 —
+  default
+  datadir/
+  config
+  resolution.
+- `os.Stdout`×6 +
+  `os.Stderr`×4 +
+  `os.Stdin`×4 —
+  injected
+  stdio
+  seams.
+- `os.ErrNotExist`×6 —
+  the
+  `errors.Is`
+  target
+  set.
+- `os.Exit`×2 —
+  one
+  real
+  (`main.go:110`
+  the
+  process
+  boundary),
+  one
+  doc
+  comment
+  (`doctor.go:110`).
+- `os.Args`×1 —
+  `main.go:110`
+  passes
+  `os.Args[1:]`
+  into
+  `run`;
+  nothing
+  else
+  reads
+  argv.
+- `os.Interrupt`×1 +
+  `syscall.SIGTERM`×1 —
+  the
+  NotifyContext
+  pair.
+- `os.Executable`×1 —
+  `service.go:83`
+  binary
+  path
+  for
+  the
+  unit
+  file.
+- `os.O_WRONLY`+
+  `O_CREATE`+
+  `O_APPEND`
+  ×1
+  each —
+  the
+  single
+  OpenFile
+  flag
+  set
+  (log
+  file).
+- ZERO
+  `os.Setenv`,
+  `Unsetenv`,
+  `Clearenv`,
+  `Environ`,
+  `Expand`,
+  `ExpandEnv`,
+  `LookupEnv`
+  —
+  env
+  writes
+  absent;
+  lookup
+  is
+  Getenv
+  only
+  (empty-vs-unset
+  distinction
+  deliberately
+  unused).
+- ZERO
+  `os.Chdir`,
+  `Getwd`,
+  `Mkdir`,
+  `RemoveAll`,
+  `Lstat`,
+  `Symlink`,
+  `Readlink`,
+  `Link`,
+  `Truncate`,
+  `Chown`,
+  `Lchown`,
+  `Chtimes`,
+  `UserConfigDir`,
+  `UserCacheDir`,
+  `TempDir`,
+  `Getuid`,
+  `Geteuid`,
+  `Getgid`,
+  `Getpid`,
+  `Getppid`,
+  `Hostname`,
+  `Pipe`,
+  `NewFile`,
+  `SetNonblock`,
+  `FindProcess`,
+  `StartProcess`,
+  `IsTimeout`,
+  `IsPermission`,
+  `ErrExist`,
+  `ErrPermission`,
+  `Seek`,
+  `Sync`,
+  `SetDeadline`
+  methods —
+  no
+  process
+  management
+  or
+  directory
+  mutation
+  beyond
+  the
+  listed
+  fleet.
+
+Verdict: TRUE.
