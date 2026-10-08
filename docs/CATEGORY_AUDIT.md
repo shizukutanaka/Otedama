@@ -13949,3 +13949,27 @@ shows its actual name.
 
 Verdict: TRUE — dispatch is constant-typed, symmetric across the
 three operations, and fails closed.
+
+## Session 2723 update (Socratic pass 1389 — float32 precision census)
+
+Claim under test: float32 never reaches economic math — its ~7-digit
+mantissa would silently corrupt price/yield/difficulty values.
+
+Verification: all `float32` occurrences outside tests.
+
+- Confined to the SV2 wire layer by spec: `OpenMiningChannel.
+  NominalHashrate` is IEEE-754 f32 little-endian per the Stratum V2
+  spec (handshake.go:158,182-183; wire.go:164,167
+  `math.Float32bits`/`Float32frombits`). f32 is not a choice here —
+  it's the mandated wire width.
+- Sole non-wire use: `run.go:1903-1913` accumulates worker hash rates
+  into the `hashRate float32` that fills that field. Per-add rounding
+  is bounded by the same 2^-24 ceiling the wire encoding imposes
+  anyway; the field is spec-informational, and the ≤0→nominal-fallback
+  comment is careful (declares sustained/rated throughput instead of
+  the ~0 fresh-session rate so vardiff seeds correctly).
+- All economic math (price reads, yield, difficulty, arbitration
+  scores) is float64 or int elsewhere — no float32 leaks.
+
+Verdict: TRUE — float32 is confined to the spec-mandated wire field
+and its sole producer; precision ceiling matches the protocol.
