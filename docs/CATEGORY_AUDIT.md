@@ -27849,3 +27849,118 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3096 update (Socratic pass 1760 — testing-API ledger)
+
+Claim under test: the
+test surface uses
+the standard
+testing API —
+Error/Fatal/TempDir/
+Run/Setenv/Parallel/
+Cleanup — with
+fuzz and bench
+primitives and no
+exotic calls.
+
+Verification —
+census (real API
+only, field-access
+filtered):
+
+- Assertions:
+  `t.Errorf`×1659 +
+  `t.Fatalf`×825 +
+  `t.Error`×678 +
+  `t.Fatal`×254 —
+  the
+  assertion
+  bulk.
+- `t.TempDir`×122 —
+  every
+  file-
+  scoped
+  test
+  uses
+  auto-
+  cleanup
+  dirs;
+  ZERO
+  `os.TempDir`
+  in
+  tests.
+- `t.Run`×48 +
+  `t.Parallel`×19 +
+  `t.Cleanup`×36 +
+  `t.Setenv`×32 —
+  the
+  sub-test/
+  env
+  surface.
+- `t.Helper`×50 —
+  helper-
+  marking
+  on
+  50
+  sites
+  (verified
+  t.Helper
+  class).
+- `t.Skip`×81 +
+  `t.Skipf`×1 —
+  the
+  documented
+  skips.
+- Fuzz:
+  `f.Add`×81 +
+  `f.Fuzz`×23 —
+  the
+  23-
+  target
+  corpus
+  seed
+  inputs.
+- Bench:
+  `b.N`×11 +
+  `b.ReportAllocs`×11 +
+  `b.ResetTimer`×8 +
+  `b.Fatal`×1 —
+  the
+  benchmark
+  harness.
+- `t.Logf`×13 +
+  `t.Log`×2 —
+  log
+  lines.
+- ZERO
+  `t.Deadline`,
+  `t.Chdir`,
+  `t.Name`,
+  `t.Failed`,
+  `t.FailNow`,
+  `t.Skipped`,
+  `t.Log`,
+  `t.Run`
+  misuse —
+  the
+  exotic
+  surface
+  absent.
+- ZERO
+  `b.Elapsed`,
+  `b.StartTimer`/
+  `StopTimer`,
+  `b.SetBytes`,
+  `b.SetParallelism`,
+  `b.Loop` —
+  bench
+  API
+  minimal.
+- ZERO
+  `f.Log`/
+  `f.Skip` —
+  fuzz
+  lifecycle
+  minimal.
+
+Verdict: TRUE.
