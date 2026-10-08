@@ -9844,3 +9844,7 @@ Ecosystem re-verification: SRI latest remains **v1.12.0** (channels_sv2 hardenin
 ## Session 1816 update (Socratic pass 482 — config.yaml.example parity)
 
 Claim verified: `config.yaml.example` (repo root — the earlier find-filter missed it, now located) parses cleanly and every key resolves to a real struct tag in internal/config/config.go — 11 keys (bitcoin_address, data_dir, language, log_format, log_level, pools[].url/user/password, workers[].name), zero phantom keys. The 12 struct tags absent from the example are all optional fields (bitcoin_addresses, arbitration_hysteresis_pct, curtail_below_btc_usd, electricity_price_per_kwh, http_addr, min_yield_sats_per_sec, payout_scheme, power_watts, tls_ca_file) — a deliberately minimal starter file, consistent with defaults-first design. Also verified: stray build artifacts in the working tree (`otedama`, `miner.test`) are properly gitignored (`/otedama`, `*.test`) and never committed. TRUE — no defect.
+
+## Session 1817 update (Socratic pass 483 — .editorconfig + CODE_OF_CONDUCT audit)
+
+Claim verified: `.editorconfig` is internally consistent and matches actual file conventions — Go files = tab/gofmt, YAML/JSON/Dockerfile = 2-space, shell = 4-space, Makefile = tab, Markdown exempts trailing-whitespace trimming (correct — hard breaks are meaningful). `CODE_OF_CONDUCT.md` is Contributor Covenant 2.1 correctly customized: the reporting channel points at the real `…/security/advisories/new` path (no `[INSERT CONTACT METHOD]` placeholder residue), enforcement ladder intact. TRUE — no defect.
