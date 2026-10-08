@@ -99,12 +99,19 @@ type HashrateFetcher struct {
 const HashrateCacheDuration = 30 * time.Minute
 
 // NewHashrateFetcher returns a fetcher with the default public
-// endpoints and a 10-second HTTP timeout.
+// endpoints and a 10-second HTTP timeout. Like the price fetcher, the
+// client refuses every redirect: the sources are hardcoded HTTPS
+// endpoints, so a redirect can only be hostile (an https→http downgrade
+// injecting a manipulated hashrate the provider would divide device
+// hashrate by).
 func NewHashrateFetcher() *HashrateFetcher {
 	return &HashrateFetcher{
 		sources: defaultHashrateSources,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("rates: redirects are not followed")
+			},
 		},
 	}
 }
