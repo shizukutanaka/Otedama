@@ -35,7 +35,7 @@ the configured `io.Writer`. It uses:
 Layout is computed in code with `padRight`, `visibleLen` (which
 correctly counts escape-sequence-stripped width), and `shortenURL`.
 
-Render is driven by a single ticker (default 250 ms) that calls
+Render is driven by a single ticker (1 s) that calls
 `renderLoop`, which reads the latest `Stats` from a buffered channel
 and writes the new frame.
 
@@ -45,7 +45,7 @@ and writes the new frame.
 
 - **Zero new dependencies.** Consistent with ADR-003. The TUI is a
   consumer of `os.Stdout` and `time.Ticker` — both stdlib.
-- **The render is deterministic and small.** ~400 lines of Go cover
+- **The render is deterministic and small.** ~600 lines of Go cover
   every rendering case. Bug reports and audits stay in the codebase.
 - **No surprise updates.** Bubble Tea released breaking API changes
   during v0.x; we would not want to chase them.
@@ -63,9 +63,11 @@ and writes the new frame.
   click events for free. We have neither — but Otedama's TUI is
   read-only (the only interaction is Ctrl+C to quit), so we don't
   need them.
-- **No automatic resize handling.** If the terminal is resized
-  smaller than expected, lines wrap. We accept this; the dashboard
-  is information-dense but not safety-critical.
+- **Resize handling is width-only.** The dashboard re-detects
+  terminal width each render tick (`detectWidth` → `terminalWidth`
+  on unix/windows; :572-588) and truncates lines to the new column
+  count — a shrink no longer wraps but tall content still scrolls
+  off. There is no interactive resize event handling beyond that.
 - **No graphical widgets.** No progress bars, no spinners. We use
   plain text indicators (`✓`, `!`, `✗` in `doctor`; "connected" /
   "disconnected" in the dashboard). Less flashy, but readable in
@@ -74,7 +76,7 @@ and writes the new frame.
 ### Neutral
 
 - **Testing is straightforward.** Each line-rendering function
-  (`headerLine`, `poolLine`, `walletLine`, `earningsLine`,
+  (`header`, `poolLine`, `walletLine`, `earningsLine`,
   `providerLine`, `footer`) is a pure string-returning function and
   is unit-tested individually with no terminal involved.
 
