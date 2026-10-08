@@ -29215,3 +29215,123 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3108 update (Socratic pass 1772 — io/bufio complete ledger)
+
+Claim under test: the
+io surface is
+Reader/Writer
+interfaces +
+ReadFull/WriteString/
+LimitReader —
+and bufio is
+Reader-only
+(line-cap reads,
+no Scanner).
+
+Verification —
+census:
+
+- `io.Writer`×45 +
+  `io.Reader`×24 +
+  `io.ReadWriter`×3 +
+  `io.Closer`×2 +
+  `io.ByteReader`×1 —
+  the
+  interface
+  surface.
+- `io.ReadFull`×16 +
+  `io.WriteString`×5 +
+  `io.LimitReader`×4 +
+  `io.ReadAll`×2 +
+  `io.Copy`×2 +
+  `io.Discard`×3 +
+  `io.MultiWriter`×1 —
+  the
+  bounded
+  helpers
+  (verified
+  limit-
+  reader
+  class:
+  every
+  wire
+  read
+  is
+  capped
+  or
+  fixed-
+  length).
+- `io.EOF`×5 +
+  `io.ErrUnexpectedEOF`×1 —
+  the
+  EOF
+  sentinels.
+- `bufio.Reader`×4 +
+  `bufio.NewReader`×2 +
+  `bufio.NewReaderSize`×1 +
+  `bufio.ErrBufferFull`×2 —
+  the
+  V1
+  line
+  readers
+  (buffer
+  caps
+  the
+  wire
+  line
+  ceiling).
+- ZERO
+  `bufio.Scanner`,
+  `bufio.NewScanner`,
+  `bufio.Writer`,
+  `bufio.NewWriter`,
+  `bufio.ReadWriter`,
+  `bufio.NewReadWriter`,
+  `bufio.SplitFunc`,
+  `bufio.ScanLines`,
+  `bufio.ScanWords`,
+  `bufio.ScanBytes`,
+  `bufio.ScanRunes`,
+  `bufio.MaxScanTokenSize` —
+  the
+  scanner
+  surface
+  absent;
+  the
+  Reader
+  with
+  explicit
+  line
+  methods
+  is
+  used
+  instead.
+- ZERO
+  `io.Pipe`,
+  `io.TeeReader`,
+  `io.MultiReader`,
+  `io.SectionReader`,
+  `io.OffsetWriter`,
+  `io.LimitedReader`,
+  `io.NopCloser`,
+  `io.Seeker`,
+  `io.ReaderAt`,
+  `io.WriterAt`,
+  `io.ReaderFrom`,
+  `io.WriterTo`,
+  `io.ByteScanner`,
+  `io.RuneReader`,
+  `io.RuneScanner`,
+  `io.SeekStart`/
+  `SeekCurrent`/
+  `SeekEnd`,
+  `io.CopyN`,
+  `io.CopyBuffer` —
+  the
+  residual
+  io
+  surface
+  absent.
+
+Verdict: TRUE.
