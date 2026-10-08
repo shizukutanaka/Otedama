@@ -10442,3 +10442,7 @@ Claim verified: EstSatsEarned is labeled "est." (an integrated forecast, not poo
 ## Session 1963 update (Socratic pass 629 — curtailment trust boundary)
 
 Claim verified: curtailDecision never changes the gate on a non-fresh price — the startup fallback and any rate older than CacheDuration hold the last trusted state, so mining can never be paused or resumed on a price the engine does not trust; threshold ≤0 disables the feature; transitions log once per direction with the actual rate and threshold; the atomic curtailGate suppresses mid-flight job application (same re-arm hole class as arbitration pauses) and is mirrored to otedama_curtailed. TRUE.
+
+## Session 1964 update (Socratic pass 630 — gauge publish hygiene)
+
+Claim verified: publishBTCRate only writes gauges from observed state — rate gauge keeps the fetcher fallback before the first fetch (never zeroed), skew/age/source-health gauges publish only after a real fetch ran (a stalled feed stays visible via btcRateAgeSeconds, and median-backed-by-1-of-3 erosion is visible via rateSourcesOK); publishDifficulty treats diff ≤0 as a no-op and emits 0 rather than dividing by a non-positive hashrate. TRUE.
