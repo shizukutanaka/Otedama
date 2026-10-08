@@ -27197,3 +27197,71 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3089 update (Socratic pass 1753 — unicode/utf8 ledger)
+
+Claim under test: the
+unicode surface is
+the sanitizer table
+(Cc+Cf+Zl+Zp) plus
+IsControl/IsSpace —
+and utf8.ValidString
+is the only
+validation.
+
+Verification —
+census:
+
+- `unicode.In`×2 +
+  `unicode.Cc`×2 +
+  `unicode.Cf`×2 +
+  `unicode.Zl`×2 +
+  `unicode.Zp`×2 —
+  the
+  sanitize
+  range
+  tables —
+  Cc+Cf+Zl+Zp
+  complete
+  (#1341
+  extended).
+- `unicode.IsControl`×1 —
+  the daemon
+  quoteToken
+  C1-safe
+  gate
+  (#809).
+- `unicode.IsSpace`×1 —
+  the HAL
+  Identity
+  whitespace
+  reject
+  (#594).
+- `utf8.ValidString`×1 —
+  the wordlist
+  integrity
+  check.
+- ZERO `utf8.Decode`,
+  `utf8.RuneLen`,
+  `utf8.Encode` —
+  no manual
+  rune decode
+  (verified
+  rune-decode
+  class).
+- ZERO `utf16.*` —
+  no UTF-16
+  surface.
+- ZERO `unicode.IsLetter`,
+  `IsDigit`,
+  `IsNumber`,
+  `IsPrint`,
+  `IsPunct` —
+  no manual
+  char class
+  beyond the
+  two gates;
+  `unicode.SimpleFold`
+  zero.
+
+Verdict: TRUE.
