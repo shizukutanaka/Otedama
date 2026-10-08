@@ -19509,3 +19509,35 @@ Verdict: TRUE — the sanitize
 boundary is complete (Cc+Cf+Zl+Zp
 after #1341); no unsafe rune
 walking.
+
+## Session 2950 update (Socratic pass 1615 — runtime-package census)
+
+Claim under test: `runtime` is
+read-only — NumCPU for thread
+sizing, MemStats/NumGoroutine for
+metrics — never a GC or scheduler
+override.
+
+Verification (9 sites, 6 files):
+
+- `runtime.NumCPU` — 3 sites:
+  miner/worker.go:95,:139 (worker
+  thread default) and
+  doctor/checks.go:803 (CPU info
+  display). All size a thread
+  pool to the core count — the
+  canonical NumCPU use.
+- `runtime.ReadMemStats` +
+  `NumGoroutine` — only at
+  metrics/runtime.go:41-43, the
+  RuntimeCollector.
+- Zero `runtime.GC`, `GOMAXPROCS`,
+  `SetFinalizer`, `Goexit`,
+  `Gosched`, `Caller`, `Godebug`
+  — no manual GC, no scheduler
+  overrides, no finalizer, no
+  debug hooks.
+
+Verdict: TRUE — runtime is used
+for read-only queries only; no
+hidden scheduling or GC control.
