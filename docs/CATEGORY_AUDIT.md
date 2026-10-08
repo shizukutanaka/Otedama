@@ -11154,3 +11154,7 @@ Claim verified: the V1 dial path can't send an empty password, hide a plaintext 
 ## Session 2139 update (Socratic pass 805 — runSessionV1 steady state)
 
 Claim verified: the V1 steady state has the same honesty guarantees as V2 — windowed hashrate, productive-seconds gating (hr>0 && !stalled), ≥20-sample acceptance warn, episode-scoped starvation/starved warnings that re-arm on recovery, stall check suppressed while curtailed, p95-gated latency log; the Jobs() close honors a pool-requested ReconnectWaiter delay (bounded by ctx) before reporting the close; coinbase verification runs only when a payoutScript was derived AND CoinbaseTx is non-empty — a malformed or non-paying coinbase warns once per episode and re-arms on the next good one (no spam, never silently skipped), and the job still applies (fail-open warn — disclosed); the diffCh retarget path refuses to run before a job exists, while curtailed, or on a same-difficulty repeat — and appliedDifficulty tracks the actually-applied value, not the last-sent. lastJobAt updates on every job message regardless of the curtail gate. TRUE.
+
+## Session 2140 update (Socratic pass 806 — milestone gate: clean tree)
+
+Milestone re-verification: `gofmt -l` clean across cmd + internal; `go build ./...` clean; `go vet ./...` clean; `go test` green on stratum, miner, engine, doctor, config, metrics, httpserver, hal (8 packages — all cached, all pass). The audit cycle's 806-pass ledger remains a zero-defect streak since the last real fix at s1649. TRUE.
