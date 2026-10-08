@@ -10310,3 +10310,7 @@ Claim verified: checkPoolDiversity warns on 0/1 pools with the honest consequenc
 ## Session 1930 update (Socratic pass 596 — doctor core checks complete)
 
 Claim verified: checkConfig warns (not fails) on an absent file since defaults exist, and fails on Validate() errors; checkBitcoinAddress fails honestly on empty/shape/checksum errors with masked display + kind label (P2TR recognized); checkHardware is honest — no GPU is informational not a warning because no compute dispatch exists (matches KNOWN_LIMITATIONS §4); checkNetwork is a 3s-bounded TCP probe with an actionable fix; clock-skew thresholds (120s warn / 300s fail) match rates.clockSkewWarnThreshold, and the default client refuses redirects (downgrade defense). All 17 doctor checks verified this cycle. TRUE.
+
+## Session 1931 update (Socratic pass 597 — ADR-009 periodic ecosystem recheck)
+
+Claim verified: no drift since s1910 — sv2-apps latest release remains v0.8.0 (tag 7f490743), SRI remains v1.12.0 on stratum-mining/stratum; the tracked normative open set (sv2-spec #203 non-custodial payouts, #238 optional SetupConnection flags) stays compatible with our subset-flags validation. No code delta needed. TRUE.
