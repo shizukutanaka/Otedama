@@ -18647,3 +18647,33 @@ Verification:
   others cached).
 
 Verdict: TRUE — build/vet/test all green.
+
+## Session 2920 update (Socratic pass 1585 — iota-enum exhaustiveness)
+
+Claim under test: every `iota` enum has
+an exhaustive `String()` switch covering
+every declared value, with a default
+that surfaces unknowns rather than
+silently returning "".
+
+Verification (5 enums):
+
+- `Policy` (arbitration): 4 values;
+  `String()` covers all 4 + `default:
+  fmt.Sprintf("unknown(%d)")`; the
+  policy-score switch also lists all 4
+  in a combined case.
+- `ValueOrigin` (config): 4 values;
+  `String()` covers each + default.
+- `Status` (doctor): 4 values;
+  `String()` covers each + default.
+- `AddressType` (btccrypto): 7 values
+  incl. reserved AddressP2MR; every
+  address-classify path returns a
+  typed enum (no bare int leaking).
+- `Format` (logger): FormatText/
+  FormatJSON; Parse rejects others.
+
+Verdict: TRUE — all enums have a
+default-armed exhaustive String();
+no silent unknown-to-empty mappings.
