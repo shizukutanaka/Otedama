@@ -13248,3 +13248,7 @@ All verifiable claims re-checked: failover claim at :83 already carries the corr
 ## Session 2654 update (Socratic pass 1320 — milestone gate)
 
 Full local gate re-run: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` all 24 package legs green (engine 24.9s, lightning 12.5s, doctor 7.1s). claim verified: milestone gate — TRUE
+
+## Session 2655 update (Socratic pass 1321 — THREAT_MODEL full re-verification)
+
+All mitigation/residual-risk claims re-verified against current code and workflows: three-runtime-dependency claim matches go.mod (x/crypto, x/sys, go.yaml.in/yaml/v3); govulncheck is a real hard CI gate (security.yml:56-59, pinned v1.1.4, no continue-on-error); scrypt N=2^17 documented correctly (seedstore.go:69-71); Noise P-256 residual risk honest; EROSION class treatment accurate (decode error → session fatal → bounded reconnect loop, matching engine); unsigned-release gap and SHA-tag residual risk disclosed rather than claimed fixed; FIPS section consistent with GODEBUG_NOTES (ChaCha20-Poly1305 non-FIPS, AES-256-GCM listed); outstanding-job flood threat matches pendingCap=64 bound; en2 fixed-per-job residual accurate. claim verified: docs/THREAT_MODEL.md — TRUE
