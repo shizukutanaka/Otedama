@@ -10030,3 +10030,7 @@ Defects found and fixed: CLAUDE.md's architecture map enumerated `skills/` as fo
 ## Session 1860 update (Socratic pass 526 — cmd/otedama inventory parity)
 
 Defects found and fixed: same inventory class as s1859 — CLAUDE.md's cmd/otedama comment enumerated six subcommands (run/version/config/service/doctor/completion) but `wallet` (shipped session 418, PR #529: recovery-phrase verify + passphrase rotation) was missing. Added it. The source file count (10 incl. main/logfile/configfile helpers) is consistent with the parenthetical convention — only user-facing subcommands are enumerated.
+
+## Session 1861 update (Socratic pass 527 — internal/ package-inventory parity)
+
+Claim verified: `find internal -type d` returns exactly the 20 packages the architecture map enumerates (arbitration…version) plus the two documented subdirs (i18n/messages, poolproto/stratumv{1,2}); zero undocumented directories, zero phantom paths. The internal/ inventory is a 1:1 match. TRUE.
