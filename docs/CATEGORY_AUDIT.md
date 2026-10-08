@@ -11694,3 +11694,7 @@ Claim verified: the catalog bundle degrades honestly and locale resolution follo
 ## Session 2271 update (Socratic pass 937 — file-permission census)
 
 Claim verified: no secret-bearing path ever gets world-readable permissions — every WriteFile/OpenFile/MkdirAll/Chmod site in non-test code is exactly right: wallet dataDir 0700, encrypted wallet.dat written via CreateTemp + Chmod(0600) BEFORE the atomic Rename (the temp file is never world-readable at any point), fingerprint sidecar 0600, log file 0600; systemd unit/launchd plist directories get 0755 (they must be readable by the service manager — not a secret) while the unit/plist files themselves are 0600. Zero 0644 sites exist in the tree. The mode gap the doctor wallet-permission check catches (a restored 0644 backup — #431) is the complement: writers are tight, and the auditor verifies they stayed tight. TRUE.
+
+## Session 2272 update (Socratic pass 938 — error-sentinel census)
+
+Claim verified: no wrapped-sentinel comparison can silently miss — all 21 sentinel checks route through errors.Is/errors.As (context.DeadlineExceeded, io.EOF, os.ErrNotExist, http.ErrServerClosed, the ErrNotBech32/ErrNotBase58/ErrUnrecognisedAddress sentinels, scheme-not-implemented), and there are ZERO raw `== io.EOF` or `err == context.*` comparisons anywhere; the remaining `err == nil` sites are all succeed-or-default boolean gates (dial probes, SplitHostPort, hex decodes, ReadDir, P-256 key parse) where the error is consumed as a flag not compared for identity — the correct shape in every case. TRUE.
