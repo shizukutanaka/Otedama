@@ -10226,3 +10226,7 @@ Claim verified: Fetcher fans out across all sources in parallel, drops readings 
 ## Session 1909 update (Socratic pass 575 — logger singleton race-freedom)
 
 Claim verified: the default logger lives in atomic.Pointer[Logger] (logger.go:192); the fast path is a single Load, the cold path allocates and CompareAndSwap with the CAS loser returning the winner's instance — race-free for concurrent FromContext readers and SetDefault writers. TRUE.
+
+## Session 1910 update (Socratic pass 576 — ADR-009 periodic ecosystem recheck)
+
+Periodic recheck (prior: s1897-era tracking): sv2-apps tag set tops out at v0.8.0 (7f490743) — no newer release; SRI latest = v1.12.0 on stratum-mining/stratum. Otedama's wire layer remains compatible with the current normative set; sv2-spec's tracked open items (#203 non-custodial payout debate, #238 optional SetupConnection flags — the latter already implemented upstream in sv2-apps #131, and our subset-flags validation stays forward-compatible) need no code delta today. TRUE.
