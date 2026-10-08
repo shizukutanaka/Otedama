@@ -11974,3 +11974,7 @@ Claim verified: the V1 extranonce boundary is strict — extranonce1OK rejects e
 ## Session 2341 update (Socratic pass 1007 — admin-surface handler honesty)
 
 Claim verified: every admin handler reports honestly — readyz is a true tri-state driven only by the SetReady atomic (server.go:177–186); Addr() returns the real bound address post-listen, configured value before (:150–157); ServeError() exposes the parked goroutine error for supervisors (:163–168); metrics nil-registry → 500 not an empty page (:189–193); the index handler 404s any path other than exactly "/" (:198–205), no catch-all. TRUE.
+
+## Session 2342 update (Socratic pass 1008 — daemon argv/quoting contract)
+
+Claim verified: serviceArgv is the canonical slice — fixed "run" plus only the flags actually set, no injected extras (service.go:452–472); serviceArgs joins it per-element through quoteToken which quotes only on whitespace/quote/control char (:480–487, :496–502 — unicode.IsControl covers C1 since s809) and documents the real attack: a raw newline would escape the ExecStart= line into a new unit directive (e.g. weaker ProtectHome=); launchd consumes the slice directly so values with spaces survive as single <string> elements. TRUE.
