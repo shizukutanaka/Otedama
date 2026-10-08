@@ -33341,3 +33341,139 @@ only):
   shims).
 
 Verdict: TRUE.
+
+## Session 3136 update (Socratic pass 1800 — keyword and declaration census)
+
+Claim under test: the
+control-flow
+keyword
+surface is
+defer×91 +
+select×46 +
+range×178 —
+with goto,
+fallthrough,
+and
+user
+labels
+all
+zero,
+and
+iota
+limited
+to the
+5
+enum
+declarations.
+
+Verification —
+census:
+
+- `func`×780 —
+  total
+  function/
+  method
+  declarations.
+- `type`×211 —
+  type
+  declarations.
+- `struct`×157 +
+  `interface`×54 —
+  the
+  composite
+  type
+  fleet.
+- `map`×145 +
+  `chan`×58 —
+  container
+  and
+  channel
+  types.
+- `const`×93 +
+  `var`×239 —
+  declaration
+  ratio
+  (var
+  dominates:
+  local
+  bindings,
+  not
+  just
+  package
+  vars —
+  verified
+  var-vs-const
+  class).
+- `range`×178 —
+  loop
+  iteration
+  (verified
+  range-idiom
+  classes).
+- `defer`×91 —
+  cleanup
+  pairing
+  (verified
+  defer
+  classes:
+  close,
+  unlock,
+  cancel
+  all
+  paired).
+- `select`×46 —
+  channel
+  multiplexing.
+- `iota`×5 —
+  the
+  five
+  enum
+  blocks
+  ONLY:
+  `btccrypto.AddressType`,
+  `doctor.Status`,
+  `arbitration.Policy`,
+  `config.ValueOrigin`,
+  `logger.Format`
+  — no
+  arithmetic
+  iota
+  expressions,
+  no
+  bitmask
+  tricks.
+- `goto` — ZERO;
+  the
+  only
+  colon-labels
+  are
+  `default:`
+  switch
+  clauses
+  and
+  `Usage:`/`Commands:`
+  inside
+  help
+  strings.
+- `fallthrough` — ZERO.
+- ZERO
+  user
+  labels
+  (`label:` +
+  `break
+  label` /
+  `continue
+  label`)
+  — loop
+  exits
+  are
+  all
+  unlabeled
+  (verified
+  labeled-exit
+  class
+  earlier:
+  none
+  needed).
+
+Verdict: TRUE.
