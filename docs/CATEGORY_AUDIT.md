@@ -14043,3 +14043,29 @@ V1 job path at `run.go:1685-1705` whenever both `payoutScript` and
 
 Verdict: TRUE — runtime coinbase verification intact, exhaustive at
 its single entry point.
+
+## Session 2727 update (Socratic pass 1393 — merged-#1403 reconnect-jitter invariant)
+
+Claim under test: merged #1403's reconnect-jitter hardening still
+holds — concurrent reconnect attempts must be spread, not
+thundering-herd.
+
+Verification at HEAD: `jitteredBackoff` (run.go:481-491) is applied
+by the reconnect loop.
+
+- Uniform ±`reconnectBackoffJitterPct` = 25% spread, drawn from
+  `crypto/rand` (`rand.Int(rand.Reader, big.NewInt(span))`) — not
+  math/rand, so the timing of one node can't be used to predict the
+  whole herd's schedule.
+- Degenerate-input guards are fail-closed: `span <= 0` → returns the
+  un-jittered base `d`; crypto/rand failure → also returns `d`. The
+  backoff *timing* is always correct; only the spread degrades.
+- The loop tracks the un-jittered exponential base separately
+  (run.go:503 onward), so consecutive failures still double on
+  schedule (1s→64s cap) — jitter perturbs the sleep, never the
+  schedule.
+- `backoff` resets to `reconnectBackoffInitial` after a session that
+  established (run.go:620-626), the established-session reset merged
+  in #491 — still present.
+
+Verdict: TRUE — jitter + exponential-backoff discipline intact.
