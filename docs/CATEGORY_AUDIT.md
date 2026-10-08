@@ -16558,3 +16558,30 @@ Verification — the complete sync.Once set (4):
 
 Verdict: TRUE — every Once guards an error-free
 lifecycle transition; error-in-Once is absent.
+
+## Session 2827 update (Socratic pass 1493 — writer-sharing census)
+
+Claim under test: no io.Writer is written from two
+goroutines concurrently — a shared writer without a
+mutex interleaves bytes mid-message.
+
+Verification — the complete writer set:
+
+- metrics.WriteText — per-request writer (each HTTP
+  request carries its own ResponseWriter); the
+  Registry's mutex serializes series state, requests
+  never share a writer.
+- Dashboard.w — documented contract at :121/:160 —
+  the render loop is the sole writer; the
+  non-concurrency-safe writer is called out by name.
+- doctor Print/WriteJSON — main-goroutine, post-run.
+- printRecoveryPhrase/verifyBackupPhrase — setup-time
+  single goroutine.
+- logger Config.Writer — slog's own handler mutex
+  serializes internally (stdlib contract).
+- Zero bufio.NewWriter sites — every writer is a
+  direct sink (os.Stdout, test buffers, conn).
+
+Verdict: TRUE — each writer has exactly one writer
+goroutine or a documented serialize-by-construction
+contract.
