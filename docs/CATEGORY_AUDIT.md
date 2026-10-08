@@ -26335,3 +26335,69 @@ census:
   unneeded.
 
 Verdict: TRUE.
+
+## Session 3079 update (Socratic pass 1743 — context surface ledger)
+
+Claim under test: the
+context surface is
+propagation-only —
+Context as the
+first param,
+WithCancel/
+WithTimeout paired,
+Background confined
+to three justified
+roots, one
+WithValue.
+
+Verification —
+census:
+
+- `context.Context`×87 —
+  the type in
+  signatures.
+- `context.WithTimeout`×7
+  — bounded
+  waits
+  (verified).
+- `context.WithCancel`×5 +
+  `CancelFunc`×3 —
+  parent-driven
+  teardown;
+  every
+  CancelFunc
+  called
+  (verified
+  ctx-cancel
+  class).
+- `context.Background`×3 —
+  the three
+  justified
+  roots
+  (main,
+  logger
+  detach,
+  shutdown
+  drain).
+- `context.WithValue`×1 —
+  engine
+  run.go — the
+  single
+  request-scoped
+  key (verified
+  ctx-Value
+  class).
+- `context.Canceled`×1 +
+  `DeadlineExceeded`×2 —
+  the error
+  comparisons.
+- ZERO `context.TODO`
+  — every root
+  is
+  deliberate.
+- ZERO `AfterFunc`
+  usages beyond
+  the audited
+  pair.
+
+Verdict: TRUE.
