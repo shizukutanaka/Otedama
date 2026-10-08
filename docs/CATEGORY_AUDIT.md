@@ -15383,3 +15383,34 @@ Gate re-verification at head 75dbfe4bf:
 
 Cumulative since s2760 milestone: 20 passes (1441–1445 plus
 this gate), all TRUE, zero defects requiring code change.
+
+## Session 2781 update (Socratic pass 1447 — empty/zero conflation census)
+
+Claim under test: "" or 0 is never silently reinterpreted as
+either "unset" or a real value in a way that confuses the two.
+
+Verification: ~14 `== ""` decision points.
+
+- Numeric env vars (config.go:402, :544): `v == ""` → skip —
+  "unset" and "explicitly empty" are deliberately identical in
+  the env layer; Origins records provenance so a later layer
+  cannot be confused about who set what.
+- cfg.DataDir (config.go:433): "" triggers the OS-appropriate
+  default; an explicit empty stays documented as "wallet
+  disabled" — the comment explains both paths.
+- BitcoinAddress/BitcoinAddresses (config.go:642): both unset
+  forms checked together before deciding "no payout".
+- Address list empties (config.go:652, setup.go:409): skip
+  rather than accept.
+- p.URL (config.go:687): empty is a validation issue, not a
+  silent default.
+- poolUser fallback (run.go:531): "" falls through to the
+  address list — intentional layering, index-guarded.
+- deviceID/masked (metrics.go:542/:567): "" short-circuits to
+  a documented fallback before map/label use.
+- WalletPassphrase/DataDir (setup.go:175): "" means "feature
+  not configured" — the documented contract.
+
+Verdict: TRUE — every zero value has a single, documented
+meaning at its boundary; provenance tracking prevents a
+lower-layer "" from masquerading as a higher-layer setting.
