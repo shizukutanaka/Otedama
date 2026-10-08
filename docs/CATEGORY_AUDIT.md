@@ -10582,3 +10582,7 @@ Claim verified: the non-custodial guarantee is enforced at the transaction layer
 ## Session 1998 update (Socratic pass 664 — pool protocol abstraction boundary)
 
 Claim verified: one canonical scheme table feeds both FromURL and StripScheme (no dual-parser drift), unknown schemes return an error rather than a guess, StripUserinfo redacts only the authority's last '@' before the first '/' — a '@' in a path survives and malformed URLs pass through unredacted so diagnostics are never corrupted; the dialer registry panics on nil/unknown/duplicate registration (misconfiguration fails at boot, not silently at first dial), DialURL closes the connection on negotiate failure, and SanitizePoolText strips Cc+Cf+Zl+Zp — the Trojan Source class of bidi/format runes — plus a 256-rune cap before pool text reaches logs or the TUI. TRUE.
+
+## Session 1999 update (Socratic pass 665 — V2 frame wire boundary)
+
+Claim verified: the decoder validates the announced length *before* allocating — a peer claiming a huge payload is rejected without spending memory (the load-bearing order); MaxFrameSize must be positive so a misconfigured decoder fails closed; EncodeFrame derives MsgLength from the actual payload so an inconsistent frame is unconstructable; each Frame's Payload is freshly allocated and caller-owned (documented — no scratch aliasing to a later ReadFrame); ChannelID is gated on the channel bit plus MinimumChannelPayload, and ExtensionID masks the channel bit so dispatch is uniform for both frame flavors. TRUE.
