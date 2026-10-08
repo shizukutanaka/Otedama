@@ -11942,3 +11942,7 @@ Claim verified: numericEnvVars (config.go:357–381) is a single source of truth
 ## Session 2333 update (Socratic pass 999 — TUI lifecycle idempotence)
 
 Claim verified: Dashboard lifecycle is fully idempotent — Start CAS(false,true) (:138) prevents double-spawn; Stop CAS(true,false) (:154) makes Stop-before-Start and repeated Stop safe single-shots (doneCh closed once, no panic); Stop waits on d.wg before writing to the shared non-concurrency-safe writer (:161–165), so teardown can't race an in-flight render. Update is non-blocking drop-oldest. TRUE.
+
+## Session 2334 update (Socratic pass 1000 — MILESTONE gate re-verification)
+
+Milestone gate re-run on the full audit branch at pass 1000: `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` green on all 8 scoped packages (metrics, rates, arbitration, engine, poolproto + stratumv1/v2, miner, tui, httpserver). The ledger's ~1000 consecutive TRUE-verdict claims remain self-consistent and the branch continues to merge cleanly. TRUE.
