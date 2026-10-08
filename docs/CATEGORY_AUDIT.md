@@ -10206,3 +10206,7 @@ Claim verified: AkashProvider.publish sends a zero-yield quote when no GPU devic
 ## Session 1904 update (Socratic pass 570 — mining-yield math re-verification)
 
 Claim verified: MiningProvider.publish computes expected sats/sec = deviceHashrate/networkHashrate × 3.125 BTC / 600 s (mining.go:136–154), prefers live worker-measured hashrate over family fallbacks, uses the live network-hashrate feed with degraded-input confidence drop (0.95→0.7) when the wired feed goes stale, skips non-SHA256d devices, and charges no pool fee under solo payout. TRUE.
+
+## Session 1905 update (Socratic pass 571 — polling-provider lifecycle)
+
+Claim verified: pollingProvider's launch rejects double-start, Stop is safe-when-unstarted and restartable, the quote channel is recreated only after wg.Wait() (the loop goroutine is the sole writer, so no send-on-closed), the non-blocking send drops the oldest buffered quote so the freshest estimate always wins, and every blocking point is ctx-aware. polling.go:38–118 clean. TRUE.
