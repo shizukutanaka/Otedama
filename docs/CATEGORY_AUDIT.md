@@ -13168,3 +13168,7 @@ All TRUE: 🔵 planned rows are all ADR-tracked by design (thermal→ADR-008 sub
 ## Session 2634 update (Socratic pass 1300 — milestone checkpoint)
 
 **MILESTONE pass 1300 — all green:** `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/arbitration/miner/stratum/config/poolproto{,/stratumv1,/stratumv2} all ok. Working tree = ledger + doc corrections only; no code drift since last milestone. Cumulative: ~1297 audit classes verified true, real fixes this cycle include SPEC §7 rewrite (s2615), tls_ca_file doc+doctor chain (s2616), ADR-010 erratum (s2623), MIGRATING deps 2→3 (s2632).
+
+## Session 2635 update (Socratic pass 1301 — TROUBLESHOOTING parity)
+
+All TRUE: every cited surface exists — `otedama doctor`, `wallet verify`/`change-passphrase` (shipped #529), `service install`/`status`, `run --log-level`, GOMAXPROCS worker-cap guidance (workers = runtime.NumCPU). The embedded correction note (no `--log-level` on doctor; flags precede subcommand) is itself accurate — flag parsing stops at the first positional. No phantom flags remain post-#558/#573.
