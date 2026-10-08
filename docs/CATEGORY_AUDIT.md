@@ -31730,3 +31730,239 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3127 update (Socratic pass 1791 — math/big/cmp/slices/maps complete ledger)
+
+Claim under test: the
+numeric-collections
+surface is
+IsNaN/IsInf guards +
+big.Int/big.Float
+target math +
+slices.Sort +
+cmp.Compare/Or +
+maps.Copy/Clone —
+with math/rand and
+the trig/aggregate
+API absent.
+
+Verification —
+census:
+
+- `math.IsInf`×13 +
+  `math.IsNaN`×6 —
+  the
+  non-finite
+  gate
+  pair
+  (verified
+  NaN-
+  check
+  class:
+  every
+  float
+  input
+  passes
+  both).
+- `math.Float64bits`×4 +
+  `math.Float64frombits`×3 +
+  `math.Float32bits`×2 +
+  `math.Float32frombits`×1 +
+  `math.Trunc`×1 +
+  `math.Max`×1 +
+  `math.Inf`×1 +
+  `math.Abs`×1 —
+  bit-cast
+  serialization
+  +
+  the
+  display
+  helpers.
+- `big.Int`×7 +
+  `big.NewInt`×5 +
+  `big.Float`×4 +
+  `big.NewFloat`×1 —
+  the
+  target/
+  difficulty
+  arithmetic
+  (verified
+  bigint
+  class).
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  `crypto/rand`
+  (zero
+  `math/rand`
+  —
+  verified
+  crypto-
+  rand
+  class).
+- `cmp.Compare`×5 +
+  `cmp.Or`×4 —
+  the
+  ordering
+  +
+  first-
+  nonzero
+  defaults.
+- `slices.Sort`×12 +
+  `slices.SortFunc`×2 +
+  `slices.SortStableFunc`×1 +
+  `slices.Contains`×1 —
+  the
+  sort/
+  membership
+  surface.
+- `maps.Copy`×2 +
+  `maps.Clone`×1 —
+  the
+  map
+  merge/
+  snapshot
+  pair.
+- ZERO
+  `math/rand` —
+  every
+  `rand.*`
+  site
+  is
+  crypto/rand;
+  `math.Rand`,
+  `math.New`,
+  `math.Seed`,
+  `math.Intn`,
+  `math.Int31`,
+  `math.Int63`,
+  `math.Float32`,
+  `math.Float64`,
+  `math.Perm`,
+  `math.Shuffle`,
+  `math.NormFloat64`,
+  `math.ExpFloat64`,
+  `math.Read` —
+  all
+  absent.
+- ZERO
+  `math.Pow`,
+  `math.Sqrt`,
+  `math.Exp`,
+  `math.Exp2`,
+  `math.Log`,
+  `math.Log2`,
+  `math.Log10`,
+  `math.Log1p`,
+  `math.Sin`,
+  `math.Cos`,
+  `math.Tan`,
+  `math.Asin`,
+  `math.Acos`,
+  `math.Atan`,
+  `math.Atan2`,
+  `math.Sinh`,
+  `math.Cosh`,
+  `math.Tanh`,
+  `math.Asinh`,
+  `math.Acosh`,
+  `math.Atanh`,
+  `math.Hypot`,
+  `math.Mod`,
+  `math.Remainder`,
+  `math.Floor`,
+  `math.Ceil`,
+  `math.Round`,
+  `math.RoundToEven`,
+  `math.MulAdd`,
+  `math.Nextafter`,
+  `math.Cbrt`,
+  `math.Erf`,
+  `math.Erfc`,
+  `math.Erfinv`,
+  `math.Erfcinv`,
+  `math.Gamma`,
+  `math.Lgamma`,
+  `math.Bessel`,
+  `math.Y0`,
+  `math.Y1`,
+  `math.Yn`,
+  `math.J0`,
+  `math.J1`,
+  `math.Jn`,
+  `math.Ilogb`,
+  `math.Logb`,
+  `math.Frexp`,
+  `math.Ldexp`,
+  `math.Modf`,
+  `math.Signbit`,
+  `math.Copysign`,
+  `math.Dim`,
+  `math.Min`×more,
+  `math.MaxInt`/`MinInt`/`MaxFloat`/`SmallestNonzero` —
+  the
+  entire
+  float
+  library
+  absent;
+  mining
+  math
+  is
+  integer/
+  big.Int
+  domain.
+- ZERO
+  `slices.Reverse`,
+  `Equal`,
+  `EqualFunc`,
+  `Index`,
+  `IndexFunc`,
+  `BinarySearch`,
+  `BinarySearchFunc`,
+  `Clip`,
+  `Clone`,
+  `Compact`,
+  `CompactFunc`,
+  `Concat`,
+  `Delete`,
+  `DeleteFunc`,
+  `Grow`,
+  `Insert`,
+  `IsSorted`,
+  `IsSortedFunc`,
+  `Max`,
+  `MaxFunc`,
+  `Min`,
+  `MinFunc`,
+  `Repeat`,
+  `Replace`,
+  `Sorted`,
+  `SortedFunc`,
+  `SortedStableFunc`,
+  `Chunk`,
+  `Collect`,
+  `Values`,
+  `AppendSeq`,
+  `Backward`,
+  `All` —
+  residual
+  absent.
+- ZERO
+  `maps.All`,
+  `maps.Insert`,
+  `maps.Keys`,
+  `maps.Values`,
+  `maps.Equal`,
+  `maps.EqualFunc`,
+  `maps.DeleteFunc`,
+  `maps.Collect`,
+  `maps.Sorted`,
+  `maps.SortedFunc` —
+  residual
+  absent.
+- ZERO
+  `cmp.Less`,
+  `cmp.Or`×more —
+  residual
+  absent.
+
+Verdict: TRUE.
