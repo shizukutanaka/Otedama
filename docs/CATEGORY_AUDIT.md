@@ -11030,3 +11030,7 @@ Claim verified: the wire codec can't write a lie or read a flood — every appen
 ## Session 2108 update (Socratic pass 774 — SV2 frame decoder bounds)
 
 Claim verified: the frame decoder can't be driven into a hostile allocation — Decoder requires MaxFrameSize > 0 at every read (a zero-valued decoder is an error, not an unbounded one); the 6-byte header is validated BEFORE any allocation (MsgLength ≤ U24 max; channel messages must declare ≥4 payload bytes); the total header+payload is checked against MaxFrameSize (default 16 MiB) before the payload buffer is made; io.ReadFull enforces complete reads at both stages; EncodeFrame re-derives MsgLength from the actual payload so the header can never disagree with the bytes; and ChannelID() fail-closes on non-channel frames and sub-4-byte payloads. TRUE.
+
+## Session 2109 update (Socratic pass 775 — SV2 mining-channel decode)
+
+Claim verified: OpenMiningChannel decode can't mis-attribute or accept a truncated field — the fixed layout decodes field-by-field through the bounded wire primitives (ReqID U32, User STR0_255, NominalHashrate 4-byte float32 bits, MaxTarget exactly 32 bytes via io.ReadFull — a short frame errors at the exact field, never a partially-filled struct); every stage's error is wrapped with the field name for attribution; and MaxTargetUnconstrained is the spec's all-FF declaration consistent with the sv2-spec #236 SetTarget bound tracking. TRUE.
