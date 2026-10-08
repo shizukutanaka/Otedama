@@ -10050,3 +10050,7 @@ Claim verified: CLAUDE.md's "主要10言語" (英・日・中・韓・西・仏�
 ## Session 1865 update (Socratic pass 531 — doctor 17-check claim parity)
 
 Claim verified: `internal/doctor/checks.go` defines exactly 17 named checks (Configuration → System clock accuracy, counted via `Name:` literals at :58–:890) — CLAUDE.md's "17 並行ヘルスチェック" is exact. TRUE.
+
+## Session 1866 update (Socratic pass 532 — CLAUDE.md branch-name falsehood)
+
+Defects found and fixed: CLAUDE.md's branch-strategy text named `main` twice ("`main` ブランチは常にリリース可能…mainにマージ", "mainへのマージ前に全テスト") but the repository's default (and only trunk) branch is `master` — no `main` ref exists. An agent following the text literally would target a nonexistent branch. Corrected both references to `master`; the GitHub Flow prescription itself is unchanged (feature branches → PR → trunk). Same correction class previously applied to ci.yml/devin-direct-merge.yml/comment text in sessions 1351/1689.

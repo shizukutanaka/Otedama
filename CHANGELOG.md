@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1866 — CLAUDE.md)
+
+- Branch-strategy text now names the real default branch `master` in both places (the repo has no `main` ref); GitHub Flow semantics unchanged.
+
 ### Fixed (session 1862 — CLAUDE.md)
 
 - Architecture map: added `scorecard.yml` (session-1754 OpenSSF workflow) to the `.github/workflows` enumeration.
