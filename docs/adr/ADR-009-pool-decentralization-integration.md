@@ -1878,3 +1878,14 @@ sv2-apps latest v0.8.0 — both unchanged. No action required.
 - sv2-spec open set: #238 (negotiate optional SetupConnection flags — updated 2026-10-06, still open; Otedama's strict subset validation remains forward-compatible), #234 (authority key management/rotation), #203 (coinbase payouts extension), #198 (coinbase_witness field), plus non-normative style PRs #186/#232 and WIP #103. No new normative changes since the s1661 recheck.
 - SRI reference implementation: still **v1.12.0** (unchanged).
 - sv2-apps: `/releases/latest` now resolves to **v0.8.0** — supersedes the s1661 note which read v0.7.0 as latest at that time. v0.8.0's tProxy BIP323 version-rolling mask remains the standing P0 gap evidence for Otedama (no mining.configure / version-rolling client-side).
+
+### Session 1708 recheck (ecosystem)
+
+Re-verified via individual PR pages (GitHub API + list-page HTML both unreliable — scrape hits SPA markup; individual page state is authoritative):
+
+- **#238 open** — negotiate optional SetupConnection flags (new 2026-10-06): reserves bits 0–15 required / 16–31 optional; success echoes accepted optional flags; errors report unsupported *required* bits only. Otedama's subset-flag validation is forward-compatible — an optional-flag echo still satisfies "returned ⊆ offered".
+- **#234 open** — authority key management/rotation doc (clarification only, no wire change; "Pool Authority Key" → "Authority Key", established sessions need not terminate at `not_valid_after`).
+- **#203 open** — non-custodial payouts extension (renamed; still the active JDP-payout proposal).
+- **#198 open** — `coinbase_witness` field on NewTemplate (Sjors coordinating SRI-first deployment order).
+- Releases: SRI **v1.12.0**, sv2-apps **v0.8.0** — both unchanged.
+- Cosmetic-only open items: #186 (markdown table cells), #103 (WIP Proxy Annex draft).

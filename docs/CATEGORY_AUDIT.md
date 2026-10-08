@@ -9400,3 +9400,7 @@ Residuals: the gated references remain latent tripwires — each would fire only
 **Claim verified: "the PR branch contains only intended changes and the built binary still satisfies its exit-code contract" — TRUE (measured).** `git diff origin/master...HEAD` = 24 files: 8 workflows, docs (ledger/limitations/ADR-009/README), doctor package (panic recovery + sanitize), miner worker (jitter), cmd config (safeDisplay + EnvWarnings), install.sh, Makefile, .gitignore, .goreleaser.yaml, VERIFY.md, CHANGELOG — zero files under forbidden paths, zero in the maintainer-review zones (`internal/stratum/noise*`, `internal/lightning/`). Fresh `go build` succeeds; `otedama doctor` exits **2** with failures (contract: doctor failure → exit 2) — the 2 failures are environmental (no BTC address configured, no outbound DNS in the sandbox), the other 15 checks all resolve to pass/warn/skip honestly.
 
 Residuals: none.
+
+## Session 1708 update (Socratic pass 374 — ADR-009 recheck)
+
+Ecosystem re-verified: sv2-spec normative open set unchanged — #238/#234/#203/#198 all open (confirmed via individual PR pages; the list-page markup misreports state). #238's optional-flags split keeps Otedama's subset validation forward-compatible. SRI v1.12.0 + sv2-apps v0.8.0 unchanged. No action required.
