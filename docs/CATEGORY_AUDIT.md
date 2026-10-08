@@ -10290,3 +10290,7 @@ Claim verified: four advisory checks stay honest — checkPowerEconomics warns o
 ## Session 1925 update (Socratic pass 591 — doctor transport checks)
 
 Claim verified: checkPoolEncryption names the real adversary payoff for plaintext stratum+tcp:// (payout-address rewrite → stolen earnings) with userinfo-stripped display and honest default-pool skip; checkPoolTLSCA validates each tls_ca_file at diagnose time with the same x509 parser the dialer uses — flagging the silently-ignored non-stratum+tls:// case and unreadable/non-PEM files before they degrade to a confusing dial failure. TRUE.
+
+## Session 1926 update (Socratic pass 592 — doctor runner mechanics)
+
+Claim verified: Runner.Run fans all 17 checks out concurrently into indexed result slots (report order = check order), recovers a panicking check into a named Fail so the other 16 survive, and records per-check Elapsed honestly. Honest residual: a check whose underlying syscall hangs ignores ctx — per-check wall-clock bounding was proposed in #542 and rejected (design intent: checks bound themselves, e.g. probe 5s dial, clock-skew 5s reqCtx).
