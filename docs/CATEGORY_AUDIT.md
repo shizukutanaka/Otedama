@@ -11026,3 +11026,7 @@ Claim verified: the i18n bundle can't render nothing or panic — NewBundle hard
 ## Session 2107 update (Socratic pass 773 — SV2 wire primitives)
 
 Claim verified: the wire codec can't write a lie or read a flood — every append helper bounds-checks BEFORE writing the length byte (over-limit input errors out; a length prefix can never claim a size the field can't hold); every read helper declares ≤255/≤32 BEFORE allocating, so a hostile frame can't drive a large allocation — max 255 bytes per field; io.ReadFull on both the length prefix and the payload makes a truncated stream an error, never a partially-filled field; and the get/append asymmetry is correct: empty reads return "" / []byte{} to round-trip cleanly. TRUE.
+
+## Session 2108 update (Socratic pass 774 — SV2 frame decoder bounds)
+
+Claim verified: the frame decoder can't be driven into a hostile allocation — Decoder requires MaxFrameSize > 0 at every read (a zero-valued decoder is an error, not an unbounded one); the 6-byte header is validated BEFORE any allocation (MsgLength ≤ U24 max; channel messages must declare ≥4 payload bytes); the total header+payload is checked against MaxFrameSize (default 16 MiB) before the payload buffer is made; io.ReadFull enforces complete reads at both stages; EncodeFrame re-derives MsgLength from the actual payload so the header can never disagree with the bytes; and ChannelID() fail-closes on non-channel frames and sub-4-byte payloads. TRUE.
