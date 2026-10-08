@@ -967,28 +967,36 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
-2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
+2. ✅ **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
    Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
    strengthens the case for the Job Declaration Client (miner-built templates)
    as the headline v3.x feature. (coindesk.com 2026-05-11)
-3. 🟡 **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
-   Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
-   Providers** — token-based auth on the provider APIs. The real
-   `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must therefore mint
-   and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
-   REST endpoint. Fold JWT acquisition into the provider client design.
-   (messari.io State of Akash Q3 2025; akash.network/docs)
-4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
-   already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
-   enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
-   X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
-   `tlsmlkem=1` is part of that validated module. Low-effort, high-trust wins
-   for a money-handling binary: (a) document that outbound TLS uses hybrid
-   post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
-   for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
-   existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+   — **Applied (session 1751):** ADR-009 :12 now cites the ~75% estimate
+   alongside the ~70% figure current at draft time.
+3. ✅→(row above) **Real Akash provider API now requires JWT auth (AEP-64,
+   Mainnet 14).** Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT
+   Authentication for Providers** — token-based auth on the provider APIs.
+   The real `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must
+   therefore mint and attach a JWT to provider `GetStatus`/lease calls, not
+   just hit an open REST endpoint. Fold JWT acquisition into the provider
+   client design. (messari.io State of Akash Q3 2025; akash.network/docs)
+   — **Folded (session 1751):** the constraint is preserved verbatim in
+   the July-pass Akash row (session 251 #11), which already records "JWT
+   (AEP-64) still applies to the provider *status/lease* REST surface";
+   that row stays 🟡 as the single live Akash-integration tracker.
+4. ✅ **FIPS 140-3 mode — dispositioned by design.** Verified session
+   1751: the row's three asks resolve as follows. (a)+(c) already
+   satisfied — `GODEBUG_NOTES.md` documents `tlsmlkem=1` (hybrid
+   X25519MLKEM768 PQ key exchange, :98-102) and a dedicated `fips140`
+   entry (:161-175), and THREAT_MODEL :451-458 states the FIPS posture
+   explicitly. (b) is *deliberately rejected*: GODEBUG_NOTES :161-175
+   records "**Do not enable**" — `fips140=on` restricts crypto to the
+   validated subset, which excludes ChaCha20-Poly1305 and would break
+   the Noise NX transport; the wallet's AES-256-GCM is the only
+   FIPS-listed construction. Hard-FIPS environments are told to look
+   elsewhere (THREAT_MODEL :458). Marker flipped ✅.
 
 ---
 
