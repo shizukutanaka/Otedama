@@ -10574,3 +10574,7 @@ Claim verified: the BIP-39 chain is spec-exact — entropy confined to {128..256
 ## Session 1996 update (Socratic pass 662 — payout-address validation)
 
 Claim verified: both validators are spec-complete — base58 decode preserves leading-'1' zero bytes, requires the 25-byte version+hash160+checksum structure, verifies the double-SHA256 checksum, and accepts only mainnet 0x00/0x05; bech32 enforces the BIP-173 surface rules (bc1 prefix, single case, ≤90 chars, hrp=bc), picks the BIP-350 constant by witness version (v0=bech32, v≥1=bech32m), bounds the program to 2–40 bytes, and classifies v0→{20,32}/v1→32 while honestly returning "unsupported" for future versions rather than misclassifying; the single entry point tries bech32 then base58 via ErrNot* sentinels. TRUE.
+
+## Session 1997 update (Socratic pass 663 — coinbase payout verification)
+
+Claim verified: the non-custodial guarantee is enforced at the transaction layer, not the byte layer — CoinbasePaysScript parses the vout list positionally (legacy + segwit serialization, every varint and length bound-checked, malformed → error not false-negative) so a hostile pool cannot evade by embedding the user's script in an OP_RETURN push, scriptSig, or witness data where bytes look like payout but pay nothing; ScriptForAddress first checksum-validates then emits the standard locking script for all five supported types with correct opcodes, giving the engine exactly one canonical byte string to compare. TRUE.
