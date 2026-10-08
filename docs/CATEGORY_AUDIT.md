@@ -17991,3 +17991,33 @@ Verification (`rg '\bany\b|interface\{\}'`):
 
 Verdict: TRUE — `any` is confined to surfaces
 where dynamic typing is structurally required.
+
+## Session 2894 update (Socratic pass 1559 — nolint-justification census)
+
+Claim under test: every `//nolint` carries a
+verifiable inline justification (bound proven
+on an adjacent line, stdlib contract, or
+deliberate semantics).
+
+Verification (`rg -n nolint` — ~70 sites):
+
+- `gosec` sites: each names the proven bound —
+  `len <=255`/`<=32`/`<=40` checked lines above,
+  ParseUint bitSize 32, exp≥3, witness-program
+  limits, bounded shifts on bytes.
+- `errcheck` sites: mostly test-file discards;
+  production two — `hash.Hash Write never
+  fails` (run.go:2172) and unrecoverable
+  terminal write (dashboard.go:262).
+- `gocritic` sites: deliberate semantics —
+  Prometheus label escaping is escapeLabel's
+  job (metrics/runtime.go:63), `%q` would
+  break Windows paths (service.go:407),
+  trailing-space reject fixture.
+- `nilerr` site: sc.exe failure IS the
+  not-installed signal (service.go:434).
+- No bare `//nolint` without a named linter or
+  reason.
+
+Verdict: TRUE — suppression surface is fully
+justified and small relative to codebase size.
