@@ -17309,3 +17309,22 @@ Verdict: TRUE on the verifiable surface — SRI
 v1.12.0 latest, mask gap stands; the open-set
 re-probe was externally rate-limited, not a
 content change.
+
+## Session 2861 update (Socratic pass 1526 — recent-commit file-surface)
+
+Claim under test: the last 20 audit commits
+touched only audit-record files — no code or
+config drift sneaked into the push stream.
+
+Verification (`git diff --name-only HEAD~20..HEAD`):
+
+- Exactly two files changed:
+  `docs/CATEGORY_AUDIT.md` (+410 lines of ledger
+  entries) and
+  `docs/adr/ADR-009-pool-decentralization-integration.md`
+  (+16, the s2843 ecosystem note).
+- Zero Go source, workflow, or config edits — the
+  append-only audit phase is clean.
+
+Verdict: TRUE — no stray modifications entered
+the ledger commits.
