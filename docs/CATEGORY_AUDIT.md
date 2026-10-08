@@ -10494,3 +10494,7 @@ Claim verified: the mining quote computes expected sats/sec as (deviceHashrate/n
 ## Session 1976 update (Socratic pass 642 — Akash quote honesty)
 
 Claim verified: the AI-inference provider names itself "(Akash Network, simulated)" at the display layer, selects only GPU devices with GeneralCompute at Start, and when none exist publishes a zero-yield quote (graceful arbitration exclusion — silence would leave the stream stale); each quote carries both gross and net (post-20% platform fee) so arbitration routes on net economics; SatsPerSecond refuses non-positive inputs rather than emitting a negative or NaN yield. TRUE.
+
+## Session 1977 update (Socratic pass 643 — polling lifecycle invariants)
+
+Claim verified: provider lifecycle is structurally leak-free — a second Start is rejected with a labeled error before prepare can mutate state; the quote channel is closed by the loop goroutine itself (the sole writer), so subscribers observe termination cleanly; Stop cancels, wg.Waits, then recreates the channel, making restart impossible to race; sendQuote drops the oldest buffered quote rather than blocking — arbitration always consumes the freshest estimate, never a queue of stale ones. TRUE.
