@@ -23,7 +23,7 @@ If any row does not pass, open a security advisory.
 | 1 | Source builds without warnings on Go 1.24+ | `go build ./...` at repo root | Exit code 0, no output — **Correction (session 488):** this row said "Go 1.22+" but `go.mod` requires ≥1.24 (`godebug tlsmlkem` fails to parse under older toolchains) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
-| 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
+| 4 | `staticcheck` findings are clean | `golangci-lint run` (staticcheck is enabled inside the linter set) | Exit code 0 — **Correction (session 1779):** the standalone `staticcheck` binary is not provisioned by `make setup`; the check runs through golangci-lint's `staticcheck` linter |
 | 5 | `golangci-lint` is clean | `golangci-lint run` | Exit code 0 |
 | 6 | No `TODO`/`FIXME`/`XXX` in committed code | `grep -rE 'TODO|FIXME|XXX' --include='*.go' .` | Empty or annotated with issue number — **Correction (session 1711):** the previous pattern `'TODO\|FIXME\|XXX'` was wrong under `-E` (ERE): `\|` is a literal pipe, so the grep searched for one literal string and silently passed |
 | 7 | Test:implementation ratio ≥ 1.0 | `find internal cmd -name '*_test.go' \| xargs wc -l` vs `! -name '*_test.go'` | Ratio ≥ 1.0 |
@@ -120,7 +120,8 @@ echo "[3] vet"
 go vet ./...
 
 echo "[4] staticcheck"
-staticcheck ./... || true  # warn, don't fail
+# The standalone staticcheck binary is not provisioned by make setup;
+# its checks run inside golangci-lint in the next step.
 
 echo "[5] golangci-lint"
 golangci-lint run || true
@@ -131,9 +132,8 @@ echo "[6] grep TODO/FIXME/XXX"
 echo "[7] test:impl ratio"
 impl=$(find internal cmd -name '*.go' ! -name '*_test.go' -exec cat {} + | wc -l)
 test=$(find internal cmd -name '*_test.go' -exec cat {} + | wc -l)
-ratio=$(echo "scale=3; $test / $impl" | bc)
-echo "ratio: $ratio"
-[ "$(echo "$ratio >= 1.0" | bc)" = "1" ]
+echo "impl=$impl test=$test"
+[ "$test" -ge "$impl" ]
 
 echo "All green."
 ```
