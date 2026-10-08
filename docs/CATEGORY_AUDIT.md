@@ -11958,3 +11958,7 @@ Claim verified: Counter is atomic.Uint64 (metrics.go:85–89) — no float64 pre
 ## Session 2337 update (Socratic pass 1003 — daemon status honesty)
 
 Claim verified: ServiceStatus can't misreport — Installed is a filesystem stat of the unit/plist (service.go:241–243, :334–336), Running is `systemctl --user is-active` output == "active" or `launchctl list` without "Could not find" (:246–247, :339–340) so failed/inactive/missing units all report false, and Details carries the tool's raw output verbatim. Unsupported platforms return an explicit error (:138). TRUE.
+
+## Session 2338 update (Socratic pass 1004 — clock-abstraction contract honesty)
+
+Claim verified: clock.Fake is RLock-guarded on Now and write-locked on Set/Advance (clock.go:84–108) — concurrency-safe; the contract honestly documents that Set AND negative Advance move time backward (:92–95, :103–104) and warns production code not to assume monotonic ordering rather than pretending a guarantee it doesn't give. Compile-time satisfaction checks exist for both impls (:112+). TRUE.
