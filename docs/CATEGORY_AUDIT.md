@@ -12730,3 +12730,7 @@ Claim verified: `LICENSE` exists at repo root and opens with authentic Apache Li
 ## Session 2531 update (Socratic pass 1197 — module-cache integrity check)
 
 Claim verified: `go mod verify` returns "all modules verified" — every module in the build's dependency graph matches its go.sum checksum against the module cache, so the three-dependency supply chain is bit-for-bit intact locally. TRUE — complements the s2523 manifest-parity census: no content drift, no checksum drift.
+
+## Session 2532 update (Socratic pass 1198 — internal markdown-link census)
+
+Claim verified: every relative markdown link in root docs, docs/, and docs/adr/ resolves to an existing file — the only "maybe-dead" candidates (bare ADR-00X filenames) are relative links inside docs/adr/README.md's index table, which correctly resolve within that directory (all 11 ADRs present); the one TROUBLESHOOTING mention is a code-quoted path, not a link, and also exists. TRUE — zero dead internal links.
