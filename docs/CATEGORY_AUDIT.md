@@ -17655,3 +17655,17 @@ Verification (`govulncheck ./...`):
 Verdict: TRUE — no new reachable vuln
 introduced by the ledger-only additions since
 s2850.
+
+## Session 2879 update (Socratic pass 1544 — coverage re-measure)
+
+Claim under test: the core packages still hold
+the CLAUDE.md ≥90% coverage floor.
+
+Verification (`go test -cover`, fresh run):
+
+- arbitration 98.3% · miner 97.3% · stratum
+  98.1% · config 95.2% · engine 94.2% —
+  all ≥94%, comfortably above the 90% floor.
+
+Verdict: TRUE — the coverage bar holds on the
+five core packages.
