@@ -26909,3 +26909,93 @@ across 10 files):
   awaited.
 
 Verdict: TRUE.
+
+## Session 3086 update (Socratic pass 1750 — encoding surface complete ledger)
+
+Claim under test: the
+encoding surface is
+exactly binary + hex
++ json + yaml —
+four packages, all
+bounded.
+
+Verification —
+census (imports +
+call census):
+
+- `encoding/binary` —
+  `LittleEndian`
+  ×65 call
+  sites —
+  the
+  wire
+  codec;
+  ZERO
+  BigEndian
+  (verified
+  LE-only
+  class).
+- `encoding/json` —
+  `Unmarshal`×26 +
+  `RawMessage`×18 +
+  `NewEncoder`×3 +
+  `Marshal`×1 —
+  the config/
+  wire parse
+  surface
+  (verified
+  decode
+  class);
+  ZERO
+  `Decode`
+  streaming
+  outside
+  yaml.
+- `encoding/hex` —
+  `DecodeString`×6 +
+  `EncodeToString`×4 —
+  the
+  payout/
+  share
+  codec.
+- `yaml` —
+  `NewDecoder`×1 —
+  the config
+  file
+  decode
+  (go.yaml.in/
+  yaml/v3,
+  KnownFields
+  strict —
+  #444
+  migrated).
+- ZERO
+  `encoding/gob`,
+  `encoding/csv`,
+  `encoding/base64`,
+  `encoding/base32`,
+  `encoding/pem`,
+  `encoding/asn1`,
+  `encoding/xml`
+  — the
+  complete
+  absence
+  list;
+  no
+  encoding
+  surface
+  beyond
+  the
+  four.
+- `yaml.in` /
+  `yaml.example`
+  matches
+  are
+  string
+  literals
+  in
+  docs,
+  not
+  code.
+
+Verdict: TRUE.
