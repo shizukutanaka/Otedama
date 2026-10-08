@@ -12985,3 +12985,7 @@ Claim verified: the doctor registry defines exactly 17 named checks (checks.go: 
 ## Session 2590 update (Socratic pass 1256 — i18n catalog completeness census)
 
 Census: 15 message ID constants in en.go; every priority-language catalog contains exactly 15 keyed entries (ja/zh/ko/es = 15 each, other_langs = 45 for fr/de/pt, ru_ar = 30 for ru/ar — 150 total). Completeness is not claimed-on-faith: TestAllIDs_MatchesEnglishCatalog pins AllIDs to the English map, per-language missing-ID errors are asserted, and MissingTranslations is exercised. TRUE — full bidirectional parity with the "10 言語" claim, all human-reviewed catalogs complete.
+
+## Session 2591 update (Socratic pass 1257 — subcommand surface parity)
+
+Three-way parity verified: main.go dispatches exactly 7 subcommands (run/version/config/service/doctor/wallet/completion — main.go:119-131), CLAUDE.md architecture map lists all 7, and docs/API.md documents all 7. No undocumented or phantom subcommands on any side. TRUE.
