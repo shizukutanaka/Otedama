@@ -39979,3 +39979,115 @@ APIs):
   anywhere).
 
 Verdict: TRUE.
+
+## Session 3182 update (Socratic pass 1846 — sync/atomic ledger)
+
+Claim under test: production
+atomic
+access
+is
+100%
+typed
+API;
+bare
+`atomic.*Int32`
+appears
+only
+in
+test
+counters;
+`sync.Map`
+is
+set-
+theoretic
+use
+only.
+
+Verification —
+census:
+
+- `sync`:
+  `Mutex`×77,
+  `WaitGroup`×31,
+  `RWMutex`×8,
+  `Once`×5,
+  `Pool`×3,
+  `Map`×1.
+  ZERO:
+  `sync.Cond`,
+  `sync.Locker`
+  custom
+  wrappers —
+  `Cond`
+  never
+  needed
+  (channels
+  carry
+  wakeup
+  semantics).
+- `sync/atomic`
+  production:
+  `Bool`×16,
+  `Uint64`×10,
+  `Pointer`×9,
+  `Int64`×1 —
+  all
+  typed
+  API.
+- `sync/atomic`
+  bare
+  functions:
+  `AddInt32`×6,
+  `LoadInt32`×1 —
+  ALL
+  in
+  `*_test.go`
+  local
+  counter
+  variables
+  (`warns`,
+  `hits`);
+  zero
+  in
+  production.
+  Earlier
+  ledger
+  "all
+  typed
+  API"
+  scoped
+  to
+  prod
+  —
+  the
+  nuance
+  recorded.
+  ZERO
+  everywhere:
+  `AddUint64`/`AddInt64`/
+  `AddUint32`/`AddUintptr`,
+  `StoreInt*`/`LoadInt*`/
+  `Swap*`/`CompareAndSwap*`
+  in
+  production
+  (typed
+  `Int64.Add`/etc
+  methods
+  used
+  instead).
+- `sync.Map`×1
+  site
+  verified
+  earlier:
+  `Load`/`Store`/`Delete`/
+  `Range`
+  only —
+  set-
+  theoretic
+  API,
+  no
+  `LoadAndStore`/`Swap`/
+  `LoadOrStore`-
+  misuse.
+
+Verdict: TRUE.
