@@ -10090,3 +10090,7 @@ Claim verified: SECURITY.md's support table is internally consistent with the re
 ## Session 1875 update (Socratic pass 541 — Go-version pin census)
 
 Claim verified (already-recorded residual, no code change — rejected #1344 territory): the workflow Go pins diverge from go.mod `go 1.24.0` on four axes — `GO_VERSION: '1.21'` (ci-cd.yml), `GO_VERSION: '1.23.x'` (ci.yml/release.yml/test.yml), matrix `go: [1.20,1.21]` / `[1.22.x,1.23.x]` / `[1.23.x]`, and security.yml's hard-coded `'1.21'` for the gosec/nancy/govulncheck job. Every one fails at `go.mod requires go >= 1.24.0` with GOTOOLCHAIN=local-class runners — the security.yml job is fully dead (both `go list -json -deps` and govulncheck's own tool install can never execute). Dockerfile's `golang:1.24-alpine` and deploy.yml's `go-version-file: go.mod` are the two correct pins. Recorded; the umbrella fix remains the maintainer's rejected-PR decision (#1344).
+
+## Session 1876 update (Socratic pass 542 — DefaultPoolURL single-source claim)
+
+Claim verified: `config.DefaultPoolURL` (stratum+v2://public.stratum.slushpool.com:3336) is the single source for the built-in fallback pool — referenced by all three documented consumers: engine `defaultPoolURL` (setup.go:374), doctor reachability (checks.go:344), CLI startup banner (run.go:188). No literal duplicates exist. TRUE.
