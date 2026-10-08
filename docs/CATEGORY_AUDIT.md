@@ -9576,3 +9576,7 @@ Four Cat-11 🟡 rows dispositioned. (1) Payout-minimum-in-doctor → 🔵 block
 ## Session 1749 update (Socratic pass 415 — Cat-11 arXiv rows resolved)
 
 (1) Row 27 (one countermeasure, two timing channels) → ✅ already satisfied: THREAT_MODEL :267-271 already documents the Rohrer & Tschorsch LN HTLC-resolution timing leak as the payout-side analogue of the Stratum earnings channel, and states Tor-by-default (ADR-007 B7) "mitigates both channels at once"; reference at :500. (2) Rows 25/26 (betweenness-biased paths, balance-prior seeding) → 🔵 catalogue, correctly self-scoped as riding with Cat 11 #6 if a send path ever exists — receive-only today. Marker updates only.
+
+## Session 1750 update (Socratic pass 416 — extended Cat-5/6/8 rows dispositioned)
+
+Seven extended-pass rows moved 🟡→🔵, each correctly conditional: preemption-risk switch cost (needs a real provider — only simulated today; anchors ADR-010 A2), randomized deadline spot policy (no deadline-constrained inference exists; A1/A6), learned switching cost (upgrade target for A2 — ledger must exist first), non-stationarity measures (signal-selection guidance for A1+A8), Octopus Agile REST (UK-only instance of the ADR-008 sub-domain-4 feed decision; noted its proposed `power/tariff/` path is off the architecture map), forward price-curve interface (design constraint inside the same ADR-008 scope), marginal-vs-average carbon (signal-selection note inside Cat 8 #10/ADR-008), trace exemplars (conditional on OTel shipping — v3.3.0 `-tags otel` artifact). Marker updates only.

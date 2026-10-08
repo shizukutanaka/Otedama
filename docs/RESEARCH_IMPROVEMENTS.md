@@ -813,58 +813,84 @@ endpoint against current vendor documentation. Tags as before
     preemption). A `VastProvider` behind the existing `provider` interface
     gives a non-simulated backend now. (Renting out *own* hardware — fine
     under the non-custodial stance.)
-13. 🟡 **Preemption is the dominant failure mode — price it in.** Duan et al.,
+13. 🔵 **Preemption is the dominant failure mode — price it in.** Duan et al.,
     "GFS" (arXiv:2509.11134, ASPLOS '26), forecast GPU demand and keep a
     reserve quota to cut eviction 33%. A preemption-risk term should raise a
     provider's *effective* switch cost in the A2 ledger so the engine
     doesn't churn a GPU onto a stream it loses in minutes. Pairs with #14
     and Cat 5 #6.
+    — **Dispositioned (session 1750):** conditional on a real provider —
+    today's only compute backend is simulated, so there is no preemption
+    signal to price. Anchored to ADR-010 A2's switch-cost ledger (itself
+    🔵) and Cat 5's real-provider row; activates with them.
 
 ### Category 6 — arbitration / online optimisation (arXiv grounding)
 
-14. 🟡 **Randomized deadline-aware spot policy with √K competitive ratio.**
+14. 🔵 **Randomized deadline-aware spot policy with √K competitive ratio.**
     "ROSS" (arXiv:2601.14612) proves deterministic deadline policies are
     stuck at Ω(K) (K = reliable/spot cost ratio) while a randomized reserve
     rule achieves √K (~30% savings). The competitive-analysis counterpart to
     ADR-010 A1/A6; load-bearing only if deadline-constrained inference
     exists.
-15. 🟡 **Adaptive, learned switching cost with sub-linear dynamic regret.**
+    — **Dispositioned (session 1750):** correctly self-scoped — no
+    deadline-constrained inference surface exists today (simulated
+    provider only). Anchored to ADR-010 A1/A6.
+15. 🔵 **Adaptive, learned switching cost with sub-linear dynamic regret.**
     "SCaLE" (arXiv:2601.09042) handles ℓ2 switching costs under noisy bandit
     feedback with no known cost structure. Justifies making ADR-010 A2's
     switch-cost ledger *learned / non-stationary* rather than a fixed
     calibration; the regret-optimal target for A2.
-16. 🟡 **Track which non-stationarity the engine self-tunes against.**
+    — **Dispositioned (session 1750):** an upgrade target for ADR-010 A2
+    (🔵 unscheduled) — the ledger must exist before it can be learned.
+16. 🔵 **Track which non-stationarity the engine self-tunes against.**
     "Non-stationary Bandit Convex Optimization" (arXiv:2506.02980, NeurIPS
     2025) gives regret bounds parameterised by switches / total-variation /
     path-length — exactly the three drift types in hashprice/Akash yield
     (difficulty steps, volatility, diurnal). Use its measures to choose the
     self-tuning signal for the Holt-Winters reset threshold (A1+A8).
+    — **Dispositioned (session 1750):** signal-selection guidance for
+    ADR-010 A1+A8 (🔵) — catalogued, rides with that scope.
 
 ### Category 8 — power: real, currently-live feeds
 
-17. 🟡 **Octopus Agile half-hourly REST (no key for read-only rates).**
+17. 🔵 **Octopus Agile half-hourly REST (no key for read-only rates).**
     `api.octopus.energy/v1/products/<P>/electricity-tariffs/<T>/standard-unit-rates/?period_from=…`
     concretises ADR-008 sub-domain 4; a `power/tariff/octopus.go` poller
     (~30 min) drives the Cat 8 #9 curtailment hook.
-18. 🟡 **Design the tariff interface as a forward *price curve*, not a spot
+    — **Dispositioned (session 1750):** UK-only tariff and one instance
+    of the feed-integration decision already parked 🔵 under ADR-008
+    sub-domain 4 — rides with that scope (region/feed selection is the
+    ADR question, same class as the carbon row). Also note the proposed
+    `power/tariff/` path is not in CLAUDE.md's architecture map — an
+    implementation lands inside an existing package, not a new dir.
+18. 🔵 **Design the tariff interface as a forward *price curve*, not a spot
     price.** Tibber (GraphQL, once-daily curve) and Amber (REST, 5-min AEMO
     forecast) cover EU-Nordic and AU. A "return the forward curve" interface
     accommodates all three and feeds the horizon-aware (Pontryagin) scheduler
     (ADR-008 #2) — plan curtailment windows ahead instead of reacting to spot.
-19. 🟡 **For carbon-aware curtailment use *marginal*, not average, intensity.**
+    — **Dispositioned (session 1750):** interface-shape guidance for the
+    same ADR-008 sub-domain 4 scope; catalogued as the design constraint
+    that any tariff feed must return a curve, not a scalar.
+19. 🔵 **For carbon-aware curtailment use *marginal*, not average, intensity.**
     WattTime MOER (5-min marginal emissions) is the correct signal for
     "pause to cut emissions" because curtailing changes load at the margin;
     Electricity Maps average (AOER) understates the effect. Sharpens Cat 8
     #10; keep optional (keys required) per ADR-003.
+    — **Dispositioned (session 1750):** sharpens Cat 8 #10, which is now
+    🔵 under ADR-008 — catalogued as the signal-selection constraint
+    (marginal, not average) inside that scope.
 
 ### Category 9/10 — observability & supply-chain (current real tooling)
 
-20. 🟡 **Emit trace exemplars on the submit-latency histogram.**
+20. 🔵 **Emit trace exemplars on the submit-latency histogram.**
     prometheus/client_golang v1.23 (Jul 2025) + OpenMetrics 1.0 allow a
     `{trace_id="…"}` exemplar on a histogram bucket so a p99 spike links to
     its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
     (Cat 9 #3); joining them is a small extension to the hand-rolled
     exposition writer (no client_golang dep — keeps ADR-003/005).
+    — **Dispositioned (session 1750):** conditional on Cat 9 #3 — there
+    are no trace IDs to exemplar until OTel ships (🔵, v3.3.0 `-tags otel`
+    artifact). Joins that scope.
 21. ✅ **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
     metrics.** `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
     registry; `RuntimeCollector()` emits 12 standard `go_*` metrics
