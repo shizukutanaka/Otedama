@@ -12502,3 +12502,7 @@ Claim verified: stratum/tls.go's package doc records the fixed bug class — str
 ## Session 2474 update (Socratic pass 1140 — MILESTONE gate)
 
 Claim verified: at pass 1140 the gate suite is clean — `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` green on provider, lightning, daemon, rates, cmd/otedama. TRUE — the audit-cumulative tree (1,690+ ledger entries incl. maintainer-gated verdicts on wallet/seed/store/wordlist + twin-TLS + merge-health) compiles, vets, formats, and tests clean on the packages covered this stretch.
+
+## Session 2475 update (Socratic pass 1141 — runtime collector honesty)
+
+Claim verified: RuntimeCollector substitutes go_gc_duration_seconds (normally a summary) with two honest counters — go_gc_duration_seconds_total (PauseTotalNs/1e9) and go_gc_cycles_total (NumGC) — documented as covering the common rate() dashboard use, never fabricating quantiles (runtime.go:15–22, :104–114); all 12 emitted metrics carry HELP+TYPE+exactly-1-sample derived from runtime.ReadMemStats/NumGoroutine (:35–125); go_info's version label is escapeLabel-quoted with a justified nolint:gocritic (:52–57); integer counters use FormatUint, floats use %g canonical form; a write error aborts the exposition mid-stream rather than emitting a partial series. TRUE — no fabricated summary quantiles, no unescaped label, no dishonest zero-fill.
