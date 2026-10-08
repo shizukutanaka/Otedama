@@ -14069,3 +14069,26 @@ by the reconnect loop.
   in #491 — still present.
 
 Verdict: TRUE — jitter + exponential-backoff discipline intact.
+
+## Session 2728 update (Socratic pass 1394 — merged-#1341 sanitizer invariant)
+
+Claim under test: merged #1341's Trojan-Source hardening still holds
+— pool/config display sanitizers strip Cf/Zl/Zp in addition to Cc.
+
+Verification at HEAD:
+
+- `poolproto.go:460-461` — `unsafePoolRune` returns
+  `unicode.In(r, Cc, Cf, Zl, Zp)`; doc comment correctly attributes
+  the Cf class to Trojan Source (CWE-838: bidi overrides U+202A–E,
+  U+2066–69, tag chars U+E0000+, zero-width spaces/joiners) and Zl/Zp
+  to forged log lines.
+- `cmd/otedama/config.go:209` — identical predicate for config text.
+  Both sites match → no divergent drift between pool-boundary and
+  config-boundary sanitization.
+- `SanitizePoolText` truncates at `maxPoolTextRunes` AFTER mapping to
+  `[]rune` — rune-boundary-safe, no mid-codepoint cut that would emit
+  U+FFFD noise.
+- Strip-then-truncate order is correct: a 256-rune budget counts only
+  visible characters, and a Cf char can't dodge truncation.
+
+Verdict: TRUE — dual-site sanitizer parity intact.
