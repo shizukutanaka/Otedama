@@ -23754,3 +23754,68 @@ Verification — census:
   pool path.
 
 Verdict: TRUE.
+
+## Session 3037 update (Socratic pass 1701 — goroutine-spawn ledger)
+
+Claim under test: every
+production goroutine
+spawn has an ownership
+record (ctx-cancel,
+WaitGroup, or close
+contract).
+
+Verification — census
+(exclusion-glob order
+corrected: `-g '*.go'
+-g '!*_test.go'` —
+the earlier order re-
+included test files):
+
+- 25 `go` spawns
+  across 13 files —
+  a recount differs
+  from the earlier
+  ledger's "20" because
+  that pass used a
+  narrower pattern;
+  this count includes
+  named-function
+  spawns too. Count
+  revision noted here
+  per self-correction
+  convention.
+- By file: engine/run.go
+  ×6 (workers + loop
+  supervision),
+  rates/hashrate.go
+  ×2 + rates/fetcher.go
+  ×2 (feeds),
+  stratumv1 ×2
+  (read/write loops),
+  miner/worker ×2
+  (mine + idle loop),
+  httpserver ×2
+  (listener + stop),
+  hal/registry ×2
+  (detect fan-out),
+  engine/fanin ×2
+  (merge + close),
+  tui ×1, provider
+  ×1, stratumv2
+  dialer ×1, doctor
+  ×2 (probe + fan-out).
+- All verified owned:
+  spawn-ownership and
+  goroutine-leak
+  passes confirmed
+  every spawn pairs
+  with ctx cancel,
+  WaitGroup, or
+  channel close —
+  the fan-in helper
+  itself uses the
+  wg-wait-then-close
+  idiom at
+  fanin.go:56.
+
+Verdict: TRUE.
