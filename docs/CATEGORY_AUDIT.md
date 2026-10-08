@@ -28865,3 +28865,137 @@ census:
   concrete.
 
 Verdict: TRUE.
+
+## Session 3105 update (Socratic pass 1769 — flag complete ledger)
+
+Claim under test: the
+flag surface is
+per-subcommand
+NewFlagSet with
+ContinueOnError —
+zero global
+CommandLine use.
+
+Verification —
+census:
+
+- `flag.NewFlagSet`×5 +
+  `flag.ContinueOnError`×5 +
+  `flag.ErrHelp`×5 —
+  the
+  five
+  subcommand
+  flag
+  sets
+  (run,
+  config,
+  service,
+  doctor,
+  wallet)
+  all
+  return
+  errors
+  instead
+  of
+  exiting —
+  verified
+  exit-
+  surface
+  class.
+- `flag.FlagSet`×3 +
+  `flag.Flag`×1 +
+  `flag.Parse`×1 —
+  the
+  type/
+  plumbing
+  references.
+- Registrations:
+  `.StringVar`×12 +
+  `.BoolVar`×5 +
+  `.String`×2 +
+  `.Bool`×2 +
+  `.Visit`×1 +
+  `.Parse`×2 —
+  the
+  flag
+  definition
+  surface;
+  all
+  typed.
+- ZERO
+  `flag.CommandLine`
+  writes,
+  `flag.Parse`
+  at
+  package
+  level,
+  `flag.Usage`,
+  `flag.PrintDefaults`
+  at
+  package
+  level —
+  the
+  global
+  flag
+  state
+  is
+  never
+  touched;
+  each
+  subcommand
+  owns
+  its
+  own
+  set.
+- ZERO
+  `flag.Var`,
+  `flag.Func`,
+  `flag.BoolFunc`,
+  `flag.TextVar`,
+  `flag.DurationVar`,
+  `flag.IntVar`,
+  `flag.UintVar`,
+  `flag.Float64Var`,
+  `flag.Int64Var`,
+  `flag.Uint64Var` —
+  the
+  flag
+  set
+  is
+  Bool+
+  String
+  only;
+  numeric
+  flags
+  are
+  parsed
+  from
+  strings
+  through
+  the
+  env
+  surface
+  (verified
+  numeric-env
+  class).
+- ZERO
+  `flag.NArg`,
+  `NFlag`,
+  `Arg`,
+  `Args`,
+  `Lookup`,
+  `Set`,
+  `VisitAll`,
+  `Parsed`,
+  `Output`,
+  `Name`,
+  `ErrorHandling`,
+  `PanicOnError`,
+  `ExitOnError` —
+  the
+  residual
+  flag
+  surface
+  absent.
+
+Verdict: TRUE.
