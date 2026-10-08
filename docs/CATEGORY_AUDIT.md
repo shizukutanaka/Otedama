@@ -13300,3 +13300,7 @@ Verified .github/oss-fuzz-integration.md package coverage: doc lists 9 package p
 ## Session 2667 update (Socratic pass 1333 — ROADMAP.md current-state claims)
 
 Re-verified: all ✅-marked items match shipped code (poolproto split + V1 dialer production path, BIP-39 2048-word list w/ SHA-256 pin, arbitration alpha state); unmarked items are still open (secp256k1 real impl, DATUM dialer, JDP) — consistent with KNOWN_LIMITATIONS. SRI mention "v1.11.0" at :26 is a dated session-251 snapshot (self-bounding; ADR-009 tracks current v1.12.0). "~1,940 solo-hours / 88% over budget" arithmetic is the max-bound case (86.5% precise — acceptable rounding in an estimate). claim verified: ROADMAP.md — TRUE
+
+## Session 2668 update (Socratic pass 1334 — SECURITY.md supported-versions table)
+
+Corrected the v2.1.9 (legacy) row — it promised "重大な脆弱性のみ、2026年10月まで" but `git ls-remote --heads` confirms the planned `legacy-v2` maintenance branch was never created (same phantom-ref family corrected in CHANGELOG s2658 and MIGRATING-FROM-V2 s2659); the window also expires this month. Row now reads No + migration pointer. Rest of file verified TRUE: PVR path (GitHub private reporting primary, maintainer contact fallback, PGP/Foundation deferred honestly), 72h/7d/14d/30–90d timeline is a stated goal not a claim, CVSS v3.1 severity bands conventional, scope excludes web/plugin correctly (per CLAUDE.md map). claim corrected: SECURITY.md
