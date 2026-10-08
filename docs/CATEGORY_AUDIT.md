@@ -23448,3 +23448,51 @@ Verdict: TRUE — branch
 remains mergeable and
 fully verified at this
 commit.
+
+## Session 3031 update (Socratic pass 1695 — runtime ledger)
+
+Claim under test: the
+runtime surface is
+read-only introspection
+— no tuning knobs, no
+finalizers.
+
+Verification — census:
+
+- `runtime.GOOS`×10 +
+  `GOARCH`×1 — platform
+  branches (daemon
+  unit file choice, gpu
+  stub guard, TUI
+  width path).
+- `runtime.NumCPU`×6 —
+  the worker-count
+  default and the
+  detect-fanout
+  bound.
+- `runtime.Version`×2 —
+  version metadata.
+- `runtime.ReadMemStats`
+  ×2 + `MemStats`×1 —
+  the runtime
+  collector's honest
+  2-counter summary
+  substitute
+  (verified: GC pause
+  summary is not
+  implemented, so the
+  collector emits
+  Alloc/HeapAlloc
+  rather than faking
+  richer stats).
+- `runtime.NumGoroutine`
+  ×1 — the leak-
+  visibility
+  metric.
+- ZERO runtime.GC,
+  GOMAXPROCS,
+  SetFinalizer,
+  KeepAlive, GODEBUG
+  env mutation.
+
+Verdict: TRUE.
