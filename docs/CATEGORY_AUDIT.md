@@ -11910,3 +11910,7 @@ Claim verified: ScriptForAddress (script.go:36–79) can never emit a wrong-type
 ## Session 2325 update (Socratic pass 991 — i18n bundle integrity)
 
 Claim verified: NewBundle (message.go:250–268) enforces its contract structurally — English catalog required and must be LangEnglish, nil/duplicate-language catalogs rejected; Render's fallback chain (lang → base-tag → English → conspicuous "!{id}!" placeholder + error) never returns an empty string; MissingTranslations/Languages return fresh sorted collections per call — no shared-map mutation hazard. TRUE.
+
+## Session 2326 update (Socratic pass 992 — config numeric bounds completeness)
+
+Claim verified: appendNumericIssues (config.go:701–743) rejects NaN/±Inf on every economic field before the range checks (comparisons can't catch NaN), then bounds each field — hysteresis [0,1), curtail_below_btc_usd/min_yield/power_watts/electricity_price all ≥0 with 0=disabled documented in the message. No numeric field reaches the engine unchecked. TRUE.
