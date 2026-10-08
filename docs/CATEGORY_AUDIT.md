@@ -10600,3 +10600,7 @@ Claim verified: encoding is spec-strict while decoding is deliberately lenient w
 ## Session 2002 update (Socratic pass 668 — v2tls transport honesty)
 
 Claim verified: stratum+v2tls:// now means a real certificate-verified TLS connection — the pre-fix silent plaintext downgrade is documented and closed; the default config verifies against the system root store at TLS ≥1.2 with ServerName filled from the actually-dialed host (not caller-supplied, so the check binds to the right identity); the extra-CA path *extends* the trust store without ever disabling verification, and a PEM blob with no valid certificates is an error rather than silently narrowing trust; handshake completes inside DialContext so a verification failure surfaces as a dial error, and there is no plaintext fallback path anywhere in the function. TRUE.
+
+## Session 2003 update (Socratic pass 669 — V2 handshake wire fidelity)
+
+Claim verified: SetupConnection/OpenMiningChannel encoders and decoders are field-order symmetric with per-field error attribution; MaxTargetUnconstrained honestly declares the all-ones bound — max_target is wire-required (a decoder reading it hits a short buffer without the field), so all-ones is the truthful encoding of "no preference" and stays forward-compatible with sv2-spec #236's ≤-channel-max constraint; OpenMiningChannelSuccess reads Extranonce through getB0_255 on purpose (the Postel-lenient half of the asymmetry), and OpenMiningChannelError tolerates a missing error string rather than failing the whole frame. TRUE.
