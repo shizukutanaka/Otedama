@@ -496,7 +496,23 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 1/2 — mining client & Stratum correctness (from SRI v1.5.0 + ESP-Miner)
 
-1. 🟡 **Validate the SV2 server certificate, not just the Noise DH.** The
+1. 🟡→🔵 **Validate the SV2 server certificate — scope refined.** Verified
+   in session 1731/1732: the premise "only the Noise DH defends today" is
+   stale. Noise NX is **not wired into the live connect path at all**
+   (engine run.go:871-876 warns "Noise NX is not yet wired"; noise.go:107
+   still substitutes P-256 for secp256k1). The MITM defence that *is*
+   deployed is `stratum+v2tls://`: real certificate-verified TLS via
+   `stratum.DialTLS` + `TLSConfigWithExtraCAs` (system roots + optional
+   `tls_ca_file` PEM), with no plaintext downgrade (coverage_test.go:733-787).
+   The genuinely-open remainder is unchanged but narrower: when ADR-011's
+   secp256k1 migration wires Noise NX, add `VerifyServerCert(cert,
+   authorityPubKey, clock.Now())` + a per-pool `authority_pubkey` config
+   field — the SV2-native signed-certificate check (BIP340 Schnorr over
+   `valid_from`/`not_valid_after`/`server_public_key`, with expiry
+   enforcement) the spec mandates. Until then the row is blocked, not
+   silently missing.
+   — (Original row retained below.)
+   Validate the SV2 server certificate, not just the Noise DH. The
    SV2 security spec delivers a signed certificate (`valid_from`,
    `not_valid_after`, `server_public_key`, BIP340 Schnorr sig over the
    fields); the initiator MUST verify the signature against a known
