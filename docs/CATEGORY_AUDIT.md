@@ -9952,3 +9952,7 @@ Claim verified: the 10-language path is complete end-to-end — Lang constants (
 
 Defects found and fixed:
 - CONTRIBUTING.md:92 claimed non-major languages are covered by machine translation ("その他の言語は機械翻訳で対応しています") — false: the tree ships exactly 10 hand-written catalogs and `DetectLang` falls back to English for everything else (verified s1840). No MT catalogs or runtime MT path exist. Corrected to state the English fallback honestly and invite new-catalog contributions. CLAUDE.md:102's parallel "1,000+ 言語" statement is the rulebook's own aspirational scope note — left as-is (maintainer document). CLAIM FALSE, corrected.
+
+## Session 1842 update (Socratic pass 508 — release checksum chain parity)
+
+Claim verified: the publish↔verify chain is consistent — ci-cd.yml:227-230 aggregates `sha256sum otedama-* > checksums.txt` (self-inclusion fix from s1665 holds: glob excludes checksums.txt itself since its name doesn't start with `otedama-`); install.sh probes the same names in order (`checksums.txt`, `otedama_<ver>_checksums.txt`, `otedama_<VERSION>_checksums.txt`) and fails closed on fetch error unless `--skip-verify` (lines 150-200). TRUE.
