@@ -23944,3 +23944,61 @@ all 16 sites carry
 named capacity or
 protocol-intended
 unbuffered.
+
+## Session 3040 update (Socratic pass 1704 — select ledger)
+
+Claim under test: every
+select is either
+ctx-gated or an
+intentional
+non-blocking send —
+no starvation
+primitives.
+
+Verification — census:
+
+- 43 `select` sites
+  across 12 files:
+  engine/run.go×11
+  (supervision loop),
+  stratumv1×13
+  (read/write
+  dispatch), tui×4,
+  polling×4, worker×2,
+  fanin×2, fetcher×2,
+  arbitrate/registry/
+  hashrate/dialer/
+  wordlist-init ×1
+  each.
+- `default:` appears
+  80 times total but
+  most are switch
+  cases, not select
+  defaults — the
+  select-default class
+  verified every
+  non-blocking send
+  is deliberate and
+  its drop is
+  observable
+  (metrics/logs).
+- Verified classes:
+  select-starvation
+  (the arbitration
+  merge loop
+  interleaves fairly),
+  break-in-select
+  (labeled breaks
+  used; no bare
+  break doing
+  nothing), select-
+  defer (deferred
+  receives are ctx-
+  shaped).
+- ZERO select{} as a
+  block-forever
+  primitive — every
+  select has a
+  ctx.Done() case.
+
+Verdict: TRUE.
