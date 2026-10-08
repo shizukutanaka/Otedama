@@ -10788,3 +10788,7 @@ Claim verified: the doctor surface can't leak secrets or misreport — probePool
 ## Session 2048 update (Socratic pass 714 — doctor runner + JSON contract)
 
 Claim verified: the doctor output contract is machine-honest — WriteJSON embeds exit_code in the document itself so a CI script acts on the verdict without re-deriving the fail>warn dominance; per-check durations export as whole milliseconds; result order equals check order (stable mapping, not goroutine-completion order); and a panicking check converts to a named Fail result via per-goroutine recover — one broken probe can never take down the other 16 results (the s1649 fix, confirmed in place). doctor is fully covered. TRUE.
+
+## Session 2049 update (Socratic pass 715 — setup helpers invariants)
+
+Claim verified: the setup helpers preserve the documented semantics — the nonce partition gives every (worker, thread) pair its own residue class via a next-pow2 stride bounded at 2^31 (no duplicate (header,nonce) grinding and no uint32 overflow — the guard rejects an oversized total instead of wrapping); a zero SHA256d-capable device set is a hard error, not a silent no-miner run; nominalMiningHashrate is per-worker so it counts exactly the devices that will actually hash (the pool's vardiff seed reflects reality); sessionUser honors the documented precedence chain (explicit per-pool User > address.worker > bare address); payoutAddresses de-duplicates while preserving configured order; and maskAddr renders first6…last4 so logs never print a full payout address. TRUE.
