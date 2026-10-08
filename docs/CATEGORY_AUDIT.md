@@ -22893,3 +22893,72 @@ underlying claims —
 no runtime reflection,
 set-theoretic Map use —
 remain TRUE.
+
+## Session 3021 update (Socratic pass 1685 — os ledger)
+
+Claim under test: the
+whole os.* surface is
+bounded, injected, and
+disciplined — no env
+mutation, no cwd
+tricks.
+
+Verification — census:
+
+- `os.Getenv` ×16 —
+  all behind injectable
+  seams (config env
+  arg, i18n getter fn,
+  OTEDAMA_* cmd entry)
+  verified earlier.
+- `os.Stat` ×10 +
+  `os.ErrNotExist`×6 —
+  Stat-first hygiene
+  with errors.Is;
+  no raw errno.
+- `os.File`×10 +
+  `ReadFile`×8 +
+  `WriteFile`×4 +
+  `MkdirAll`×5 +
+  `Open`/`OpenFile`
+  — all bounded to
+  datadir/wallet/
+  service paths
+  (verified
+  confinement).
+- `os.Rename`×2 +
+  `Chmod`×1 +
+  `CreateTemp`×1 —
+  the wallet atomic-
+  save pattern
+  (chmod-before-rename,
+  verified).
+- `os.ReadDir`×2 —
+  the stale-temp
+  sweep.
+- `os.Stdout`×6/
+  `Stderr`×4/`Stdin`×4 —
+  stdio discipline;
+  secrets enter via
+  Stdin only.
+- `os.ModeCharDevice`
+  ×3 — TTY detection
+  (wallet verify,
+  --help-on-tty).
+- `os.Exit`×2 —
+  top-level exits
+  only (verified —
+  zero library
+  exits).
+- `os.Executable`×1 —
+  service argv
+  resolution.
+- `os.Interrupt`×1 —
+  the single signal
+  wiring.
+- ZERO os.Environ/
+  Setenv/Chdir/Pipe/
+  ForkExec in
+  production.
+
+Verdict: TRUE.
