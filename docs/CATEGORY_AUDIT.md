@@ -17428,3 +17428,22 @@ Verdict: TRUE — handshake decoders hold under
 ~3.2M adversarial inputs; cumulative fuzz
 coverage now spans 3 of the 7 stratum targets
 with zero crashes.
+
+## Session 2867 update (Socratic pass 1532 — race-detector rotation)
+
+Claim under test: the concurrency-heavy packages
+NOT covered by s2848's -race pass (miner,
+poolproto + both stratum adapters, rates) run
+clean under the race detector.
+
+Verification:
+
+- `go test -race -count=1 ./internal/miner/
+  ./internal/poolproto/... ./internal/rates/` →
+  5 legs all PASS: miner 1.06s, poolproto 1.04s,
+  stratumv1 1.58s, stratumv2 1.44s, rates 2.81s.
+
+Verdict: TRUE — cumulative -race coverage now
+spans 8 packages (s2848: metrics, arbitration,
+stratum; s2867: miner, poolproto, stratumv1,
+stratumv2, rates) with zero detections.
