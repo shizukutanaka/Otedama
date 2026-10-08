@@ -9936,3 +9936,10 @@ Claim verified: every workflow's `branches:` trigger list includes `master` — 
 ## Session 1838 update (Socratic pass 504 — tree-integrity sanity on accumulated ledger)
 
 Claim verified: after 22 ledger/code commits on this branch, `go build ./...` (0), `go vet ./...` (clean), `gofmt -l` (no output), and scoped `go test ./internal/doctor/ ./cmd/otedama/ ./internal/config/` all pass — the doc-heavy accumulation has not drifted the buildable surface, and the s1649 doctor panic-recovery + s1655/s1659 sanitization + s1675 env-warning pins all hold. TRUE.
+
+## Session 1839 update (Socratic pass 505 — ADR-009 ecosystem recheck)
+
+Ecosystem findings recorded:
+- sv2-spec: #203 (non-custodial payouts extension, push-based JDP alternative to #202/#195) confirmed still open — active July discussion on payout bound width (warioishere: SEQ0_255 caps ~60 coinbase outputs for real pools; plebhash: legacy Sv1 firmware already caps outputs + blockspace contention makes big output sets economically irrational → hybrid custodial/non-custodial is an unavoidable design constraint). Relevant prior note: Otedama's direct-coinbase TIDES verification already lives in this design space. (Earlier fetched pulls-page rendering showed only #186/#103 but was a partial render — #203 verified open directly.)
+- sv2-apps: latest release remains v0.7.0 (released 24 Jul) — JDS DownstreamState isolation, JDC RequestTransactionData race fix, tProxy payout verification for split coinbase scriptSigs, downstream share validation against advertised pow2 difficulty (aligns with Otedama's share-target checks), ASIC telemetry discovery by username+port. v0.8.0 remains a misread from s1660 — corrected record stands.
+- No normative drift affecting Otedama's wire surface this pass. TRUE.
