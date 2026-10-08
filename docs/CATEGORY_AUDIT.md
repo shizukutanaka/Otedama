@@ -31130,3 +31130,220 @@ census:
   site.
 
 Verdict: TRUE.
+
+## Session 3124 update (Socratic pass 1788 — context/io/bufio complete ledger)
+
+Claim under test: the
+ctx surface is
+Context + WithTimeout
++ WithCancel + the
+3 root Background —
+with TODO and the
+cause APIs absent;
+io is Writer/Reader/
+ReadFull/LimitReader;
+bufio is the V1
+Reader only.
+
+Verification —
+census:
+
+- `context.Context`×87 +
+  `WithTimeout`×7 +
+  `WithCancel`×5 +
+  `CancelFunc`×3 +
+  `Background`×3 +
+  `DeadlineExceeded`×2 +
+  `Canceled`×1 +
+  `WithValue`×1 —
+  the
+  propagation
+  surface
+  (verified
+  ctx-
+  origin
+  class:
+  3
+  roots
+  at
+  main/
+  doctor/
+  run;
+  WithValue
+  is
+  the
+  logger
+  request-id
+  seam).
+- `io.Writer`×45 +
+  `io.Reader`×24 +
+  `io.ReadWriter`×3 +
+  `io.Closer`×2 +
+  `io.ByteReader`×1 —
+  the
+  interface
+  surface.
+- `io.ReadFull`×16 +
+  `io.LimitReader`×4 +
+  `io.WriteString`×5 +
+  `io.ReadAll`×2 +
+  `io.Copy`×2 +
+  `io.MultiWriter`×1 +
+  `io.Discard`×3 —
+  the
+  function
+  surface
+  (verified
+  read-
+  bound
+  class:
+  every
+  unbounded
+  read
+  is
+  LimitReader
+  wrapped).
+- `io.EOF`×5 +
+  `io.ErrUnexpectedEOF`×1 —
+  the
+  sentinel
+  surface.
+- `bufio.Reader`×4 +
+  `bufio.NewReader`×2 +
+  `bufio.NewReaderSize`×1 +
+  `bufio.ErrBufferFull`×2 —
+  the
+  V1
+  line
+  reader
+  +
+  the
+  wallet
+  secret
+  prompt;
+  NO
+  bufio.Writer
+  (writes
+  go
+  straight
+  to
+  conn/
+  file).
+- `io.net`×1 —
+  a
+  doc
+  comment
+  naming
+  the
+  io+net
+  pairing,
+  not
+  a
+  package
+  ref.
+- ZERO
+  `context.TODO`,
+  `WithDeadline`,
+  `AfterFunc`,
+  `CauseFunc`,
+  `WithCancelCause`,
+  `WithDeadlineCause`,
+  `WithTimeoutCause`,
+  `Cause`,
+  `WithoutCancel` —
+  the
+  cause/
+  decouple
+  APIs
+  absent.
+- ZERO
+  `io.Pipe`,
+  `io.SectionReader`,
+  `io.SegmentReader`,
+  `io.TeeReader`,
+  `io.MultiReader`,
+  `io.OffsetWriter`,
+  `io.LimitedReader`×type,
+  `io.NopCloser`,
+  `io.ReadAtLeast`,
+  `io.CopyBuffer`,
+  `io.CopyN`,
+  `io.PipeReader`,
+  `io.PipeWriter`,
+  `io.Seeker`,
+  `io.ReaderAt`,
+  `io.WriterAt`,
+  `io.ReaderFrom`,
+  `io.WriterTo`,
+  `io.SeekStart`,
+  `io.SeekCurrent`,
+  `io.SeekEnd`,
+  `io.RuneReader`,
+  `io.RuneScanner`,
+  `io.StringReader`,
+  `io.ByteScanner`,
+  `io.ByteWriter`,
+  `io.ReadCloser`,
+  `io.WriteCloser`,
+  `io.ReadWriteCloser`,
+  `io.ReadSeeker`,
+  `io.ReadSeekCloser`,
+  `io.ReadWriteSeeker`,
+  `io.ErrClosedPipe`,
+  `io.ErrNoProgress`,
+  `io.ErrShortBuffer`,
+  `io.ErrShortWrite` —
+  the
+  seek/
+  pipe/
+  segment
+  class
+  absent;
+  the
+  code
+  is
+  stream-
+  only.
+- ZERO
+  `bufio.Writer`,
+  `bufio.NewWriter`,
+  `bufio.NewWriterSize`,
+  `bufio.ReadWriter`,
+  `bufio.NewReadWriter`,
+  `bufio.Scanner`,
+  `bufio.NewScanner`,
+  `bufio.ScanBytes`,
+  `bufio.ScanRunes`,
+  `bufio.ScanLines`,
+  `bufio.ScanWords`,
+  `bufio.SplitFunc`,
+  `bufio.ErrInvalidUnreadByte`,
+  `bufio.ErrInvalidUnreadRune`,
+  `bufio.ErrNegativeCount`,
+  `bufio.ErrTooLong`,
+  `bufio.ErrTooManyEmptyTokens`,
+  `bufio.ErrFinalToken`,
+  `bufio.MaxScanTokenSize`,
+  `bufio.PeekDiscard` —
+  Scanner
+  and
+  Writer
+  absent;
+  the
+  V1
+  line
+  discipline
+  uses
+  `Reader.ReadString/
+  ReadSlice`
+  with
+  ErrBufferFull
+  as
+  the
+  overflow
+  sentinel
+  (the
+  64KiB
+  ceiling).
+
+Verdict: TRUE.
