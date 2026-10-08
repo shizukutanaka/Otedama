@@ -15104,3 +15104,26 @@ Verdict: TRUE — lock domains are shard-free; the one class vet
 can't fully see (map values holding Mutex) is absent: all maps
 store value types or pointers-to-locked-structs, never
 Mutex-containing values.
+
+## Session 2769 update (Socratic pass 1435 — recover census)
+
+Claim under test: recover() appears only at goroutine boundaries
+where a panic must be converted into an observable failure, never
+as silent control flow.
+
+Verification: exactly one recover() in non-test code —
+doctor.go:241 inside the per-check fan-out goroutine. It sits in
+a deferred func at goroutine top (correct recovery site),
+converts the panic into a named StatusFail Result in the
+index-slot array (no shared-map write), and reports the panic
+value in Detail so nothing is swallowed silently. This is the
+merged #1405 hardening.
+
+Zero other sites: no library-code panic swallowing, no
+recover-then-continue patterns, no defensive recover around
+third-party calls (all callees are ours and panic only on
+programmer error, which is intentionally loud).
+
+Verdict: TRUE — panic recovery exists exactly where the
+diagnostic tool must outlive a broken check; everywhere else
+programmer-error panics are intended to crash loudly.
