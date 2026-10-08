@@ -13016,3 +13016,7 @@ Four-way parity verified: wallet.go dispatches exactly `verify` + `change-passph
 ## Session 2596 update (Socratic pass 1262 — complete flag-surface census)
 
 Bidirectional census: 15 flags registered across cmd/otedama (`--bitcoin-address`, `--config`, `--data-dir`, `--dry-run`, `--http-addr`, `--json`, `--language`, `--log-file`, `--log-format`, `--log-level`, `--no-tui`, `--origin`, `--pprof`, `--wallet-mnemonic-passphrase`, `--wallet-passphrase`) vs 15 flags documented in docs/API.md — identical sets in both directions. Zero undocumented flags, zero phantom flags. TRUE.
+
+## Session 2597 update (Socratic pass 1263 — metric-name parity re-verification)
+
+Census re-run: 51 `otedama_*` literal names in the tree vs 46 documented in API.md. The 5 undocumented names (`otedama_hashrate_hps`, `otedama_test_total`, `otedama_x`, `otedama_y`, `otedama_z`) exist only inside metrics_test.go as exposition-format test fixtures — not registered metrics. Real registered surface = 46 = documented 46, bidirectional parity holds. TRUE.
