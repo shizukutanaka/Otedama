@@ -9860,3 +9860,7 @@ Fresh govulncheck v1.1.4 run over ./...: **0 reachable vulnerabilities** (0 in o
 ## Session 1820 update (Socratic pass 486 — binary smoke + branch health)
 
 End-to-end smoke on a fresh `go build`: `otedama version` prints `v3.0.0-alpha.1-dev` with correct ldflags-default metadata (darwin/arm64, go1.27.1); `otedama doctor --json` exits **2** per the status-dominance contract (checks run, worst-status wins); `otedama config validate --config /tmp/nonexistent.yaml` falls back to defaults per design and exits **78** (EX_CONFIG) with the honest `bitcoin_address is required` diagnostic — exit-code contract (0/1/2/78) holds on the live binary. Branch health re-verified: origin/master remains an ancestor of HEAD, working tree clean, CI on #1405 = 22 pending/0 failed (queue saturation, unchanged). TRUE — no defect.
+
+## Session 1821 update (Socratic pass 487 — RESEARCH_IMPROVEMENTS marker re-census)
+
+Marker re-census: 14 🟡 occurrences but only 4 are live gaps — the other 10 are transition annotations (`🟡→🔵`, `🟡→✅`, "stays 🟡") inside folded/planned rows plus the legend line itself. Live set unchanged and exactly matches the s1811 census: :506 P-256 Noise stub (maintainer zone), :951/:962 govulncheck hard-gate (evergreen — re-verified clean at s1819), :1203 SNIPPET contested lead. 🔵=88, ✅=102, ❌=7 — the backlog is fully dispositioned with no orphaned markers. TRUE — ledger self-consistent.
