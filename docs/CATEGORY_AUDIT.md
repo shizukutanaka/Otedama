@@ -23020,3 +23020,61 @@ with a word boundary):
   factory).
 
 Verdict: TRUE.
+
+## Session 3023 update (Socratic pass 1687 — io/bufio ledger)
+
+Claim under test: all
+untrusted reads are
+bounded; writers are
+interface-typed.
+
+Verification — census:
+
+- `io.Writer`×45/
+  `Reader`×24 — the
+  code is interface-
+  first.
+- `io.ReadFull`×16 —
+  every wire read is a
+  fixed-length scratch
+  fill (verified).
+- `io.LimitReader`×4 —
+  the HTTP response
+  caps (doctor probes,
+  rates fetches);
+  `io.ReadAll`×2 and
+  `io.Copy`×2 sit
+  behind them
+  (verified).
+- `io.MultiWriter`×1 —
+  the stdout+file log
+  fan-out.
+- `io.ErrUnexpectedEOF`
+  ×1 — the short-read
+  contract's explicit
+  error.
+- `io.WriteString`×5,
+  `EOF`×5, `Discard`×3,
+  `ReadWriter`×3,
+  `Closer`×2,
+  `ByteReader`×1 —
+  small plumbing.
+- `bufio.Reader`×4 +
+  `NewReader`×2 +
+  `NewReaderSize`×1 —
+  the V1 line reader
+  (64KiB cap verified)
+  + the scratch
+  reader.
+- `bufio.ErrBufferFull`
+  ×2 — the V1 line-
+  ceiling detection
+  path.
+- ZERO bufio.Writer
+  unbuffered-flush
+  gaps, ZERO
+  bufio.Scanner
+  (unbounded-token
+  risk avoided).
+
+Verdict: TRUE.
