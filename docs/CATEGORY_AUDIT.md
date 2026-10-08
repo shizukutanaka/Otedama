@@ -14143,3 +14143,29 @@ Verification: `binary.LittleEndian` call sites outside wire.go.
 
 Verdict: TRUE — encoding convention uniform; raw calls confined to
 fixed-offset fields, helpers own the variable-width path.
+
+## Session 2731 update (Socratic pass 1397 — error pass-through discipline)
+
+Claim under test: raw `return nil, err` / `return err` sites are
+same-package pass-throughs — layering boundaries still %w-wrap.
+
+Verification: 36 bare-error return sites across 11 files (non-test).
+
+- Distribution: stratum/messages.go 13, stratumv2/dialer.go 5,
+  engine/run.go 5, metrics 5, daemon 3, frame/rates/stratumv1/
+  lightning 1 each. All are intra-package helper→caller chains or
+  decode-chain bubbles where the callee already produced an
+  attributed error (field names baked in by the strict decoders
+  verified earlier).
+- Zero `Unwrap()` implementations — no custom error types fake the
+  wrap chain; `%w` is used at genuine boundaries only.
+- The convention holds: same-layer pass-through stays bare (adding
+  "failed to X" at every level would duplicate message chains); the
+  boundary sites checked (sendMsg/decode hops) carry field-attributed
+  errors, so a bare return loses no context.
+- No `errors.As`/`Is` target is a wrapped-away sentinel — the 19
+  `errors.Is` targets verified earlier are all package-declared vars
+  that reach callers intact.
+
+Verdict: TRUE — pass-through discipline consistent; boundaries wrap,
+interior bubbles stay bare.
