@@ -16921,3 +16921,25 @@ Verification:
 
 Verdict: TRUE — ledger integrity confirmed at the
 head; earlier anomalies documented and closed.
+
+## Session 2842 update (Socratic pass 1508 — merged-fix invariant spot re-verification)
+
+Claim under test: the recent security fixes merged
+to master remain present and unmodified — no revert
+or drift since their landings.
+
+Verification on origin/master (40da2e515):
+
+- #1399 coinbase-pays-script gate:
+  btccrypto/script.go:95 `CoinbasePaysScript`
+  present with its length-rejection tests
+  (script_test.go:82/96).
+- #1403 reconnect jitter: engine/run.go:481
+  `jitteredBackoff` present, wired at :648.
+- #1341 Cf/Zl/Zp sanitizer pair: identical
+  `unicode.In(r, Cc, Cf, Zl, Zp)` at
+  poolproto.go:461 and cmd/otedama/config.go:209 —
+  the two boundary twins still symmetric.
+
+Verdict: TRUE — merged invariants intact; no drift
+between the merged fixes and the audited tree.
