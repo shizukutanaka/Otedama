@@ -19363,3 +19363,37 @@ Verification (31 sites, 11 files):
 
 Verdict: TRUE — typed atomic only;
 no torn or mixed access.
+
+## Session 2946 update (Socratic pass 1611 — io-package census)
+
+Claim under test: every
+`io.ReadAll`/`io.Copy` on a
+network source is wrapped in a
+`LimitReader` — an unbounded
+response can't exhaust memory.
+
+Verification (23 sites):
+
+- `io.ReadFull` — 14 sites, all on
+  wire primitives: `lenBuf[:]`,
+  scratch/payload arrays whose
+  length is already bound before
+  the call (frame decoder, noise,
+  handshake, seedstore).
+- `io.ReadAll` — 3 sites, all
+  wrapped in `io.LimitReader`:
+  hashrate.go:212 (`maxHashrateBody`),
+  fetcher.go:436 (`64*1024`),
+  checks.go:928 (`8<<10` drain).
+- `io.Copy` — 2 sites, both
+  `io.Copy(io.Discard,
+  io.LimitReader(...))` drains.
+- `io.MultiWriter(stdout, fileW)`
+  at run.go:322 — fan-out to
+  console + log file.
+- Zero `io.Pipe`, `io.SectionReader`,
+  `io.TeeReader`, `io.NopCloser`
+  — no misuse surface.
+
+Verdict: TRUE — every network read
+is LimitReader-bounded.
