@@ -13060,3 +13060,7 @@ Re-verified post-drift: branch is 969 commits ahead, 0 behind origin/master; `me
 ## Session 2607 update (Socratic pass 1273 — payout-scheme enum parity)
 
 Census: code accepts exactly `fpps`, `pplns`, `solo`, `tides` (validated enum, empty allowed). SPECIFICATION.md:69 documents "empty, or one of `fpps`/`pplns`/`tides`/`solo`" — exact 4-element parity in both directions. No fifth scheme registered, no documented scheme unimplemented. TRUE.
+
+## Session 2608 update (Socratic pass 1274 — log-level/format enum parity)
+
+Census: Validate() accepts `log_level` ∈ {debug, info, warn, error} (config.go:664) and `log_format` ∈ {text, json} (config.go:674), defaults info/text — matching SPECIFICATION.md:73-74 and API.md:27-28 exactly, including the documented defaults. Both-direction parity holds. TRUE.
