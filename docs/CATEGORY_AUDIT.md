@@ -30035,3 +30035,99 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3116 update (Socratic pass 1780 — exec/signal method-level ledger)
+
+Claim under test: all
+five exec sites are
+synchronous Output/
+CombinedOutput
+probes — no
+Start/Wait
+lifecycle, no
+pipes.
+
+Verification —
+site census
+(`internal/daemon/
+service.go`):
+
+- `systemctl --user
+  show-environment`
+  → `.Output()` —
+  env
+  probe
+  (service.go:189).
+- `systemctl --user
+  is-active
+  otedama.service`
+  → `.Output()` —
+  status
+  probe
+  (:244).
+- `launchctl list
+  com.otedama.daemon`
+  → `.Output()` —
+  status
+  probe
+  (:338).
+- `sc.exe query
+  Otedama` →
+  `.Output()` —
+  Windows
+  status
+  probe
+  (:432).
+- `exec.Command(name,
+  args...)` →
+  `.CombinedOutput()` —
+  the
+  shared
+  install/uninstall/
+  status
+  helper
+  (:522-523).
+- `signal.NotifyContext`×1 —
+  the
+  sole
+  signal
+  wiring
+  (main.go).
+- ZERO
+  `.Start`,
+  `.Wait`,
+  `.Run`,
+  `.StdinPipe`,
+  `.StdoutPipe`,
+  `.StderrPipe`,
+  `.Dir=`,
+  `.Env=`,
+  `.SysProcAttr`,
+  `exec.LookPath`,
+  `exec.CommandContext`,
+  `exec.Cmd` field
+  writes —
+  every
+  command
+  is
+  a
+  one-shot
+  synchronous
+  read;
+  no
+  long-lived
+  child
+  or
+  env
+  mutation.
+- ZERO
+  `signal.Notify`,
+  `signal.Reset`,
+  `signal.Ignore`,
+  `signal.Stop`,
+  `signal.Process`,
+  `signal.NotifyContext`×more —
+  residual
+  absent.
+
+Verdict: TRUE.
