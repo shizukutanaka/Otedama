@@ -35720,3 +35720,150 @@ census:
   binary).
 
 Verdict: TRUE.
+
+## Session 3152 update (Socratic pass 1816 — errors + log/slog detail ledger)
+
+Claim under test: error
+construction is
+errors.New-
+dominated
+with
+errors.Is
+for
+sentinels,
+and
+logging
+is
+100%
+the
+internal
+slog-based
+logger —
+zero
+stdlib
+`log`
+calls.
+
+Verification —
+census:
+
+- `errors.New`×36 —
+  leaf
+  sentinel
+  definitions
+  (ErrHandshakeFailed
+  etc.).
+- `errors.Is`×22 —
+  every
+  sentinel
+  comparison
+  (verified
+  errors.Is
+  convention
+  class).
+- `errors.Join`×2 +
+  `errors.As`×1 —
+  the
+  two
+  composite-
+  error
+  sites
+  and
+  the
+  single
+  typed
+  extraction.
+- ZERO
+  `errors.Unwrap`,
+  `errors.AsType`,
+  `errors.IsType` —
+  no
+  manual
+  unwrap
+  or
+  Go1.26
+  generic
+  helpers.
+- `slog.NewJSONHandler`×1 +
+  `slog.NewTextHandler`×1 —
+  `logger.go:124/126`
+  the
+  sink-matrix
+  constructors
+  (the
+  other
+  two
+  hits
+  were
+  doc
+  comments).
+- `slog.New`×1 +
+  `slog.Logger`×2 +
+  `slog.Handler`×1 +
+  `slog.HandlerOptions`×1 —
+  the
+  logger
+  internals.
+- `slog.Level`×1 +
+  `slog.LevelDebug`/
+  `LevelInfo`/
+  `LevelWarn`/
+  `LevelError`×1 —
+  the
+  level
+  enum
+  (all
+  four
+  levels
+  exactly
+  once
+  each).
+- ZERO
+  `log.` —
+  the
+  single
+  `log.Error`
+  hit
+  was
+  `structlog.Error`
+  (a
+  local
+  `logger.Logger`
+  at
+  `run.go:227`),
+  suffix
+  pollution.
+  No
+  stdlib
+  `log`
+  import
+  exists
+  in
+  production
+  code.
+- ZERO
+  `slog.SetDefault`,
+  `slog.Default`,
+  `slog.With`,
+  `slog.Info/Warn/Error/Debug`,
+  `slog.LogAttrs`,
+  `slog.NewLogLogger`,
+  `Attr`/`String`/`Int`/`Any`
+  helper
+  calls —
+  the
+  custom
+  `logger.Logger`
+  owns
+  the
+  whole
+  slog
+  surface;
+  call
+  sites
+  use
+  its
+  Adapter()
+  API.
+
+Verdict: TRUE.
