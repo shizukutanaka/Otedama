@@ -12885,3 +12885,7 @@ Claim verified: code-review.yml's −203 lines removed vacuous JS-only secret/co
 ## Session 2568 update (Socratic pass 1234 — security/devin-direct-merge diff check)
 
 Claim verified: security.yml pins every floating tool ref off master/main/latest (gosec v2.29.0, trivy v0.36.0, trufflehog v3.97.9, nancy v2.1.0, govulncheck v1.1.4), drops the dead `security-tests` job from the report's needs/table, and scopes the IP-literal check to non-test sources with an honest allowlist (loopback help text + the 1.1.1.1:53 doctor probe). devin-direct-merge.yml restricts to master-PRs only (comment text assumes master), serializes per-PR comments, and drops the pointless full-history checkout (the steps only call `gh` API). TRUE — all honest hardening.
+
+## Session 2569 update (Socratic pass 1235 — ci-cd.yml diff deep check)
+
+Claim verified: ci-cd.yml's diff is real — `go build` corrected to `./cmd/otedama` (glob form was fragile), ldflags version injection added where it was silently missing, `sha256sum *` → `sha256sum otedama-*` (previously would have hashed checksums.txt into itself — a real bug), action-gh-release v1→v3, dead k8s deploy job removed (`k8s/deployment.yaml` never existed AND its `refs/heads/main` gate was unfireable — doubly dead), plus the standard concurrency/permissions/timeout/pin hardening. `GO_VERSION: '1.21'` remains = the disclosed Go-pin residual class. TRUE — all 9 workflow diffs now deep-verified as honest hardening.
