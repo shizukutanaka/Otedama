@@ -12772,3 +12772,12 @@ Claim verified: `skills/` contains all four CLAUDE.md-named skill files (tdd.md,
 ## Session 2541 update (Socratic pass 1207 — workflow file-reference census)
 
 Claim verified: workflow-referenced local paths — release.yml's `./config.yaml.example` in the DEB/RPM fpm mappings (line 164/178 match `config.yaml` inside `config.yaml.example`) and `install.sh` — resolve to existing files. The only unresolvable references are deploy.yml's `./kubernetes/helm/otedama/values*.yaml` paths (lines 186/252), which live inside the already-recorded dormant deploy job (triggers on `main` only — never fires from `master`): ⚠️ same-class residual, previously disclosed with deploy.yml's dead npm/Node steps, not a new defect. Also confirmed `.sweep.sh` no longer exists (removed in a prior round) and nothing references it. TRUE — all live workflow file references valid.
+
+## Session 2542 update (Socratic pass 1208 — honest-ledger correction on deploy.yml trigger state)
+
+Ledger self-correction (honest-ledger protocol): the s2529 entry claimed "deploy.yml filters on `main` ONLY (lines 6,13) → trigger-dormant". Verified by direct re-read: that claim was WRONG — deploy.yml lists `master` in both push (line 7) and pull_request (line 14) filters, plus `workflow_dispatch`, so the workflow DOES fire on master pushes.
+
+Corrected state (append-only, history not rewritten):
+- The `test:` job (replaced with Go build/vet/test at #1404) genuinely runs on master — not dormant.
+- The k8s deploy steps (helm/kubectl, `./kubernetes/helm/otedama/values*.yaml` — a tree that does not exist) are each gated by `if: env.KUBECONFIG_B64 != ''`; without the STAGING_KUBECONFIG/PROD_KUBECONFIG secrets they no-op rather than fail. So deploy.yml on master is secret-gated dormant for its deploy stages, not trigger-dormant as s2529 stated.
+- The missing kubernetes/ tree remains a real residual only reachable if k8s secrets are configured; the dormant-by-guard outcome means it produces no master-branch failures today.
