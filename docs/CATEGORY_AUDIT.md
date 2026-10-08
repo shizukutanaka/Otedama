@@ -25538,3 +25538,64 @@ census:
   at runtime.
 
 Verdict: TRUE.
+
+## Session 3068 update (Socratic pass 1732 — binary/hex/base surface ledger)
+
+Claim under test: the
+binary codec is
+LittleEndian-only
+with the
+Put/Uint pair, and
+hex is a string
+round-trip — no
+base64/base32 or
+big-endian drift.
+
+Verification —
+census:
+
+- `binary.LittleEndian`
+  — the only
+  byte order:
+  `Uint32`×29,
+  `PutUint32`×23,
+  `Uint16`×4,
+  `PutUint16`×3,
+  `Uint64`×1,
+  `PutUint64`×3,
+  `AppendUint16`×1,
+  `AppendUint32`×1.
+- ZERO
+  `binary.BigEndian`
+  — the wire is
+  spec'd LE
+  end-to-end.
+- ZERO `binary.Read`,
+  `Write`, `Size`,
+  `Uvarint`,
+  `Varint`,
+  `ReadUvarint` —
+  the struct-
+  codec and
+  varint
+  surfaces are
+  unused.
+- `hex.DecodeString`×6 +
+  `hex.EncodeToString`×4
+  — the hex
+  round-trip
+  pair only.
+- ZERO `base64.*`,
+  `base32.*`,
+  `hex.Decode`,
+  `Encode`, `Dump`,
+  `EncodedLen`,
+  `DecodedLen` —
+  the base-N
+  family is
+  absent
+  (addresses use
+  bech32/base58
+  impls instead).
+
+Verdict: TRUE.
