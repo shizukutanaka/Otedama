@@ -20250,3 +20250,50 @@ Verdict: TRUE — no stdlib
 container use; every bounded
 structure is a slice with an
 explicit ceiling.
+
+## Session 2968 update (Socratic pass 1633 — flag census)
+
+Claim under test: `flag` is
+per-subcommand `NewFlagSet`
+with `ContinueOnError` — the
+package-level `flag.Parse` /
+`flag.CommandLine` are never
+used.
+
+Verification:
+
+- `flag.NewFlagSet` — 5 sites:
+  doctor.go:17, wallet.go:96
+  ("wallet "+verb), run.go:56
+  (name param), service.go:49
+  ("service install"),
+  version.go:16. All with
+  `flag.ContinueOnError`.
+- `fs.SetOutput(out)` at
+  main.go:76 and run.go:66 —
+  writes to the caller-provided
+  stderr, not os.Stderr.
+- `fs.StringVar`/`BoolVar`/
+  `String`/`Bool` — ~15 flag
+  definitions, all targeted at
+  injected receivers.
+- `fs.Visit(fn)` at run.go:98 —
+  marks explicitly-set flags
+  into `f.setFlags` for the
+  `--origin` output.
+- `errors.Is(err, flag.ErrHelp)`
+  at main.go:78, config.go:49
+  + :183, run.go:131 — the
+  help-detection mapping
+  (verified s2408 → exitOK).
+- Zero `flag.Parse`,
+  `flag.CommandLine`,
+  `flag.Arg`/`Args`/`Set`/
+  `NArg`/`PrintDefaults`/
+  `Usage` in production.
+
+Verdict: TRUE — flag parsing is
+per-subcommand with injected
+writers and explicit help
+detection; no global flag
+state.
