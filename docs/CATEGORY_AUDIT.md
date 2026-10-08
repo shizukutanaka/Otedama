@@ -15370,3 +15370,16 @@ pushes' completed runs, not a new failure class. Nothing
 actionable; no new class observed.
 
 Verdict: recorded classes only — no action.
+
+## Session 2780 update (Socratic pass 1446 — milestone gate)
+
+Gate re-verification at head 75dbfe4bf:
+
+- `gofmt -l internal cmd` — zero drift.
+- `go build ./...` — clean.
+- `go vet ./internal/... ./cmd/...` — clean.
+- `go test -count=1` on engine, arbitration, miner,
+  poolproto{,/stratumv1,/stratumv2}, config, doctor — all PASS.
+
+Cumulative since s2760 milestone: 20 passes (1441–1445 plus
+this gate), all TRUE, zero defects requiring code change.
