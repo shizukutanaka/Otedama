@@ -19577,3 +19577,49 @@ Verification:
 Verdict: TRUE — fmt is output-
 side only; no uncontrolled
 stdout prints, no Scan.
+
+## Session 2952 update (Socratic pass 1617 — time-package census)
+
+Claim under test: `time` calls are
+either (a) elapsed measurements
+(`Since`/`Until`), (b)
+timer/ticker machinery already
+audited, or (c) a single
+documented yield-and-retry
+sleep — never an uncancellable
+wait.
+
+Verification:
+
+- `time.Sleep` — exactly one site
+  (worker.go:282), a 10ms yield
+  inside the grind loop's
+  `localWork == nil` branch. The
+  loop checks `w.mu` on every
+  iteration and the work-version
+  gate re-publishes a job, so the
+  maximum unresponsive window
+  is 10ms.
+- `time.Now`/`Since` — elapsed
+  measurement only: uptime at
+  engine/stats.go, doctor's
+  per-check `Elapsed`, worker
+  startTime atomic.
+- `time.NewTicker`/`NewTimer`/
+  `After`/`AfterFunc` — covered by
+  the ticker/timer census
+  (s2882, 9 tickers + 2 timers,
+  all paired).
+- `time.Parse`/`ParseDuration` —
+  zero in production; durations
+  are constants or config
+  `time.Duration` fields.
+- `clock.Fake` — tests use the
+  abstraction; production uses
+  `time.Now()` inside the
+  `clock.Real` wrapper.
+
+Verdict: TRUE — every time call
+is either measurement, a paired
+timer, or a documented 10ms
+yield; no unbounded sleep.
