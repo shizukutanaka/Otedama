@@ -13124,3 +13124,7 @@ All TRUE: arbitration does compare mining yields (`mining.` StreamID prefix, arb
 ## Session 2623 update (Socratic pass 1289 — ADR-010 stale baseline, REAL FIX)
 
 FALSE claim found + corrected: ADR-010's context describes v3.0.0-alpha.1's engine as "~150 LOC pure stateless comparator, two quotes, fixed 5% hysteresis, routes ALL devices to winner" — the alpha import (106aebca0) already shipped a 402-LOC per-device `Decide` over N streams with `Policy` enum and caller-supplied `HysteresisMargin` in policy-score space (today 555 LOC). Feature A5's per-device routing ask is therefore partially pre-met. Erratum appended to the ADR per convention (history preserved, proposal unchanged).
+
+## Session 2624 update (Socratic pass 1290 — ADR index/status parity)
+
+All TRUE: README index lists all 11 ADRs; file statuses match the index exactly (7 Accepted incl. ADR-011's dash-prefixed Status line, 4 Proposed). ADR-002's index annotation "partially superseded by ADR-006" is consistent with its own errata (V1 dialer shipped via poolproto). Status vocabulary constrained to {Proposed, Accepted, Deprecated, Superseded} per README contract. All index links resolve to real files.
