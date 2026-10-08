@@ -18021,3 +18021,26 @@ Verification (`rg -n nolint` — ~70 sites):
 
 Verdict: TRUE — suppression surface is fully
 justified and small relative to codebase size.
+
+## Session 2895 update (Socratic pass 1560 — compiler-directive census)
+
+Claim under test: `//go:` directives are only
+build constraints, and each platform pair
+covers the full space without overlap.
+
+Verification (`rg '//go:'`):
+
+- 5 directives, all `//go:build`:
+  - hal: `linux` (gpu_linux.go) + `!linux`
+    (gpu_stub.go) — exact partition.
+  - tui width: `unix` + `windows` +
+    `!unix && !windows` — exact 3-way cover,
+    no gap (fails closed on exotic OSes into
+    the generic width fallback).
+- Zero `//go:embed`, `//go:linkname`,
+  `//go:noinline`, `//go:generate` — no other
+  compiler magic in production.
+
+Verdict: TRUE — build-tag surface is a clean
+exhaustive partition; nothing else hooks the
+compiler.
