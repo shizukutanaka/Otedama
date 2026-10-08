@@ -142,7 +142,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **annual "rebuild from cold" 演習**: 全 released tag を fresh VM (caches なし) で再ビルドし checksum 一致を年1回検証。
 - Docker images は digest pin、tag pin しない。
 
-**実装状況:** Fuzz test は v3.0.0-alpha で `internal/stratum/` に2つ実装済み。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring と annual rebuild 演習は今すぐ採用可能。
+**実装状況:** Fuzz test は 23 ターゲット（14 ファイル・9 パッケージ、`internal/stratum/` 7個を含む）に拡大済み — `test.yml` の `fuzz` ジョブが `make fuzz` で smoke 実行する。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring と annual rebuild 演習は今すぐ採用可能。
 
 ### 10. ライセンスと法的安定性 / Licensing and Legal Sustainability
 

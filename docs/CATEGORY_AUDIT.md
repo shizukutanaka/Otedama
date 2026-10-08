@@ -13180,3 +13180,7 @@ All TRUE: every cited surface exists — `otedama doctor`, `wallet verify`/`chan
 ## Session 2637 update (Socratic pass 1303 — competitive-analysis parity)
 
 **FIX APPLIED:** failover row claimed "直感的なUIで可能" — no failover UI exists; the real mechanism is `pools[]` YAML/flag list with automatic failover on disconnect (run.go). Qualified in-place. Verified TRUE: DefaultPoolURL = `stratum+v2://public.stratum.slushpool.com:3336` (config.go:54) matching the "SV2 Slushpool public endpoint" claim; non-custody row already qualified (ZKP=v4.0, BIP-39/scrypt/AES-GCM current); session-506 notes (v30 IPC ≠ native SV2; LDK-free wallet; own i18n catalog) all accurate; 10-language i18n catalog exists.
+
+## Session 2638 update (Socratic pass 1304 — sustainability parity)
+
+**FIX APPLIED:** "Fuzz test は internal/stratum/ に2つ実装済み" — actual inventory is 23 `func Fuzz` targets in 14 files across 9 packages (7 in internal/stratum/), now smoke-run by the test.yml `fuzz` job. Corrected. Verified TRUE: poolproto abstraction + both dialers shipped (--http-addr/--pprof flag names accurate; otlp flag honestly TBD at v3.3.0), dual-protocol SV1-first strategy matches the shipped dialer set, stdlib slog + internal Prometheus exposition direction matches implementation.
