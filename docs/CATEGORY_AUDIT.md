@@ -17580,3 +17580,23 @@ Verification (`git fetch origin master`):
 
 Verdict: TRUE — no drift, no conflict surface;
 the branch is purely additive over master.
+
+## Session 2875 update (Socratic pass 1540 — ledger block census)
+
+Claim under test: the ledger's appended tail is
+contiguous with no missing or duplicated
+session numbers.
+
+Verification:
+
+- `grep -c '^## Session'` → **2,041 blocks**.
+- Tail enumeration s2859–s2874 → exactly 16
+  contiguous headings, one per pass
+  (1524–1539), zero gaps and zero duplicates
+  in the appended range.
+- 1,530 blocks carry `Socratic pass` markers —
+  the remaining ~500 predate the marker
+  convention (documented schema generations).
+
+Verdict: TRUE — append-only discipline holds;
+the tail is a contiguous numbering run.
