@@ -12998,3 +12998,7 @@ Claim verified against main.go:52-55 (exitOK=0, exitRuntime=1, exitUsage=64/EX_U
 - API.md `config validate` exit 78 — matches exitConfig. TRUE.
 - API.md SIGINT-130 — signal.NotifyContext restores default disposition on first signal; a second SIGINT terminates via default action = 128+2. TRUE.
 - API.md "unsupported shell exits with a usage error (2)" — FALSE: cmdCompletion returns exitUsage=64 (completion.go:38), not 2. FIXED: API.md corrected to "64, EX_USAGE".
+
+## Session 2593 update (Socratic pass 1259 — forbidden-path + architecture-map census)
+
+Census: all 9 CLAUDE.md forbidden paths absent (internal/providers, internal/auth, internal/render, internal/scientific, internal/observability, internal/security, pkg/, web/, k8s/, cmd/otedamad — zero existence). The internal/ tree is exactly the architecture map's 19 packages (arbitration, btccrypto, clock, config, daemon, doctor, engine, hal, httpserver, i18n, lightning, logger, metrics, miner, poolproto, provider, rates, stratum, tui, version) plus cmd/otedama — no orphan directories. TRUE.
