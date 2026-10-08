@@ -40091,3 +40091,137 @@ census:
   misuse.
 
 Verdict: TRUE.
+
+## Session 3183 update (Socratic pass 1847 — crypto/* ledger)
+
+Claim under test: cryptographic
+primitives
+are
+stdlib
+`crypto/*`
+plus
+the
+two
+`x/crypto`
+KDFs
+(`scrypt`,
+`pbkdf2`)
+only —
+no
+custom
+ciphers,
+no
+weak
+hashes,
+no
+`crypto/hkdf`
+(HKDF
+is
+the
+spec's
+HMAC
+chaining
+via
+`hmacSHA256Pooled`).
+
+Verification —
+census:
+
+- Production
+  `crypto/*`
+  import
+  set:
+  `aes`,
+  `cipher`,
+  `ecdh`,
+  `hmac`,
+  `rand`,
+  `sha256`,
+  `sha512`,
+  `subtle`,
+  `tls`,
+  `x509`
+  —
+  plus
+  `x/crypto/scrypt`
+  (seedstore
+  KDF)
+  and
+  `x/crypto/pbkdf2`
+  (BIP-39
+  seed
+  derive)
+  under
+  the
+  `x/crypto`
+  go.mod
+  rationale.
+- Head
+  symbols:
+  `tls.Config`×18,
+  `sha256.Sum256`×13,
+  `tls.Conn`×13,
+  `tls.VersionTLS12`×10,
+  `sha256.New`×8,
+  `x509.NewCertPool`×6,
+  `tls.Dialer`×5,
+  `cipher.NewGCM`×2,
+  `cipher.AEAD`×2,
+  `scrypt.Key`×2,
+  `hmac.New`×1,
+  `subtle.ConstantTimeCompare`×1,
+  `pbkdf2.Key`×1.
+- ZERO
+  (weak/
+  absent):
+  `crypto/md5`,
+  `crypto/sha1`,
+  `crypto/des`,
+  `crypto/rc4`,
+  `crypto/dsa`,
+  `crypto/ecdsa`/`ecdh`
+  usage
+  outside
+  test
+  cert
+  generation
+  +
+  noise
+  ecdh,
+  `crypto/ed25519`/
+  `rsa`/`x25519`
+  direct,
+  `crypto/hkdf`/
+  `crypto/pbkdf2`/
+  `crypto/mlkem`/
+  `crypto/fips140`
+  imports,
+  `InsecureSkipVerify`,
+  `tls.CipherSuites`
+  custom
+  suites —
+  the
+  FIPS
+  posture
+  is
+  godebug
+  `tlsmlkem=1`
+  +
+  default
+  suites.
+- `aead.Seal`/`Open`
+  ×1
+  is
+  the
+  reused
+  transport
+  `cipher.AEAD`
+  variable
+  (session-875
+  perf
+  fix),
+  not
+  a
+  package.
+
+Verdict: TRUE.
