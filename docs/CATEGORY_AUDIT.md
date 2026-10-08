@@ -11878,3 +11878,7 @@ Claim verified: un-ldflags'd builds report themselves honestly — `Version = "v
 ## Session 2317 update (Socratic pass 983 — Worker Start/Stop idempotence)
 
 Claim verified: the Worker's lifecycle can't double-spawn or hang — `started atomic.Bool` (:125) with CAS(false,true) in Start (:154) makes a second Start a no-op; Stop (:186) short-circuits unless started, and the s1652 cancelReady rendezvous covers the Stop-before-Start-completes window. Neither path can leak a second grind set or block forever. TRUE.
+
+## Session 2318 update (Socratic pass 984 — share-drop non-blocking send)
+
+Claim verified: the grind hot loop can never stall on a slow share consumer — the send at worker.go:316 is `select{shares<-share; default:}` so a full channel drops the share and increments dropCount (:318), which Stats() surfaces at :242. A found share is either delivered or honestly counted as dropped — never silently lost and never blocking the hash loop. TRUE.
