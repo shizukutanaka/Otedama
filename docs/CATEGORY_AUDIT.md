@@ -11710,3 +11710,7 @@ Claim verified: both blocking-wait sites are cancellable and bounded — the V1 
 ## Session 2275 update (Socratic pass 941 — milestone re-verification)
 
 Claim verified: the whole tree is still green at pass 940 — `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test ./internal/engine/ ./internal/arbitration/ ./internal/miner/ ./internal/stratum/...` all ok (engine 24.9s). The audit cycle's fixes remain the only code changes since s1652; no regression introduced by the census-documented verdicts. TRUE.
+
+## Session 2276 update (Socratic pass 942 — defer-in-loop census)
+
+Claim verified: no loop-accumulating defer exists — every defer that appears textually inside a `for`/`range` is actually inside a `go func()` literal (the per-check doctor goroutine's wg.Done + panic-recovery pair, the rates per-source sender's wg.Done, hal detect fan-out) where it runs once per spawned goroutine, not per iteration; the remaining defers are function-scoped cleanups placed before a loop textually (timer.Stop bounding the V1 60s RPC wait, worker-shutdown sweep in run.go Phase-3, s.cancelPending on session exit, ticker.Stop inside ticker goroutines). No Close/Unlock defer accumulates across loop iterations — connections and locks all release at their own scope's end. TRUE.
