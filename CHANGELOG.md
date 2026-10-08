@@ -8363,3 +8363,10 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 - `docs/DEPLOYMENT.md`: ポッド `securityContext` に `fsGroup: 65532` +
   `fsGroupChangePolicy: "OnRootMismatch"` を追加 — 新規 PVC が root:root
   でマウントされ uid 65532 が wallet.dat を書けなかった欠陥を修理。
+
+### Fixed (session 1772 — goreleaser brews opt-in)
+
+- `.goreleaser.yaml`: `brews` に `skip_upload: "true"` + オプトイン手順の
+  コメント — 非存在の `shizukutanaka/homebrew-tap` への formula push で
+  `goreleaser release` が必ず失敗していた欠陥を修理（release.yml の
+  HOMEBREW_TAP_REPO ゲートと同じ姿勢に統一）。

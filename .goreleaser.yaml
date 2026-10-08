@@ -156,6 +156,12 @@ release:
 
 brews:
   - name: otedama
+    # The tap repository (shizukutanaka/homebrew-tap) does not exist yet —
+    # upload is skipped so a `goreleaser release` run completes instead of
+    # failing on the formula push. When the tap is created, set
+    # HOMEBREW_TAP_GITHUB_TOKEN and flip this to "auto" (or remove it) —
+    # same opt-in contract as release.yml's HOMEBREW_TAP_REPO var.
+    skip_upload: "true"
     homepage: https://github.com/shizukutanaka/Otedama
     description: "Non-custodial compute arbitration software"
     license: Apache-2.0
