@@ -11986,3 +11986,7 @@ Claim verified: the header wire layer is a strict inverse — EncodeHeader valid
 ## Session 2344 update (Socratic pass 1010 — hashrate format + ntime-roll invariants)
 
 Claim verified: HashRateString is a strict non-overlapping tier ladder (TH→GH→MH→kH→H, each ×1e3) with honest fallback — negative/NaN inputs never crash or silently clamp (worker.go:338–349); engine callsites share the single formatter (stats.go:255,475). The grind loop's ntime roll is monotone forward: nonce wrap (nonce < prev) increments ntimeRoll and sets h.Time = jobTime + roll so no header is ever re-hashed (:327–334). TRUE.
+
+## Session 2345 update (Socratic pass 1011 — SV2 fixed-width codec symmetry)
+
+Claim verified: fixed-layout message codecs are strict mirrors — SubmitSharesStandard (24B) and SubmitSharesSuccess (20B) each write fields at the same LE offsets the decoder reads, and every Decode rejects len<required BEFORE any binary read (messages.go:256–310) so truncated payloads can't misalign into valid-looking structs; SubmitSharesError carries a bounded STR0_255 tail. TRUE.
