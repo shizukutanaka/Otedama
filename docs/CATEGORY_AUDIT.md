@@ -15442,3 +15442,31 @@ constants in one edit.
 
 Verdict: TRUE — bound policy is named and single-sourced
 everywhere except the two recorded literal duplications.
+
+## Session 2783 update (Socratic pass 1449 — sentinel-identity wrap census)
+
+Claim under test: error sentinels keep their identity across
+wrapping — nothing flattens them with %v/%s, and every wrap
+uses %w.
+
+Verification:
+
+- All `fmt.Errorf` wraps across the tree use %w — zero sites
+  format a wrapped error with %v/%s (greps for sentinel names
+  in non-%w Errorf calls: empty).
+- Sentinels are returned unwrapped at origin: ErrWrongPassphrase
+  (seedstore.go:152), ErrNotBech32/ErrNotBase58/
+  ErrUnrecognisedAddress (bech32.go:147, base58.go:67/:106),
+  ErrSchemeNotImplemented (secp256k1.go), ErrHandshakeFailed —
+  callers can use either errors.Is or ==.
+- Boundary checks verified at the same level the error is
+  produced: flag.ErrHelp (raw flag pkg error, cmd/otedama),
+  context.Canceled/DeadlineExceeded (raw ctx errors),
+  bufio.ErrBufferFull, http.ErrServerClosed, os.ErrNotExist —
+  %w chains elsewhere preserve Is/As reachability regardless.
+- errors.As used correctly at run.go:2201 to extract a typed
+  flagError before message dispatch.
+
+Verdict: TRUE — sentinel identity is end-to-end preserved;
+== and errors.Is are interchangeable for every declared
+sentinel, and no wrap point strips identity.
