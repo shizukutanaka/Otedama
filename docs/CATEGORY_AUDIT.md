@@ -13116,3 +13116,7 @@ All verified TRUE: wallet verify/change-passphrase verbs exist (cmd/otedama/wall
 ## Session 2621 update (Socratic pass 1287 — ADR-007 current-state claims)
 
 All TRUE: (a) WalletManager's complete public surface is {Seed, Fingerprint, Mnemonic, IsNew, ChangePassphrase} + construction — purely seed/mnemonic storage/retrieval, no BOLT12/offer machinery anywhere in internal/lightning (the only "offer" hit is BIP-39 wordlist entry #1283); (b) AES-256-GCM seedstore (verified many passes); (c) receive-only posture consistent with KNOWN_LIMITATIONS §6; (d) non-custodial boundary statements consistent with CLAUDE.md prohibitions. The ADR is explicitly "Proposed" roadmap — no stale present-tense overclaims found.
+
+## Session 2622 update (Socratic pass 1288 — ADR-008 current-state claims)
+
+All TRUE: arbitration does compare mining yields (`mining.` StreamID prefix, arbitrate.go:76) vs AI/non-mining streams via provider quotes — matches the "hashprice vs inference" description; `internal/power/` correctly does not exist (proposed-only roadmap); the CLI examples (`otedama power ...`) are explicitly future-scope. No present-tense overclaims. internal/ tree still exactly matches the CLAUDE.md architecture map (19 packages, zero forbidden paths).
