@@ -13699,3 +13699,23 @@ Verification: `//go:` directive census across `internal/` + `cmd/`.
   directives, no legacy `// +build` syntax.
 
 Verdict: TRUE.
+
+## Session 2711 update (Socratic pass 1377 — //nolint re-census at HEAD)
+
+Claim under test: every `//nolint` suppression names its linter and
+justifies itself — the convention verified in an earlier pass survives
+at the current HEAD.
+
+Verification: 117 `//nolint` markers across `internal/` + `cmd/`
+(`--include='*.go'`): 62 `errcheck`, 51 `gosec`, 3 `gocritic`,
+1 `nilerr`.
+
+**Defect found + fixed:** one *bare* `//nolint` (no linter name, no
+reason) at `cmd/otedama/main_test.go:200`. It suppressed nothing —
+`run()` returns `int`, which no enabled linter flags — so the
+directive was dead weight with the side-effect of disabling every
+linter on that line. Removed. All remaining markers name a linter;
+the gosec set carries prose justification on the sites that need it
+(e.g. service.go:407 %q-vs-Windows-path, runtime.go:63 label quoting).
+
+Verdict: FALSE (one dead bare-nolint) → fixed; convention now uniform.
