@@ -22732,3 +22732,63 @@ Verification — census:
   records why.
 
 Verdict: TRUE.
+
+## Session 3018 update (Socratic pass 1682 — strings/bytes ledger)
+
+Claim under test: the
+string-manipulation
+surface is bounded
+scan/build work; secret
+comparison stays on
+subtle, not bytes.Equal.
+
+Verification — census:
+
+- `strings` — HasPrefix
+  ×27 (scheme/prefix
+  tests), Join ×15,
+  Contains ×13,
+  TrimSpace ×11,
+  Builder ×10 (the
+  exposition + log
+  builders), Repeat ×7
+  (all bounded by
+  computed widths),
+  ToLower ×6, CutPrefix
+  ×5, Split ×3,
+  NewReplacer ×3
+  (sanitizer tables),
+  plus one-off
+  Index/Trim/ToUpper
+  sites — nothing
+  unbounded, no
+  strings.Replace on
+  wire-critical paths
+  beyond the checked
+  sanitizers.
+- `bytes.Equal` ×2 —
+  the coinbase payout
+  script comparison
+  sites: both compare
+  a DERIVED output
+  script to an
+  expected script
+  (structural equality,
+  not a secret) — the
+  one true secret
+  compare stays on
+  crypto/subtle's
+  ConstantTimeCompare
+  (verified at
+  s2977+).
+- ZERO bytes.Buffer in
+  production, ZERO
+  bytes.Contains on
+  attacker-sized
+  input, ZERO
+  bytes.Split unbounded
+  (V1 JSON uses
+  encoding/json, not
+  byte splitting).
+
+Verdict: TRUE.
