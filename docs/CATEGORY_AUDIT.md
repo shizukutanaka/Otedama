@@ -30131,3 +30131,142 @@ service.go`):
   absent.
 
 Verdict: TRUE.
+
+## Session 3117 update (Socratic pass 1781 — net complete ledger)
+
+Claim under test: the
+net surface is
+Conn/Dialer/
+SplitHostPort/
+Listen/DefaultResolver —
+a TCP-only
+footprint.
+
+Verification —
+site census:
+
+- `net.Conn`×14 +
+  `conn.Close()`×6 —
+  the
+  transport
+  interface +
+  its
+  closes
+  (verified
+  resource-
+  pairing
+  class).
+- `net.Dialer`×6 —
+  the
+  deadline-
+  bound
+  dialers
+  (verified
+  dial-bound
+  class).
+- `net.SplitHostPort`×3 +
+  `net.ParseIP`×1 +
+  `net.DefaultResolver`×1
+  — host:port
+  parsing +
+  the
+  doctor
+  DNS
+  probe
+  (checks.go:482).
+- `net.Listen`×1 —
+  the
+  admin
+  HTTP
+  listener
+  (server.go:111).
+- `net.Pipe` —
+  a
+  COMMENT
+  at
+  `poolproto/
+  stratumv1/
+  dialer.go:37`
+  documenting
+  the
+  test
+  fake
+  transport,
+  not
+  code.
+- ZERO
+  `net.Dial`,
+  `DialTCP`,
+  `DialTimeout`,
+  `DialContext`,
+  `DialUDP`,
+  `DialUnix`,
+  `DialIP`,
+  `ListenPacket`,
+  `ListenTCP`,
+  `ListenUDP`,
+  `ListenUnix`,
+  `ListenUnixgram`,
+  `ListenMulticastUDP`,
+  `ListenIP`,
+  `ResolveTCPAddr`,
+  `ResolveUDPAddr`,
+  `ResolveIPAddr`,
+  `ResolveUnixAddr`,
+  `LookupAddr`,
+  `LookupCNAME`,
+  `LookupSRV`,
+  `LookupMX`,
+  `LookupNS`,
+  `LookupTXT`,
+  `LookupIP`,
+  `LookupHost`×more,
+  `Interfaces`,
+  `InterfaceAddrs`,
+  `ParseMAC`,
+  `ParseCIDR`,
+  `CIDRMask`,
+  `IPMask`,
+  `JoinHostPort`,
+  `TCPAddr`,
+  `UDPAddr`,
+  `IPAddr`,
+  `UnixAddr`,
+  `TCPConn`,
+  `UDPConn`,
+  `UnixConn`,
+  `UnixListener`,
+  `IPConn`,
+  `IPPacketConn`,
+  `UnixPacketConn`,
+  `Addr`,
+  `PacketConn`,
+  `Listener`,
+  `OpError`,
+  `DNSError`,
+  `AddrError`,
+  `ParseError`,
+  `UnknownNetworkError`,
+  `Error`,
+  `Buffers`,
+  `WritePacketTo`,
+  `FileListener`,
+  `FilePacketConn`,
+  `FileConn`,
+  `MultipathTCP`,
+  `DefaultResolver`×more —
+  the
+  UDP/
+  Unix/
+  IP-
+  class
+  surface
+  absent;
+  the
+  entire
+  network
+  footprint
+  is
+  TCP.
+
+Verdict: TRUE.
