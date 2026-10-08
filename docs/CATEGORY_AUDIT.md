@@ -41357,3 +41357,185 @@ census:
   internals.
 
 Verdict: TRUE.
+
+## Session 3192 update (Socratic pass 1856 — direct-dependency symbol ledger)
+
+Claim under test: the
+three
+direct
+dependencies
+are
+used
+at
+exactly
+the
+rationale-
+comment
+seams
+recorded
+in
+go.mod
+—
+x/crypto
+for
+the
+two
+wallet
+KDFs
++
+Noise
+AEAD,
+x/sys
+for
+terminal
+width,
+yaml
+for
+config
+decode.
+
+Verification —
+census:
+
+- `golang.org/x/crypto`
+  imports
+  ×3:
+  `chacha20poly1305`
+  (stratum/noise.go
+  —
+  Noise
+  NX
+  AEAD;
+  stdlib
+  has
+  no
+  chacha
+  AEAD),
+  `scrypt`→`scrypt.Key`×2
+  (lightning
+  seedstore
+  KDF),
+  `pbkdf2`→`pbkdf2.Key`×1
+  (BIP-39
+  seed
+  derivation).
+  ZERO:
+  `argon2`,
+  `bcrypt`,
+  `blake2*`,
+  `sha3`,
+  `hkdf`
+  (stdlib
+  `crypto/hkdf`
+  unused;
+  HKDF
+  is
+  hand-
+  rolled
+  HMAC
+  in
+  noise.go
+  per
+  Noise
+  spec),
+  `curve25519`/`ecdh`
+  (stdlib
+  `crypto/ecdh`
+  instead),
+  `ed25519`,
+  `ssh`,
+  `otr`,
+  `openpgp`,
+  `nacl/*`,
+  `ripemd160`,
+  `salsa20`,
+  `twofish`,
+  `blowfish`,
+  `cast5`,
+  `tea`,
+  `xtea`,
+  `md4`,
+  `poly1305`
+  direct —
+  three
+  imports,
+  three
+  symbols,
+  no
+  KDF
+  or
+  cipher
+  sprawl.
+- `golang.org/x/sys`:
+  imports
+  ×2 —
+  `unix`
+  (width_unix.go:
+  `IoctlGetWinsize`/`TIOCGWINSZ`)
+  +
+  `windows`
+  (width_windows.go).
+  ZERO:
+  `unix`/`windows`
+  beyond
+  the
+  single
+  winsize
+  ioctl/
+  console
+  call,
+  `x/sys/cpu`,
+  `x/sys/plan9`.
+- `go.yaml.in/yaml/v3`:
+  `NewDecoder`×3,
+  `Decoder`×2,
+  `NewEncoder`×1
+  —
+  config
+  file
+  decode
+  +
+  test
+  round-trip
+  only.
+  ZERO:
+  `yaml.Unmarshal`/`Marshal`
+  package-
+  level
+  (streaming
+  Decoder
+  with
+  `KnownFields`
+  strict
+  mode
+  is
+  the
+  chosen
+  API),
+  `yaml.Node`
+  AST
+  manipulation.
+- Module
+  pin
+  set:
+  x/crypto
+  v0.48.0,
+  x/sys
+  v0.41.0,
+  yaml
+  v3.0.5 —
+  each
+  go.mod
+  rationale
+  comment
+  matches
+  this
+  exact
+  surface
+  (s3176
+  dep-
+  rationale
+  audit
+  verified).
+
+Verdict: TRUE.
