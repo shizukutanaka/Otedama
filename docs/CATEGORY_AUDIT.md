@@ -42950,3 +42950,160 @@ census:
   fields).
 
 Verdict: TRUE.
+
+## Session 3202 update (Socratic pass 1864 — strconv/hex/binary final ledger)
+
+Claim under test:
+`strconv`
+is
+bounded
+unsigned
+parsing
++
+explicit
+formatting;
+`encoding`
+is
+`binary.LittleEndian`
++
+`hex`
+only —
+`base64`/`BigEndian`/`xml`/`gob`/`csv`
+all
+absent.
+
+Verification —
+census:
+
+- `strconv`:
+  `ParseFloat`×12
+  (rates
+  +
+  config
+  numeric
+  env
+  —
+  64-bit
+  with
+  finite
+  guards),
+  `FormatUint`×10
+  (wire
+  field
+  formatting
+  post-
+  #1241
+  strconv
+  migration),
+  `ParseUint`×7
+  (wire
+  numbers;
+  bitSize
+  pinned
+  per
+  field
+  —
+  verified
+  s3151
+  census),
+  `Itoa`×2,
+  `Atoi`×2
+  (range-
+  checked
+  port
+  parse),
+  `Quote`×1
+  (service
+  argv
+  quoting).
+  ZERO:
+  `ParseInt`/`ParseBool`/`ParseComplex`,
+  `FormatInt`/`FormatFloat`/`FormatBool`/`FormatComplex`
+  (explicit
+  wire
+  formatters
+  instead),
+  `AppendQuote`/`QuoteToASCII`/`QuoteRune*`
+  beyond
+  the
+  ×1,
+  `Unquote`,
+  `NumError`/`ErrRange`/`ErrSyntax`
+  custom
+  handling.
+- `encoding/binary`:
+  `LittleEndian`×84 —
+  every
+  wire
+  marshal/
+  decode
+  (SV2
+  U16/U24/U32/U64
+  are
+  LE
+  per
+  spec).
+  ZERO:
+  `BigEndian`,
+  `binary.Varint`/`Uvarint`/
+  `PutVarint`/`PutUvarint`
+  (SV2
+  is
+  fixed-
+  width,
+  not
+  varint),
+  `binary.Read`/`Write`
+  reflection-
+  struct
+  codec
+  (explicit
+  per-
+  field
+  `Uint16`/`Uint32`/`PutUint*`
+  calls
+  instead),
+  `binary.MaxVarintLen*`.
+- `encoding/hex`:
+  `DecodeString`×20,
+  `EncodeToString`×11
+  —
+  address/
+  coinbase/
+  extranonce
+  hex.
+  ZERO:
+  `hex.Decode`/`Encode`/`DecodedLen`/`EncodedLen`/`Dump`/`Dumper`,
+  odd-
+  length
+  tolerant
+  decode
+  (all
+  sites
+  check
+  `len(s)%2`/
+  exact
+  byte
+  length
+  first).
+- ZERO
+  across
+  tree:
+  `base64`,
+  `ascii85`,
+  `binary.BigEndian`,
+  `encoding/gob`,
+  `encoding/xml`,
+  `encoding/csv`,
+  `encoding/asn1`,
+  `encoding/pem`
+  beyond
+  the
+  ×3
+  cert
+  decode
+  sites
+  (s3185
+  verified).
+
+Verdict: TRUE.
