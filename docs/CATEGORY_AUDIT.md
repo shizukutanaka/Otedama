@@ -10294,3 +10294,7 @@ Claim verified: checkPoolEncryption names the real adversary payoff for plaintex
 ## Session 1926 update (Socratic pass 592 — doctor runner mechanics)
 
 Claim verified: Runner.Run fans all 17 checks out concurrently into indexed result slots (report order = check order), recovers a panicking check into a named Fail so the other 16 survive, and records per-check Elapsed honestly. Honest residual: a check whose underlying syscall hangs ignores ctx — per-check wall-clock bounding was proposed in #542 and rejected (design intent: checks bound themselves, e.g. probe 5s dial, clock-skew 5s reqCtx).
+
+## Session 1927 update (Socratic pass 593 — doctor exit-code dominance)
+
+Claim verified: Report.ExitCode implements strict status dominance — any StatusFail → 2, else any StatusWarn → 1, else 0 — so a failing check is never masked by warnings, and Skip never contributes. Matches the documented 0/1/2 contract in SPECIFICATION §2 (clarified s1883). TRUE.
