@@ -14195,3 +14195,31 @@ Verification: 30 sync.{Mutex,RWMutex} sites (non-test).
 
 Verdict: TRUE — each lock's granularity matches its contention
 profile; the hottest read (mining work) avoids locks entirely.
+
+## Session 2733 update (Socratic pass 1399 — stored-context census)
+
+Claim under test: no struct stores a context.Context field — the
+anti-pattern detaches calls from their caller's deadline and leaks
+the ambient cancellation scope.
+
+Verification: regex scan over all non-test structs for
+`context.Context` fields.
+
+- Zero actual stored-context fields. Three near-matches are func-type
+  fields whose SIGNATURES take ctx — they carry the convention, not
+  the violation:
+    - `stratumv1.Dialer.dialFn func(ctx context.Context, address string)`
+      (:38) and `stratumv2.Dialer.dialFn` (:42) — injectable dial
+      functions parameterized by the caller's ctx at invocation.
+    - `doctor.Check.Run func(ctx context.Context) Result` (:100) —
+      the check's entry point; the runner calls `chk.Run(ctx)` at
+      :251 passing the ambient request ctx.
+- True parameter threading confirmed elsewhere: Dial/Negotiate/
+  Start/Submit/Enumerate/Detect/Shutdown all take ctx positionally;
+  session.start(:239) and readLoop(:245) receive it at spawn.
+- Consequence: every deadline chain derives from the caller —
+  `dctx, cancel := context.WithTimeout(ctx, dialTimeout)` sites are
+  bounded children of real parent ctxs, never detached roots.
+
+Verdict: TRUE — context is parameter-threaded everywhere; no stored
+scopes.
