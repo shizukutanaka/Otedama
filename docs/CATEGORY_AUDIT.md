@@ -28500,3 +28500,130 @@ references):
   only.
 
 Verdict: TRUE.
+
+## Session 3102 update (Socratic pass 1766 — os-package complete ledger)
+
+Claim under test: the
+os surface is
+Stat/Remove/ReadFile/
+UserHomeDir/Stdio/
+ErrNotExist/Mkdir/
+WriteFile/ModeCharDevice —
+a bounded file+
+stdio set — with
+os/user absent.
+
+Verification —
+census:
+
+- `os.Stat`×10 +
+  `os.ErrNotExist`×6 +
+  `os.Mkdir`×5 +
+  `os.ReadDir`×2 +
+  `os.MkdirAll` —
+  the
+  stat/
+  dir
+  surface
+  (verified
+  stat-toctou
+  class).
+- `os.ReadFile`×8 +
+  `os.WriteFile`×4 +
+  `os.OpenFile`×1 +
+  `O_WRONLY`/`O_CREATE`/`O_APPEND` +
+  `os.Create`×1 +
+  `os.Remove`×9 +
+  `os.Rename`×2 +
+  `os.Chmod`×1 —
+  the
+  file
+  lifecycle
+  (verified
+  file-write
+  class).
+- `os.UserHomeDir`×7 +
+  `os.Executable`×1 —
+  the
+  path
+  roots.
+- `os.Stdout`×6 +
+  `os.Stdin`×4 +
+  `os.Stderr`×4 +
+  `os.ModeCharDevice`×3 —
+  the
+  TTY
+  detection
+  (verified
+  mode-char
+  class).
+- `os.Exit`×2 +
+  `os.Args`×1 +
+  `os.Interrupt`×1 —
+  the
+  process
+  boundary
+  (verified
+  exit-
+  surface
+  class).
+- ZERO
+  `os/user` —
+  no
+  uid/gid/
+  group
+  lookup.
+- ZERO
+  `os.Getuid`,
+  `Getgid`,
+  `Geteuid`,
+  `Getegid`,
+  `Setuid`,
+  `Setgid`,
+  `Chown`,
+  `Lchown` —
+  no
+  ownership
+  surface.
+- ZERO
+  `os.Getpid`,
+  `Getppid`,
+  `Getpagesize`,
+  `Hostname`,
+  `Getwd`,
+  `Chdir`,
+  `Chtimes`,
+  `Link`,
+  `Symlink`,
+  `Readlink`,
+  `Lstat`,
+  `Truncate`,
+  `Chroot`,
+  `TempDir`,
+  `CreateTemp`,
+  `MkdirTemp`,
+  `RemoveAll`,
+  `SameFile` —
+  the
+  process/
+  fs
+  residual
+  absent.
+- ZERO
+  `os.Setenv`,
+  `Unsetenv`,
+  `Clearenv`,
+  `Expand`,
+  `ExpandEnv`,
+  `StartProcess`,
+  `FindProcess`,
+  `Wait`,
+  `Pipe`,
+  `NewFile` —
+  the
+  env/
+  process
+  residual
+  absent.
+
+Verdict: TRUE.
