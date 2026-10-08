@@ -24107,3 +24107,61 @@ of all 9
   cancel via ctx.
 
 Verdict: TRUE.
+
+## Session 3043 update (Socratic pass 1707 — panic/recover ledger)
+
+Claim under test: every
+panic is a
+construction-time
+invariant and the
+single recover is the
+doctor runner's
+panic→Fail
+conversion.
+
+Verification — census
+(12 panic sites):
+
+- Registry/invariant
+  guards (init-time
+  or fail-fast
+  contract):
+  worker.go:155
+  double-Start,
+  btccrypto.go:187
+  scheme-dup,
+  poolproto.go:371/
+  375/380 nil/unknown/
+  dup dialer,
+  english_wordlist.go:
+  38/42 count+hash
+  pin.
+- metrics.go:155/166/
+  182/204/216 — name
+  validity + type-
+  collision panics at
+  registration
+  (fail-fast; all
+  callers register at
+  construction).
+- Single
+  `recover()` at
+  doctor.go:241 —
+  per-check
+  panic→Fail
+  conversion inside
+  the check fan-out.
+- ZERO runtime
+  panics on data
+  paths — every
+  pool-controlled
+  input decodes
+  through bounded
+  validators
+  (verified).
+- ZERO recover in
+  goroutines other
+  than the doctor
+  check boundary.
+
+Verdict: TRUE.
