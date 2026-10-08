@@ -42692,3 +42692,126 @@ census:
   stop.
 
 Verdict: TRUE.
+
+## Session 3200 update (Socratic pass 1862 — errors/wrap final ledger)
+
+Claim under test:
+error
+handling
+is
+`errors.Is`
+discrimination
++
+`%w`
+wrapping
++
+`errors.New`
+leaves;
+no
+`Unwrap`
+traversal
+or
+`==`
+sentinel
+comparison
+remains.
+
+Verification —
+census:
+
+- `errors.Is`×62
+  —
+  every
+  sentinel
+  and
+  wrapped-
+  error
+  branch
+  (`os.ErrNotExist`,
+  `io.EOF`,
+  `net.ErrClosed`,
+  `http.ErrServerClosed`,
+  `context.Canceled`/`DeadlineExceeded`,
+  `flag.ErrHelp`,
+  project
+  sentinels).
+- `errors.As`×4 —
+  typed
+  extraction
+  (`*net.OpError`-style).
+- `errors.New`×59
+  —
+  leaf
+  errors;
+  `= errors.New`
+  sites
+  count
+  the
+  sentinel/
+  package-
+  error
+  declarations
+  (~11
+  `var Err*`/
+  exported
+  sentinels).
+- `errors.Join`×4 —
+  config
+  validation
+  multi-
+  error
+  aggregation.
+- `fmt.Errorf`-
+  with-
+  `%w`×111
+  call
+  sites —
+  every
+  wrapping
+  point
+  preserves
+  the
+  causal
+  chain.
+- `errors.Unwrap`×0
+  direct
+  calls —
+  traversal
+  is
+  always
+  through
+  `Is`/`As`,
+  never
+  manual
+  unwrapping.
+- ZERO:
+  `err ==`/
+  `!=`-
+  sentinel
+  equality
+  (migrated
+  to
+  `errors.Is`
+  —
+  #1185/#1239/#1382
+  sweeps),
+  `github.com/pkg/errors`,
+  `golang.org/x/xerrors`,
+  multi-
+  `%w`
+  before
+  Go-1.20
+  semantics
+  (all
+  `%w`
+  wrap
+  exactly
+  one
+  operand
+  except
+  `errors.Join`
+  for
+  fan-
+  in).
+
+Verdict: TRUE.
