@@ -40541,3 +40541,131 @@ census:
   `net/rpc`/`jsonrpc`.
 
 Verdict: TRUE.
+
+## Session 3186 update (Socratic pass 1850 — Go-1.21+-API ledger)
+
+Claim under test: ordering/
+container
+work
+is
+fully
+modernized
+to
+`slices`/`maps`/`cmp`
++
+the
+`min`/`max`/`clear`
+builtins;
+zero
+legacy
+`sort.*`,
+zero
+hand-
+rolled
+min/
+max/
+delete-
+all
+loops.
+
+Verification —
+census:
+
+- `slices`:
+  `Sort`×13,
+  `SortFunc`×2,
+  `Equal`×2,
+  `SortStableFunc`×1,
+  `IsSortedFunc`×1,
+  `Contains`×1.
+  ZERO:
+  `slices.SortStable`,
+  `IsSorted`,
+  `BinarySearch`,
+  `BinarySearchFunc`,
+  `Clip`,
+  `Clone`,
+  `Compact`,
+  `Concat`,
+  `Delete`,
+  `DeleteFunc`,
+  `Grow`,
+  `Insert`,
+  `Repeat`,
+  `Replace`,
+  `Reverse`,
+  `Chunk`,
+  `Collect`,
+  `Concat`,
+  `AppendSeq`,
+  `Sorted`/`SortedFunc`/`SortedStableFunc`
+  iter
+  forms —
+  the
+  codebase
+  sorts
+  in
+  place
+  or
+  checks
+  membership;
+  no
+  iterator
+  adoption
+  (matches
+  the
+  earlier
+  `iter`
+  ZERO).
+- `maps`:
+  `Copy`×2,
+  `Clone`×1.
+  ZERO:
+  `maps.Clone`→
+  (single
+  use),
+  `DeleteFunc`,
+  `Equal`,
+  `EqualFunc`,
+  `All`/`Keys`/`Values`/`Collect`/`Insert`
+  iter
+  forms.
+- `cmp`:
+  `Compare`×5,
+  `Or`×4.
+  ZERO:
+  `cmp.Less`
+  (always
+  `Compare`
+  or
+  `<`).
+- builtins:
+  `min(`×5,
+  `max(`×6,
+  `clear(`×1 —
+  all
+  post-1.21
+  builtins,
+  plus
+  the
+  earlier-
+  audited
+  `new`/`make`/`len`/`cap`/`append`/
+  `copy`/`delete`.
+- ZERO
+  legacy:
+  `sort.Ints`/`Float64s`/`Strings`/`Slice`/`Search`/`IsSorted`
+  —
+  the
+  `sort`
+  package
+  is
+  fully
+  migrated
+  (s3172
+  recorded
+  ZERO
+  `sort.`
+  imports).
+
+Verdict: TRUE.
