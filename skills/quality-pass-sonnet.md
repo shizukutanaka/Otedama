@@ -31,11 +31,11 @@ doc-vs-code整合性の維持**である。
 | 短所 | ブロック要因 |
 |---|---|
 | CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`tlsmlkem`=Go 1.24 knob） | `.github/workflows/`へのpush権限なし |
-| 依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ・CVE到達不能／toolchain 1.24でcontainermaxprocs未享受） | 実行環境がsum.golang.orgを拒否しgo get不可 |
+| ~~依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ）~~ ✅ 解消済み（訂正 session 2679: go.yaml.in/yaml/v3 v3.0.5 へ移行済み #444、x/crypto v0.48.0 へバンプ済み #1359。toolchain が go 1.24 で containermaxprocs 未享受の点のみ残存） | toolchain bump はメンテナ判断 |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
+| ~~`wallet`サブコマンドなし／`ChangePassphrase`に導線なし~~ ✅ 解消済み（訂正 session 2679: `otedama wallet` サブコマンド（verify + rotate）が #529 で出荷済み） | — |
 | Noise NX未配線／secp256k1スタブ／Akashシミュレーション／DATUM未実装 | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
-| TUI 80カラム固定／ASIC検出なし／CIにfuzzなし | KNOWN_LIMITATIONS §15/§8/§13 |
+| TUI 80カラム固定／ASIC検出なし | KNOWN_LIMITATIONS §15/§8（「CIにfuzzなし」行は session 1266（#1347）で test.yml に fuzz ジョブが追加され解消済み — 訂正 session 2679） |
 
 ## 2. Sonnet優先タスクキュー（手順が明確なもの）
 

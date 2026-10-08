@@ -31,14 +31,14 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 
 | 短所 | ブロック要因 |
 |---|---|
-| CI全Goジョブ赤: workflowはGo 1.23.x/1.22.xピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードはgo1.26.8でgreen（session 508 実測） | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
+| CI全Goジョブ赤: workflowはGo 1.23.x（ci.yml/release.yml）/1.21（ci-cd.yml）ピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードはgo1.26.8でgreen（session 508 実測）（訂正 session 2679: ピンは 1.23.x/1.22.x ではなく 1.23.x/1.21 — #1344 系の変更提案は却下済み） | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
 | Noise NX未配線（既定`stratum+v2://`は平文） | CODEOWNERS + 監査済みellswift Go実装が世に存在しない（ADR-011 Erratum） |
 | secp256k1がスタブ（decred v4はBIP-340でもellswiftでもない — EC-Schnorr-DCRv0） | 依存追加が環境制約で不可 + v3.1.0スコープ |
-| 依存陳腐化: yaml.v3アーカイブ済（後継go.yaml.in）、x/crypto 31版遅れ（CVEはssh/openpgp配下で到達不能）、toolchain 1.24（containermaxprocs未享受） | 実行環境がsum.golang.orgをForbiddenで拒否 |
+| ~~依存陳腐化: yaml.v3アーカイブ済／x/crypto 31版遅れ~~ ✅ 解消済み（訂正 session 2679: go.yaml.in/yaml/v3 v3.0.5 へ移行済み #444、x/crypto v0.48.0 へバンプ済み #1359。toolchain が go 1.24 で containermaxprocs godebug 未享受の点のみ残存） | toolchain bump はメンテナ判断 |
 | Akash統合はシミュレーション。実APIは廃止akash-apiでなく`chain-sdk`、入札はon-chain Bidengine | v3.1.0・設計判断（ADR-010 A4再フレーム済み） |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
-| DATUM未実装／ASIC検出なし／TUI 80カラム固定／CIにfuzzなし | KNOWN_LIMITATIONS §14/§8/§15/§13 |
+| ~~`wallet`サブコマンドなし／`ChangePassphrase`に導線なし~~ ✅ 解消済み（訂正 session 2679: `otedama wallet` サブコマンド（verify + rotate）が #529 で出荷済み） | — |
+| DATUM未実装／ASIC検出なし／TUI 80カラム固定 | KNOWN_LIMITATIONS §14/§8/§15（「CIにfuzzなし」行は session 1266（#1347）で test.yml に fuzz ジョブが追加され解消済み — 訂正 session 2679） |
 
 ## 2. Opus優先タスクキュー（深い推論を要するもの）
 
