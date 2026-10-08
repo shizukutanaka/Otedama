@@ -39874,3 +39874,117 @@ census:
   `url.Parse`).
 
 Verdict: TRUE.
+
+## Session 3181 update (Socratic pass 1845 — strings ledger)
+
+Claim under test: string
+work
+is
+`strings.*`
+canonical
+helpers
+only —
+zero
+manual
+byte-loop
+indexing,
+zero
+`Contains`-
+based
+prefix/
+suffix
+emulation,
+zero
+regex.
+
+Verification —
+census
+(30
+distinct
+APIs,
+~690
+calls):
+
+- Top
+  tier:
+  `Contains`×411
+  (test-
+  dominated
+  assertions),
+  `HasPrefix`×50,
+  `Builder`×30,
+  `Join`×27,
+  `Repeat`×25,
+  `TrimSpace`×15,
+  `Split`×11,
+  `NewReader`×11.
+- Mid
+  tier:
+  `HasSuffix`×9,
+  `Index`×8,
+  `ToLower`×7,
+  `ContainsRune`×6,
+  `Fields`×5,
+  `CutPrefix`×5,
+  `ContainsAny`×5,
+  `TrimPrefix`×4,
+  `NewReplacer`×3,
+  `Count`×3.
+- Tail:
+  `TrimSuffix`×2,
+  `ToUpper`×2,
+  `LastIndexByte`×2,
+  `IndexRune`×2,
+  `IndexByte`×2,
+  `EqualFold`×2,
+  `TrimLeft`×1,
+  `Trim`×1,
+  `Replace`×1,
+  `IndexFunc`×1.
+- ZERO:
+  `strings.Cut`/`CutSuffix`
+  (all
+  two-
+  way
+  splits
+  use
+  `Split`/index
+  helpers
+  verified
+  in
+  the
+  earlier
+  string-cut
+  audit),
+  `Compare`,
+  `Clone`,
+  `Map`,
+  `Title`,
+  `ToTitle`,
+  `ToValidUTF8`,
+  `IndexAny`,
+  `LastIndexAny`,
+  `FieldsFunc`,
+  `SplitAfter`,
+  `ReplaceAll` —
+  modernized
+  to
+  the
+  `Cut*`
+  or
+  `Contains*`/
+  index
+  forms
+  where
+  adopted;
+  regex-
+  adjacent
+  helpers
+  absent
+  by
+  design
+  (no
+  `regexp`
+  anywhere).
+
+Verdict: TRUE.
