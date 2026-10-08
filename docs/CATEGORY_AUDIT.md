@@ -18976,3 +18976,34 @@ Verification (1 site):
 
 Verdict: TRUE — syscall is imported
 only for the SIGTERM name.
+
+## Session 2932 update (Socratic pass 1597 — os/exec census)
+
+Claim under test: every `exec.Command`
+has a fixed binary + argv — no
+user-controlled argv or env that
+could inject a flag or a variable.
+
+Verification (5 sites):
+
+- `systemctl --user show-environment`,
+  `systemctl --user is-active`,
+  `launchctl list`, `sc.exe query` —
+  all fixed binaries, constant args.
+- `exec.Command(name, args...)` at
+  service.go:522 is inside the
+  `runCmd` var — a test-injectable
+  seam; callers inside daemon pass
+  only constant binaries + constants
+  (`systemdUnitName`, `launchdLabel`,
+  "Otedama").
+- No `exec.LookPath` — binaries are
+  resolved via PATH at run time; the
+  daemon is a system tool so PATH
+  is the operator's domain anyway.
+- `.Env` never assigned — children
+  inherit the daemon's env, correct
+  for same-uid service calls.
+
+Verdict: TRUE — fixed binaries + args;
+env inheritance is same-uid.
