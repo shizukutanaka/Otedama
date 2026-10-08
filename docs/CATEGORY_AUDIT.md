@@ -12905,3 +12905,7 @@ REAL FIX: THREAT_MODEL's rewritten mitigation undercounts the dependency boundar
 Claim verified: AUDIT_CHECKLIST's corrections are all honest (staticcheck-via-golangci scoping, the ERE `\|` grep bug documented, Noise P-256 placeholder scope clarified, ADR-001..011 count, test-ratio script un-bcv'd). DEPLOYMENT adds the fsGroup fix for fresh-PVC root:root mounts (real operational defect corrected), drops the nonexistent `status="submitted"` label claim, and adds SLO guidance.
 
 REAL FIX: AUDIT_CHECKLIST row 15 (runtime-dependency audited set) had the same x/sys undercount as THREAT_MODEL — enumerated only crypto+yaml. Corrected to the three direct deps plus the `golang.org/x/{net,term,text}` transitive set, verified against `go mod graph`.
+
+## Session 2573 update (Socratic pass 1239 — KNOWN_LIMITATIONS §13 diff check)
+
+Claim verified: §13's rewrite is honest — the stale "six of seven workflows broken" narrative is replaced by the post-repair state: real Go jobs in deploy.yml, gated setup-node, deleted hollow security-tests, real fuzz job, docker-verify now launching real containers and polling `/healthz`, release.yml package metadata license fix. Residuals correctly kept as maintainer decisions, not re-deliverable bugs: the Go-version-pin class (#1344), ci-cd dead-weight deletion, golangci v2 migration (#1391), Dependency-graph repo setting, deploy.yml helm/KUBECONFIG gates. TRUE.
