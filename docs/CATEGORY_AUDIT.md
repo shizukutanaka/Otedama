@@ -11058,3 +11058,7 @@ Claim verified: the generated systemd unit can't inject, over-privilege, or loop
 ## Session 2115 update (Socratic pass 781 — logger singleton lifecycle)
 
 Claim verified: the package-level logger can't race, double-initialize, or be nil-poisoned — the fast path is a plain atomic.Pointer load; the slow path races via CompareAndSwap so exactly one construction wins (a loser returns the winner's pointer, never a second instance); SetDefault refuses nil so no caller can poison the singleton; and Discard() gives tests a real no-op logger rather than a nil that could panic downstream. TRUE.
+
+## Session 2116 update (Socratic pass 782 — fanIn shutdown completeness)
+
+Claim verified: the generic fan-in can't wedge a producer, close early, or leak — the out buffer is bufFactor×N clamped to [1,64] (bounded, never zero-capacity-starved); every producer exits on ctx.Done at BOTH the receive and the forward send (a stalled downstream can't pin a producer goroutine); the dedicated closer waits on wg so out is closed only after the last producer exits — send-on-closed and close-before-final-send are both structurally impossible; and an input closing yields a clean goroutine exit, so all N producers converge to wg.Wait deterministically. TRUE.
