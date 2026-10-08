@@ -18901,3 +18901,30 @@ Verification:
 Verdict: TRUE — zero net/url usage;
 the custom validator is stricter than
 the stdlib parser for this domain.
+
+## Session 2929 update (Socratic pass 1594 — filepath.Walk/Glob census)
+
+Claim under test: no filesystem
+traversal runs on an unvalidated
+user-supplied path.
+
+Verification (1 site):
+
+- `filepath.Walk`/`Glob`/`WalkDir` →
+  exactly one site: wallet.go:268
+  `filepath.Glob(filepath.Join(dir,
+  ".wallet-*.tmp"))` — the stale
+  temp-file sweep inside the wallet
+  data dir.
+- `dir` is the wallet's own data dir
+  (validated upstream), not a
+  user-supplied path; the glob
+  pattern is a fixed literal
+  `.wallet-*.tmp`, not built from
+  input.
+- Zero `filepath.Walk`/`WalkDir` —
+  no recursive traversal at all.
+
+Verdict: TRUE — the only glob is a
+fixed-pattern sweep inside a
+validated data dir.
