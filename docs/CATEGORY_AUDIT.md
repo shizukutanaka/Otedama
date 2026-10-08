@@ -17343,3 +17343,27 @@ cmd/, all *.go including tests):
   cycle's code changes.
 
 Verdict: TRUE — marker surface remains empty.
+
+## Session 2863 update (Socratic pass 1528 — ledger schema self-consistency)
+
+Claim under test: every `## Session` block in the
+ledger carries a recognizable claim/verdict schema.
+
+Verification (regex census over 2,028 blocks):
+
+- 651 blocks lack the literal word "Verdict" —
+  all in sessions 2000–2780; they carry the
+  equivalent marker `Claim verified:` instead.
+  Entries ≥2781 uniformly use the tri-field
+  `Claim under test / Verification / Verdict`
+  schema. This is an honest format evolution, not
+  lost verdicts.
+- 15 blocks lack any "Claim" keyword — all are
+  milestone entries (s2314/2354/2374/2414/2574/
+  2591/2593…) that open with `Milestone re-check`,
+  a deliberate alternate schema.
+
+Verdict: TRUE — no entry is schema-less; two
+documented schema generations exist (2000–2780
+`Claim verified:` vs ≥2781 tri-field) plus
+deliberate milestone blocks.
