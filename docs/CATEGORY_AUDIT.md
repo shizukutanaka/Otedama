@@ -19993,3 +19993,42 @@ Verification (606 sites):
 Verdict: TRUE — the string API
 surface is the modern idiom
 set; no deprecated calls.
+
+## Session 2962 update (Socratic pass 1627 — bytes-package census)
+
+Claim under test: production code
+touches `bytes` only through
+`bytes.Equal` for fixed-length
+comparison — all other bytes.*
+calls are test fixtures.
+
+Verification:
+
+- `bytes.Equal` — 2 production
+  sites:
+  - btccrypto/script.go:131 —
+    payout script match inside
+    the coinbase parser (bounds
+    already verified at s2380).
+  - btccrypto/base58.go:81 —
+    base58 checksum compare.
+- `bytes.Buffer` — ~214 sites,
+  all `_test.go` captures.
+- `bytes.NewReader` — test-only.
+- `bytes.NewBuffer` /
+  `NewBufferString` — test-only.
+- Zero `bytes.Map`, `Title`,
+  `IndexRune`, `IndexFunc`,
+  `Replace`, `Cut`, `Clone`,
+  `Compare`, `Contains` (in
+  production), `Trim`,
+  `HasPrefix`, `HasSuffix`,
+  `Index`, `IndexByte`,
+  `Fields`, `Split`, `Join`,
+  `Repeat`, `Reader` (as a
+  type) — all absent or
+  test-only.
+
+Verdict: TRUE — production bytes
+surface is 2 Equal calls; the
+rest is test fixtures.
