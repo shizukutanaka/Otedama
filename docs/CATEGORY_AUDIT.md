@@ -14807,3 +14807,27 @@ Verification: full errors.Is/As call census.
   earlier), so all these Is/As lookups unwrap correctly.
 
 Verdict: TRUE — sentinel discipline holds at every site.
+
+## Session 2757 update (Socratic pass 1423 — wrap-verb census)
+
+Claim under test: every error value embedded in a new error is
+wrapped with %w; %v appears only for non-error payloads.
+
+Verification: all fmt.Errorf sites carrying `%v`.
+
+- `%w` correctly wraps the real error at btccrypto.go:297
+  (ErrUnknownScheme), stratumv1/dialer.go:159,:182
+  (ErrHandshakeFailed), daemon/service.go:524 (`%w` for the exec
+  error; `%s` for the command output), engine/run.go:2092
+  (`%w` for the difficulty error).
+- The `%v` arguments are payload text, not errors to preserve:
+  `resp.errResult` (the pool's decoded JSON-RPC error object —
+  rendered as text because the Go-side sentinel carries the
+  chain), a numeric hash rate, an extranonce size, a Policy enum
+  value, a difficulty float.
+- Zero sites format an `error` with `%v` — the unwrappable-info
+  loss class is absent, matching the 19-site errors.Is surface
+  that relies on unbroken chains.
+
+Verdict: TRUE — %w wherever a chain must survive; %v only for
+display payloads.
