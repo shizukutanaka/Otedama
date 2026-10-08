@@ -11838,3 +11838,7 @@ Claim verified: every pool connection has single-owner cleanup — `defer conn.C
 ## Session 2307 update (Socratic pass 973 — inCh reader/consumer contract)
 
 Claim verified: the V2 session's poolMsg channel can't deadlock — reader goroutine is sole closer (defer close(inCh)), buffer 32, and BOTH send sites are `select{inCh<-; ctx.Done()}`-cancellable so a full channel never parks the reader; consumer treats `!ok` as "pool closed connection" and `pm.err` as session-ending read error → reconnect/failover. Foreign-channel frames are filtered per SV2 group-channel rules (s449). TRUE.
+
+## Session 2308 update (Socratic pass 974 — Decide empty-input semantics)
+
+Claim verified: Decide degrades gracefully on every degenerate input — nil Input/invalid Policy/non-finite hysteresis+minYield error out explicitly (s443); duplicate device IDs rejected; `len(candidates)==0` yields a documented idle Assignment with reason ("no compatible stream accepting non-zero work" or the below-floor variant) rather than a panic or silent empty assignment; zero devices produce an empty Allocation. TRUE.
