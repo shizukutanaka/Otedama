@@ -13080,3 +13080,7 @@ Catalog census: exactly 15 exported ID constants (10 startup./status. + 5 error.
 ## Session 2612 update (Socratic pass 1278 — honest-ledger correction)
 
 Correction to s2593 (per the append-only honesty protocol): that entry said "the architecture map's 19 packages" — the actual count is 20 internal top-level directories (the map lists 18 packages + i18n/messages counted as one entry + poolproto's two children; on disk: 20 dirs under internal/ + poolproto/{stratumv1,stratumv2} = 22 package dirs total, matching CLAUDE.md's inventory exactly). Substance unchanged — the parity claim itself was TRUE.
+
+## Session 2613 update (Socratic pass 1279 — SPECIFICATION §6 metrics catalogue)
+
+§6's table lists 45 distinct base names + the combined `rate_sources_ok / rate_sources_total` row = all 46 registered `otedama_*` series exactly (recomputed: zero spec'd name unregistered; the only unlisted registered literals are test fixtures `otedama_hashrate_hps`/`_x`/`_y`/`_z` — registration-guard test inputs, not production metrics). The `go_*` runtime-collector family is documented nowhere and exposed nowhere: `RuntimeCollector()` is registered only in metrics_test — PR #1158 (closed unmerged) had proposed wiring it into /metrics and was rejected, so docs correctly match the shipped surface. TRUE.
