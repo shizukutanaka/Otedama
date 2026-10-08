@@ -10250,3 +10250,7 @@ Claim verified: label sets are rendered with sorted keys (deterministic expositi
 ## Session 1915 update (Socratic pass 581 — httpserver lifecycle)
 
 Claim verified: the HTTP server carries slowloris-appropriate timeouts (ReadHeader 5s / Read 10s / Write 10s / Idle 60s), records a background Serve failure into serveErr for observability rather than dropping it, stores the bound address atomically, and shuts down via ctx with a 5s graceful drain. TRUE.
+
+## Session 1916 update (Socratic pass 582 — config-example ↔ yaml-tag parity)
+
+Claim verified: every yaml tag in internal/config/config.go (19 unique keys) is covered by config.yaml.example — active top-level keys (bitcoin_address, data_dir, language, log_format, log_level), nested pools[] fields (url, user, password, bitcoin_addresses, payout_scheme, tls_ca_file), and commented optional keys with prose (http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct). No orphan tags, no example keys that fail to decode. TRUE.
