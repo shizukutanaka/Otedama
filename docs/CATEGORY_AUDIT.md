@@ -11842,3 +11842,7 @@ Claim verified: the V2 session's poolMsg channel can't deadlock — reader gorou
 ## Session 2308 update (Socratic pass 974 — Decide empty-input semantics)
 
 Claim verified: Decide degrades gracefully on every degenerate input — nil Input/invalid Policy/non-finite hysteresis+minYield error out explicitly (s443); duplicate device IDs rejected; `len(candidates)==0` yields a documented idle Assignment with reason ("no compatible stream accepting non-zero work" or the below-floor variant) rather than a panic or silent empty assignment; zero devices produce an empty Allocation. TRUE.
+
+## Session 2309 update (Socratic pass 975 — session Close idempotence)
+
+Claim verified: every poolproto Close is concurrency-safe — all four sites use sync.Once (V1 connection dialer.go:224/237, V1 session stratumv1.go:661, V2 connection dialer.go:200/209; V2 session delegates to its conn's once). A duplicate Close (session-end + defer, or concurrent callers) executes the body exactly once: ctx cancel → pending ledger reap → conn close. No double-close panic, no half-closed state. TRUE.
