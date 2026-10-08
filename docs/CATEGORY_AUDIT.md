@@ -21322,3 +21322,60 @@ Verification — full census:
   single NotifyContext).
 
 Verdict: TRUE.
+
+## Session 2990 update (Socratic pass 1654 — io/bufio boundary ledger)
+
+Claim under test: every
+unbounded-length read of
+external data is wrapped
+in LimitReader, and all
+fixed-length reads go
+through io.ReadFull with
+scratch buffers.
+
+Verification — census:
+
+- `io.ReadAll` ×2 — both
+  `io.LimitReader`-wrapped:
+  rates/fetcher.go:436 (64
+  KiB) and hashrate.go:212
+  (maxHashrateBody).
+- `io.Copy` ×2 — both
+  bounded drain-to-Discard:
+  doctor checks.go:928
+  (8KiB) and
+  hashrate.go:209.
+- `io.ReadFull` ×16 — the
+  wire-decoder primitive;
+  all callers verified
+  earlier to use declared-
+  length or fixed-size
+  scratch buffers with
+  length-before-alloc.
+- `io.LimitReader` ×4 —
+  no caller forgets the
+  bound.
+- `io.EOF`/`io.ErrUnexpected
+  EOF` — clean-EOF vs
+  truncated-payload
+  distinction used by
+  the decoders.
+- `bufio.NewReader(Size)`
+  ×3 — V1 session line
+  reads (64KiB ceiling);
+  `bufio.ErrBufferFull`
+  detected at :2 sites —
+  overlong line surfaces
+  as an error, not silent
+  truncation.
+- `io.Discard` ×3 — probe
+  bodies drained bounded.
+- `io.MultiWriter` ×1 —
+  stdout+file log tee.
+- `io.Writer`×45/`io.Reader`
+  ×24 — injectable seams
+  throughout; no package
+  writes to os.Stdout
+  directly (fmt census).
+
+Verdict: TRUE.
