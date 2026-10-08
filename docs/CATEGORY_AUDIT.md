@@ -13552,3 +13552,10 @@ Re-checked failing jobs on the PR after the latest push; confirmed every failure
 - `Dependency Review` — repo Settings→Dependency graph disabled; action exits with "not supported on this repository".
 - Full pin surface: ci.yml pins 1.23.x (env) + 1.22.x/1.23.x (matrix); ci-cd.yml independently pins 1.21 (env:21) + 1.20/1.21 (matrix:33) — the same broken class lives in TWO workflows. #1344 raised the pins once and was closed unmerged → recorded rejection; do not re-propose.
 - PR #1405 mergeable (no conflicts) at 0db281502.
+
+## Session 2705 update (Socratic pass 1371 — editorconfig conformance + residual-script census)
+
+- `[*.go] indent_style=tab`: every Go source line uses tab indentation; the only space-indented lines are embedded non-Go payload strings (launchd plist XML in `internal/daemon/service.go:363-`, embedded bash in `cmd/otedama/completion.go:67-`) — gofmt-compliant, not violations. TRUE.
+- `[*.{yml,yaml}] indent_size=2` + `trim_trailing_whitespace=true`: valid 2-space nesting everywhere, but 163 whitespace-only blank lines inside `run: |` block scalars across all 7 workflow files carry trailing indent (ci.yml 45, security.yml 33, ci-cd.yml 32, test.yml 27, deploy.yml 21, code-review.yml 3, release.yml 2). Recorded as a cosmetic issue — zero semantic effect (YAML keeps the blank line either way; bash ignores the spaces), and stripping them across 7 files would bury real diffs in whitespace churn. Record-first rule applied; no fix.
+- `insert_final_newline=true` + `end_of_line=lf`: sampled 50 Go files — all LF-terminated with final newline. TRUE.
+- Residual script surface: only `install.sh` remains (bash -n clean); `.sweep.sh` is a session artifact, gitignored. TRUE.
