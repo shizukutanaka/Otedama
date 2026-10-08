@@ -18725,3 +18725,29 @@ Verification:
 Verdict: TRUE — no drain-loops on
 channels; every consumer selects on
 ctx.Done() as an exit.
+
+## Session 2923 update (Socratic pass 1588 — fmt.Errorf %w census)
+
+Claim under test: `fmt.Errorf` calls
+without `%w` are all root-cause
+validation errors — not wrapper calls
+that would discard an inner error.
+
+Verification (~30 sites):
+
+- Every `%w`-less `fmt.Errorf` is a
+  parameter/format validation message:
+  nBits negative mantissa, zero
+  mantissa, difficulty overflow,
+  wire-string length caps, "no wallet",
+  "no devices", "pool negotiated
+  version out of range", channel
+  closed, noise frame oversize —
+  none wraps an inner error.
+- Callers that DO need to preserve the
+  cause use `%w` (census s2863 counted
+  64 errors.Is/As-compatible sites).
+
+Verdict: TRUE — `%w`-less fmt.Errorf
+is only for leaf errors; wrapping is
+done via %w where needed.
