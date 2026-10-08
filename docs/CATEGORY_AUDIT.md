@@ -12869,3 +12869,7 @@ Claim verified: the branch-added `subcommands_test.go` tests are real regression
 ## Session 2564 update (Socratic pass 1230 — branch-test runtime verification)
 
 Claim verified: all branch-added tests execute green — `TestConfigShow_SanitizesLogFields`, `TestConfigShow_SurfacesMalformedEnvWarning` (cmd/otedama), `TestRunner_PanickingCheckBecomesFailResult` (internal/doctor) all PASS; the sanitize pin actually exercises the `\x1b`-injection path and the panic pin exercises the recover path, so they would catch regressions, not just observe. TRUE — payload tests are executable and passing.
+
+## Session 2565 update (Socratic pass 1231 — deploy.yml diff deep check)
+
+Claim verified: the deploy.yml payload is all real hardening — `deploy-production` needs-list fix (removing `deploy-staging`, whose always-false if-gate was silently skipping every production deploy — a genuine structural bug), removal of the archived `actions/create-release@v1` step that raced release.yml's action-gh-release, rollback gate corrected `refs/heads/main` → `refs/heads/master` (previously unfireable), health probe `/health` → `/healthz` matching the real httpserver route, concurrency serialization without canceling in-flight releases, `contents: read` least-privilege, per-job timeouts, PR-gated registry login/push. TRUE — every workflow line carries honest intent.
