@@ -521,7 +521,7 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
-2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+2. ✅ **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
    `max_target`. In the V2 channel/job path clamp the effective target into
@@ -533,11 +533,23 @@ endpoint against current vendor documentation. Tags as before
    MaxTarget}`; the engine's session loop updates the live share target
    and re-issues the active job so workers compare against it immediately.
    The clamp-to-`[min, max_target]` behavior this item originally asked
-   for is not yet implemented — Otedama accepts whatever target the pool
-   sends outright, since `OpenMiningChannel`'s `max_target` preference
-   field is intentionally not sent (see the dead-field note removed from
-   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
-   message is no longer silently unrecognised, which was the blocking gap.
+   for is not implemented — Otedama accepts whatever target the pool
+   sends outright.
+   — ✅ **Resolved by design** (verified session 1733): the remaining
+   clamp is vacuous on every axis. Otedama declares
+   `MaxTargetUnconstrained` in `OpenMiningChannel` (run.go:1919,
+   handshake.go:162-168 — the field is now on the wire, the earlier note's
+   "intentionally not sent" is stale), so sv2-spec #236's pool-side
+   SetTarget≤max_target bound can never be violated against this client.
+   A too-EASY pool target is harmless (easy shares are what the pool
+   credits; any resulting submit flood is already bounded by the
+   per-session `submitLimiter` token bucket, run.go:2218-2225). The only
+   adversarial direction is a too-HARD target (share difficulty ≥ block
+   difficulty), which cannot be "clamped" upward — grinding at
+   block-target instead would emit only rejected shares — and is already
+   defended by the episodic starvation tripwire (run.go:951-1096) plus
+   the SetTarget=0 → block-target fallback (run.go:2036-2043). SetTarget
+   is applied and re-issues the active job immediately (run.go:1228-1235).
 3. ✅ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs — not applicable as designed.** Verified in session 1731: Otedama never assembles a coinbase from `coinbase_tx_prefix`/`suffix` — it opens *standard* channels and `NewMiningJob` carries the pool-computed `merkle_root` directly (messages.go:87,101), so the witness-vs-txid choice this row guards against does not exist on the V2 path. The V1 path does assemble coinbase (`coinb1 + en1 + en2 + coinb2` → `Hash256`, stratumv1.go:537-546) but hashes exactly the byte string the pool dictates — V1 coinbase parts carry no witness fields to strip, and the pool reconstructs the identical bytes for verification. The hazard would only materialize if a future Extended-channel/JDP path assembles client-side coinbase; record it as a design constraint for that work.
    — (Original row retained below.)
    Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.
