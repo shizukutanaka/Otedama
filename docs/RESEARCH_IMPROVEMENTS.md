@@ -636,13 +636,24 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
    Cat 4 #7.
+   — ✅ **Already satisfied** (verified session 1736): THREAT_MODEL's
+   Tampering section (:135-152) documents the pool-selfishness threat with
+   the exact citation (undetectable orphan pattern, 38.2% profitability
+   threshold), then frames multi-pool failover + endpoint diversity as
+   "*cheap defection*" — the security framing this row asked for — and
+   cites pool-vs-local share reconciliation as the closest observable
+   signal plus the PPLNS/FPPS residual-risk advice. The mechanisms it
+   names are real: `otedama doctor` ships both "Pool diversity" and
+   "Pool endpoint diversity" checks (checks.go:448, :498 — warns when
+   distinct URLs resolve to one endpoint, "failover is illusory").
+   Reference list entry at :496-497.
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
