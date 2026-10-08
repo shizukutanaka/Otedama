@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1862 — CLAUDE.md)
+
+- Architecture map: added `scorecard.yml` (session-1754 OpenSSF workflow) to the `.github/workflows` enumeration.
+
 ### Fixed (session 1860 — CLAUDE.md)
 
 - Architecture map: added the shipped `wallet` subcommand (PR #529) to the `cmd/otedama` enumeration.

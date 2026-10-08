@@ -10034,3 +10034,7 @@ Defects found and fixed: same inventory class as s1859 — CLAUDE.md's cmd/oteda
 ## Session 1861 update (Socratic pass 527 — internal/ package-inventory parity)
 
 Claim verified: `find internal -type d` returns exactly the 20 packages the architecture map enumerates (arbitration…version) plus the two documented subdirs (i18n/messages, poolproto/stratumv{1,2}); zero undocumented directories, zero phantom paths. The internal/ inventory is a 1:1 match. TRUE.
+
+## Session 1862 update (Socratic pass 528 — workflows inventory parity)
+
+Defects found and fixed: third enumeration drift in the architecture map — `.github/workflows/` lists 8 files but `scorecard.yml` (the OpenSSF Scorecard workflow added session 1754) is undocumented. Added it. With this fix all three map enumerations (skills/, cmd/, workflows/) now match the filesystem exactly; the internal/ listing was already exact (s1861).
