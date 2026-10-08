@@ -37797,3 +37797,168 @@ only):
   tails.
 
 Verdict: TRUE.
+
+## Session 3164 update (Socratic pass 1828 — os/exec + template + absent-package detail ledger)
+
+Claim under test: `os/exec`
+is
+exactly
+5
+fixed-
+argv
+daemon
+verbs;
+`text/template`
+is
+one
+trusted-
+bundle
+site;
+the
+bulk-
+stdlib
+absent
+set
+is
+truly
+absent
+in
+production
+(regexp/
+reflect
+are
+test-
+only).
+
+Verification —
+census:
+
+- `exec.Command`×5 —
+  daemon
+  service
+  verbs
+  (systemctl/
+  launchctl/
+  sc.exe
+  install/
+  uninstall/
+  status);
+  every
+  argv
+  fixed.
+  ZERO
+  `exec.CommandContext`,
+  `LookPath`,
+  `Cmd`
+  field
+  pokes,
+  `CombinedOutput`,
+  `StdoutPipe`,
+  `StderrPipe`,
+  `ExtraFiles`,
+  `SysProcAttr`,
+  `WaitDelay`,
+  `ProcessState`,
+  `ExitError`,
+  `Environ`,
+  `ErrNotFound`.
+- `template.New`×1 —
+  `message.go`
+  i18n
+  bundle
+  (trusted
+  templates,
+  non-
+  user
+  input).
+  ZERO
+  `template.Must`,
+  `ParseFiles`,
+  `ParseFS`,
+  `ParseGlob`,
+  `Funcs`,
+  `Delims`,
+  `Option`,
+  `HTMLEscaper`,
+  `JSEscaper`,
+  `URLQueryEscaper`,
+  `html/template`
+  entirely.
+- `hash/fnv`×1
+  production
+  import
+  (`run.go:37`;
+  `fnv.New32a`
+  at
+  `run.go:2171`
+  for
+  label
+  hashing).
+- `net/http/pprof`×1
+  production
+  import
+  (`server.go:47`,
+  `//nolint:gosec`,
+  opt-in
+  private
+  mux
+  only).
+- Test-
+  only
+  imports
+  of
+  otherwise-
+  absent
+  packages:
+  `regexp`×3
+  (`metrics_doc_test`,
+  `messages_test`,
+  `config_file_test`
+  —
+  pattern
+  assertions),
+  `reflect`×1
+  (`arbitration/fuzz_test`
+  type
+  inspection),
+  `testing/iotest`×2
+  (`stratum` wire
+  read-
+  fault
+  injection).
+- ZERO
+  production
+  imports
+  of:
+  `compress/*`,
+  `container/*`,
+  `database/*`,
+  `debug/*`
+  (`"debug"`
+  hits
+  are
+  the
+  log-level
+  string),
+  `encoding/{ascii85,asn1,base32,csv,gob,xml}`,
+  `expvar`,
+  `go/*`,
+  `hash/{adler32,crc32,crc64,maphash}`,
+  `html*`,
+  `image*`,
+  `index/*`,
+  `log/syslog`,
+  `math/{cmplx,rand/v2}`,
+  `mime*`,
+  `net/{cgi,fcgi,httptest,httptrace,http2,mail,rpc,smtp,textproto,url}`,
+  `plugin`,
+  `regexp`,
+  `reflect`,
+  `runtime/{coverage,debug,metrics,trace}`,
+  `testing/{fstest,quick,slogtest}`,
+  `text/{scanner,tabwriter}`,
+  `time/tzdata`,
+  `unicode/{utf16,norm}`,
+  `golang.org/x/{net,term,text,sync,tools,exp,mod,time,image,build,website,oauth2,mobile}`.
+
+Verdict: TRUE.
