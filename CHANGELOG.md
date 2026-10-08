@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1800 — ci-cd.yml)
+- Removed the `deploy` job — it applied the nonexistent `k8s/deployment.yaml` on every master push when KUBE_CONFIG was set
 ### Fixed (session 1796 — ci.yml)
 - Removed `deploy-staging`/`deploy-production` — vestigial jobs applying nonexistent `k8s/` manifests for a foreign postgres/redis/ingress topology; deploy.yml owns deployment
 ### Fixed (session 1794 — code-review.yml)

@@ -9776,3 +9776,7 @@ Defect found and fixed: `oss-fuzz-integration.md`'s `project.yaml` template carr
 ## Session 1799 update (Socratic pass 465 — KNOWN_LIMITATIONS drift re-check)
 
 Drift found and corrected: §13 still listed ci.yml's k8s deploy jobs as existing-but-gated after s1796 deleted them — struck through and annotated resolved. Re-verified the neighboring bullets against live code: `ci-cd.yml`'s deploy job still references `k8s/deployment.yaml` (lines 272–274 — entry remains TRUE; recorded maintainer decision), deploy.yml's helm steps still target the absent `./kubernetes/helm/otedama` chart behind secret gates (s1792 residual — TRUE). The `docker-verify-cgo0-postgres` name remains a cosmetic leftover from the removed postgres service — TRUE as documented.
+
+## Session 1800 update (Socratic pass 466 — ci-cd.yml vestigial deploy job)
+
+Defect found and fixed: ci-cd.yml's `deploy` job ran `kubectl apply -f k8s/deployment.yaml` + `kubectl set image`/`rollout status` on every master push — the `k8s/` tree is forbidden and absent, so any configured KUBE_CONFIG secret turned a routine merge into a deterministically failing kubectl against a nonexistent manifest. Removed; `needs:` graph re-verified dangling-free. KNOWN_LIMITATIONS §13's ci-cd bullet updated to reflect the job's removal (the file's remaining dead weight is the Go-pin/duplicate-pipeline class — recorded maintainer decision).

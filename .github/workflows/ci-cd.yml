@@ -239,36 +239,3 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy:
-    name: Deploy to Kubernetes
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: [docker]
-    if: github.ref == 'refs/heads/master'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-    
-    - name: Configure kubectl
-      env:
-        KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG }}
-      if: env.KUBECONFIG_B64 != ''
-      run: |
-        mkdir -p ~/.kube
-        echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
-    
-    - name: Deploy to Kubernetes
-      env:
-        KUBECONFIG_B64: ${{ secrets.KUBE_CONFIG }}
-      if: env.KUBECONFIG_B64 != ''
-      run: |
-        kubectl apply -f k8s/deployment.yaml
-        kubectl set image statefulset/otedama otedama=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n otedama
-        kubectl rollout status statefulset/otedama -n otedama

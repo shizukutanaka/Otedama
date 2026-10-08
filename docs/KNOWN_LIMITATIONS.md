@@ -526,10 +526,11 @@ cosmetic leftover).
   produced until session 1703 mislabeled the project's Apache-2.0
   license as `MIT` in the fpm metadata (fixed).
 - **`ci-cd.yml` as a whole** remains dead duplicate weight: a second
-  pipeline that hardcodes `GO_VERSION: '1.21'`, a `1.20`/`1.21` matrix
-  below `go.mod`'s minimum, and `kubectl apply -f k8s/deployment.yaml`
-  — nonexistent path. Deleting the file is the obvious resolution;
-  whether the duplicate pipeline exists at all is the maintainer's call.
+  pipeline that hardcodes `GO_VERSION: '1.21'` and a `1.20`/`1.21`
+  matrix below `go.mod`'s minimum. Its `deploy` job (which applied the
+  nonexistent `k8s/deployment.yaml`) was removed in session 1800 —
+  deleting the file itself is the remaining resolution and is the
+  maintainer's call.
 - **golangci-lint is pinned at v1.x everywhere** — session 1703
   converged the three divergent sites on the Makefile's `v1.64.8`
   (`ci.yml` curl install was `v1.55.2`; `test.yml`/`ci-cd.yml` used
