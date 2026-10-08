@@ -30831,3 +30831,182 @@ census:
   `subtle.ConstantTimeCompare`.
 
 Verdict: TRUE.
+
+## Session 3122 update (Socratic pass 1786 — encoding complete ledger)
+
+Claim under test: the
+codec surface is
+json.Unmarshal +
+binary.LittleEndian +
+hex string fns —
+with stream
+decoders, BigEndian,
+varint, and the
+rest absent.
+
+Verification —
+census:
+
+- `json.Unmarshal`×26 +
+  `json.RawMessage`×18 +
+  `json.NewEncoder`×3 +
+  `json.Marshal`×1 —
+  the
+  V1
+  RPC +
+  config
+  round-trip
+  surface.
+- `binary.LittleEndian`
+  ONLY —
+  `Uint32`×29,
+  `PutUint32`×23,
+  `Uint16`×4,
+  `PutUint64`×3,
+  `PutUint16`×3,
+  `Uint64`×1,
+  `AppendUint32`×1,
+  `AppendUint16`×1;
+  ZERO
+  `BigEndian` —
+  the
+  SV2
+  wire
+  is
+  LE-only
+  (verified
+  endian
+  class).
+- `hex.DecodeString`×6 +
+  `hex.EncodeToString`×4 —
+  extranonce/
+  coinbase
+  hex
+  at
+  the
+  V1
+  boundary.
+- `bech32`×60 +
+  `base58`×26
+  hits
+  are
+  btccrypto
+  IDENTIFIER
+  names
+  (`validateBech32`,
+  `decodeBase58`...)
+  —
+  hand-rolled
+  checksum
+  validators
+  with
+  no
+  external
+  dependency;
+  not
+  package
+  calls.
+- ZERO
+  `json.Decoder`,
+  `json.NewDecoder`,
+  `json.MarshalIndent`,
+  `json.Valid`,
+  `json.HTMLEscape`,
+  `json.Indent`,
+  `json.Compact`,
+  `json.Token`,
+  `json.Delim`,
+  `json.Number`,
+  `json.Marshaler`,
+  `json.Unmarshaler`,
+  `json.SyntaxError`,
+  `json.UnmarshalTypeError`,
+  `json.InvalidUnmarshalError`,
+  `json.UnsupportedTypeError`,
+  `json.UnsupportedValueError`,
+  `json.MarshalerError`,
+  `json.InvalidUTF8Error` —
+  the
+  streaming/
+  interface/
+  introspection
+  surface
+  absent;
+  all
+  inputs
+  are
+  bounded
+  byte
+  slices
+  (LimitReader/
+  line
+  caps)
+  decoded
+  whole.
+- ZERO
+  `binary.Write`,
+  `binary.Read`,
+  `binary.Size`,
+  `binary.Uvarint`,
+  `binary.Varint`,
+  `binary.PutUvarint`,
+  `binary.PutVarint`,
+  `binary.AppendUvarint`,
+  `binary.AppendVarint`,
+  `binary.UvarintLen`,
+  `binary.MaxVarintLen64`,
+  `binary.NativeEndian`,
+  `binary.ByteOrder`×refs —
+  the
+  varint/
+  reflection
+  codec
+  absent;
+  the
+  wire
+  is
+  hand-rolled
+  fixed-width.
+- ZERO
+  `hex.Encode`,
+  `hex.Decode`,
+  `hex.EncodedLen`,
+  `hex.DecodedLen`,
+  `hex.NewEncoder`,
+  `hex.NewDecoder`,
+  `hex.Dump`,
+  `hex.Dumper`,
+  `hex.DumpTo`,
+  `hex.InvalidByteError`,
+  `hex.ErrLength` —
+  residual
+  absent;
+  the
+  two
+  string
+  functions
+  cover
+  the
+  need.
+- ZERO
+  `encoding/base32`,
+  `base64`,
+  `ascii85`,
+  `gob`,
+  `csv`,
+  `xml`,
+  `pem`,
+  `asn1` —
+  no
+  other
+  encoding
+  package
+  in
+  the
+  tree
+  (verified
+  codec-
+  census
+  class).
+
+Verdict: TRUE.
