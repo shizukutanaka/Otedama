@@ -10198,3 +10198,7 @@ Claim verified: internal/provider/ai_inference.go's AkashProvider documents itse
 ## Session 1902 update (Socratic pass 568 — AI-yield honesty labeling)
 
 Claim verified: AkashProvider.Name() returns "AI Inference (Akash Network, simulated)" (ai_inference.go:79) — the simulated nature surfaces in the TUI, logs, and `config show`, so operators cannot mistake estimate-driven arbitration for live Akash revenue. TRUE.
+
+## Session 1903 update (Socratic pass 569 — simulated-quote determinism + graceful degradation)
+
+Claim verified: AkashProvider.publish sends a zero-yield quote when no GPU devices exist (arbitration excludes it gracefully), falls back to rate=95000 when the BTC feed is stale, grades confidence by feed freshness (0.6 stale / 0.85 fresh), and quotes the fixed midpoint of the documented [0.30, 0.60] USD/hr band with the 20% Akash fee folded into NetSatsPerSecond. Deterministic, bounded, honest. TRUE.
