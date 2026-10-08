@@ -11102,3 +11102,7 @@ Claim verified: the scheme table is a true single source of truth — knownSchem
 ## Session 2126 update (Socratic pass 792 — env/flag layer + DefaultDataDir)
 
 Claim verified: the env layer can't stomp a value with "" or drift from the flag layer — applyEnvLayer walks the single numericEnvVars spec table for every numeric key (a new numeric field gets parse+origin in one edit site — no per-key drift possible); every string env applies only when non-empty, so a blank OTEDAMA_* can't silently erase a valid file value; applyFlagLayer stamps OriginFlag only on non-empty flags (origin can't lie about which layer won); DefaultDataDir is a pure GOOS dispatch honoring APPDATA→"", UserHomeDir→darwin fallback, XDG_DATA_HOME→~/.local/share on linux — never an empty-success path. TRUE.
+
+## Session 2127 update (Socratic pass 793 — bounded job map + curtail edge gates)
+
+Claim verified: the V2 job store can't grow unboundedly or flip curtail on stale input — storeBoundedJob tracks insertion order separately and only appends a JobID that's NEW (re-notifications of an existing job overwrite in place, never extend the order list), then evicts the oldest when order exceeds jobsCap — a pool flooding NewMiningJob can't exhaust memory; curtailDecision fails closed on every degenerate input (threshold ≤ 0 → feature disabled; !fresh → no act on stale price; rate ≤ 0 → never curtail on a broken feed), and only transitions when the change is real (below-floor while unpaused → pause once; recovered while paused → resume once — no flapping). TRUE.
