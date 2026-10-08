@@ -10972,3 +10972,7 @@ Claim verified: the exposition surface can't emit a divergent or malformed serie
 ## Session 2094 update (Socratic pass 760 — rates fetcher tail)
 
 Claim verified: the price feed can't silently deceive arbitration — clock skew is measured per source from the HTTP Date header and the max persisted; the warn message above the threshold names the real consequences (TLS certificate validation, mining nTime fields, rate-freshness judgements) instead of a bare number; a 2-source divergence >4x distrusts the feed rather than averaging a poisoned pair; implausible readings are excluded before the median so a single bad source can't drag it; all-sources-fail returns errors.Join preserving every per-source cause; and the skew measurement is still returned even when extract fails. TRUE.
+
+## Session 2095 update (Socratic pass 761 — httpserver admin surface)
+
+Claim verified: the admin HTTP surface can't hang or lie — the full timeout set is present (ReadHeaderTimeout 5s as slowloris mitigation, Read/Write 10s, Idle 60s); pprof handlers are opt-in via enablePprof on a private mux (the //nolint:gosec is justified — nothing lands on the default global mux); /readyz is a tri-state atomic (unready → 503 "not ready", never a fabricated 200); the bound address is stored so a :0 listener reports its real port; non-graceful Serve failures are captured into serveErr instead of vanishing; and Shutdown is bounded at 5s so Stop can't hang forever on a stuck connection. TRUE.
