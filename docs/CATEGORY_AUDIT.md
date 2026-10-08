@@ -10438,3 +10438,7 @@ Claim verified: otedama_shares_unaccounted reconciles local found vs pool-judged
 ## Session 1962 update (Socratic pass 628 — TUI snapshot honesty)
 
 Claim verified: EstSatsEarned is labeled "est." (an integrated forecast, not pool-authoritative accounting — KNOWN_LIMITATIONS §9 contract honored on screen); Curtailed renders a deliberate-pause badge distinct from the Stalled fault indicator so an operator cannot mistake a price-driven pause for a broken miner; Update is non-blocking with drain-oldest so a slow terminal can never backpressure the engine; Stop waits for the render goroutine via WaitGroup before its own writes — no io.Writer race. TRUE.
+
+## Session 1963 update (Socratic pass 629 — curtailment trust boundary)
+
+Claim verified: curtailDecision never changes the gate on a non-fresh price — the startup fallback and any rate older than CacheDuration hold the last trusted state, so mining can never be paused or resumed on a price the engine does not trust; threshold ≤0 disables the feature; transitions log once per direction with the actual rate and threshold; the atomic curtailGate suppresses mid-flight job application (same re-arm hole class as arbitration pauses) and is mirrored to otedama_curtailed. TRUE.
