@@ -1145,6 +1145,16 @@ func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
 	}
 }
 
+func TestCheckPoolTLSCA_V2TLSSchemePasses(t *testing.T) {
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2tls://p.example.com:34254", TLSCAFile: ca},
+	}}
+	if r := checkPoolTLSCA(&cfg).Run(context.Background()); r.Status != StatusPass {
+		t.Errorf("status = %v, want Pass (v2tls honors tls_ca_file)", r.Status)
+	}
+}
+
 // ============================================================================
 // checkPayoutScheme — payout scheme advisory check
 // ============================================================================

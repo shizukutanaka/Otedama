@@ -65,10 +65,10 @@ pools:
     # payout_scheme: "tides"
     #
     # tls_ca_file (optional) is a path to a PEM bundle of extra certificate
-    # authorities to trust for this pool's stratum+tls:// certificate, for a
-    # pool presenting a private-CA or self-signed cert. System roots are always
-    # used as well, and certificate verification is never disabled. No effect
-    # on non-TLS schemes.
+    # authorities to trust for this pool's stratum+tls:// or stratum+v2tls://
+    # certificate, for a pool presenting a private-CA or self-signed cert.
+    # System roots are always used as well, and certificate verification is
+    # never disabled. No effect on non-TLS schemes.
     # tls_ca_file: "/etc/otedama/pool-ca.pem"
 
   # Failover: list pools in priority order. Otedama tries the first;

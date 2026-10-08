@@ -613,14 +613,17 @@ func checkPoolTLSCA(cfg *config.Config) Check {
 					continue
 				}
 				configured++
-				// tls_ca_file is only honored for stratum+tls:// (V1 over TLS);
-				// for any other scheme it is silently ignored at runtime.
-				if !strings.HasPrefix(p.URL, "stratum+tls://") {
+				// tls_ca_file is honored for the two TLS schemes,
+				// stratum+tls:// (V1) and stratum+v2tls:// (V2): both dial
+				// certificate-verified TLS with the PEM merged into the
+				// system root store. Any other scheme ignores it at runtime.
+				if !strings.HasPrefix(p.URL, "stratum+tls://") &&
+					!strings.HasPrefix(p.URL, "stratum+v2tls://") {
 					return Result{
 						Status: StatusWarn,
-						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honors it; it will be ignored",
+						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// and stratum+v2tls:// honor it; it will be ignored",
 							stripScheme(poolproto.StripUserinfo(p.URL))),
-						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
+						Fix: "remove tls_ca_file, or use a stratum+tls:// or stratum+v2tls:// URL for this pool",
 					}
 				}
 				pem, err := os.ReadFile(p.TLSCAFile)

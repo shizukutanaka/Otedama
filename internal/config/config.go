@@ -231,13 +231,13 @@ type PoolConfig struct {
 	PayoutScheme string `yaml:"payout_scheme"`
 
 	// TLSCAFile is an optional path to a PEM file of certificate authorities
-	// to trust for this pool's stratum+tls:// connection, in addition to the
-	// system root store. Use it for a pool that presents a private-CA or
-	// self-signed certificate, so the connection can be verified rather than
-	// either failing or being run in the clear. Empty means "system roots
-	// only". Only stratum+tls:// (V1 over TLS) honors it today — the V2
-	// adapter dials with the system root store regardless, and `doctor`
-	// warns when it is set on any other scheme. Certificate verification is
+	// to trust for this pool's TLS connection, in addition to the system
+	// root store. Use it for a pool that presents a private-CA or
+	// self-signed certificate, so the connection can be verified rather
+	// than either failing or being run in the clear. Empty means "system
+	// roots only". It is honored for stratum+tls:// (V1) and
+	// stratum+v2tls:// (V2); the plaintext schemes ignore it, and `doctor`
+	// warns when it is set on one of them. Certificate verification is
 	// always performed; this never disables it.
 	TLSCAFile string `yaml:"tls_ca_file"`
 }
