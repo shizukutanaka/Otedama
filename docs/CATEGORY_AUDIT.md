@@ -13160,3 +13160,7 @@ All TRUE: Go-floor row corrected to 1.24+ matches go.mod (tlsmlkem godebug parse
 ## Session 2632 update (Socratic pass 1298 — MIGRATING-FROM-V2 claims parity)
 
 **FIX APPLIED:** dependencies row claimed "v3 has 2 (`x/crypto`, `yaml.v3`)" — stale: go.mod has 3 direct requires ({go.yaml.in/yaml/v3, golang.org/x/crypto, golang.org/x/sys}; x/sys for internal/tui terminal syscalls, tracked since session-2571). Corrected to "3 direct modules" naming all three. Remaining claims verified TRUE: 4-scheme table matches poolproto.go:116-119, SHA-256d-only, `otedama service install`, Noise+V1/V2 split, wallet crypto description.
+
+## Session 2633 update (Socratic pass 1299 — RESEARCH_IMPROVEMENTS open-set)
+
+All TRUE: 🔵 planned rows are all ADR-tracked by design (thermal→ADR-008 sub-domain 6, solo-mining→ADR-009, ASIC→ADR-008 sub-domain 1 now disclosed in KNOWN_LIMITATIONS §8); ❌ rejected rows carry scope citations. Status markers last synchronized at session 1284 remain consistent — no untracked opens. Ledger-vs-code spot checks pass (rejectClass, reject-rate gauges, per-device lazy series, V1 reconciliation ceiling).
