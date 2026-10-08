@@ -11814,3 +11814,7 @@ Milestone: the ledger now holds 1,468 session entries; ~630 carry an explicit TR
 ## Session 2301 update (Socratic pass 967 — gauge-input finiteness)
 
 Claim verified: no NaN/Inf can reach the metrics exposition — every Gauge.Set input is finite by construction: shareAcceptanceRate is accepted/judged ∈ [0,1] with total==0 → 1.0; rejectRate/staleRate only divide when judged>0; hashrate is a finite counter-derived window rate; powerCostUSDPerHour comes from config floats already validated finite (s473); the network-rates path rejects non-finite readings upstream (s437/s478). TRUE.
+
+## Session 2302 update (Socratic pass 968 — failover-config validation parity)
+
+Claim verified: failover entries get primary-equivalent validation — config.go:647 validates every `bitcoin_addresses[i]` via the same `validateBitcoinAddress` checksum check as `bitcoin_address` (empty entries flagged), and appendPoolIssues applies `validatePoolURL` (host:port + no-userinfo, s486) plus the payout_scheme whitelist {fpps,pplns,tides,solo} to every pools[] entry. A typo in a backup config is caught at `config validate`, not at failover time. TRUE.
