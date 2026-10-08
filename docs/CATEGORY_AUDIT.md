@@ -11822,3 +11822,7 @@ Claim verified: failover entries get primary-equivalent validation — config.go
 ## Session 2303 update (Socratic pass 969 — doctor status enum JSON contract)
 
 Claim verified: the Status iota enum serializes correctly — String() is exhaustive over pass/warn/fail/skip with an "unknown" fallback (no panic path); the JSON writer uses json.NewEncoder.Encode so enum strings and all text fields are escaped per spec; the text/JSON split remains correct (JSON fields can't carry live control chars because the only free-text values (Detail/Fix) go through SanitizePoolText at display boundaries, and JSON encoding escapes anyway). TRUE.
+
+## Session 2304 update (Socratic pass 970 — TUI write-target injection)
+
+Claim verified: the dashboard can never interleave with logger stdout — the package contains zero os.Stdout/os.Stderr/fmt.Print* references; every write (frame at :262, cursor controls at :424–432, clean-line at :163) goes through the injected `d.w` io.Writer from NewDashboard(w). Terminal-width detection (:583) type-asserts the injected writer to *os.File and falls back when it isn't one — no hardcoded stdout dependency. TRUE.
