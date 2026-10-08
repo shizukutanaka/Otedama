@@ -16536,3 +16536,25 @@ Verification — complete site inventory:
 
 Verdict: TRUE — every affix operation reads the side
 the data actually lives on.
+
+## Session 2826 update (Socratic pass 1492 — once-error census)
+
+Claim under test: no sync.Once closure captures an
+error — once an error lands inside Once.Do it is
+replayed forever as if initialization succeeded.
+
+Verification — the complete sync.Once set (4):
+
+- stratumv1/dialer.go:224 + stratumv1.go:159 +
+  stratumv2/dialer.go:200 — `closeOnce` guards the
+  idempotent close path (closed flag + channel
+  closes); the closure performs in-memory state
+  transitions only, which cannot error.
+- stratumv2/dialer.go:233 — `startOnce` guards the
+  single spawn of the read loop; same no-error class.
+- No Once wraps a fallible init (dial, decode,
+  allocation); no error is captured inside a closure
+  and replayed.
+
+Verdict: TRUE — every Once guards an error-free
+lifecycle transition; error-in-Once is absent.
