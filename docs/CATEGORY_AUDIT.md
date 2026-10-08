@@ -9388,3 +9388,9 @@ Residuals: major-version `uses:` tags are mutable within their major line by Git
 **Claim verified: "go.mod/go.sum describe exactly the dependency set the code needs" — TRUE (measured).** `go mod verify` → `all modules verified` (every module in the cache matches its go.sum hash — no tampered/local-modified deps). `go mod tidy -diff` → empty (zero drift: no unused requires, no missing requires for any import — the declared graph is exactly the used graph). `devin-direct-merge.yml` re-audit: fetch-depth 0, minimal permissions (contents:read + pull-requests:write), mergeable-retry loop against the async UNKNOWN state, fork gate, timeout — all correct.
 
 Residuals: none for this surface. The lint pins converged in s1703 only take effect once the Go-pin class (#1344 decision) lets the jobs reach the lint step.
+
+## Session 1706 update (Socratic pass 372)
+
+**Claim verified: "no committed file lives under a CLAUDE.md forbidden path" — TRUE (full census).** `git ls-files` (221 files) filtered against every forbidden path — `scripts/`, `tests/`, `k8s/`, `pkg/`, `web/`, `cmd/otedamad/`, `internal/providers|auth|render|scientific|observability|security/` — returns zero. Exactly one ADR-009 file exists (`docs/adr/ADR-009-pool-decentralization-integration.md`) — matches the single-file convention. Forbidden paths appear only as (a) gated, unreachable workflow references (`k8s/*.yaml` behind `KUBE_CONFIG_*` secrets; `scripts/code-review/generate-comment.js` behind `has_node`, recorded s1702) and (b) prose in docs, which is documentation, not a path violation.
+
+Residuals: the gated references remain latent tripwires — each would fire only if its gate's precondition were satisfied (a kubeconfig secret provisioned while manifests stay absent; a package.json added to a Go repo). Both are recorded rather than removed because deletion is a maintainer call on pipeline intent.
