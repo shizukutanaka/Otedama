@@ -33477,3 +33477,131 @@ census:
   needed).
 
 Verdict: TRUE.
+
+## Session 3137 update (Socratic pass 1801 — operator surface census)
+
+Claim under test: the
+operator
+surface is
+the
+bit-shift
++`|=`/`<<=`
+flags
+plus
+`++`
+counter
+increments —
+with
+`--`,
+`&=`,
+`^=`,
+`>>=`,
+`&^`
+operators
+all
+zero
+in
+real
+code.
+
+Verification —
+census:
+
+- `<<`×27 +
+  `>>`×15 —
+  the
+  bit-shift
+  surface:
+  nonce
+  partition
+  (`64-bits`
+  shift),
+  nBits
+  compact-
+  target
+  decode,
+  channel_msg
+  flag
+  bits.
+- `|=`×2 +
+  `<<=`×1 —
+  the
+  three
+  compound
+  bit
+  assignments.
+- `++` —
+  ~46
+  counter
+  increments,
+  all
+  simple
+  (`settled++`,
+  `seqNum++`,
+  `passed++/warned++/failed++`,
+  `ntimeRoll++`,
+  `workVer++`);
+  none
+  in
+  expressions.
+- `--` —
+  ZERO
+  real
+  decrement
+  operators;
+  the
+  1630
+  `--`
+  hits
+  are
+  flag
+  strings
+  (`--http-addr`)
+  and
+  comment
+  text,
+  confirmed
+  by
+  `\w--[;,)\}]`
+  =0.
+- `&=`×0,
+  `^=`×0,
+  `>>=`×0,
+  `&^`×0 —
+  zero
+  compound
+  bit
+  ops
+  and
+  zero
+  bit-clear.
+- ZERO
+  `..`  /
+  `...`×spread
+  outside
+  variadics —
+  the
+  only
+  `...`
+  uses
+  are
+  variadic
+  calls
+  (verified
+  earlier).
+- Arithmetic
+  `+` `-` `*` `/` `%`
+  censused
+  in
+  earlier
+  passes
+  (signed-
+  arithmetic,
+  int-
+  truncation,
+  division
+  classes
+  all
+  clean).
+
+Verdict: TRUE.
