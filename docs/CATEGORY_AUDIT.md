@@ -41682,3 +41682,115 @@ census:
   production.
 
 Verdict: TRUE.
+
+## Session 3194 update (Socratic pass 1858 — go-directive + build-tag ledger)
+
+Claim under test: compiler
+directives
+are
+exactly
+the
+six
+`//go:build`
+platform
+tags;
+no
+`go:generate`/`go:embed`/
+`go:linkname`/`go:noinline`/
+cgo
+directives
+exist
+anywhere.
+
+Verification —
+census:
+
+- `//go:build`
+  ×6
+  (two
+  complete
+  cover
+  triplets):
+  `internal/hal/gpu_linux.go`
+  +
+  `gpu_linux_test.go`
+  `linux`,
+  `gpu_stub.go`
+  `!linux`;
+  `internal/tui/width_unix.go`
+  `unix`,
+  `width_windows.go`
+  `windows`,
+  `width_other.go`
+  `!unix && !windows`.
+  Each
+  triplet
+  covers
+  the
+  whole
+  GOOS
+  space
+  exactly
+  once
+  (platform-
+  tag
+  parity
+  verified
+  at
+  s2950
+  +
+  s3172-era
+  passes).
+- `//go:`-directive
+  count
+  =
+  6
+  total
+  (the
+  tags
+  above).
+  ZERO:
+  `go:generate`,
+  `go:embed`,
+  `go:linkname`,
+  `go:noinline`,
+  `go:nosplit`,
+  `go:systemstack`,
+  `go:nowritebarrier`,
+  `go:yeswritebarrierrec`,
+  `go:uintptrescapes`,
+  `go:cgo_import_dynamic`,
+  `go:cgo_*`
+  —
+  zero
+  compiler-
+  private
+  escape
+  hatches.
+- `embed`:
+  ZERO
+  imports —
+  i18n
+  catalogs
+  are
+  `.go`
+  source
+  maps
+  (chosen
+  over
+  embed
+  so
+  the
+  completeness
+  test
+  sees
+  the
+  symbols),
+  BIP-39
+  wordlist
+  is
+  a
+  `.go`
+  slice.
+
+Verdict: TRUE.
