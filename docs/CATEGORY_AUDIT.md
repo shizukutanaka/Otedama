@@ -11914,3 +11914,7 @@ Claim verified: NewBundle (message.go:250–268) enforces its contract structura
 ## Session 2326 update (Socratic pass 992 — config numeric bounds completeness)
 
 Claim verified: appendNumericIssues (config.go:701–743) rejects NaN/±Inf on every economic field before the range checks (comparisons can't catch NaN), then bounds each field — hysteresis [0,1), curtail_below_btc_usd/min_yield/power_watts/electricity_price all ≥0 with 0=disabled documented in the message. No numeric field reaches the engine unchecked. TRUE.
+
+## Session 2327 update (Socratic pass 993 — CLI rejection posture)
+
+Claim verified: every unrecognized input fails at startup, never at runtime — fs.Parse rejects unknown flags → stderr + exitUsage (main.go:77–81); unknown subcommand → message + did-you-mean + usage + exitUsage (:140–145); help detection scans every token (correct for space-separated flag values) and stops only at literal `--` (:87–99). TRUE.
