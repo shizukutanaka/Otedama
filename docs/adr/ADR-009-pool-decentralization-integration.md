@@ -1903,3 +1903,24 @@ Cosmetic only: #186, #232, WIP #103. Releases: SRI **v1.12.0**
 (2026-09-17), sv2-apps **v0.8.0** (2026-09-17) — both unchanged; the
 standing P0 gap (no `mining.configure` / BIP323 version-rolling
 client-side, while tProxy v0.8.0 ships the mask) is unaffected.
+
+### Session 1776 recheck (ecosystem)
+
+Re-verified live (GitHub API rate-limited; list-page HTML + git
+ls-remote used instead — same effective sources):
+
+- sv2-spec normative open set unchanged: **#238** (negotiate optional
+  SetupConnection flags — Otedama's subset-flag validation stays
+  forward-compatible: an optional-flag echo satisfies
+  "returned ⊆ offered"), **#234** (authority key management/rotation
+  docs — clarification only), **#203** (non-custodial payout
+  extension), **#198** (`coinbase_witness` on NewTemplate).
+  Cosmetic-only: #232, #186, WIP #103.
+- SRI: still **v1.12.0** (2026-09-17) — the hardening release whose
+  share-validation/coinbase-bound fixes Otedama already performs
+  client-side (min_ntime/nTime bounds, bounded job storage).
+- sv2-apps: still **v0.8.0** (2026-09-17; tag list re-pulled via
+  ls-remote) — tProxy's BIP323 version-rolling mask remains the
+  standing P0 gap evidence (Otedama's V1 client sends no
+  `mining.configure` and cannot request a version mask).
+- No drift since session 1730.

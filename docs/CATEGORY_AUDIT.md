@@ -9680,3 +9680,7 @@ Claim verified: the build context is minimal yet complete — TRUE. `COPY . .` i
 ## Session 1775 update (Socratic pass 441 — third site of the image version-stamping defect fixed; git-cliff verified)
 
 Defect found and fixed: `make docker-build` tagged the image `$(VERSION)` but passed no build-args, so the binary inside the image reported `dev/unknown` — third site of the session-1773 class. The Makefile already computed `COMMIT`/`BUILD_DATE` for the Go ldflags; now passes the same values as `--build-arg VERSION/COMMIT/BUILD_DATE` matching the Dockerfile's declared ARGs. `make -n` shows the expanded command correctly. Also verified (no cliff.toml exists — recorded as honest residual): goreleaser's `changelog: use: git-cliff` runs config-less fine, producing git-cliff's default conventional-commit format rather than CHANGELOG.md's curated style; acceptable for the dormant manual path but a real divergence if the pipeline ever ships.
+
+## Session 1776 update (Socratic pass 442 — ADR-009 ecosystem recheck)
+
+Claim verified: no ecosystem drift since session 1730 — TRUE. sv2-spec normative open set stable (#238 optional-flag negotiation, #234 authority-key docs, #203 non-custodial payouts, #198 coinbase_witness; #232/#186/#103 cosmetic); Otedama's subset-flag validation remains forward-compatible with #238. SRI v1.12.0 and sv2-apps v0.8.0 both unchanged (re-pulled via ls-remote after the REST API hit its rate limit). ADR-009 ecosystem log updated.
