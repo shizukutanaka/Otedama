@@ -12042,3 +12042,7 @@ Claim verified: the two tripwires are identical-shape in both session loops — 
 ## Session 2358 update (Socratic pass 1024 — tls_ca_file degrade symmetry)
 
 Claim verified: both session paths handle the optional CA bundle identically — unreadable file → warn + fall back to system roots only (never silent plaintext; run.go:849–852 V2, :1452–1457 V1); malformed PEM hard-fails via TLSConfigWithExtraCAs error rather than connecting with a broken trust set (:853–856); the dial is bounded at poolDialTimeout (15s) so a blackholed endpoint can't hold failover (:859–862); stratum+v2tls:// calls stratum.DialTLS — a certificate-verified connection, never the V1 mislabeled-plaintext class. TRUE.
+
+## Session 2359 update (Socratic pass 1025 — SV2 adapter Submit honesty)
+
+Claim verified: the SV2 adapter Submit returns ShareResult{Accepted:true} but its docstring discloses the provisional nature explicitly — the authoritative verdict arrives asynchronously via SubmitSharesSuccess/Error which the engine's frame loop processes (dialer.go:353–358); channel_msg bit is set in sendMsg matching the engine's inline path (:367–370); the opaque job id goes through parseJobID (:358). No false claim of confirmed pool acceptance. TRUE.
