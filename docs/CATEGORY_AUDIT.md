@@ -13208,3 +13208,7 @@ Residue state matches the documented record — branch filters now include `mast
 ## Session 2644 update (Socratic pass 1310 — GOVERNANCE + SECURITY parity)
 
 All claims verified TRUE — GOVERNANCE.md's Dependabot-not-Renovate correction matches `.github/dependabot.yml` (configured ecosystems exist); the dead-cosign disclosure (release.yml never invokes goreleaser → nothing is signed today) is verbatim accurate; SECURITY.md's supported-versions table is honest (v3.0.x-alpha marked "No — self-responsibility", v2.1.9 partial until Oct 2026); GitHub Private Vulnerability Reporting named primary channel with PGP deferred until Foundation (no phantom email/key); `docs/MIGRATING-FROM-V2.md` link live; no `migrate-from-v2` phantom command; ZKP-auth disclosure consistent with CLAUDE.md's absent-path rule.
+
+## Session 2645 update (Socratic pass 1311 — ROADMAP parity)
+
+All claims verified TRUE — engine dispatch at run.go:822 routes V1 URLs to `runSessionV1` (poolproto.DialURL load-bearing) while the V2 path still uses `stratum.NewDecoder(conn)` directly at run.go:887; `poolproto/stratumv2` Dialer exists with init-registration + Dial/Negotiate but remains unwired into the session loop — the "✅部分完了" statuses are exactly accurate; BIP-39 complete (2048-word SHA-256-verified embed); Sigstore keyless correctly listed as future work; session-251 notes (Bitcoin Core v30 IPC mining interface, DATUM = SV1-transport reuse of stratumv1) consistent with ADR-009/poolproto reservations.
