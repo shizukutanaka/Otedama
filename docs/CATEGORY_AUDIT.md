@@ -29108,3 +29108,110 @@ census:
   API.
 
 Verdict: TRUE.
+
+## Session 3107 update (Socratic pass 1771 — json complete ledger)
+
+Claim under test: the
+json surface is
+Unmarshal/RawMessage/
+NewEncoder/Marshal —
+a bounded codec —
+with the streaming/
+strict-decode API
+absent.
+
+Verification —
+census:
+
+- `json.Unmarshal`×26 —
+  the
+  decode
+  bulk
+  (verified
+  json-unmarshal
+  class:
+  wire
+  +
+  config).
+- `json.RawMessage`×18 —
+  the
+  deferred-
+  decode
+  fields
+  (verified
+  raw-message
+  class).
+- `json.NewEncoder`×3 +
+  `json.Marshal`×1 —
+  the
+  encode
+  bulk
+  (response
+  writers
+  +
+  doctor
+  JSON
+  output).
+- `.Encode`×5 +
+  `.Decode`×1 —
+  the
+  encoder
+  calls
+  (json
+  +
+  one
+  yaml
+  decoder).
+- ZERO
+  `json.Valid`,
+  `json.Compact`,
+  `json.Indent`,
+  `json.HTMLEscape`,
+  `json.MarshalIndent`,
+  `json.Number`,
+  `json.DisallowUnknownFields`,
+  `json.UseNumber`,
+  `json.Buffered`,
+  `json.More`,
+  `json.Token`,
+  `json.Delim`,
+  `json.Marshaler`,
+  `json.Unmarshaler`,
+  `json.TextMarshaler`,
+  `json.TextUnmarshaler`,
+  `json.Encoder.SetIndent`,
+  `json.Encoder.SetEscapeHTML`,
+  `json.Decoder.Token`,
+  `json.UnsupportedTypeError`,
+  `json.UnsupportedValueError`,
+  `json.InvalidUnmarshalError`,
+  `json.InvalidUTF8Error`,
+  `json.MarshalerError`,
+  `json.SyntaxError`,
+  `json.UnmarshalTypeError`,
+  `json.UnmarshalFieldError` —
+  the
+  streaming/
+  strict/
+  error-
+  type
+  surface
+  absent;
+  decode
+  errors
+  surface
+  as
+  `error`
+  only.
+- `yaml.NewDecoder`×1 —
+  the
+  config
+  file
+  decode
+  (go.yaml.in
+  pin,
+  verified
+  dep
+  class).
+
+Verdict: TRUE.
