@@ -20844,3 +20844,44 @@ Verdict: TRUE after fix —
 the 15-var production
 surface is fully documented;
 no phantom names.
+
+## Session 2980 update (Socratic pass 1644 — version/buildinfo surface)
+
+Claim under test: version
+metadata is ldflags-only —
+no `debug/buildinfo` or
+`runtime/debug` reads that
+could contradict it.
+
+Verification:
+
+- `runtime/debug`,
+  `debug/buildinfo`,
+  `ReadBuildInfo` — zero
+  imports/calls in
+  production.
+- version.go:19-33 — three
+  ldflags vars (`Version`,
+  `Commit`, `BuildDate`) with
+  honest dev defaults
+  (`-dev`, `unknown`); the
+  godoc says they "should
+  not" be modified post-load.
+- `Get()` — snapshots the
+  vars plus `runtime.Version()`
+  and GOOS/GOARCH; returns a
+  value type so later
+  mutation cannot leak.
+- `Info.String()` — stable
+  single-line format,
+  documented parseable.
+- `otedama version` and
+  `--version` output flows
+  through this single path
+  (no second format).
+
+Verdict: TRUE — build
+identity has one honest
+source; absent metadata
+shows "-dev"/"unknown"
+rather than faking it.
