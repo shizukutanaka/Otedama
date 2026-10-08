@@ -551,6 +551,9 @@ var frameDecoders = map[uint8]func([]byte, *Message) error{
 	},
 }
 
+// DispatchFrame decodes f's payload into the typed Message for its
+// msg_type. Frames whose msg_type has no registered decoder decode as
+// UnknownMessage so future protocol extensions pass through.
 func DispatchFrame(f Frame) (Message, error) {
 	var m Message
 	d, ok := frameDecoders[f.Header.MsgType]

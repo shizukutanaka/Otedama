@@ -12662,3 +12662,7 @@ Claim verified: zero TODO/FIXME/XXX/HACK markers exist in production code (grep 
 ## Session 2514 update (Socratic pass 1180 — milestone gate)
 
 Milestone claim verified: the whole-tree hygiene gates stay green on the audit branch — `gofmt -l internal cmd` reports zero files, `go build ./...` compiles clean, `go vet ./internal/... ./cmd/...` reports nothing; scoped tests pass: internal/poolproto/stratumv1 (0.50s), stratumv2 (0.40s), stratum (0.03s), config (0.02s), lightning (12.2s — BIP-39/seed/wallet vectors), i18n/messages (0.01s). The one real fix this stretch (config TLSCAFile doc, commit 43d5d870d) is covered by the config package tests. TRUE — pass 1180 milestone holds; ledger now carries ~1,790 entries across ~160+ verified census classes.
+
+## Session 2515 update (Socratic pass 1181 — exported-symbol godoc re-census)
+
+Claim checked: re-ran the exported-symbol godoc census with a stricter scanner (awk over all non-test .go in internal/ + cmd/, flagging any `func [A-Z]` whose preceding line isn't a comment). Result: exactly one drift site — stratum.DispatchFrame (messages.go:554) was the only package-level exported function with no doc comment, violating the CLAUDE.md doc requirement. FALSE → FIXED: added a godoc comment describing its contract (decodes a frame's payload into the typed Message; unregistered msg_types surface as UnknownMessage for forward-compat pass-through). gofmt/build/vet clean. All other exported functions remain documented.
