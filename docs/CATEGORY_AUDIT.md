@@ -11706,3 +11706,7 @@ Claim verified: no attacker-sizeable allocation exists — every `make([]byte, n
 ## Session 2274 update (Socratic pass 940 — sleep/timer census)
 
 Claim verified: both blocking-wait sites are cancellable and bounded — the V1 pool-requested reconnect delay uses `select { <-ctx.Done() → return ctx.Err() | <-time.After(w) }` where w was already clamped by ReconnectWait at parse time, so shutdown stays instant and the wait can't exceed the session's reconnect window; the worker's idle-yield `time.Sleep(10ms)` fires only when no job is loaded (localWork==nil) — it is an intentional non-busy spin that rechecks the job pointer each iteration under the wg lifecycle, so a new job lands within 10ms and Stop cancels the loop on the next iteration check; and all 80 `select ... default:` sites are non-blocking sends (drop-oldest quote channels, share-drop counters, latest-wins target updates) whose dropped item is either replaceable or accounted — no unaccounted drop exists. TRUE.
+
+## Session 2275 update (Socratic pass 941 — milestone re-verification)
+
+Claim verified: the whole tree is still green at pass 940 — `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test ./internal/engine/ ./internal/arbitration/ ./internal/miner/ ./internal/stratum/...` all ok (engine 24.9s). The audit cycle's fixes remain the only code changes since s1652; no regression introduced by the census-documented verdicts. TRUE.
