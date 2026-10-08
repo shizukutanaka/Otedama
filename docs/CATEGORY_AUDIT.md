@@ -10330,3 +10330,7 @@ Claim verified: rejectByReason's dedicated mutex (added s509/#591) guards every 
 ## Session 1935 update (Socratic pass 601 — earnings-accountant honesty)
 
 Claim verified: satsAccountant integrates the arbitration expected-yield (sats/sec) only over productive seconds — never accrues while idle/stalled/curtailed, never goes backwards (elapsed>0 guard), keeps fractional precision across ticks; uptimeAccountant carries fractional seconds the same way and is nil-counter safe. The TUI number is honestly disclosed as an estimate whose authority is the pool's own accounting (KNOWN_LIMITATIONS §9). TRUE.
+
+## Session 1936 update (Socratic pass 602 — telemetry windows)
+
+Claim verified: LatencyTracker is a mutex-guarded 256-sample ring; negative samples are rejected; Quantile does nearest-rank on a sorted copy — exact within the retained window (no streaming-estimator error), index clamps make the q≤0/q≥1 endpoints fall out on a single code path, and sorting happens after the lock is released. hashrateWindow returns 0 — never negative/NaN — on counter reset (reconnect), baseline-primed on first observe. TRUE.
