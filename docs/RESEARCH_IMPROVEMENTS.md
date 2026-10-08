@@ -654,12 +654,25 @@ endpoint against current vendor documentation. Tags as before
    "Pool endpoint diversity" checks (checks.go:448, :498 — warns when
    distinct URLs resolve to one endpoint, "failover is illusory").
    Reference list entry at :496-497.
-9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
+9. 🔵 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
    optimum. Otedama can't change the DAA, but `doctor` can track
    pool-acknowledged shares vs. pool-credited blocks over a window and warn
    on divergence — grounds Cat 1 #10.
+   — 🔵 **Scope refined (verified session 1737):** the share side of the
+   divergence signal already ships — SubmitSharesSuccess reconciliation
+   clamps pool-claimed accepts to locally settled submits (run.go:1252-1270),
+   the starvation tripwires warn once per episode when pool difficulty
+   starves income or a connected pool goes silent (run.go:1498-1505),
+   and rejects are classified by reason for metric attribution. The
+   block side is *structurally unobservable* to a Stratum client: block
+   credit travels over Bitcoin, not the stratum wire, so "pool-credited
+   blocks" has no data source without a chain-explorer API — a new
+   external dependency for doctor, which today is pure config +
+   reachability checks (its only HTTP is the clock-skew probe). Whether
+   that dependency is in scope is an ADR-level product decision, not a
+   maintenance task — deferred rather than implemented speculatively.
 10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
     "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
     2601.02496), constructs PoW letting pool participants retroactively
