@@ -219,8 +219,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 
 ## Category 5 — AI inference / compute markets
 
-1. 🟡 **Real Akash REST integration** — currently simulated
-   (KNOWN_LIMITATIONS §1). The single biggest placeholder.
+1. ✅→(session 251 #11) — **Folded (session 1757):** this row is the same
+   requirement as the July-pass Akash-integration tracker (session 251
+   Cat-5 #11), which already carries the concrete `GetStatus`/`/status` +
+   JWT(AEP-64) surface AND the unblock boundary recorded in session 1756 —
+   new config/secret surface + new outbound-HTTP surface + real account
+   context are ADR-level prerequisites. Keeping one live tracker prevents
+   duplicate disposition.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
 3. ✅ **Provider health/heartbeat** — detect a dead inference provider and
    stop routing GPUs to it (parallels HashrateMonitor for mining).
