@@ -43358,3 +43358,91 @@ census:
   misuse.
 
 Verdict: TRUE.
+
+## Session 3205 update (Socratic pass 1867 — bytes final ledger)
+
+Claim under test:
+`bytes`
+is
+`Buffer`
+scratch
++
+`Equal`
+hash
+compares
++
+test
+fixture
+readers;
+no
+higher
+API
+(`Fields`/`Split`/`Replace`/`Title`)
+in
+use.
+
+Verification —
+census:
+
+- `bytes.Buffer`×214 —
+  wire
+  marshal
+  scratch
+  +
+  test
+  capture
+  buffers.
+- `bytes.Equal`×57 —
+  hash/
+  address/
+  nonce
+  equality
+  (target
+  compare
+  helpers
+  wrap
+  this).
+- `bytes.NewReader`×23 —
+  test
+  wire
+  fixtures.
+- `bytes.Repeat`×13 —
+  test
+  payload
+  construction.
+- `bytes.NewBuffer`×4,
+  `Reader`×3,
+  `Contains`×2,
+  `NewBufferString`×1,
+  `HasPrefix`×1.
+- ZERO:
+  `bytes.Clone`
+  (fresh
+  `append`/literal
+  used),
+  `bytes.Cut`/`CutPrefix`/`CutSuffix`
+  (strings
+  is
+  the
+  chosen
+  text
+  API),
+  `bytes.Compare`,
+  `bytes.Fields`/`FieldsFunc`/`FieldsSeq`,
+  `bytes.Index`/`IndexByte`/`IndexRune`/`IndexAny`/`LastIndex`,
+  `bytes.Join`,
+  `bytes.Map`,
+  `bytes.Replace`/`ReplaceAll`,
+  `bytes.Split`/`SplitN`/`SplitAfter`/`SplitSeq`,
+  `bytes.Title`/`ToTitle`/`ToUpper`/`ToLower`/`ToValidUTF8`,
+  `bytes.Trim`/`TrimSpace`/`TrimPrefix`/`TrimSuffix`/`TrimFunc`/`TrimRight`/`TrimLeft`,
+  `bytes.Buffer.Available`/`Grow`-
+  sizing
+  calls
+  (zero-
+  value
+  buffers
+  grow
+  dynamically).
+
+Verdict: TRUE.
