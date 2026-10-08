@@ -242,6 +242,11 @@ spec:
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        # A fresh PVC mounts root:root; fsGroup grants the nonroot uid
+        # (65532) write access to /var/lib/otedama for wallet.dat.
+        fsGroup: 65532
+        fsGroupChangePolicy: "OnRootMismatch"
       containers:
       - name: otedama
         image: ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1

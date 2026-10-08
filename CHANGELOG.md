@@ -8357,3 +8357,9 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   し最終イメージへ COPY — named volume 初回作成時の root:root 化で
   nonroot コンテナが wallet.dat を書けなかった欠陥を修理（DEPLOYMENT.md
   の Docker/Compose/k8s 全例が踏む経路）。
+
+### Fixed (session 1771 — k8s PVC fsGroup)
+
+- `docs/DEPLOYMENT.md`: ポッド `securityContext` に `fsGroup: 65532` +
+  `fsGroupChangePolicy: "OnRootMismatch"` を追加 — 新規 PVC が root:root
+  でマウントされ uid 65532 が wallet.dat を書けなかった欠陥を修理。
