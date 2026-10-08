@@ -17488,3 +17488,16 @@ Verification (`internal/doctor/checks.go`):
 
 Verdict: TRUE — the doctor's 17-check surface is
 exactly as documented.
+
+## Session 2870 update (Socratic pass 1535 — milestone gate)
+
+Milestone re-check at pass 1535:
+- `gofmt -l internal cmd` → clean (zero files).
+- `go build ./...` → clean.
+- `go vet ./...` → clean.
+- `go test -count=1 ./...` → **24 legs all PASS**
+  (heaviest: engine 25.4s, lightning 11.6s,
+  doctor 7.1s).
+
+The branch stays buildable, vet-clean, and the
+full suite passes at the current tip. TRUE.
