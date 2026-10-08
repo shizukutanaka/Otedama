@@ -22640,3 +22640,40 @@ Verification — census:
   stdout/stderr pass).
 
 Verdict: TRUE.
+
+## Session 3016 update (Socratic pass 1680 — encoding/binary ledger)
+
+Claim under test: every
+wire integer is little-
+endian, spelled out by
+hand — no struct codec
+and no big-endian.
+
+Verification — census:
+
+- `binary.LittleEndian`
+  ×65 — the sole
+  ByteOrder used; every
+  PutUint16/24/32/64 and
+  Uint16/24/32/64 in the
+  V2 frame + message
+  layer and the V1
+  coinbase fields is LE
+  per spec.
+- ZERO `binary.BigEndian`
+  — no foreign-order
+  leakage anywhere.
+- ZERO `binary.Write`/
+  `binary.Read` — the
+  codec is hand-spelled
+  per field (verified
+  earlier: field-name-
+  attributed errors,
+  length-before-alloc,
+  Postel decode).
+- This confirms the
+  s2985/s3013 wire
+  invariants at the
+  primitive level.
+
+Verdict: TRUE.
