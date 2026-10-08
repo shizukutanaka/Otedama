@@ -10086,3 +10086,7 @@ Claim verified: every top-level key in config.yaml.example (bitcoin_address, dat
 ## Session 1874 update (Socratic pass 540 — SECURITY.md supported-version parity)
 
 Claim verified: SECURITY.md's support table is internally consistent with the release reality — newest tag is v2.1.9 (matches the "Partial — critical only until 2026-10" row), the working tree VERSION v3.0.0-alpha.1 is correctly classed as unsupported-alpha, and no v3.0.x stable exists yet so the Yes rows have no live counterpart (policy-before-release, not a falsehood). Honest residual: the v2.1.9 partial-support window expires **this month** (2026-10); whether a maintenance release or a table refresh follows is a maintainer decision, flagged here.
+
+## Session 1875 update (Socratic pass 541 — Go-version pin census)
+
+Claim verified (already-recorded residual, no code change — rejected #1344 territory): the workflow Go pins diverge from go.mod `go 1.24.0` on four axes — `GO_VERSION: '1.21'` (ci-cd.yml), `GO_VERSION: '1.23.x'` (ci.yml/release.yml/test.yml), matrix `go: [1.20,1.21]` / `[1.22.x,1.23.x]` / `[1.23.x]`, and security.yml's hard-coded `'1.21'` for the gosec/nancy/govulncheck job. Every one fails at `go.mod requires go >= 1.24.0` with GOTOOLCHAIN=local-class runners — the security.yml job is fully dead (both `go list -json -deps` and govulncheck's own tool install can never execute). Dockerfile's `golang:1.24-alpine` and deploy.yml's `go-version-file: go.mod` are the two correct pins. Recorded; the umbrella fix remains the maintainer's rejected-PR decision (#1344).
