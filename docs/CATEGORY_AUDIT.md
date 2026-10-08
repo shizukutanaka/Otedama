@@ -19205,3 +19205,18 @@ Verification (4 constructor sites):
 Verdict: TRUE — TLS 1.2+ always,
 verification always on, default
 cipher suites.
+
+## Session 2940 update (Socratic pass 1605 — milestone gate)
+
+Milestone re-check after the
+stdlib-surface block (s2930–s2939):
+
+- `gofmt -l .` → zero output.
+- `go build ./...` → BUILD_OK.
+- `go vet ./...` → VET_OK.
+- `go test -count=1` on miner,
+  stratum, poolproto{,v1,v2}, config,
+  engine → all PASS (engine 24.975s).
+
+No regressions introduced by the
+stdlib-surface census block.
