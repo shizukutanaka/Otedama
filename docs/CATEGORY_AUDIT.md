@@ -15612,3 +15612,31 @@ Verification — all 3 wrap sites:
 Verdict: TRUE — no double-buffered reader can lose input;
 the fresh-per-call bufio is safe only because the call is
 single-use, which the code satisfies.
+
+## Session 2789 update (Socratic pass 1455 — error-context census)
+
+Claim under test: errors reaching a user or log identify the
+failing entity (which pool, which address, which source) —
+literal error strings without interpolation are fine only
+when the wrap site attaches the entity.
+
+Verification:
+
+- ~120 unparameterized fmt.Errorf literals audited; the ones
+  describing failures of a specific entity are always
+  wrapped with that entity at the call boundary:
+  pools[%d].url invalid: %v (config.go:690), pools[%d].
+  payout_scheme %q (config.go:696), host:port hint + %w
+  (config.go:805), checksum + %w (config.go:774).
+- Literals that correctly name themselves: rates: kraken /
+  coingecko / no-ticker / redirects-not-followed,
+  lightning: wrong-passphrase / incorrect-old-passphrase —
+  the entity is either embedded or deliberately withheld
+  (secrets-adjacent paths never echo material).
+- bech32/base58/script validators return generic literals —
+  every caller attaches the address/pool being validated.
+- Zero sites produce an error that surfaces bare
+  "invalid" / "failed" with no entity reachable in the chain.
+
+Verdict: TRUE — entity context is attached exactly once at
+the boundary that knows it; nothing surfaces anonymous.
