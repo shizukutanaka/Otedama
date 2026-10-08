@@ -9572,3 +9572,7 @@ Verified (scope refined): Cat-10 row 6 (traffic shaping / "mining cookie" agains
 ## Session 1748 update (Socratic pass 414 — Cat-11 Lightning rows dispositioned)
 
 Four Cat-11 🟡 rows dispositioned. (1) Payout-minimum-in-doctor → 🔵 blocked-on-spec: `checkPayoutScheme` (checks.go:756-790) already surfaces per-pool FPPS/PPLNS/TIDES/Solo context, but no V1/V2 wire field carries a pool's actual minimum payout — the tracked spec path is sv2-spec #203; a hardcoded policy table is the rejected hardcoding class. (2) Min-cost-flow routing → 🔵 conditional, correctly self-scoped — receive-only today (ADR-007). (3) Liquidity-centralisation awareness → 🔵 same condition, ADR-001 stance already on record. (4) SCB reminders → 🔵 conditional on embedded node (ADR-007 B4, unscheduled). Marker updates only.
+
+## Session 1749 update (Socratic pass 415 — Cat-11 arXiv rows resolved)
+
+(1) Row 27 (one countermeasure, two timing channels) → ✅ already satisfied: THREAT_MODEL :267-271 already documents the Rohrer & Tschorsch LN HTLC-resolution timing leak as the payout-side analogue of the Stratum earnings channel, and states Tor-by-default (ADR-007 B7) "mitigates both channels at once"; reference at :500. (2) Rows 25/26 (betweenness-biased paths, balance-prior seeding) → 🔵 catalogue, correctly self-scoped as riding with Cat 11 #6 if a send path ever exists — receive-only today. Marker updates only.

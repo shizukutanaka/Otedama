@@ -900,23 +900,29 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 11 — Lightning routing & privacy (arXiv grounding)
 
-25. 🟡 **Bias path selection away from high-betweenness channels.** Abdesselam
+25. 🔵 **Bias path selection away from high-betweenness channels.** Abdesselam
     et al., "Payment-failure times for random Lightning paths" (arXiv:
     2511.16376, BRAINS 2025), tie time-to-failure to edge-betweenness — the
     most-traversed channels deplete first. A depletion-aware tie-breaker
     sharpens Cat 11 #6/#7 from qualitative to concrete; catalogue-only while
     receive-only.
-26. 🟡 **Seed the min-cost-flow scorer with a cheap balance prior.** Davis et
+    — **Dispositioned (session 1749):** correctly self-scoped as
+    catalogue — rides with Cat 11 #6 if a send path ever exists.
+26. 🔵 **Seed the min-cost-flow scorer with a cheap balance prior.** Davis et
     al. (arXiv:2405.12087) beat the 50/50-split prior by ~27%. The
     ADR-003-friendly takeaway is a *dependency-free heuristic* prior
     (capacity + degree + age), not the ML model — a small deterministic
     initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
     improving first-attempt success without probing.
-27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
-    "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
-    leaks payment endpoints — the LN analogue of the Stratum timing leak
-    already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
-    B7) mitigates *both*; doc-only linkage.
+    — **Dispositioned (session 1749):** same condition — catalogued as
+    the prior for Cat 11 #6's scorer.
+27. ✅ **One countermeasure, two timing channels — already satisfied.**
+    Verified session 1749: THREAT_MODEL :267-271 already documents
+    exactly this linkage — "the same class of timing channel exists on
+    the payout side: Rohrer & Tschorsch ... HTLC-resolution timing leaks
+    payment endpoints in payment-channel networks", and Tor-by-default
+    (ADR-007 B7) "mitigates both channels at once". Reference entry at
+    :500. No further linkage needed.
 
 ---
 
