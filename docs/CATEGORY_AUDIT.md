@@ -42376,3 +42376,156 @@ census:
   secp256k1).
 
 Verdict: TRUE.
+
+## Session 3198 update (Socratic pass 1860 — crypto residual ledger)
+
+Claim under test:
+the
+remaining
+`crypto/*`
+surface
+is
+the
+audited
+minimum —
+SHA-256d
+mining
++
+AES-GCM
+seed
+sealing
++
+pooled
+HMAC
++
+one
+constant-
+time
+compare;
+no
+weak
+crypto
+anywhere.
+
+Verification —
+census:
+
+- `aes`:
+  `aes.NewCipher`×2.
+  `cipher`:
+  `NewGCM`×2,
+  `AEAD`×2
+  —
+  the
+  seedstore
+  AES-256-GCM
+  seal/
+  open
+  pair
+  only.
+  ZERO:
+  `NewCBCEncrypter`/`NewCFB*`/`NewCTR`/`NewOFB`
+  (GCM-
+  only
+  AEAD
+  policy),
+  `BlockMode`/
+  padding
+  schemes.
+- `hmac`:
+  `hmac.New`×1 —
+  the
+  pooled-
+  hasher
+  constructor
+  feeding
+  Noise
+  HKDF2/
+  HKDF3
+  (#625
+  merged:
+  `hmacSHA256Pooled`
+  reset-
+  reuse).
+- `sha256`:
+  `Sum256`×13,
+  `New`×8
+  —
+  SHA-256d
+  header
+  hashing,
+  wordlist
+  integrity,
+  proof-
+  of-
+  work
+  checks.
+  `sha512.New`×1
+  —
+  PBKDF2-HMAC-SHA512
+  for
+  BIP-39
+  seed
+  derivation.
+  ZERO:
+  `sha256.New224`,
+  `sha512.New384`/`Sum384`/`Sum512_224`/`Sum512_256`,
+  `sha3`,
+  `blake2*`.
+- `subtle`:
+  `ConstantTimeCompare`×1 —
+  the
+  wallet
+  passphrase
+  verify
+  (single
+  call
+  site,
+  audited
+  s2510+).
+  ZERO:
+  `ConstantTimeByteEq`/`Select`/`Copy`/`XORBytes`
+  elsewhere
+  (no
+  manual
+  secret
+  loops).
+- ZERO
+  across
+  the
+  whole
+  tree:
+  `md5`,
+  `sha1`,
+  `des`,
+  `rc4`,
+  `x25519`
+  (P-256
+  stub
+  per
+  documented
+  deferral),
+  `hkdf`
+  stdlib
+  (Noise
+  hand-
+  rolls
+  HKDF
+  on
+  the
+  pooled
+  hasher),
+  `pbkdf2`
+  beyond
+  the
+  BIP-39
+  ×1,
+  `ecdsa`/`ed25519`/`rsa`
+  production,
+  `crypto/internal/*`
+  internals,
+  `crypto.Signer`
+  custom
+  impls.
+
+Verdict: TRUE.
