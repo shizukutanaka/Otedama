@@ -12977,3 +12977,7 @@ Three small diffs verified against code:
 Final uninspected diff verified: (a) header note — release.yml confirmed to build with plain `go build`+`gh release upload`, goreleaser is the manual path requiring cosign/cyclonedx-gomod/syft/git-cliff; (b) cosign comment corrected — both sign entries are `artifacts: checksum` (checksum file as trust root), old "every archive" claim was false; (c) `--build-arg VERSION/COMMIT/BUILD_DATE` wired to real Dockerfile ARGs consumed by ldflags -X injection (Dockerfile:17-26); (d) `skip_upload: "true"` on brews — honest disclosure that shizukutanaka/homebrew-tap does not exist, matching release.yml's HOMEBREW_TAP_REPO opt-in contract. TRUE.
 
 This completes the branch-payload audit: all 46 diff files verified. Totals: 2 doc dep-count fixes (s2571/2572), 1 real CI fix (s2585 gh --repo), every other claim TRUE.
+
+## Session 2589 update (Socratic pass 1255 — doctor check-count parity)
+
+Claim verified: the doctor registry defines exactly 17 named checks (checks.go: Configuration, Bitcoin address, Failover payout addresses, Data directory, Lightning wallet, Pool reachability, Pool diversity, Pool endpoint diversity, Pool connection encryption, Pool TLS CA files, Power & cost config, Environment variables, Profitability floor, Pool payout schemes, Hardware, Network, System clock accuracy) — matching the "17 並行ヘルスチェック" claim in CLAUDE.md and the check-count references in docs/API.md + CATEGORY_AUDIT. TRUE.
