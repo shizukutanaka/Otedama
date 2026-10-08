@@ -14635,3 +14635,30 @@ Verification: all 12 variable-capacity make() sites.
 - No site allocates from an unvalidated external length.
 
 Verdict: TRUE — bound-before-alloc holds at every variable site.
+
+## Session 2750 update (Socratic pass 1416 — non-string map-key census)
+
+Claim under test: non-string map keys are exact-value integral
+types only — no float/bool/interface keys that invite
+equality traps.
+
+Verification: all non-string-keyed map declarations.
+
+- `map[int]bool` ×2 (seed.go) — BIP-39 valid entropy bits and word
+  counts: pure lookup tables.
+- `map[uint64]chan rpcResponse` (stratumv1.go:110) — the pending
+  RPC ledger keyed by request id: ids are protocol-integer.
+- `map[uint32]*NewMiningJob` (dialer.go:304, run.go:989/1206) —
+  V2 pending-job assembler + engine job ledger keyed by wire
+  job_id; the assembler enforces the 64-entry FIFO cap.
+- `map[uint32]time.Time`/`map[uint32]miner.Hash` (run.go:964,:969)
+  — submit-time/target tracking keyed by sequence number.
+- `map[uint8]func` (messages.go:447) — frameDecoders keyed by
+  msg_type byte: exact-dispatch table.
+- `map[uint8]bool` seenUnknown/seenMisplaced — dedup sets keyed by
+  reject code byte.
+- `map[int]struct{}` (setup.go:294) — nonce-partition seen set.
+- Zero float keys (equality trap), zero bool keys, zero interface
+  keys. Every key type mirrors its wire/identifier width.
+
+Verdict: TRUE — key types are exact-value and width-correct.
