@@ -511,11 +511,14 @@ cosmetic leftover).
   path that does not exist (no `kubernetes/` directory; CLAUDE.md's map
   documents `k8s/` as represented only by `docs/DEPLOYMENT.md` YAML
   examples), with no `KUBECONFIG` configured — unreachable by design.
-- **`ci.yml` `deploy-staging`/`deploy-production`** still invoke
-  `kubectl apply -f k8s/*.yaml` — the same nonexistent `k8s/` directory —
-  but only behind the `KUBE_CONFIG_{STAGING,PRODUCTION}` secret gate
-  added in session 1689, so they skip (not fail) until those secrets and
-  the manifests exist together.
+- ~~**`ci.yml` `deploy-staging`/`deploy-production`**~~ — **resolved
+  (session 1796):** both jobs were deleted outright rather than left
+  skipping on the `KUBE_CONFIG_{STAGING,PRODUCTION}` secret gate — they
+  applied `k8s/01-*.yaml`…`08-*.yaml` manifests under the forbidden
+  `k8s/` path describing a foreign postgres/redis/ingress topology
+  Otedama has no use for, and production would have run real kubectl on
+  any v* tag with the secret set. deploy.yml remains the deployment
+  owner.
 - **`release.yml` `build-packages`** (fpm `.deb`/`.rpm`, runs only on
   `v*` tags) no longer references the nonexistent `scripts/` files — the
   maintainer-script and systemd-unit references were removed and it
