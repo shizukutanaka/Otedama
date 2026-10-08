@@ -222,9 +222,8 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	@echo "==> [7/8] test:impl ratio"
 	@impl=$$(find internal cmd -name '*.go' ! -name '*_test.go' -exec cat {} + | wc -l); \
 	tst=$$(find internal cmd -name '*_test.go' -exec cat {} + | wc -l); \
-	ratio=$$(echo "scale=3; $$tst / $$impl" | bc); \
-	echo "    impl=$$impl test=$$tst ratio=$$ratio"; \
-	if [ $$(echo "$$ratio < 1.0" | bc) = "1" ]; then \
+	echo "    impl=$$impl test=$$tst"; \
+	if [ "$$tst" -lt "$$impl" ]; then \
 		echo "    test:impl ratio below 1.0 threshold" && exit 1; \
 	fi
 	@echo "==> [8/8] SPDX headers on every Go file"

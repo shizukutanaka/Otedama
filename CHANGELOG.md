@@ -8390,3 +8390,9 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 - `Makefile`: `release-check` の CHANGELOG ゲートを修理 — `## [v...]` の
   v 接頭不一致と `[Unreleased]` 常時マッチの2重欠陥で、バージョン節の
   存在を実質検査していなかった。`v` 除去＋日付付き節を必須化。
+
+### Fixed (session 1778 — audit ratio fail-open)
+
+- `Makefile`: `audit` の test:impl 比率ゲートを `bc` から純シェル整数比較
+  へ置換 — bc 不在環境で空値が偽評価となり閾値未検査で素通りしていた
+  fail-open 欠陥を修理。
