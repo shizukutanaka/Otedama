@@ -10314,3 +10314,7 @@ Claim verified: checkConfig warns (not fails) on an absent file since defaults e
 ## Session 1931 update (Socratic pass 597 — ADR-009 periodic ecosystem recheck)
 
 Claim verified: no drift since s1910 — sv2-apps latest release remains v0.8.0 (tag 7f490743), SRI remains v1.12.0 on stratum-mining/stratum; the tracked normative open set (sv2-spec #203 non-custodial payouts, #238 optional SetupConnection flags) stays compatible with our subset-flags validation. No code delta needed. TRUE.
+
+## Session 1932 update (Socratic pass 598 — payout metrics hygiene)
+
+Claim verified: setActivePayout never exposes a raw address — only the masked first6…last4 form reaches otedama_payout_info; exactly one series reads 1 (previous zeroed before the new one is set); gauges are lazily created per masked address and bounded to the configured failover list; the unchanged/empty inputs are no-ops; the whole update runs under a dedicated mutex. TRUE.
