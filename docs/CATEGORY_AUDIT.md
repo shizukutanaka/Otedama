@@ -23549,3 +23549,56 @@ Verification — census:
   hex + raw JSON.
 
 Verdict: TRUE.
+
+## Session 3033 update (Socratic pass 1697 — fmt ledger)
+
+Claim under test: fmt
+verbs are conventional
+and no fmt parsing is
+used where strconv is
+required.
+
+Verification — census:
+
+- `fmt.Errorf`×260 —
+  error construction,
+  %w wrapping
+  convention verified.
+- `fmt.Sprintf`×211 —
+  general formatting;
+  the 12 hot-path
+  conversions to
+  strconv landed in an
+  earlier merged PR
+  (#1241).
+- `fmt.Fprintf`×74 +
+  `Fprintln`×16 +
+  `Fprint`×10 —
+  writer-directed
+  output only
+  (logger sink, TUI,
+  help text, doctor
+  print) — no bare
+  fmt.Print* to
+  stdout outside the
+  CLI layer.
+- `fmt.Sscanf` — the
+  single grep hit is
+  a COMMENT at
+  rates/fetcher.go:52
+  documenting why
+  strconv.ParseFloat
+  is used instead
+  ("Sscanf is
+  greedy"). s3017's
+  ZERO claim stands
+  as a code census.
+- ZERO fmt.Scan/
+  Scanln (stdin
+  parsing is explicit
+  bufio/terminal
+  reads, verified in
+  wallet secret
+  entry).
+
+Verdict: TRUE.
