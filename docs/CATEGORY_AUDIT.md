@@ -19150,3 +19150,27 @@ Verification:
 
 Verdict: TRUE — pprof is opt-in,
 private-mux, with a loopback warning.
+
+## Session 2938 update (Socratic pass 1603 — runtime/profiling census)
+
+Claim under test: no `runtime/pprof`,
+`runtime/trace`, or
+`runtime/metrics` — profiling goes
+through the HTTP handlers only.
+
+Verification:
+
+- `runtime/pprof` → zero imports
+  (runtime profiling is exposed
+  only via `net/http/pprof` handlers).
+- `runtime/trace` → zero imports.
+- `runtime/metrics` → zero imports.
+- `internal/metrics/runtime.go`
+  imports only `runtime` itself —
+  `ReadMemStats` + `NumGoroutine`
+  for the go_* collector (verified
+  s2921 as read-only).
+
+Verdict: TRUE — no programmatic
+profiling API; the go_* collector
+reads MemStats + NumGoroutine.
