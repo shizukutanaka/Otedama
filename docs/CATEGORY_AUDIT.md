@@ -10278,3 +10278,7 @@ Claim verified: checkWallet reports honest tri-state — absent wallet.dat → w
 ## Session 1922 update (Socratic pass 588 — doctor pool-probe boundary)
 
 Claim verified: pool reachability probes are bounded (maxReachabilityProbes=8 — a long pool list cannot turn doctor into a port scanner), parallel with a 5s per-dial timeout honoring ctx, and userinfo is stripped both before dialing and before display so credentials never reach the network probe or the report; outcome tri-state is honest (zero reachable → Fail, partial → Warn naming the dead failover). TRUE.
+
+## Session 1923 update (Socratic pass 589 — doctor clock-skew check)
+
+Claim verified: checkClockSkew probes with a 5s ctx-bound request via an injectable client seam, drains the body with an 8KiB bound before Close (keep-alive reuse; no unbounded read on a hostile endpoint), and reports honestly — missing/unparseable Date headers degrade to Warn (never fabricated data), skew above the fail threshold gets a Fix explaining the real impact (TLS validity + mining nTime). TRUE.
