@@ -13072,3 +13072,7 @@ Census: PriorityLanguages() returns exactly en/ja/zh/ko/es/fr/de/pt/ru/ar (messa
 ## Session 2610 update (Socratic pass 1276 — config-example field parity)
 
 Bidirectional census: all 20 `yaml:`-tagged fields in config.go are represented in config.yaml.example — 7 active top-level keys (bitcoin_address, data_dir, language, log_format, log_level, pools, workers) + the remaining 13 as documented commented options (bitcoin_addresses, http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct) or nested pool/worker keys (url, user, password, payout_scheme, tls_ca_file, name). Header correctly describes precedence (flags > env > file > defaults) matching the 4-layer Resolve order. TRUE.
+
+## Session 2611 update (Socratic pass 1277 — i18n catalog completeness + usage)
+
+Catalog census: exactly 15 exported ID constants (10 startup./status. + 5 error.) defined identically across all 10 language bundles — the messages_test completeness gate fails any bundle missing an ID or carrying an extra. Production call sites render 3 IDs directly (StartupReady, StartupPoolConnecting, StatusShuttingDown via the logln seam); the remaining 12 are exported constants forming the documented UI contract (per-language completeness is pinned by test, so drift is structurally caught). TRUE.
