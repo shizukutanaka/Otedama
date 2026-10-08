@@ -26035,3 +26035,75 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3075 update (Socratic pass 1739 — strings/bytes/unicode surface ledger)
+
+Claim under test: the
+string surface is
+the tested idioms —
+HasPrefix/Contains/
+TrimSpace/Join/
+Builder — plus
+unicode categories
+for the sanitize
+boundary; no
+redundant
+ToTitle/Compare/
+bytes.Buffer
+drift.
+
+Verification —
+census:
+
+- `strings.HasPrefix`×27 —
+  prefix gates.
+- `strings.Join`×15,
+  `Contains`×13,
+  `TrimSpace`×11 —
+  the canonical
+  set.
+- `strings.Builder`×10 —
+  the single
+  builder type;
+  ZERO
+  `bytes.Buffer`
+  on concat
+  paths.
+- `strings.Repeat`×7 —
+  bounded
+  (verified
+  repeat class).
+- `unicode`: `Cc`×2,
+  `Cf`×2, `Zl`×2,
+  `Zp`×2 +
+  `In`×2,
+  `IsControl`×1 —
+  the #1341-
+  extended
+  sanitize
+  boundary
+  (verified).
+- `unicode.IsSpace`×1,
+  `utf8.ValidString`×1 —
+  wordlist /
+  whitespace.
+- `strings.Map`×1,
+  `Fields`×1,
+  `IndexFunc`×1 —
+  the narrow
+  remainder.
+- ZERO `bytes.Buffer`,
+  `bytes.Compare`,
+  `bytes.Contains`
+  (only
+  `bytes.Equal`×2),
+  `strings.ToTitle`,
+  `strings.Title`,
+  `strings.Clone`,
+  `strings.Lines`,
+  `strings.SplitSeq` —
+  the wider
+  surface is
+  unused.
+
+Verdict: TRUE.
