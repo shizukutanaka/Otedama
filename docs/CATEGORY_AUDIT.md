@@ -12849,3 +12849,7 @@ Claim verified: the branch-corrected .goreleaser.yaml header is accurate — rel
 ## Session 2559 update (Socratic pass 1225 — doctor branch-payload deep check)
 
 Claim verified: the doctor diff is exactly the reviewed payload — panic→Fail conversion inside each fan-out goroutine (per-index-slot write, no race; converts panicking checks into named Fail results preserving the sibling results), `poolproto.SanitizePoolText` applied to Detail and Fix at the Print boundary (closes the pool-controlled-text→terminal injection path), the s2264 stale-comment correction, and +51 lines of regression tests covering both behaviors. TRUE — payload matches the PR contract with proper test coverage.
+
+## Session 2560 update (Socratic pass 1226 — remaining code-payload deep check)
+
+Claim verified: every remaining code diff on the branch is the reviewed payload — worker.go's cancelReady rendezvous (started.Load() fast-path + publication wait before reading w.cancel + unconditional done wait — the Start/Stop race is structurally closed); config.go's env-warning surfacing in `config show` + safeDisplay on log_level/log_format; run.go's honest pprof flag text; hashrate.go's CheckRedirect refusal (s2251 invariant with +25 lines regression test); messages.go's DispatchFrame godoc (s2515); +165-line encrypted-frame fuzz file (verified functional at s2547); +43 lines subcommand tests. TRUE — 100% of the branch's code payload accounted for, zero unexplained diff.
