@@ -9986,3 +9986,7 @@ Claim verified: `govulncheck ./...` (v1.1.4, current DB) reports **0 reachable v
 ## Session 1849 update (Socratic pass 515 — README install-path consistency)
 
 Claim verified: README.md:54's `curl ... raw.githubusercontent.com/master/install.sh | bash` matches install.sh's own documented usage (header :6/:9); the inline correction note (session 493) accurately explains install.sh is fetched from the repo, not from release assets (releases/latest/download/install.sh would 404 — only otedama-<os>-<arch>.tar.gz is published). The documented install path is reachable and the residual KL §17 caveat is cross-referenced honestly. TRUE.
+
+## Session 1850 update (Socratic pass 516 — ADR index/file parity re-verification)
+
+Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 plus README.md; the index table (README.md:35-45) lists all 11 with titles matching filenames and statuses — Accepted: 001-006, 011 (002 noted partially-superseded by 006); Proposed: 007-010. No orphan files, no missing rows, statuses consistent with prior errata entries. TRUE.
