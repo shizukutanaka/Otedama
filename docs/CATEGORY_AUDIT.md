@@ -13648,3 +13648,32 @@ s2630–s2696 merges, so the claim is verified against today's code, not
 the code as of those merges.
 
 Verdict: TRUE.
+
+## Session 2709 update (Socratic pass 1375 — link-time dependency surface census)
+
+Claim under test: the binary links only what the architecture map and
+go.mod rationale comments declare — no hidden transitive imports.
+
+Verification: `go list -deps ./cmd/otedama` — 221 packages total.
+
+- **Third-party: exactly the declared set.** `go.yaml.in/yaml/v3`
+  (config), `golang.org/x/crypto/{chacha20,chacha20poly1305,internal/alias,
+  poly1305,pbkdf2,scrypt}` (Noise transport + wallet seed KDF),
+  `golang.org/x/sys/unix` (TUI terminal width). No undeclared module
+  appears; `go mod tidy` drift was already verified zero (s2706).
+- **`net/http/pprof`: audited opt-in path only.** Sole import site is
+  `internal/httpserver/server.go:47` (with `//nolint:gosec`), feeding
+  the private mux behind the `--pprof` flag — not `DefaultServeMux`,
+  matching the s903 httpserver-pass verdict.
+- **`text/template`: i18n only** (`internal/i18n/message.go:48`) —
+  the RenderWith engine; no other template surface.
+- **`compress/{flate,gzip}`: transitive via `net/http`** (standard
+  Accept-Encoding client path), not a hand-added dep.
+- **`crypto/tls/internal/fips140tls`: Go-1.24+ runtime plumbing** —
+  consistent with the GODEBUG_NOTES tlsmlkem/fips140 posture.
+- **`os/exec`: daemon package only** (systemctl/launchctl/sc.exe argv —
+  the s690/s864 exec-argv censuses verified fixed args).
+- **Absent as expected: `plugin`, `debug/elf`, `net/rpc`, `expvar`,
+  `html/template`, `database/sql`, `go/types`** — none linked.
+
+Verdict: TRUE — the link surface equals the declared surface.
