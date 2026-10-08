@@ -26175,3 +26175,94 @@ artifacts):
   audited.
 
 Verdict: TRUE.
+
+## Session 3077 update (Socratic pass 1741 — CI failure-class re-enumeration)
+
+Claim under test: every
+red check on the
+branch maps to a
+recorded failure
+class — no new
+signal.
+
+Verification —
+job-by-job
+attribution:
+
+- `Test (ubuntu, 1.20)`
+  / `1.22.x` /
+  `1.23.x` —
+  `go.mod requires
+  go >= 1.24.0` /
+  `invalid go version
+  '1.24.0': must match
+  format 1.23;
+  unknown block type:
+  godebug` — the
+  pinned-Go class
+  (ci-cd.yml matrix,
+  #1344 rejected).
+- `Fuzz` — `make fuzz`
+  under Go 1.23.12:
+  same `go >= 1.24.0`
+  reject — same
+  class.
+- `Security Scan` +
+  `Security Scanning` —
+  security.yml pins
+  `go-version: '1.21'`;
+  nancy/govulncheck
+  `go install` hits
+  the same
+  parse/ tool chain
+  wall — same
+  class.
+- `Lint` (ci-cd.yml,
+  golangci-lint-
+  action@v3) — runs
+  to completion and
+  flags
+  hugeParam /
+  gocyclo
+  (`runSession` 103,
+  `runSessionV1` 76)
+  / misspell on
+  i18n locale
+  words / gofumpt —
+  all findings
+  live in master
+  files untouched
+  by this branch;
+  the lint-debt
+  class recorded
+  since the
+  session-131x
+  backlog.
+- `Dependency Review` —
+  repo-level
+  setting,
+  unchanged.
+
+Green checks that
+matter: `build`,
+`test`,
+`Test Changed
+Packages (PR)`,
+`Benchmark`,
+`Docker Verify`,
+`Check Common
+Issues`,
+`check-conflict-
+and-comment`,
+`Compliance Check`,
+`Benchmarks`,
+`Security Report`.
+
+Verdict: all
+failures are the
+three recorded
+classes — no new
+signal; branch
+remains docs-ledger
++ small fixes
+only.
