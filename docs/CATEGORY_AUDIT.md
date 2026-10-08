@@ -43220,3 +43220,141 @@ census:
   `New32a`).
 
 Verdict: TRUE.
+
+## Session 3204 update (Socratic pass 1866 — io/bufio final ledger)
+
+Claim under test:
+`io`
+is
+Reader/
+Writer
+interfaces
++
+bounded
+reads;
+`bufio`
+is
+`NewReader`
+for
+line-
+delimited
+wire
+parsing
+only —
+no
+`Scanner`/
+`Writer`.
+
+Verification —
+census:
+
+- `io`:
+  `Writer`×58,
+  `Reader`×25
+  (seam
+  interfaces),
+  `ReadFull`×18
+  (fixed-
+  length
+  scratch
+  decodes),
+  `EOF`×13
+  +
+  `ErrUnexpectedEOF`×8
+  (truncation
+  checks),
+  `Discard`×9
+  (probe
+  drains),
+  `ReadAll`×8
+  +
+  `LimitReader`×4
+  +
+  `Copy`×4
+  (all
+  bounded
+  —
+  HTTP
+  bodies
+  via
+  LimitReader
+  cap),
+  `WriteString`×5,
+  `ReadWriter`×4,
+  `MultiReader`×3,
+  `ErrClosedPipe`×2,
+  `Closer`×2,
+  `MultiWriter`×1
+  (stdout+
+  logfile
+  sink),
+  `ByteReader`×1.
+  ZERO:
+  `CopyBuffer`/`CopyN`,
+  `SectionReader`/`OffsetWriter`/`LimitedReader`-
+  struct,
+  `TeeReader`,
+  `Pipe`/`PipeReader`/`PipeWriter`,
+  `io/ioutil`
+  anywhere,
+  `ReadAtLeast`,
+  `Seek`/`Seeker`/`ReaderAt`/`WriterAt`,
+  `io.NopCloser`-count
+  (0 —
+  real
+  bodies
+  only).
+- `bufio`:
+  `NewReader`×31
+  +
+  `Reader`×4,
+  `NewReaderSize`×1,
+  `ErrBufferFull`×2.
+  The
+  V1
+  read
+  loop
+  wraps
+  the
+  conn
+  in
+  `bufio.NewReader`
+  whose
+  64KiB
+  internal
+  buffer
+  is
+  the
+  structural
+  line
+  cap
+  (`ReadString('\n')`
+  never
+  accumulates
+  beyond
+  the
+  buffer).
+  ZERO:
+  `bufio.Scanner`/`NewScanner`/`SplitFunc`/
+  `ScanLines`/`ScanWords`/`ScanRunes`/`ScanBytes`
+  (explicit
+  `ReadString`
+  line
+  protocol
+  instead),
+  `bufio.Writer`/`NewWriter`/`WriterSize`/`NewWriterSize`
+  (writes
+  go
+  through
+  writeMu+deadline
+  direct
+  on
+  the
+  conn,
+  or
+  `fmt.Fprintf`),
+  `bufio.ReadWriter`,
+  `Peek`/`Buffered`/`Reset`-
+  misuse.
+
+Verdict: TRUE.
