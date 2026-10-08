@@ -23699,3 +23699,58 @@ of *_test.go only:
   goroutine itself).
 
 Verdict: TRUE.
+
+## Session 3036 update (Socratic pass 1700 — net/url + dialer ledger)
+
+Claim under test: no
+net/url shortcuts
+(manual strict
+parsing is
+deliberate) and all
+dials are ctx-bound.
+
+Verification — census:
+
+- `"net/url"` imports:
+  ZERO — pool URLs
+  are validated by
+  the manual
+  scheme+host:port
+  checker which is
+  STRICTER than
+  url.Parse (rejects
+  userinfo, path,
+  query outright —
+  verified).
+- `Dialer`×59
+  identifier sites
+  — the net.Dialer/
+  tls.Dialer types
+  and per-dialer
+  fields across
+  V1, V2, and the
+  doctor probe.
+- `DialContext`×9 —
+  every dial is
+  ctx-bound (the
+  15s outer + 30s
+  V1 handshake
+  verified).
+- `DialTimeout`×4 —
+  helper sites in
+  the V1 dial path
+  and doctor; each
+  carries a finite
+  timeout
+  (verified).
+- ZERO `net.Listen`
+  on pool paths —
+  the only listener
+  is httpserver's
+  single admin
+  socket.
+- ZERO `Dial` without
+  context on the
+  pool path.
+
+Verdict: TRUE.
