@@ -43107,3 +43107,116 @@ census:
   verified).
 
 Verdict: TRUE.
+
+## Session 3203 update (Socratic pass 1865 — sort/hash/fnv ledger)
+
+Claim under test:
+`sort`
+package
+is
+fully
+migrated
+to
+`slices`;
+`hash`
+imports
+are
+`hash/fnv`
+(engine)
++
+`hash`
+interface
+(noise
+hasher
+pool);
+no
+crc/adler/
+maphash
+anywhere.
+
+Verification —
+census:
+
+- `sort`:
+  ZERO
+  imports —
+  Go-1.21
+  `slices.Sort`×13/
+  `SortFunc`/`SortStableFunc`/`IsSortedFunc`/`Contains`/`Equal`
+  migration
+  is
+  complete
+  (final
+  holdouts
+  removed
+  by
+  #619/`i18n`
+  and
+  #1235/`engine`).
+- `hash`
+  imports
+  ×2:
+  `"hash/fnv"`
+  in
+  `internal/engine/run.go`,
+  `"hash"`
+  in
+  `internal/stratum/noise_pool.go`.
+- `hash`
+  symbols:
+  `hash.Hash`×4
+  (the
+  noise
+  pool's
+  reset-
+  reuse
+  hasher
+  interface),
+  `fnv.New32a`×1
+  (engine's
+  single
+  FNV-1a
+  32-bit
+  worker-
+  key/
+  map-
+  bucket
+  hash —
+  fresh
+  per
+  call,
+  not
+  a
+  pooled
+  collision
+  surface).
+- ZERO:
+  `crc32`/`crc64`/`adler32`
+  (no
+  checksum
+  duties —
+  SHA-256
+  covers
+  every
+  integrity
+  need),
+  `maphash`
+  (runtime
+  hash
+  is
+  not
+  needed —
+  maps
+  hash
+  natively),
+  `hash/maphash`/`hash/adler32`/
+  `hash/crc64`
+  imports,
+  `fnv.New32`/`New64`/`New128`/`New64a`/
+  `New128a`
+  (only
+  the
+  ×1
+  `New32a`).
+
+Verdict: TRUE.
