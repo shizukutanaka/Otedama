@@ -25817,3 +25817,85 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3072 update (Socratic pass 1736 — math surface ledger)
+
+Claim under test: the
+math surface is the
+finite-check plus
+bit-math subset —
+IsNaN/IsInf guards
+first, big.Int/
+big.Float for
+target math — no
+float accumulation
+on money paths.
+
+Verification —
+census:
+
+- `math.IsInf`×13 +
+  `math.IsNaN`×6 —
+  non-finite
+  guards ahead
+  of every range
+  compare
+  (verified
+  guard-first
+  class).
+- `math.Float64bits`×4,
+  `Float64frombits`×3,
+  `Float32bits`×2,
+  `Float32frombits`×1 —
+  the canonical
+  bit-pattern
+  helpers for
+  deterministic
+  float keys
+  (metrics
+  exposition).
+- `math.Trunc`×1,
+  `Max`×1, `Inf`×1,
+  `Abs`×1 — the
+  narrow
+  remainder.
+- `math/big`: `Int`×7,
+  `NewInt`×5,
+  `Float`×4,
+  `NewFloat`×1 —
+  target math
+  keeps full
+  precision;
+  float64 is
+  estimates-
+  only
+  (verified
+  money-math
+  class).
+- `math/bits` — zero
+  production
+  uses (the
+  nonce-space
+  arithmetic
+  is plain
+  unsigned ops).
+- ZERO `math.Pow`,
+  `Exp`, `Log`,
+  `Sqrt`, `Sin/Cos`,
+  `Floor/Ceil`
+  (Trunc is
+  the only
+  rounder),
+  `Gamma`, `Min`
+  (Go builtin
+  preferred) —
+  the extended
+  API is
+  unused.
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  crypto/rand
+  only; ZERO
+  math/rand.
+
+Verdict: TRUE.
