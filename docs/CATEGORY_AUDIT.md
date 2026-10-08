@@ -10422,3 +10422,7 @@ Claim verified: pauseDevice calls SetWork(nil) only on the worker whose DeviceID
 ## Session 1958 update (Socratic pass 624 — Decide input guards + determinism)
 
 Claim verified: Decide rejects nil Input, invalid Policy, and non-finite or negative HysteresisMargin/MinYieldSatsPerSec up front; duplicate device IDs are a hard error, not a silent dedup; devices are ID-sorted before assignment so output order is deterministic; Yield.Effective() collapses non-finite yields to 0 (a bad quote can neither win a sort nor poison TotalYield) and clamps Confidence to ≤1 (a provider cannot inflate past its own net). TRUE.
+
+## Session 1959 update (Socratic pass 625 — candidate filtering + sort)
+
+Claim verified: candidateStreams gates on family acceptance, positive effective yield, and the min-yield floor — belowFloor separates "no stream wanted this device" from "the work on offer was underpriced" for actionable idle logging; the candidate sort is policy-score descending with a StreamID tiebreak (fully deterministic); ForegoneSatsPerSec is measured against raw max yield, not the policy winner, so the foregone-cost metric stays honest under non-earnings policies; hysteresis is judged in the same policy-score space the selection used. TRUE.
