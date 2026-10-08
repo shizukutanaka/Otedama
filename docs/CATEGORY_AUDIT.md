@@ -16608,3 +16608,28 @@ Verification:
 
 Verdict: TRUE — the class is absent; locks never wait
 on channels.
+
+## Session 2829 update (Socratic pass 1495 — method-value capture census)
+
+Claim under test: no `f := obj.Method` method-value
+binding captures a receiver into a stored function —
+the captured object keeps stale state (and the
+receiver alive) beyond its intended lifetime.
+
+Verification:
+
+- Structural scan for method-value bindings
+  (`x := obj.Method` without invocation): zero hits —
+  every `obj.Method` form in production is invoked in
+  place or is an io.Reader seam injection
+  (`reader = rand.Reader` at seed.go:89,
+  wallet.go:135/355, seedstore.go:82 — those bind the
+  package-level Reader, immutable by design).
+- `go x.Method(` spawns: all 21 verified owned in the
+  goroutine census (s2710+); none rebind a receiver
+  into a long-lived field.
+- Function fields that do hold receivers are the
+  declared callback seams (CollectFunc, log callbacks
+  moved outside locks at #714) — intentional.
+
+Verdict: TRUE — the stale-capture class is absent.
