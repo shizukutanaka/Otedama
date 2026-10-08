@@ -12809,3 +12809,7 @@ Claim verified: `bash -n install.sh` clean; `make -n build` resolves ldflags to 
 ## Session 2549 update (Socratic pass 1215 — binary smoke re-verification)
 
 Claim verified: fresh `make build` produces a working binary — `otedama version` prints the injected metadata end-to-end (`v3.0.0-alpha.1 (7656af021) built 2026-10-08T07:35:20Z with go1.27.1 for darwin/arm64`), and `--help` enumerates the full command surface (run, version, config, service, doctor, wallet, completion) consistent with the CLAUDE.md architecture map including the #529 wallet subcommand. TRUE — the shipped binary reflects current code and real build metadata.
+
+## Session 2550 update (Socratic pass 1216 — working-tree hygiene + gitignore coverage)
+
+Claim verified: `git status` is clean after a full `make build` — the produced `./bin/otedama` binary is covered by `.gitignore` (`bin/` entry present); zero untracked residue, zero stray files on the working tree, and commit cadence holds (last commits are the s2547–s2549 ledger entries, each touching only `docs/CATEGORY_AUDIT.md`). TRUE — tree hygiene holds; nothing unaccounted for.
