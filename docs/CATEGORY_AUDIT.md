@@ -10466,3 +10466,7 @@ Claim verified: the share-submission path is bounded by a token bucket (8/s refi
 ## Session 1969 update (Socratic pass 635 — submit-path gate ordering)
 
 Claim verified: both the V2 and V1 share paths run the superseded-job gate BEFORE spending a rate-limit token — leftover shares from a dead session are dropped for free and can never starve live shares out of the token bucket; drop accounting distinguishes the stale gate from the rate cap in the debug log; V2 records (seq→time,target) bounded by submitTimesCap eviction; V1 counts sharesSubmitted at transmit-attempt (identical semantics to V2) and still records latency on Submit error — a disconnect-induced p99 spike is surfaced, not hidden. TRUE.
+
+## Session 1970 update (Socratic pass 636 — milestone gate re-verification)
+
+Claim verified: the working tree is gofmt-clean, `go build ./...` and `go vet ./...` report zero findings, and the engine/arbitration/tui test suites pass — the verdict ledger claims on this branch remain true against a compiling, testing tree. TRUE (measured this session).
