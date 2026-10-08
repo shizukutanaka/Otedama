@@ -20078,3 +20078,45 @@ Verdict: TRUE — the remote-input
 reader is bounded at the buffer
 capacity; interactive readers
 are local-operator input.
+
+## Session 2964 update (Socratic pass 1629 — sort/slices/cmp census)
+
+Claim under test: sorting uses
+the modern `slices`+`cmp` API —
+zero `sort.*` calls remain in
+production.
+
+Verification:
+
+- `slices` adopted at 7 packages:
+  engine setup.go/stats.go,
+  i18n/message.go, rates
+  hashrate.go+fetcher.go,
+  hal/registry.go, arbitration/
+  engine.go, metrics/metrics.go,
+  btccrypto/btccrypto.go.
+- Calls: `slices.Sort` 13,
+  `slices.SortFunc` 2,
+  `slices.SortStableFunc` 1,
+  `slices.IsSortedFunc` 1,
+  `slices.Equal` 2,
+  `slices.Contains` 1.
+- `cmp` at arbitration/engine.go,
+  metrics/metrics.go, engine
+  run.go/arbitrate.go:
+  `cmp.Compare` 5 (explicit
+  comparators), `cmp.Or` 4
+  (first-nonzero defaults).
+- `sort.*` — zero production
+  imports; the only `sort.`
+  match is a comment. Migration
+  completed via #619 (sort.Strings→
+  slices.Sort), #1235 (sort.Ints→
+  slices.Sort), #1335 (maps.Copy
+  for merge), #1339 (cmp.Or).
+- All comparators total-order —
+  verified at s2905.
+
+Verdict: TRUE — the sort API
+is fully modernized to slices+cmp;
+zero legacy sort calls remain.
