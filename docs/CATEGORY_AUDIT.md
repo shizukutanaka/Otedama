@@ -12690,3 +12690,7 @@ Claim verified: the ledger ends well-formed — final block is a complete Sessio
 ## Session 2521 update (Socratic pass 1187 — master-drift + mergeability re-verification)
 
 Claim verified: origin/master remains pinned at 40da2e51 (no new commits since the s2511 check — the last master activity is still PR #1404's deploy-workflow fix); `git merge-tree --write-tree origin/master HEAD` produces a clean merge tree (55baa8b5) with zero conflicts — the audit branch's 882-commit payload still merges cleanly. Branch ahead count now 882 ledger/code commits; divergence remains one-directional (master hasn't moved). TRUE — mergeability invariant holds.
+
+## Session 2522 update (Socratic pass 1188 — ecosystem recheck)
+
+Claim verified via `git ls-remote`: stratum-mining/stratum latest release remains v1.12.0 (v1.11.0, v1.11.1 below); sv2-apps latest remains v0.8.0; sv2-spec HEAD unchanged at 8c1f8e66 — zero upstream movement since the s2507 ecosystem check, so every disclosed limitation and tracked-open set (#238 watch, #234, #232, #203, #198, #186, #103) still describes current upstream state. TRUE — no normative drift invalidates the recorded judgments.
