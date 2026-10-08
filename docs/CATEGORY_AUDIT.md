@@ -9343,3 +9343,7 @@ install.sh's verification loop probes `checksums.txt` then `otedama_<ver>_checks
 **Also verified:** release.yml's tarballs are already flat (`tar czf X.tar.gz otedama-X README.md LICENSE` — binary at top level), so install.sh's extraction path works for them; only the checksum side was missing.
 
 Residuals: `checksums.txt` is created after `build-binaries` finishes, so there is a short window on tag-push where the release exists but the checksum file does not — install.sh run in that window correctly refuses unverified install (fail-closed).
+
+## Session 1700 update (Socratic pass 366 — ADR-009 recheck)
+
+**Ecosystem recheck — no normative drift.** sv2-spec normative open set unchanged (#238/#234/#203/#198; #238 refreshed 2026-10-06 but still open). SRI pinned at v1.12.0. sv2-apps latest corrected to v0.8.0 via the authoritative releases/latest redirect (s1661's v0.7.0 reading superseded). Recorded in the ADR-009 file.

@@ -1872,3 +1872,9 @@ sv2-apps latest v0.8.0 — both unchanged. No action required.
 - The P0 gap stands and gains evidence again: tProxy ships the
   BIP323 version-rolling mask to downstream miners; Otedama's V1
   client still sends no `mining.configure` and cannot request one.
+
+### Session 1700 recheck (ecosystem)
+
+- sv2-spec open set: #238 (negotiate optional SetupConnection flags — updated 2026-10-06, still open; Otedama's strict subset validation remains forward-compatible), #234 (authority key management/rotation), #203 (coinbase payouts extension), #198 (coinbase_witness field), plus non-normative style PRs #186/#232 and WIP #103. No new normative changes since the s1661 recheck.
+- SRI reference implementation: still **v1.12.0** (unchanged).
+- sv2-apps: `/releases/latest` now resolves to **v0.8.0** — supersedes the s1661 note which read v0.7.0 as latest at that time. v0.8.0's tProxy BIP323 version-rolling mask remains the standing P0 gap evidence for Otedama (no mining.configure / version-rolling client-side).
