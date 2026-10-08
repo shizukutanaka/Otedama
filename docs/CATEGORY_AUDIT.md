@@ -13148,3 +13148,7 @@ All TRUE: the session-243/487/1233 disclaimer block itself is accurate — hal.D
 ## Session 2629 update (Socratic pass 1295 — KNOWN_LIMITATIONS drift)
 
 All TRUE: 17 sections re-verified; open set = {1,2,4,5,6,8,13,14,17} unchanged. §13's Go-pin failure description matches this session's live CI (Test 1.20/1.21 red, 1.23.x pending); §17's claim verified against `git tag` — newest is v2.1.9 shipping only `Otedama2.1.9.zip`, matching none of install.sh's CANDIDATES, honest-fail behavior unchanged. §2's stratum+v2tls:// guidance accurate (adapter dials system roots). Resolved items 3/7/9/10/11/12/15/16 remain resolved.
+
+## Session 2630 update (Socratic pass 1296 — THREAT_MODEL crypto-claim parity)
+
+All TRUE: wallet-at-rest row — AES-256-GCM (seedstore.go aes.NewCipher over scrypt-derived key), scrypt N=2^17=131072 r=8 p=1 (seedstore.go:69-71, godoc cites BIP-38 derivation), atomic tempfile+rename + 0600 (wallet.go save path). FIPS posture note's "AES-256-GCM is FIPS-validated construction; the gap is scrypt" accurate. Sibling claims (TLS verify always-on, redirect refusal on outbound clients, SanitizePoolText boundary, LimitReader on HTTP bodies) previously re-verified this cycle and unchanged.
