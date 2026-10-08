@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1794 — code-review.yml)
+- Removed hollow `review` and `performance-check` jobs — unreachable Node.js scaffolds that posted a vacuous comment on every PR and referenced the forbidden `scripts/` tree
+- `common-issues` now greps `*.go` for TODO/FIXME (its JS-only secret/console greps were vacuous; secrets stay covered by trufflehog)
+- `dependency-review` lost its dead `npm outdated`/comment scaffolding (the action itself is unchanged)
 ### Fixed (session 1791 — deploy.yml)
 - Smoke/verify curls now hit `/healthz` — they targeted `/health`, which the HTTP server does not register (only `/healthz`, `/readyz`, `/metrics`, `/`), so every real deploy would end in a 404-failed smoke test
 ### Fixed (session 1790 — deploy.yml)
