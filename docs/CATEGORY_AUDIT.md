@@ -10570,3 +10570,7 @@ Claim verified: a failed unlock returns one opaque message — the unmarshal and
 ## Session 1995 update (Socratic pass 661 — seed derivation + at-rest encryption)
 
 Claim verified: the BIP-39 chain is spec-exact — entropy confined to {128..256} bits, wordlist enforced at exactly 2048 unique non-empty UTF-8 entries with a defensive copy, checksum = first ENT/32 bits of SHA-256 verified on recovery, every intermediate holding secret material (bit buffers, PBKDF2 password and derived seed) is zeroed before return, and seed derivation is the mandated PBKDF2-HMAC-SHA512/2048 over "mnemonic"+passphrase; the fingerprint is HMAC-SHA256 under a domain key so it identifies without deriving; the on-disk format is versioned (0x01), scrypt N=2¹⁷/r=8/p=1 → AES-GCM, version-checked at both marshal and unmarshal with a 4 KiB read bound. TRUE.
+
+## Session 1996 update (Socratic pass 662 — payout-address validation)
+
+Claim verified: both validators are spec-complete — base58 decode preserves leading-'1' zero bytes, requires the 25-byte version+hash160+checksum structure, verifies the double-SHA256 checksum, and accepts only mainnet 0x00/0x05; bech32 enforces the BIP-173 surface rules (bc1 prefix, single case, ≤90 chars, hrp=bc), picks the BIP-350 constant by witness version (v0=bech32, v≥1=bech32m), bounds the program to 2–40 bytes, and classifies v0→{20,32}/v1→32 while honestly returning "unsupported" for future versions rather than misclassifying; the single entry point tries bech32 then base58 via ErrNot* sentinels. TRUE.
