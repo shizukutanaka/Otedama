@@ -16095,3 +16095,28 @@ Verification — both production sites:
 
 Verdict: TRUE — the only unchecked parse lands on a field
 the design never reads; all live parses are validated.
+
+## Session 2808 update (Socratic pass 1474 — lock-across-send census)
+
+Claim under test: no mutex is held while sending to a
+channel — a blocked send under a lock is the classic
+deadlock shape.
+
+Verification — two structural scans over all production
+files:
+
+- Regex scan of every `mu.Lock() … mu.Unlock()` region:
+  zero contain a channel send.
+- Scan of every `defer mu.(R)Unlock()` function body:
+  zero send operations remain inside the locked extent
+  (ctx-done selects are exempt — they can't block).
+- Sends that do exist (jobsCh, share channels, pending
+  respCh, fan-in) all run outside held locks: the pending
+  respCh is cap-1 so its only send can never block the
+  read loop anyway; the fan-in send selects on ctx.Done.
+- Lock granularity census (30 sites, verified s2724)
+  covers the other half: every lock protects only map or
+  counter state, never I/O.
+
+Verdict: TRUE — mutex extents contain only memory ops;
+every channel send is lock-free or cancellation-guarded.
