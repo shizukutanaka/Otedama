@@ -13807,3 +13807,25 @@ Verification: 19 non-test `errors.Is` call sites, 10 distinct targets.
   migration holds).
 
 Verdict: TRUE.
+
+## Session 2716 update (Socratic pass 1382 — errors.As + test-side sentinel census)
+
+Claim under test: `errors.As` is used correctly (pointer to a concrete
+error type) and test-side `errors.Is` targets are all real sentinels.
+
+Verification:
+
+- **`errors.As`: exactly 1 non-test site** — `internal/engine/run.go:2200`
+  `var fe *fatalError; return errors.As(err, &fe)`. Textbook form:
+  pointer to a concrete error type, wrapping-aware. `fatalError` is the
+  internal fail-fast marker for the scheme-gate classification
+  (s2471 verified the produced errors are unrecoverable by design).
+- **Test-side `errors.Is` targets**: the ~10 sites not covered by the
+  non-test census all reference declared package sentinels —
+  `btccrypto.ErrUnrecognisedAddress/ErrUnknownScheme/
+  ErrSchemeNotImplemented`, `poolproto.ErrHandshakeFailed`,
+  plus locally-declared test sentinels (metrics_test.go:550 `sentinel`,
+  rates fetcher_test.go:351 `errA`/`errB` — local `errors.New` vars,
+  still correct identity-based matching).
+
+Verdict: TRUE — sentinel discipline holds end-to-end.
