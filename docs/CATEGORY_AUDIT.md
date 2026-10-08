@@ -25599,3 +25599,82 @@ census:
   impls instead).
 
 Verdict: TRUE.
+
+## Session 3069 update (Socratic pass 1733 — crypto surface ledger)
+
+Claim under test: the
+crypto surface is
+stdlib-only at the
+needed primitives —
+SHA-256, TLS≥1.2,
+AES-GCM, ECDH-P256,
+subtle-compare,
+crypto/rand — with
+zero weak or
+custom crypto.
+
+Verification —
+census:
+
+- `crypto/rand` — the
+  sole entropy
+  source (×11
+  imports + Reader
+  ×7 + Int×2);
+  ZERO math/rand
+  on security
+  paths.
+- `crypto/sha256`:
+  `Sum256`×11 +
+  `New`×8 — the
+  hash prim.
+- `crypto/tls`:
+  `Config`×12,
+  `Dialer`×4,
+  `Dial`×1,
+  `VersionTLS12`×4 —
+  floor is TLS 1.2,
+  verification
+  always on
+  (verified
+  tls-config
+  class).
+- `crypto/x509`:
+  `NewCertPool`×3,
+  `SystemCertPool`×2,
+  `CertPool`×1 —
+  CA loading
+  only.
+- `crypto/ecdh.P256`×3
+  + PublicKey +
+  PrivateKey —
+  the Noise
+  handshake.
+- `crypto/cipher`:
+  `NewGCM`×2 +
+  `AEAD`×2 +
+  `aes.NewCipher`×2 —
+  AES-256-GCM
+  wallet
+  encryption.
+- `crypto/subtle.
+  ConstantTimeCompare`×1
+  — the secret
+  compare.
+- `crypto/hmac`×1 +
+  `sha512`×1 — the
+  HKDF helpers.
+- x/crypto scrypt —
+  the wallet KDF
+  (import
+  verified).
+- ZERO `md5`,
+  `sha1`, `des`,
+  `rc4`, `dsa`,
+  `rsa` encryption,
+  `cbc`/`ecb` modes,
+  `pkcs1v15` —
+  no weak or
+  legacy crypto.
+
+Verdict: TRUE.
