@@ -1205,6 +1205,19 @@ month, so the discipline matters.
     detection (ADR-010 A8) should be prioritized alongside the forecaster (A1)
     rather than after it. Sources are real but 403'd the fetcher
     (variant.fund, SSRN 6926798). Recorded as a lead only.
+    — **Verification attempted (session 1758):** primary sources remain
+    inaccessible (variant.fund serves only the firm homepage; SSRN
+    6926798 unfetchable), so the snippet stays a lead — but the claim is
+    now *contested* by primary-verifiable literature: "An exploration to
+    GPU spot price prediction" (Cluster Computing, 2022,
+    doi:10.1007/s10586-022-03581-8) models AWS GPU spot prices with
+    AR/ARIMA/ETS **and GARCH** — i.e. it treats GPU spot volatility as
+    clustered, opposite the snippet's "no volatility clustering" framing.
+    Change-point methods do remain a strong fit for abrupt shifts
+    (MDPI JRFM 13(4):186, 2025 — change-point duration model for spot
+    volatility). Net: A8's priority-vs-A1 question is real but unresolved
+    by this evidence; it is already ADR-010's own design decision, and no
+    code change is warranted from an unverified snippet.
 
 ### Lightning
 
