@@ -10390,3 +10390,7 @@ Claim verified: numericEnvVars is the one slice both ResolveWithOrigins (applies
 ## Session 1950 update (Socratic pass 616 — milestone checkpoint)
 
 Claim verified: branch green — build=0, vet=0; rates/httpserver/i18n/poolproto/config test packages all PASS (rates exercises the live-fetch pipeline for real, 1.8s). 616 passes into the cycle; the pass-600 series has surfaced zero new real defects so far — the remaining claim surface is documentation residuals and closed-PR territory, not code. TRUE.
+
+## Session 1951 update (Socratic pass 617 — miner hot loop)
+
+Claim verified: the grind loop stamps each share with the issue-time Target (the epoch key transitionReject needs), sends non-blocking with dropCount accounting (a found share is counted before the drop decision, so found ≥ sent+dropped stays auditable), rolls ntime forward when the nonce space wraps, and partitions threads by NonceOffset+threadID stepped by NonceStep. TRUE.
