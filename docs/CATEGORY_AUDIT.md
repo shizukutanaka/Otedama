@@ -12971,3 +12971,9 @@ Three small diffs verified against code:
 - NOTICE: x/sys corrected indirect→direct with accurate use (internal/tui terminal-width syscalls — the only importer, verified pass 1246); yaml corrected `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` with archive-continuation note matching go.mod. TRUE.
 - run.go: `--pprof` help text corrected — old text claimed a loopback-only restriction that does not exist; implementation prints a warning for non-loopback binds but does not block (#504). New text matches behavior. TRUE.
 - config.yaml.example: language list corrected — `zh-CN` → `zh` (LangChinese is "zh", message.go:106) and `ru`/`ar` added (both in PriorityLanguages). Old example was wrong on both counts. TRUE.
+
+## Session 2588 update (Socratic pass 1254 — .goreleaser.yaml diff; branch-payload audit COMPLETE)
+
+Final uninspected diff verified: (a) header note — release.yml confirmed to build with plain `go build`+`gh release upload`, goreleaser is the manual path requiring cosign/cyclonedx-gomod/syft/git-cliff; (b) cosign comment corrected — both sign entries are `artifacts: checksum` (checksum file as trust root), old "every archive" claim was false; (c) `--build-arg VERSION/COMMIT/BUILD_DATE` wired to real Dockerfile ARGs consumed by ldflags -X injection (Dockerfile:17-26); (d) `skip_upload: "true"` on brews — honest disclosure that shizukutanaka/homebrew-tap does not exist, matching release.yml's HOMEBREW_TAP_REPO opt-in contract. TRUE.
+
+This completes the branch-payload audit: all 46 diff files verified. Totals: 2 doc dep-count fixes (s2571/2572), 1 real CI fix (s2585 gh --repo), every other claim TRUE.
