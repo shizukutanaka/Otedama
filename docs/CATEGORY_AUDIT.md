@@ -12658,3 +12658,7 @@ Claim verified: internal/stratum/tls.go and internal/poolproto/stratumv1/tls.go 
 ## Session 2513 update (Socratic pass 1179 — marker census + stub-disclosure drift)
 
 Claim verified: zero TODO/FIXME/XXX/HACK markers exist in production code (grep over internal/ + cmd/, non-test files) — the earlier marker-sweep verdict still holds; and the noise.go alpha stub disclosure remains verbatim accurate at the file top: "in v3.0.0-alpha this is stubbed with P-256 (which satisfies the same interface) until the secp256k1 dependency is added" — an operator reading the file learns the exact gap and the exact planned fill (secp256k1 + ElligatorSwift → v3.1.0) before any code; no silent drift toward pretending production readiness. TRUE — both the marker hygiene and the maintainer-territory disclosure stay clean.
+
+## Session 2514 update (Socratic pass 1180 — milestone gate)
+
+Milestone claim verified: the whole-tree hygiene gates stay green on the audit branch — `gofmt -l internal cmd` reports zero files, `go build ./...` compiles clean, `go vet ./internal/... ./cmd/...` reports nothing; scoped tests pass: internal/poolproto/stratumv1 (0.50s), stratumv2 (0.40s), stratum (0.03s), config (0.02s), lightning (12.2s — BIP-39/seed/wallet vectors), i18n/messages (0.01s). The one real fix this stretch (config TLSCAFile doc, commit 43d5d870d) is covered by the config package tests. TRUE — pass 1180 milestone holds; ledger now carries ~1,790 entries across ~160+ verified census classes.
