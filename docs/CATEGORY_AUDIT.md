@@ -9376,3 +9376,9 @@ Residuals: if a `package.json` were ever added (not itself forbidden), the step 
 3. `release.yml` `build-packages` passed `--license "MIT"` to fpm while LICENSE is Apache-2.0 — package metadata mislabeled; corrected to `Apache-2.0` for both DEB and RPM.
 
 Residuals (recorded, not fixable here): the lint jobs still fail before reaching golangci-lint on the Go-pin class (go.mod ≥1.24 vs pins ≤1.23); `build-packages` runs only on `v*` tags so the license fix is verified by inspection, not execution.
+
+## Session 1704 update (Socratic pass 370)
+
+**Claim verified: "no remaining mutable refs or license mislabels in the release/lint chain" — TRUE after s1703.** Census of every `uses:` across the 8 workflows shows only major-version tags (@v3/@v4/@v5) — the maintainer's chosen posture, previously disclosed in solo-ops; not a defect. The three lint sites now all resolve to golangci-lint **v1.64.8**; `.golangci.yml` has no `version:` key and only v1-schema top-level fields — compatible with the pin. License metadata census: `.goreleaser.yaml:158` `license: Apache-2.0` (correct), Makefile `--allowed_licenses` is the dependency-allowlist (correct per CLAUDE.md dependency policy) — the fpm `--license "MIT"` mislabel was the only wrong site, fixed in s1703.
+
+Residuals: major-version `uses:` tags are mutable within their major line by GitHub design — converting to SHA pinning would be a maintainer policy decision, not recorded as an open defect. `golangci-lint-action@v3` itself is an older action major but accepts the `v1.64.8` version input format.
