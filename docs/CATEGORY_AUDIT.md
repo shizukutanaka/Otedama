@@ -16001,3 +16001,18 @@ Verification:
 
 Verdict: TRUE — stash filter and dispatch hold the same
 method set; outbound calls are the canonical three.
+
+## Session 2804 update (Socratic pass 1470 — cap()-usage census)
+
+Claim under test: cap() is never confused with len() —
+capacity reads only appear inside make() hints.
+
+Verification: zero cap() calls in production code outside
+make() capacity arguments. Every bound check, loop
+condition, and slice operation uses len(); channel
+capacities are named constants (preAuthCap=16,
+pendingCap=64, jobsCap=64) compared against len(), never
+re-derived via cap().
+
+Verdict: TRUE (vacuous) — the confusion class cannot
+occur; capacity lives only in named constants.
