@@ -14687,3 +14687,27 @@ Verification: single non-test site — `worker.go:282`.
 
 Verdict: TRUE — one bounded idle-poll; everything else is
 cancellable timers.
+
+## Session 2752 update (Socratic pass 1418 — file-handle census)
+
+Claim under test: every os.Open/Create/CreateTemp handle has a
+declared owner and close path — no fd leaks.
+
+Verification: all 3 non-test open sites.
+
+- `configfile.go:29` — `os.Open` guarded by `defer f.Close()` at
+  :36; open failure warns (non-NotExist) and yields defaults;
+  io.EOF decode means "empty file → defaults".
+- `logfile.go:41` — `os.OpenFile` stored into `cappedLogFile.f`;
+  the struct owns the fd for the capped-rotation lifecycle
+  (rotateLocked swaps it; program exit releases it).
+- `wallet.go:295` — `os.CreateTemp` with explicit
+  `_ = tmp.Close()` + `_ = os.Remove` on both the Write and Sync
+  error paths, then the verified chmod-before-rename atomic save
+  on the success path; the success path's close precedes rename.
+- Everything else uses `os.ReadFile`/`os.WriteFile` — one-shot
+  helpers that own their fd internally.
+- Only `os.CreateTemp` returns a bare handle needing manual
+  cleanup, and both its error paths clean up.
+
+Verdict: TRUE — 3 sites, 3 owners, zero leak paths.
