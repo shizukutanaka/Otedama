@@ -33605,3 +33605,130 @@ census:
   clean).
 
 Verdict: TRUE.
+
+## Session 3138 update (Socratic pass 1802 — error-handling idiom census)
+
+Claim under test: the
+error-handling
+surface is
+nil-checks +
+fmt.Errorf
+(with %w
+wraps) +
+errors.New
+leaves +
+errors.Is/As —
+with
+discards
+bounded
+to 51.
+
+Verification —
+census:
+
+- `!= nil`×461 +
+  `== nil`×78 —
+  the
+  nil
+  check
+  surface
+  (error
+  checks
+  +
+  zero-value
+  guards).
+- `err != nil`×334
+  with
+  `if err != nil`×183 —
+  the
+  canonical
+  error
+  guard;
+  the
+  extra
+  151
+  are
+  `if err := f(); err != nil`
+  scoped
+  guards
+  and
+  `return err != nil`-
+  style
+  conversions.
+- `fmt.Errorf`×260 —
+  the
+  error
+  constructor;
+  `%w`×111
+  of
+  them
+  wrap
+  (the
+  remaining
+  ~57%
+  are
+  formatted
+  leaf
+  errors
+  with
+  context).
+- `errors.New`×36 —
+  leaf
+  sentinel-
+  style
+  errors
+  (verb-free
+  literals
+  migrated
+  in
+  the
+  earlier
+  refactor).
+- `errors.Is`×22 +
+  `errors.As`×1 —
+  the
+  sentinel
+  comparison
+  surface
+  (Is
+  dominates;
+  the
+  single
+  As
+  is
+  `engine/run.go:2201`
+  typed-error
+  unwrap).
+- `return nil, nil`×7 —
+  the
+  honest
+  empty-success
+  sites:
+  `cmd/otedama/run.go:345`,
+  `stratumv1/tls.go:42`,
+  `stratum/tls.go:46`,
+  `hal/gpu_linux.go:65`,
+  `hal/registry.go:141`
+  (nil-capability
+  /
+  not-
+  found
+  cases,
+  not
+  error-
+  swallowing).
+- `_ = `×51 —
+  the
+  deliberate-
+  discard
+  surface
+  (verified
+  discard
+  class:
+  pre-frozen
+  os.Unsetenv
+  teardowns,
+  intentional
+  ignores).
+
+Verdict: TRUE.
