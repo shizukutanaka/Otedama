@@ -34553,3 +34553,200 @@ census:
   only.
 
 Verdict: TRUE.
+
+## Session 3145 update (Socratic pass 1809 — net + net/http detail ledger)
+
+Claim under test: the
+network
+surface is
+net.Conn/
+Dialer
+pool
+transport
++
+a
+single
+bounded
+admin
+server +
+3
+short-timeout
+clients —
+no
+DefaultServeMux
+registration,
+no
+raw
+Dial.
+
+Verification —
+census:
+
+- `net.Conn`×14 —
+  the
+  pool
+  transport
+  interface
+  type
+  (stratumv1/
+  stratumv2/
+  poolproto).
+- `net.Dialer`×6 —
+  the
+  dial
+  timeout
+  stacks
+  (every
+  dial
+  uses
+  DialContext
+  via
+  Dialer,
+  verified
+  in
+  the
+  deadline
+  classes).
+- `net.SplitHostPort`×3 —
+  the
+  host:port
+  validator.
+- `net.Listen`×1 —
+  `httpserver/server.go:111`
+  the
+  single
+  admin
+  bind.
+- `net.ParseIP`×1 —
+  `run.go:375`
+  the
+  loopback
+  check
+  for
+  `--http-addr`/
+  `--pprof`.
+- `net.Pipe`×1 —
+  COMMENT
+  only
+  (`dialer.go:37`
+  documents
+  the
+  injectable
+  fake
+  transport
+  seam).
+- `net.Conn`:
+  write
+  deadline
+  stacks
+  verified
+  —
+  every
+  pool
+  write
+  bounded.
+- `http.Request`×10 —
+  outbound
+  request
+  structs
+  (rates
+  fetchers,
+  doctor
+  probes).
+- `http.Client`×6 —
+  the
+  client
+  fleet
+  (all
+  10s
+  Timeout
+  +
+  redirect-
+  refuse,
+  verified
+  in
+  the
+  HTTP
+  posture
+  classes).
+- `http.NewRequestWithContext`×3 +
+  `http.MethodGet`×3 —
+  ctx-bound
+  GET
+  requests
+  only.
+- `http.Server`×2 +
+  `http.NewServeMux`×1 +
+  `http.ServeMux`×1 —
+  the
+  private-mux
+  admin
+  server
+  (all
+  timeouts
+  set).
+- `http.ParseTime`×3 —
+  HTTP
+  date
+  header
+  parse
+  (rate
+  feed
+  freshness).
+- Status
+  verbs:
+  `StatusOK`×5,
+  `StatusServiceUnavailable`×1,
+  `StatusInternalServerError`×1,
+  `http.NotFound`×1,
+  `http.Error`×1.
+- `http.DefaultServeMux`×1 —
+  COMMENT
+  only
+  (`server.go:44`
+  documents
+  why
+  the
+  private
+  mux
+  exists).
+- ZERO
+  `net.Dial`,
+  `net.DialTimeout`,
+  `net.ListenTCP`,
+  `net.ResolveTCPAddr`,
+  `net.Interfaces`,
+  `net.LookupHost`,
+  `net.FileListener`,
+  `net.CIDRMask`,
+  `net.ParseMAC`.
+- ZERO
+  `http.Get`,
+  `http.Post`,
+  `http.Head`,
+  `http.ListenAndServe`,
+  `http.ListenAndServeTLS`,
+  `http.Handle`,
+  `http.HandleFunc`,
+  `http.Serve`,
+  `http.DefaultClient`,
+  `http.DefaultTransport`,
+  `http.Redirect`,
+  `http.FileServer`,
+  `http.ServeContent`,
+  `http.ServeFile`,
+  `http.StripPrefix`,
+  `http.TimeoutHandler`,
+  `http.MaxBytesHandler`,
+  `http.Cookie`,
+  `http.SetCookie`,
+  `http.Hijacker`,
+  `http.Pusher`,
+  `http.ResponseController` —
+  package-level
+  convenience
+  API
+  completely
+  absent.
+
+Verdict: TRUE.
