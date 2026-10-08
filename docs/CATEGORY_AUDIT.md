@@ -10110,3 +10110,7 @@ Claim verified: dependabot.yml watches exactly the three ecosystems that exist �
 ## Session 1880 update (Socratic pass 546 — milestone checkpoint + mergeability)
 
 Cycle-2 checkpoint: this branch is 243 commits ahead of master, master is an ancestor (clean merge expected), and CI shows 22 checks pending / 0 failed — queue saturation as before. Ledger now spans ~546 verified passes; documentation-parity surfaces swept this week: CLAUDE.md enumerations (4 real defects fixed: wallet subcommand, scorecard.yml, main→master ×2), README subcommand table, OTEDAMA_* env surface, config.yaml.example key subset, SECURITY.md version table, DefaultPoolURL SSoT, datum:// dual-layer rejection, BENCHMARKS.md, dependabot ecosystems. Residuals unchanged: workflow Go-version pins <1.24 (rejected #1344 territory), Dependency-graph repo setting, known CLAUDE.md aspirational rows.
+
+## Session 1881 update (Socratic pass 547 — payout_scheme enum parity)
+
+Claim verified: `pools[].payout_scheme` accepts exactly the documented set — empty or fpps/pplns/tides/solo (config.go:690–694), matching SPECIFICATION §3's schema row verbatim including file-only layering. TRUE.
