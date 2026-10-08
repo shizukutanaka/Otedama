@@ -25068,3 +25068,65 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3061 update (Socratic pass 1725 — os package surface ledger)
+
+Claim under test: the
+`os` package surface
+is the narrow file/
+env/stream subset —
+no process, symlink,
+or exotic calls.
+
+Verification —
+census:
+
+- Env: `Getenv`×16 —
+  the 15-documented-
+  var surface
+  (verified env-read
+  class); ZERO
+  `LookupEnv`/`Setenv`/
+  `Unsetenv`/`Environ`.
+- File read: `ReadFile`×8,
+  `Open`×1, `OpenFile`×1
+  (with O_WRONLY|
+  O_CREATE|O_APPEND —
+  the log rotation).
+- File write:
+  `WriteFile`×4,
+  `Rename`×2,
+  `Chmod`×1,
+  `CreateTemp`×1 —
+  the wallet atomic-
+  rename pattern.
+- Stat/dir: `Stat`×10,
+  `ErrNotExist`×6,
+  `MkdirAll`×5,
+  `ReadDir`×2,
+  `Remove`×9,
+  `UserHomeDir`×7,
+  `Executable`×1.
+- Streams:
+  `Stdout`×6, `Stdin`×4,
+  `Stderr`×4,
+  `ModeCharDevice`×3
+  (TTY detection).
+- Process/signal:
+  `Exit`×2 (the two
+  justified sites),
+  `Interrupt`×1,
+  `Args`×1.
+- ZERO `Chdir`,
+  `MkdirTemp`,
+  `RemoveAll`,
+  `Truncate`,
+  `Symlink`, `Link`,
+  `Pipe`, `Getuid`,
+  `Lstat`, `Chtimes`,
+  `FindProcess` —
+  the mutation and
+  link surfaces are
+  unused.
+
+Verdict: TRUE.
