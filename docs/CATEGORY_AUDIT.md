@@ -18604,3 +18604,29 @@ Verification (~35 sites):
 
 Verdict: TRUE — LE-only, primitive-only;
 no binary.Read/Write reflection.
+
+## Session 2918 update (Socratic pass 1583 — ctx-cancel pairing census)
+
+Claim under test: every `WithTimeout`/
+`WithCancel` either defers `cancel` or
+stores it for teardown — no orphaned
+child contexts.
+
+Verification (12 sites):
+
+- WithTimeout (8): all use `defer
+  cancel()` — doctor cmd (30s run),
+  httpserver (5s graceful), dialCtx ×3
+  (SV1 dial 15s, SV1 handshake 30s, SV2
+  dial 15s), doctor clock-skew probe (5s),
+  run.go poolDialTimeout.
+- WithCancel (4): cancel is stored into
+  a field for teardown — worker.cancel
+  (Stop), stratumv1.session ctxCancel
+  (Close), polling.cancel (Stop),
+  run.go stopLimiter.
+- Zero `WithTimeout`/`WithCancel`
+  results discarded.
+
+Verdict: TRUE — every derived ctx has a
+deterministic cancel path.
