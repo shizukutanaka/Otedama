@@ -11894,3 +11894,7 @@ Claim verified: when no platform data dir can be resolved, `DefaultDataDir` retu
 ## Session 2321 update (Socratic pass 987 — existing-wallet failure posture)
 
 Claim verified: a corrupt/unreadable/wrong-pass wallet.dat can never be silently replaced — loadExisting returns an error (unbounded-input already rejected by UnmarshalEncryptedSeed's 4 KiB cap + version pin, seedstore.go:194–209), NewWalletManager propagates it, setupWallet warns and runs wallet-less. `IsNew` stays false on the failure path so no overwrite/mnemonic flow fires. Wrong-pass surfaces only the opaque ErrWrongPassphrase — no decryption oracle. TRUE.
+
+## Session 2322 update (Socratic pass 988 — outbound frame bound)
+
+Claim verified: EncodeFrame (frame.go:195) can't emit an out-of-spec or lying frame — payload > U24 MaxMessageLength is rejected before allocation, MsgLength is overwritten from the real payload length so the header can never disagree, and Header.Validate runs before serialization. The outbound side matches the inbound Decoder's strictness. TRUE.
