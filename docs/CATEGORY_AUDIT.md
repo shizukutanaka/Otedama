@@ -11046,3 +11046,7 @@ Claim verified: the hashrate fetch can't deadlock, OOM, or pass off a lie — pe
 ## Session 2112 update (Socratic pass 778 — Akash quote honesty)
 
 Claim verified: the simulated Akash provider can't inflate its attractiveness — no devices → a single confidence-0 quote (visible to the dashboard without being a phantom revenue claim arbitration could act on); a stale rate still prices the quote but at reduced confidence 0.6 vs 0.85 fresh — the provenance of every number travels inside the quote, not in a hidden flag; net yield is gross × 0.80 with the provider fee already factored, so arbitration routes on net (consistent with the s1091 net-yield fix); and the name literally says "simulated" — the simulated nature can't be mistaken for a live API integration. TRUE.
+
+## Session 2113 update (Socratic pass 779 — provider polling lifecycle)
+
+Claim verified: the polling lifecycle can't double-launch, leak a goroutine, or close-early — launch holds mu and refuses a second start while cancel != nil (no two loops on one quoteCh); the loop goroutine itself owns the close(quoteCh) via defer — Stop only cancels and waits, so close can never precede the last send or happen concurrently with one; Stop waits for the goroutine to exit before recreating quoteCh at the same capacity, so a restart can't race a still-running predecessor; and the ticker is stopped via defer on every exit path — no timer leak. TRUE.
