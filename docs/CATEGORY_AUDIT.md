@@ -13931,3 +13931,21 @@ Verification: all `runtime.GOOS` comparison sites.
 - `version.go:58` uses GOOS/GOARCH only for reporting, not gating.
 
 Verdict: TRUE.
+
+## Session 2722 update (Socratic pass 1388 — daemon platform-dispatch exhaustiveness)
+
+Claim under test: the three `goos` dispatch switches in the daemon
+Manager route every supported platform to its implementation and fail
+closed on anything else.
+
+Verification: `Install`/`Uninstall`/`Status` switches at
+service.go:102,116,130 — all three use the named constants
+`goosLinux`/`goosDarwin`/`goosWindows` (not string literals, so a
+typo can't compile) and each routes to the matching
+`install*/uninstall*/status*` method. `default:` returns
+`unsupported platform %q` — fail-closed, and it reports the real
+`runtime.GOOS` (not the injectable test var), so an unknown platform
+shows its actual name.
+
+Verdict: TRUE — dispatch is constant-typed, symmetric across the
+three operations, and fails closed.
