@@ -14757,3 +14757,26 @@ Verification: slices/maps usage tally + `sort` package grep.
 
 Verdict: TRUE — modernization complete; legacy sort surface is
 zero.
+
+## Session 2755 update (Socratic pass 1421 — endianness census)
+
+Claim under test: wire byte-order is uniformly little-endian with
+zero binary.Write/Read and zero BigEndian residue.
+
+Verification: `binary.*` call-site tally.
+
+- 65/65 call sites are `binary.LittleEndian.{Put,}Uint*` on byte
+  slices — the SV2 protocol's declared byte order end-to-end.
+- Zero `binary.BigEndian` — no mixed-endian wire paths (the only
+  big-endian sequence anywhere is the en2 counter tail, written
+  by explicit byte-extraction loop at stratumv1.go:530 with the
+  masking comment, not via the binary package).
+- Zero `binary.Write`/`binary.Read` — every field is a fixed-
+  width helper call on preallocated slices; no reflect-driven
+  serialization, no hidden allocation, no i/o error plumbing.
+- Matches the earlier wire-layer verdict: length prefixes,
+  channel ids, seq numbers all LE helpers in stratum/wire.go and
+  stratum/messages.go.
+
+Verdict: TRUE — one endian convention, the cheapest
+serialization form, no exceptions.
