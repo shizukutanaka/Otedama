@@ -16150,3 +16150,28 @@ Verification — the complete panic set:
 
 Verdict: TRUE — every panic is init-time or
 programmer-error; untrusted input cannot reach one.
+
+## Session 2810 update (Socratic pass 1476 — builder/buffer reuse census)
+
+Claim under test: every strings.Builder is function-scoped
+and never read after reuse; no bytes.Buffer crosses
+call boundaries.
+
+Verification — the complete set:
+
+- All eight `var sb strings.Builder` sites (metrics.go
+  :348/:368, dashboard.go:229/:512, service.go:354,
+  message.go:338, config.go:223) are declared inside the
+  function that consumes them — no sharing, no
+  use-after-Reset hazard possible (Builder is never Reset
+  at all).
+- dashboard writeSection/writeLine receive *strings.Builder
+  as a parameter only within the same render pass.
+- The single `.Reset()` in the tree is noise_pool.go:39 —
+  the pooled hasher's documented reset-before-reuse
+  contract (output is always a fresh 32B copy, verified
+  s2358).
+- Zero bytes.Buffer usage in production.
+
+Verdict: TRUE — builders are function-scoped one-shot
+writers; the sole Reset is the intended pool contract.
