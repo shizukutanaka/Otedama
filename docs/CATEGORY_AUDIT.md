@@ -11998,3 +11998,7 @@ Claim verified: the V1 job-application path guards every boundary — v1JobTarge
 ## Session 2347 update (Socratic pass 1013 — payout-mask honesty + single-active invariant)
 
 Claim verified: maskAddr is honest privacy — ≤12-char values verbatim, else first6…last4, never a full address in logs (setup.go:438–444); setActivePayout upholds the exactly-one-active invariant for otedama_payout_info — empty ignored, unchanged is a no-op, the previously active gauge is zeroed BEFORE the new one is set, all under payoutInfoMu, with gauges lazily created per masked address bounded by the failover list (metrics.go:560–592). TRUE.
+
+## Session 2348 update (Socratic pass 1014 — reconnect-loop honesty end-to-end)
+
+Claim verified: the reconnect loop is honest at every layer — jitteredBackoff draws ±pct from crypto/rand with nominal fallback on span<=0 or rand error (run.go:481–491); an established session resets backoff BEFORE failover branches so logs report the real delay (:620–627); payout-address failover requires addrConnected==false so an established address is never silently abandoned (earnings can't redirect during an outage) (:639–660); the jittered sleep is drawn once and used for both the log line and the actual wait (:648–650); the sleep is a NewTimer + explicit Stop on ctx.Done (no pre-1.23 timer leak) (:681–688); doubling happens only after the wait, capped (:689–691). TRUE.
