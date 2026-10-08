@@ -11234,3 +11234,7 @@ Claim verified: the V1 dial can't hang past its bound and the handshake can't ne
 ## Session 2159 update (Socratic pass 825 — V2 dialer + handshake prologue)
 
 Claim verified: the V2 poolproto dial can't hang past its bound and the handshake can't accept a stale or off-spec response — Dial is bounded by a 15s ctx with DeadlineExceeded normalized before wrapping; StripScheme runs before any network touch; the TLS branch delegates to stratum.DialTLS (verified in s1596/s2093 — SystemRoots + ServerName from the address); Negotiate applies a 15s read deadline cleared via defer (a slow handshake can't pin the socket); SetupConnection declares Min=Max=2 with the offered flag set; the response must decode to exactly SetupConnectionSuccess — a wrong msg type or a SetupConnectionError is rejected, not misinterpreted; the returned flags are masked against the offered set (s1247 class — a pool can't force unoffered bits); OpenMiningChannel goes out with the pool's user and MaxTargetUnconstrained; and ReqID echo is verified (a response to a different req_id can't be accepted). Session creation happens only after both stages succeed — no partial state. TRUE.
+
+## Session 2160 update (Socratic pass 826 — milestone gate)
+
+Milestone gate (last run s2140): gofmt clean across the tree; `go build ./...` and `go vet ./...` clean; `go test` green on stratum, miner, engine, poolproto, poolproto/stratumv1, poolproto/stratumv2, config, doctor (all cached — no code has changed since the last green run; every commit this stretch was docs/CATEGORY_AUDIT.md only).
