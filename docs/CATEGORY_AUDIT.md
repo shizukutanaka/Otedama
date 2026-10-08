@@ -12949,3 +12949,7 @@ Claim verified: `go mod verify` clean. Freshness check shows upstream moved (x/c
 ## Session 2583 update (Socratic pass 1249 — metric-name doc parity census)
 
 Claim verified: census of all `"otedama_*"` literals in internal/+cmd/ yields 51 names; the only absences from docs/API.md are four test fixtures (`otedama_test_total`, `otedama_x/y/z`, `otedama_hashrate_hps` — metrics_test.go only; the production metric is `otedama_hashrate_hashes_per_second`, documented). Every production metric name appears in the API table; no doc-only names exist. TRUE.
+
+## Session 2584 update (Socratic pass 1250 — env-var surface parity)
+
+Claim verified: all 15 `OTEDAMA_*` environment variables referenced in internal/+cmd/ (arbitration hysteresis/floor/curtail, bitcoin address, config, data dir, electricity price, http addr, language, log level/format, power watts, three wallet secrets) are documented in docs/API.md and/or docs/SPECIFICATION.md; zero code-only and zero doc-only names. TRUE. (Note: first census run showed false negatives because `grep -o` prefixes filenames on multi-file input — corrected with `-h`.)
