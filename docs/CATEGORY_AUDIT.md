@@ -17112,3 +17112,27 @@ test suite is green on the current tree: 23 legs
 covering all packages.
 
 Verdict: TRUE — full-suite green verified.
+
+## Session 2852 update (Socratic pass 1517 — forbidden-path census)
+
+Claim under test: the branch added no Go source
+outside the CLAUDE.md architecture map — new files
+must sit inside an allowed package.
+
+Verification (`git diff --name-status origin/master..HEAD`):
+
+- Exactly **one** added `.go` file:
+  `internal/stratum/encryptedframe_fuzz_test.go`
+  — a fuzz target inside the existing allowed
+  `internal/stratum/` package. No new package,
+  directory, or path outside the map.
+- Non-Go branch files are all pre-existing root
+  documents/build files (README, CHANGELOG,
+  Makefile, Dockerfile, .goreleaser, install.sh,
+  config.yaml.example) or `docs/`/`skills/`/
+  `.github/` payload — no `pkg/`, `web/`, `k8s/`,
+  `internal/providers/` (plural), or other
+  forbidden path introduced.
+
+Verdict: TRUE — architecture map respected; zero
+forbidden-path additions.
