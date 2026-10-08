@@ -12722,3 +12722,7 @@ Claim verified: the branch's file-level diff against master touches only mapped 
 ## Session 2529 update (Socratic pass 1195 — workflow branch-filter residual check)
 
 Claim checked: after #1293's master inclusion, every workflow's push/PR filter still carries the inert names `main` (all five files) and `develop` (ci, ci-cd, security, test) — harmless supersets since GitHub treats missing names as never-match, and every list does contain `master` so triggers DO fire. One real residual: `deploy.yml` filters on `main` ONLY (lines 6,13 — no master), so it can never trigger on this repo's branch layout; that is consistent with the already-recorded dead-workflow findings for deploy.yml (npm steps, phantom k8s path) and adds trigger-dormancy to the same class rather than a new defect — it deploys nothing either way. ⚠️ Noted, same-class residual.
+
+## Session 2530 update (Socratic pass 1196 — license-file parity check)
+
+Claim verified: `LICENSE` exists at repo root and opens with authentic Apache License 2.0 text (January 2004 terms), matching the README's Apache-2.0 badge and the Japanese footer claim — and matching CLAUDE.md's reference link. TRUE — license surface is consistent root↔docs↔rules.
