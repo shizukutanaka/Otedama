@@ -17801,3 +17801,28 @@ Milestone re-check: full hygiene gate.
 
 Verdict: TRUE — tree compiles, formats, vets,
 and passes every test at this pass boundary.
+
+## Session 2886 update (Socratic pass 1551 — file-permission census)
+
+Claim under test: every file/directory write
+uses the documented permission discipline
+(0600 files, 0700 data dir, 0755 only for
+system service dirs).
+
+Verification (`rg` Write/Open/Create/Chmod/
+Mkdir in production):
+
+- Files → all 0600: logfile.go:41,
+  wallet.go:172+227 (fingerprint sidecars),
+  wallet.go:321 (tmp chmod before rename),
+  service.go:217+318 (systemd unit, plist).
+- Data dir → `MkdirAll(0700)` wallet.go:142.
+- System service dirs → `MkdirAll(0755)`
+  service.go:164,178,306,398 — correct:
+  launchd/systemd require world-traversable
+  unit dirs; the unit FILES are still 0600.
+- Wallet save: CreateTemp → Chmod 0600 →
+  rename — no weakened-permission window.
+
+Verdict: TRUE — permission discipline holds at
+every write surface.
