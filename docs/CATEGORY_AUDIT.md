@@ -37962,3 +37962,113 @@ census:
   `golang.org/x/{net,term,text,sync,tools,exp,mod,time,image,build,website,oauth2,mobile}`.
 
 Verdict: TRUE.
+
+## Session 3165 update (Socratic pass 1829 — internal import fan-in ledger)
+
+Claim under test: the
+production
+import
+graph
+fans
+in
+through
+poolproto/
+i18n/
+config
+and
+leaves
+clock/
+daemon/
+doctor/
+engine/
+httpserver
+as
+single-
+importer
+edges.
+
+Verification —
+census
+(production
+files
+importing
+each
+internal
+path,
+module
+`github.com/shizukutanaka/Otedama`):
+
+- `internal/poolproto`×9,
+  `internal/i18n`×9,
+  `internal/config`×9 —
+  the
+  three
+  hub
+  packages.
+- `internal/hal`×6,
+  `internal/miner`×5,
+  `internal/metrics`×5,
+  `internal/provider`×4,
+  `internal/btccrypto`×4.
+- `internal/version`×2,
+  `internal/tui`×2,
+  `internal/stratum`×2,
+  `internal/lightning`×2,
+  `internal/arbitration`×2.
+- `internal/rates`×1,
+  `internal/poolproto/stratumv1`×1,
+  `internal/logger`×1,
+  `internal/i18n/messages`×1,
+  `internal/httpserver`×1,
+  `internal/engine`×1,
+  `internal/doctor`×1,
+  `internal/daemon`×1,
+  `internal/clock`×1.
+- The
+  `clock`×1
+  matches
+  the
+  earlier
+  single-
+  consumer
+  finding
+  (abstraction
+  retained
+  for
+  `clock.Fake`
+  in
+  tests
+  even
+  though
+  only
+  one
+  production
+  site
+  reads
+  it).
+- ZERO
+  cycles:
+  the
+  importer
+  counts
+  confirm
+  the
+  DAG
+  direction
+  (cmd→engine→
+  leaf
+  packages;
+  leaf
+  packages
+  never
+  import
+  cmd
+  or
+  engine —
+  `engine`×1
+  importer
+  is
+  `cmd/otedama`
+  itself).
+
+Verdict: TRUE.
