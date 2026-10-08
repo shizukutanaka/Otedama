@@ -25268,3 +25268,78 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3064 update (Socratic pass 1728 — strings/bytes surface ledger)
+
+Claim under test: the
+string surface is
+the expected
+classify/join/trim
+subset — no
+surprising APIs.
+
+Verification —
+census:
+
+- `strings.HasPrefix`
+  ×27 — the
+  dominant prefix
+  classifier
+  (schemes, url
+  forms).
+- `Join`×15,
+  `Builder`×10 —
+  construction.
+- `Contains`×13,
+  `ContainsRune`×2,
+  `ContainsAny`×2,
+  `ContainsFunc`×1 —
+  the membership
+  class.
+- `TrimSpace`×11,
+  `TrimSuffix`×1,
+  `TrimLeft`×1,
+  `Trim`×1 —
+  whitespace/edge
+  normalization.
+- `Repeat`×7 —
+  the TUI pad
+  loops.
+- `ToLower`×6,
+  `ToUpper`×1,
+  `EqualFold`×2 —
+  case
+  normalization.
+- `CutPrefix`×5,
+  `Split`×3,
+  `Fields`×1 —
+  splitting.
+- `Index*`×8 total
+  (Byte, Rune,
+  Any, Func,
+  LastIndexByte)
+  — positional
+  search.
+- `NewReplacer`×3 —
+  sanitize
+  tables.
+- bytes surface:
+  `bytes.Equal`×2
+  only — the
+  domain works
+  on strings;
+  the wire
+  layer uses
+  explicit
+  byte ops.
+- ZERO
+  `strings.Title`
+  (deprecated),
+  `bytes.Buffer`,
+  `bytes.Fields`,
+  `bytes.Repeat` —
+  no drift into
+  byte-
+  duplication.
+
+Verdict: TRUE.
