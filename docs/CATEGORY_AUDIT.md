@@ -12030,3 +12030,7 @@ Milestone verdict: gofmt -l internal cmd clean; go build ./... clean; go vet ./i
 ## Session 2355 update (Socratic pass 1021 — V1 submit echo verbatim)
 
 Claim verified: mining.submit echoes the pool's opaque job_id verbatim at params[1] (stratumv1.go:626–629) — the u32 wire ID is internal-only for stale gating; empty extranonce2 pads with "00"×negotiated size bounded by maxExtranonce2Size (:613–619) so strings.Repeat can't be coerced; worker name falls back to "otedama" only absent an authorized user; ntime/nonce are fixed %08x per spec; the result decode requires a strict bool true for Accepted (:637–648). TRUE.
+
+## Session 2356 update (Socratic pass 1022 — failover-address validation honesty)
+
+Claim verified: backup payout addresses are validated as strictly as the primary — either-or presence gate (config.go:640–645); every BitcoinAddresses[i] is run through the same validateBitcoinAddress (prefix 1/3/bc1 mainnet gate, ≤90 bound, btccrypto checksum) so a typo'd backup is caught at config time, never first at failover (:647–655); empty elements are flagged explicitly; the testnet rejection honestly documents the missing testnet option (:764–767). TRUE.
