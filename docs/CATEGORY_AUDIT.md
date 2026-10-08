@@ -10940,3 +10940,7 @@ Claim verified: time and build metadata can't silently mislead — clock.Fake is
 ## Session 2086 update (Socratic pass 752 — milestone gate)
 
 Milestone: `gofmt -l` clean; `go build ./...` clean; `go vet ./...` clean; `go test ./internal/btccrypto/... ./internal/poolproto/... ./internal/clock/... ./internal/version/... ./internal/stratum/...` all green. This stretch audited the whole V1 session surface (read path, dispatch handlers, job assembly, RPC ledger, parser guards, TLS boundary, subscribe validation), the address validators, the btccrypto abstraction + secp256k1 stub, and the clock/version abstractions — every claim verified TRUE against the code; no defects found (33 consecutive TRUE verdicts since the last real fix at s1649).
+
+## Session 2087 update (Socratic pass 753 — worker grind hot loop)
+
+Claim verified: the hot loop can't emit duplicate or stale shares and never blocks — a work swap resets both the nonce to the thread's own residue class (NonceOffset+threadID, keeping the partition intact) AND ntimeRoll to 0 (a new job can't inherit rolled-forward timestamps); nonce-space wrap is detected (nonce < prev) and rolls ntime forward so the next sweep hashes distinct headers — without the roll the wrap would re-hash identical headers into duplicate shares the pool rejects; the 1024 batch balances context/job-change responsiveness against overhead; and the share send is non-blocking with dropCount making the rare drop observable instead of silent. TRUE.
