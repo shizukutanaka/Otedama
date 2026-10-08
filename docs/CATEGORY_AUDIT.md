@@ -15774,3 +15774,32 @@ Verification:
 Verdict: TRUE — callers can trust "err non-nil ⇒ value is
 zero"; the one partial exception is documented and
 re-validated downstream.
+
+## Session 2795 update (Socratic pass 1457/1460b — file-path SSOT census)
+
+Claim under test: each on-disk filename/path is built from a
+single source constant, or the duplication is deliberate and
+documented.
+
+Verification:
+
+- wallet.dat / wallet.fingerprint: constants live in
+  lightning/wallet.go (:59/:62) and are redeclared as a
+  deliberate mirror in doctor/checks.go:243-245 — the
+  comment states why (doctor must not import the lightning
+  package + its crypto deps); values verified identical.
+  Recorded as an Issue by the in-code comment itself.
+- walletPath()/fingerprintPath() helpers exist at :69/:76
+  but three sites (:149/:170/:226/:235) call filepath.Join
+  with the same constants directly — same constant so no
+  divergence; cosmetic redundancy noted.
+- ".wallet-*.tmp" appears twice in wallet.go (:268 glob
+  sweep, :295 CreateTemp) — same file, same literal;
+  cosmetic, recorded.
+- systemdUnitName const (service.go:145) single source for
+  enable/disable/is-active; plist name likewise const.
+- Platform data-dir joins (config.go:601-618) are one
+  switch per OS; XDG_HOME fallback verified s807-merged.
+
+Verdict: TRUE — every filename derives from a constant or a
+documented deliberate mirror; no string drift possible.
