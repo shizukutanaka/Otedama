@@ -18577,3 +18577,30 @@ Verification (~25 sites):
 
 Verdict: TRUE — Trim primitives used
 correctly; no Trim-vs-Prefix confusion.
+
+## Session 2917 update (Socratic pass 1582 — encoding/binary census)
+
+Claim under test: all wire marshalling
+goes through `binary.LittleEndian`
+`Put`/`Append`/`Uint` primitives —
+never `binary.Read`/`binary.Write`
+which use reflection and can silently
+produce platform-order output on
+non-uint types.
+
+Verification (~35 sites):
+
+- Every binary op is `LittleEndian`:
+  `PutUint16/32/64`, `Uint16/32/64`,
+  `AppendUint16/32` — explicit order,
+  no reflection.
+- `binary.Read`/`binary.Write`/`binary.
+  BigEndian` → **zero** occurrences.
+- Endianness matches Stratum V2's LE
+  wire format throughout (sha256d header
+  fields, frame extension_type,
+  OpenMiningChannelSuccess fields,
+  noise nonce/len prefix).
+
+Verdict: TRUE — LE-only, primitive-only;
+no binary.Read/Write reflection.
