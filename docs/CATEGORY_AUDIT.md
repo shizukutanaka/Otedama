@@ -40796,3 +40796,126 @@ census:
   `plan9obj`).
 
 Verdict: TRUE.
+
+## Session 3188 update (Socratic pass 1852 — filepath/io/fs/path ledger)
+
+Claim under test: filesystem
+paths
+are
+`filepath.Join`-
+built
+with
+`IsAbs`/`EvalSymlinks`/
+`Glob`
+at
+the
+three
+needed
+seams;
+`io/fs`
+and
+`path`
+are
+absent.
+
+Verification —
+census:
+
+- `path/filepath`:
+  `Join`×121,
+  `Separator`×2,
+  `IsAbs`×2,
+  `Glob`×2
+  (stale-
+  temp
+  sweep),
+  `EvalSymlinks`×2
+  (systemd
+  binary
+  +
+  GPU
+  sysfs),
+  `Base`×2,
+  `Dir`×1.
+  ZERO:
+  `Walk`/`WalkDir`,
+  `Abs`,
+  `Clean`,
+  `Ext`,
+  `Rel`,
+  `VolumeName`,
+  `FromSlash`/`ToSlash`,
+  `Match`,
+  `Split`,
+  `SplitList`,
+  `ListSeparator`,
+  `Localize` —
+  path
+  work
+  is
+  join-
+  only,
+  never
+  walk
+  or
+  slash
+  normalize
+  (the
+  earlier
+  walkdir/
+  portable-
+  path
+  audits
+  verified).
+- `io/fs`:
+  ZERO —
+  no
+  `fs.FS`/`WalkDir`/`ReadFile`/`Glob`/
+  `fs.FileInfo`.
+  Apparent
+  `fs.*`
+  matches
+  (`fs.StringVar`×12
+  etc.)
+  are
+  `flag.FlagSet`
+  receivers,
+  not
+  imports.
+- `path`
+  (slash
+  package):
+  ZERO —
+  URL
+  paths
+  are
+  literal
+  strings
+  (`/healthz`,
+  `/readyz`,
+  `/metrics`,
+  `/debug/pprof/`),
+  never
+  `path.Join`/`path.Clean`-ed.
+- `os.Root`/`os.OpenRoot`
+  (Go
+  1.24
+  confinement):
+  ZERO —
+  not
+  needed
+  (paths
+  are
+  config
+  +user
+  supplied
+  then
+  `IsAbs`-/
+  `EvalSymlinks`-validated;
+  no
+  directory-
+  traversal
+  API
+  required).
+
+Verdict: TRUE.
