@@ -10562,3 +10562,7 @@ Claim verified: driver registration is fail-loud (nil, empty name, and duplicate
 ## Session 1993 update (Socratic pass 659 — HAL contract surface)
 
 Claim verified: the package doc itself was corrected in s243 to describe only shipped drivers (the aspirational asic/cuda/rocm subpackage list was removed — documentation cannot claim architecture that does not exist); Identity.Validate enforces a closed Family set plus non-empty ID free of whitespace and '/' (unicode.IsSpace, so the C1/fullwidth gap #594 closed stays closed); the Driver.Enumerate contract — return devices-so-far + ctx.Err on timeout — is exactly what the detector implements and relies on; Shutdown idempotency and concurrency safety are stated as interface requirements. TRUE.
+
+## Session 1994 update (Socratic pass 660 — wallet write-path atomicity + oracle opacity)
+
+Claim verified: a failed unlock returns one opaque message — the unmarshal and decrypt failure paths are deliberately indistinguishable to the caller, so error text gives a passphrase oracle nothing to measure; save() is crash-atomic end-to-end (same-dir temp → write → Sync → Close error checked → chmod 0600 *before* rename — the final path is never world-readable even for an instant → rename), every failure branch unlinks its temp, and the startup sweep removes only >1-minute-old temp files so it can neither accumulate cruft forever nor unlink a live write in a second process; ChangePassphrase re-verifies the old passphrase by round-trip and rejects an empty new one. TRUE.
