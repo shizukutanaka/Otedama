@@ -22453,3 +22453,36 @@ Verification — census:
   other syscall calls.
 
 Verdict: TRUE.
+
+## Session 3012 update (Socratic pass 1676 — os/signal ledger)
+
+Claim under test: exactly
+one signal wiring exists,
+at the process root.
+
+Verification — census:
+
+- `signal.NotifyContext`
+  ×1 — run.go:194, the
+  root ctx the whole
+  engine tree derives
+  from (SIGINT+SIGTERM).
+- ZERO `signal.Notify`
+  channel-based wirings —
+  no dual signal paths.
+- ZERO `signal.Reset`
+  or default-restoration
+  tricks.
+- The second grep match
+  (metrics.go:93) is a
+  comment, not code.
+- No signal handling in
+  libraries — everything
+  key off ctx.Done()
+  (verified fan-in
+  sweep).
+- `os.Interrupt` counted
+  once (same single
+  wiring's operand list).
+
+Verdict: TRUE.
