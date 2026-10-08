@@ -32,8 +32,10 @@ is ever found.
 ### Fix
 
 1. Switch to a pool that accepts low-difficulty shares, or use a
-   pool with a difficulty-tuning mode. Braiins pool and demand.sv2.io
-   both auto-tune.
+   pool with a difficulty-tuning mode (Braiins Pool's Stratum V2
+   service auto-tunes difficulty per client — the prior text named
+   "demand.sv2.io" here, a hostname that no longer resolves;
+   corrected session 2693).
 2. There is no GPU speedup available today: Otedama detects GPUs
    (`otedama doctor`) but implements no CUDA/ROCm/Vulkan compute
    dispatch, so a GPU does not increase SHA-256d hashrate (see

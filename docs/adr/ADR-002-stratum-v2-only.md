@@ -99,6 +99,21 @@ user's explicit choice via the configured URL scheme, never an
 automatic downgrade. ADR-009's positioning note already records this
 erratum's substance from the integration side.
 
+**Erratum 2 (session 2693, recorded 2026-10):** "demand.sv2.io" in the
+Negative-consequences pool list does not resolve — `sv2.io` and
+`demand.sv2.io` are both NXDOMAIN today (the pool the text means is
+**DMND**, which operates under the `dmnd.work` domain). Per the
+project's no-phantom-URLs rule this is recorded as naming drift; the
+V2-capable-pool list it appears in remains directionally right
+(Braiins Pool, DMND, SRI nodes are all real and V2-capable).
+
+The same sweep found the other example hostnames were dead too —
+`public.stratum.slushpool.com` (config.yaml.example, docs/API.md) and
+`demand.fun` (config.yaml.example's commented failover line) were also
+NXDOMAIN. Those are corrected in place: `stratum+v2tls://
+stratum.braiins.com:3336` is the documented Braiins Pool V2 endpoint,
+verified resolving and accepting TCP on :3336 today.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model

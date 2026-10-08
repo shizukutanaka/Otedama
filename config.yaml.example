@@ -50,7 +50,11 @@ bitcoin_address: ""
 #   stratum+tcp://      Stratum V1 plain        (not recommended)
 #
 pools:
-  - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
+  # (Correction, session 2693: the prior example host
+  # "public.stratum.slushpool.com" no longer resolves — NXDOMAIN. The
+  # documented Braiins Pool Stratum V2 endpoint is stratum.braiins.com,
+  # whose :3336 port answers TCP today; verified resolving and open.)
+  - url: "stratum+v2tls://stratum.braiins.com:3336"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.
@@ -74,8 +78,9 @@ pools:
   # Failover: list pools in priority order. Otedama tries the first;
   # if a connection fails or drops, it rotates to the next immediately,
   # and only applies reconnect backoff once every pool has been tried.
-  # Uncomment to add a backup:
-  # - url: "stratum+v2tls://demand.fun:3336"
+  # Uncomment and substitute a real backup pool URL to enable failover
+  # (the earlier "demand.fun" placeholder does not resolve — NXDOMAIN):
+  # - url: "stratum+v2tls://<your-backup-pool>:3336"
   #   password: "x"
 
 # ── Workers ──────────────────────────────────────────────────────────────────

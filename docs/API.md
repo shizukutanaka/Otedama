@@ -194,10 +194,13 @@ language: en               # en, ja, zh, ko, es, fr, de, pt, ru, ar
 data_dir: ~/.local/share/otedama
 
 # Mining pools, tried in the order listed (list position is the priority;
-# there is no separate priority field).
+# there is no separate priority field). Example hosts below: only
+# stratum.braiins.com is a real resolving endpoint (session-2693 audit:
+# the earlier public.stratum.slushpool.com / demand.sv2.io names are
+# both NXDOMAIN today).
 pools:
-  - url: stratum+v2://public.stratum.slushpool.com:3336
-  - url: stratum+v2://demand.sv2.io:34254
+  - url: stratum+v2://stratum.braiins.com:3336
+  - url: stratum+v2://<your-backup-pool>:3336
 
 # Worker identification sent to pools — a single object, not a list.
 # device/threads are not config fields: Otedama auto-detects every

@@ -13408,3 +13408,19 @@ claim verified: session-2623 erratum (:16) remains accurate — alpha Decide is 
 ## Session 2692 update (Socratic pass 1358 — docs/adr/ADR-011 full pass)
 
 claim verified: accepted-decision body consistent — Option A (adopt secp256k1 as 4th dep) still unimplemented by design (Follow-up items explicitly "not part of this decision"; go.mod direct deps remain 3: yaml v3.0.5, x/crypto v0.48.0, x/sys v0.41.0). P-256 stub claims accurate (x/crypto/ecdh, KNOWN_LIMITATIONS §2, plaintext-V2-only). Both prior errata still hold: Erratum-1 (secp256k1/v4 lacks BIP-340 schnorr + ellswift; SV2 needs full NX_Secp256k1+EllSwift_ChaChaPoly_SHA256 + 2-level PKI) and Erratum-2 (btcec/v2 ellswift ships since v2.5.0, consolidates Option A to one dep; PKI auth flow remains open). No new drift — TRUE.
+
+## Session 2693 update (Socratic pass 1359 — docs/adr/ADR-002 + repo-wide phantom-hostname sweep)
+
+claim corrected ×1 (via erratum): "demand.sv2.io" in the ADR-002 negative-consequences pool list — sv2.io + demand.sv2.io both NXDOMAIN (real pool: DMND at dmnd.work). Session-1236 Erratum-1 (V1 dialer) still accurate.
+claim corrected ×4 (inline, non-ADR docs): the same dead-hostname class turned out repo-wide —
+  • config.yaml.example:53 primary example "stratum+v2tls://public.stratum.slushpool.com:3336" → NXDOMAIN; replaced with "stratum+v2tls://stratum.braiins.com:3336" (documented Braiins V2 endpoint; dig resolves, TCP :3336 open)
+  • config.yaml.example:78 commented failover "demand.fun:3336" → NXDOMAIN; replaced with angle-bracket placeholder
+  • docs/API.md:199-200 pool example pair (both NXDOMAIN) → real endpoint + placeholder, with a session-2693 correction note
+  • docs/TROUBLESHOOTING.md:35 "Braiins pool and demand.sv2.io both auto-tune" → Braiins claim kept, phantom name removed with correction note
+claim corrected ×1 (via erratum): ADR-001:35 "(Braiins pool, demand.sv2.io, etc.)" — same NXDOMAIN name; erratum appended, substance (real non-custodial V2 pools exist) affirmed.
+claim verified: V2-only rationale, Noise-NX/ChaChaPoly facts, noise_pool.go existence, P-256→secp256k1 plan consistent with ADR-011, all three rejected alternatives internally consistent.
+self-correction: my session-2684 ledger claim "demand.sv2.io exists as a real SRI service" is FALSE by today's DNS — corrected here (test fixture in config_loading_test.go retains the names: never dialed, noted only).
+
+## Session 2694 update (Socratic pass 1360 — milestone gate)
+
+gofmt -l internal cmd: clean. go build ./...: ok. go vet ./internal/... ./cmd/...: ok. go test -count=1 all 23 internal+cmd packages: PASS (incl. doc-touching config/doctor/poolproto/cmd packages). Branch merges cleanly into master.
