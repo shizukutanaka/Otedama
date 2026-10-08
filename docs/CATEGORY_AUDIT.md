@@ -10234,3 +10234,7 @@ Periodic recheck (prior: s1897-era tracking): sv2-apps tag set tops out at v0.8.
 ## Session 1911 update (Socratic pass 577 — arbitration Decide input hygiene)
 
 Claim verified: Decide rejects nil input, invalid Policy, non-negative/non-finite HysteresisMargin and MinYieldSatsPerSec, and duplicate device IDs (no silent dedup); sorts devices by ID for deterministic output; uses Previous only for hysteresis/switch detection; and tracks HeldIdle when a device that had a prior assignment is left idle. engine.go:307–360 clean. TRUE.
+
+## Session 1912 update (Socratic pass 578 — chooseForDevice scoring invariants)
+
+Claim verified: candidateStreams filters by family acceptance, positive effective yield, and the minYield floor — with the idle reason distinguishing "below floor" (actionable) from "nothing wanted this device"; maxRaw is captured pre-policy so ForegoneSatsPerSec honestly reports the yield-regardless cost; the sort is stable, score-descending, StreamID-tiebroken (deterministic); hysteresis compares in the same policy-adjusted score space used for selection, so switches only happen on meaningful improvement. TRUE.
