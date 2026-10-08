@@ -12022,3 +12022,7 @@ Claim verified: `otedama service` dispatch is honest — missing subcommand → 
 ## Session 2353 update (Socratic pass 1019 — OnReady readiness semantics)
 
 Claim verified: readiness tracks a real pool session, not process start — OnReady is nil-guarded at all three call sites (run.go:417,582,595); onConnected fires true only on an established session; session-end fires false on every drop path; the Run() defer guarantees a final false on shutdown so readiness can never stick true (:414–418); poolConnectFailures counts only exits while the engine intended to run (ctx.Err()==nil), so a graceful stop can't inflate the failure counter (:587–593). TRUE.
+
+## Session 2354 update (Socratic pass 1020 — MILESTONE gate re-verification)
+
+Milestone verdict: gofmt -l internal cmd clean; go build ./... clean; go vet ./internal/... ./cmd/... clean; go test -count=1 on all 10 scoped packages (metrics, rates, arbitration, engine, poolproto×3, miner, tui, httpserver) — all ok. The 1020-pass ledger is self-consistent and the tree builds/vets/tests green at HEAD. TRUE.
