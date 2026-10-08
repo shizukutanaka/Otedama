@@ -15640,3 +15640,34 @@ Verification:
 
 Verdict: TRUE — entity context is attached exactly once at
 the boundary that knows it; nothing surfaces anonymous.
+
+## Session 2790 update (Socratic pass 1456 — money-math census)
+
+Claim under test: float64 is used only where the number is
+an estimate feeding a decision/display, never where it
+becomes a settlement amount.
+
+Verification:
+
+- The whole yield pipeline is float64 by design:
+  SatsPerSecond (provider.go:95/:185), NetSatsPerSecond,
+  mining.go:162 btcPerSec×1e8, ×0.99 pool-fee estimate,
+  ai_inference.go:124 SatsPerSecond(usdPerHour, rate) — all
+  feed Decide() comparisons, hysteresis, and the TUI/API
+  display. ULP-scale error is immaterial against the 4x
+  plausibility band and 5% hysteresis.
+- Nothing converts an estimated yield into a settlement
+  amount: payouts are pool-settled; the miner never signs,
+  builds, or broadcasts transactions — the only money-touch
+  code path (payout address → script verification) is
+  pure byte math.
+- The uptime/sats accountant accumulates float64
+  sats/s × seconds for a *display* metric (verified s2371):
+  bounded accumulation, never an invoice.
+- Non-finite yields collapse to zero before Decide
+  (#437/#443 merged fixes) — NaN/Inf cannot poison the
+  comparison.
+
+Verdict: TRUE — float64 reaches only decision/display
+surfaces; every settlement-adjacent path is integer or byte
+math.
