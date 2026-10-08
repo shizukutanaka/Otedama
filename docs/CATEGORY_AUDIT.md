@@ -14831,3 +14831,26 @@ Verification: all fmt.Errorf sites carrying `%v`.
 
 Verdict: TRUE — %w wherever a chain must survive; %v only for
 display payloads.
+
+## Session 2758 update (Socratic pass 1424 — defer-in-loop census)
+
+Claim under test: no `defer` executes inside a loop body — the
+resource-accumulation-until-function-return class is absent.
+
+Verification: defers textually adjacent to loops, each classified
+by lexical owner.
+
+- `defer wg.Done()` ×7 (checks.go:371, doctor.go:236/238,
+  fanin.go:35, registry.go:156, worker.go:169, hashrate.go:149) —
+  all inside `go func()` bodies spawned per-source; each runs at
+  that goroutine's return, bounded by the source count.
+- `run.go:2232 defer t.Stop()` — inside the token-refiller
+  goroutine's body, not the `for` — one ticker per goroutine
+  lifetime.
+- `arbitrate.go:306`, `metrics.go:171` — `defer mu.Unlock()` at
+  helper-function scope (updateStream / metric registration);
+  executes at the helper's return per call.
+- Zero `defer` inside a `for` statement's body — no per-iteration
+  accumulation of defers against the caller's frame.
+
+Verdict: TRUE — all defers are function/goroutine-scoped.
