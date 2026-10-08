@@ -22850,3 +22850,46 @@ Verification — census:
   runtime trickery).
 
 Verdict: TRUE.
+
+## Session 3020 update (Socratic pass 1684 — correction: s3019 entries)
+
+The pass-1683 block
+contains two factual
+mislabels discovered on
+re-read; correcting in
+place per honest-ledger
+convention:
+
+- `reflect` — the single
+  import is in
+  `internal/arbitration/
+  fuzz_test.go` (a TEST
+  file's DeepEqual for
+  property checks), not
+  an "i18n/flag-table
+  helper". Production
+  code has ZERO reflect.
+- `sync.Map` — the single
+  use is `pauseSet` in
+  `internal/engine/
+  arbitrate.go:87`
+  (the arbitration pause
+  set), not the "hal
+  driver registry"
+  (that registry is a
+  mutex-guarded map,
+  verified).
+
+All other s3019 counts
+(Mutex×21/RWMutex×8/
+WaitGroup×8/Once×4/
+Pool×2, zero Cond,
+zero container) stand
+as verified.
+
+Verdict: corrections
+recorded; the
+underlying claims —
+no runtime reflection,
+set-theoretic Map use —
+remain TRUE.
