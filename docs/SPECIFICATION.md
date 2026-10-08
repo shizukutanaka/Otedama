@@ -26,7 +26,7 @@ otedama <command> [flags]
 
 | Command | Behaviour |
 |---|---|
-| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. |
+| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. On first run it creates a BIP-39 wallet; the encryption passphrase and optional "25th word" are read from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` — preferred over the `--wallet-*` flags, which are visible in process lists. |
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |

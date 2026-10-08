@@ -20780,3 +20780,67 @@ Verdict: TRUE — zero orphan
 flags; the registered surface
 and the consumed surface are
 identical.
+
+## Session 2979 update (Socratic pass 1643 — env-var surface parity)
+
+Claim under test: every
+`OTEDAMA_*` env var read in
+production is documented,
+and docs name no phantom
+vars.
+
+Verification — production
+reads, 15 distinct vars:
+
+- `OTEDAMA_CONFIG`
+  (configfile.go) — doc in
+  API.md + SPECIFICATION §3.
+- `OTEDAMA_BITCOIN_ADDRESS`,
+  `LOG_LEVEL`, `LOG_FORMAT`,
+  `LANGUAGE`, `DATA_DIR`,
+  `HTTP_ADDR`,
+  `ARBITRATION_HYSTERESIS_PCT`,
+  `CURTAIL_BELOW_BTC_USD`,
+  `MIN_YIELD_SATS_PER_SEC`,
+  `POWER_WATTS`,
+  `ELECTRICITY_PRICE_PER_KWH`
+  — all config-layer reads
+  (config.go:127-538) with
+  matching §3.1 rows in
+  SPECIFICATION and rows in
+  API.md.
+- `OTEDAMA_WALLET_PASSPHRASE`,
+  `OTEDAMA_WALLET_MNEMONIC_
+  PASSPHRASE`,
+  `OTEDAMA_WALLET_NEW_
+  PASSPHRASE` — secret
+  reads in run.go/wallet.go/
+  doctor; documented in
+  API.md env table +
+  SPECIFICATION §2.
+- i18n message files also
+  embed `OTEDAMA_BITCOIN_
+  ADDRESS` — inside help-text
+  strings, not env reads.
+
+Gap found (fixed this pass):
+SPECIFICATION §2's `run` row
+did not mention the wallet
+env vars consulted at
+first-run wallet creation
+(`OTEDAMA_WALLET_PASSPHRASE`,
+`OTEDAMA_WALLET_MNEMONIC_
+PASSPHRASE`), while the
+`wallet change-passphrase`
+row names its two. Added the
+same-style parenthetical,
+noting env is preferred
+over the `--wallet-*` flags
+(argv is process-list
+visible; warning shipped in
+#493).
+
+Verdict: TRUE after fix —
+the 15-var production
+surface is fully documented;
+no phantom names.
