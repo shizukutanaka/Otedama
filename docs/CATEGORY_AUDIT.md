@@ -15504,3 +15504,33 @@ Verdict: TRUE — the one file that must be crash-durable
 (wallet.dat) uses the full discipline; every other write is
 scoped to data whose torn state is either detected or
 immaterial.
+
+## Session 2785 update (Socratic pass 1451 — shared-map ownership census)
+
+Claim under test: every map reachable from more than one
+goroutine is either mutex-guarded, immutable after
+construction, or function-local.
+
+Verification — full map-field inventory:
+
+- Mutex-guarded: metrics.Registry.{counters,gauges} (r.mu),
+  hal.Registry.drivers (registry lock + sorted snapshot
+  copies out), stratumv1.pending (sendMu + dedicated
+  pending paths), stratumv2.pending (single adapter
+  reader), engine streams/rejectByReason (mutexes).
+- Immutable after construction: Counter/Gauge.labels
+  (cloneLabels at New* time, never mutated), wordlist
+  wordIndex (init-built, read-only), validEntropyBits/
+  validCounts (init-built), btccrypto.registry
+  (init-populated by scheme files, read-only thereafter —
+  same single-goroutine init phase verified at s2741).
+- Function-local: doctor ipToPools, fetcher decode targets.
+- Convention-exported: provider.DefaultHashrates is an
+  exported package map — mutable in principle, read-only by
+  convention; a mutation is deliberate API surface, not a
+  race window (lookup happens inside a normal call).
+- RPC request literal at stratumv1.go:709 is constructed
+  per call under the writer path — never shared.
+
+Verdict: TRUE — no shared map is accessed without either a
+guard or an immutability/single-owner invariant.
