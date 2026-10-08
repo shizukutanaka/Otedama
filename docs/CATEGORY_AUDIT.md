@@ -14403,3 +14403,28 @@ Verification: mechanical gate re-run at HEAD.
 
 Verdict: TRUE — ~1,400 Socratic passes recorded; mechanical gates
 green at HEAD.
+
+## Session 2741 update (Socratic pass 1407 — syscall/runtime surface census)
+
+Claim under test: low-level `syscall`/`runtime` calls are limited to
+platform identification, resource sizing, and metrics — no runtime
+trickery.
+
+Verification: full non-test site enumeration (8 files, ~20 sites).
+
+- `runtime.Version/GOOS/GOARCH` — version.go reporting plus platform
+  branches: daemon's unsupported-platform gate (:110/:124/:138),
+  doctor's windows-vs-unix checks, config's per-OS default paths.
+- `runtime.NumCPU` — worker.go's thread default (:95,:139), doctor's
+  CPU-count check, setup.go's model label.
+- `runtime.ReadMemStats` + `NumGoroutine` — metrics/runtime.go's
+  go_* collector (the honest summary-substitute already verified).
+- `syscall.SIGTERM` (cmd/otedama/run.go:196) — the single syscall
+  constant, feeding signal.Notify for graceful shutdown.
+- Zero `go:linkname`, zero `unsafe`, zero `runtime.SetFinalizer`,
+  zero `runtime.LockOSThread`, zero `GOMAXPROCS` overrides —
+  the runtime is read-only configuration surface, never a patch
+  point.
+
+Verdict: TRUE — every low-level call is identification, sizing, or
+exposition; no behavior mutation.
