@@ -17600,3 +17600,22 @@ Verification:
 
 Verdict: TRUE — append-only discipline holds;
 the tail is a contiguous numbering run.
+
+## Session 2876 update (Socratic pass 1541 — cross-compile matrix)
+
+Claim under test: the CLI binary still
+cross-compiles for every release target, and
+the whole tree builds under GOOS=linux.
+
+Verification:
+
+- `GOOS/GOARCH go build ./cmd/otedama` →
+  all four release targets succeed:
+  linux/amd64, windows/amd64, darwin/arm64,
+  linux/arm64.
+- `GOOS=linux GOARCH=amd64 go build ./...` →
+  clean — no darwin-only syscall leaks into
+  the Linux build.
+
+Verdict: TRUE — the cross-compile matrix holds
+on the branch tip.
