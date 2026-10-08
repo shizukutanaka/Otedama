@@ -15938,3 +15938,33 @@ no testdata/ assets are referenced by embed. The class is
 structurally absent — nothing can go missing at runtime.
 
 Verdict: TRUE (vacuous) — no embed surface.
+
+## Session 2802 update (Socratic pass 1468 — signed→wire marshal census)
+
+Claim under test: every signed→unsigned conversion feeding
+a wire field or bound is either structurally bounded or
+documented; a negative can never wrap silently onto the
+wire.
+
+Verification — the full production set (stratum/,
+poolproto/, miner/, engine/):
+
+- Bounded-by-construction with nolint annotation:
+  MsgLength (MaxFrameSize bound at construction), noise
+  frame len (maxNoiseFrame checked two lines above),
+  threadID (< Threads), ntime (u32 wire field, wraps at
+  2106 per SV2 spec), ParseUint bitSize-32 results.
+- Value-domain constants: chanID=0, ext=0.
+- Byte-sourced: sha256d mantissa/exp composition — inputs
+  are raw bytes, not signed arithmetic.
+- stratumv1.go:684-688 — the two `uint64(v)` JSON-RPC id
+  coercions carry the documented nolint (negative wraps
+  only to an unmatched pending key; verified s2792).
+- run.go:1265 NewSubmitsAccepted — SV2 u32 wire field,
+  non-negative by spec; bounded by the frame decoder.
+- setup.go:90-92 — nonce-partition product computed in
+  uint64 and bound-checked (<=1<<31) before the uint32
+  stride assignment (#1389 fixed the 1<<31 int overflow).
+
+Verdict: TRUE — every conversion is bound-annotated,
+byte-sourced, or spec-non-negative; no silent wrap.
