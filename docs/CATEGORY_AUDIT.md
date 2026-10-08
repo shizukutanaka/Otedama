@@ -12490,3 +12490,7 @@ Claim verified: EncryptSeed hard-rejects an empty passphrase — scrypt of "" is
 ## Session 2471 update (Socratic pass 1137 — BIP-39 wordlist integrity, maintainer-gated verdict)
 
 Claim verified: the embedded wordlist is the canonical bip-0039/english.txt in newline-joined raw form (english_wordlist.go:4–17, 56+); init() panics if the split count ≠ 2048 OR the SHA-256 of the raw constant ≠ the pinned 2f5eed53… hash — a corrupted/tampered list fails at package init before any mnemonic can be derived (:34–45); NewEnglishWordList delegates to NewWordList, so the embedded list passes through the same 2048/unique/valid-UTF-8 validation as any caller-supplied list (:48–53). TRUE — verdict only (CODEOWNERS territory); the list is the same one Ledger/Trezor/Electrum use, pinned by hash at init, and can't silently drift.
+
+## Session 2472 update (Socratic pass 1138 — merge-health re-verification)
+
+Claim verified: `origin/master` remains 40da2e51 (#1404) — no new merges since session-2451's check; `git merge-base --is-ancestor origin/master HEAD` confirms the audit branch sits on top of the latest trunk (0 commits behind); `git merge-tree --write-tree origin/master HEAD` produces tree a8d8115 cleanly — no content conflicts pending. TRUE — every verdict recorded on this branch still describes current master; a stale-base merge surprise is structurally impossible today.
