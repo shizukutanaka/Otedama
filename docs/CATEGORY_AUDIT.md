@@ -16198,3 +16198,27 @@ Verification — the complete set (two sites):
 
 Verdict: TRUE — both truncations are bounded and load-
 bearing invariants, not leaks.
+
+## Session 2812 update (Socratic pass 1478 — rand-provenance census)
+
+Claim under test: every randomness source in production
+is crypto/rand — math/rand is absent.
+
+Verification — the complete import set:
+
+- crypto/rand consumers: seed.go:51 (BIP-39 entropy),
+  wallet.go:40 (wallet entropy/salts), seedstore.go:23
+  (scrypt salt, AES-GCM nonce), noise.go:38 (NX
+  handshake ephemerals + padding), run.go:33 (reconnect
+  backoff jitter, :476-478), setup.go:16 (backup-verify
+  word-index sampling :286).
+- math/rand: zero imports anywhere in production.
+- seed.go:79-80 + seedstore.go:78 document injectable
+  readers defaulting to crypto/rand.Reader — tests can
+  substitute deterministic sources without changing the
+  call sites (verified test seam).
+- The jitter draw is crypto/rand even though only
+  uniformity is required — strongest available source.
+
+Verdict: TRUE — production has exactly one
+randomness provider and it is the CSPRNG.
