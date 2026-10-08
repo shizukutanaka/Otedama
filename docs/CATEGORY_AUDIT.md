@@ -11846,3 +11846,7 @@ Claim verified: Decide degrades gracefully on every degenerate input — nil Inp
 ## Session 2309 update (Socratic pass 975 — session Close idempotence)
 
 Claim verified: every poolproto Close is concurrency-safe — all four sites use sync.Once (V1 connection dialer.go:224/237, V1 session stratumv1.go:661, V2 connection dialer.go:200/209; V2 session delegates to its conn's once). A duplicate Close (session-end + defer, or concurrent callers) executes the body exactly once: ctx cancel → pending ledger reap → conn close. No double-close panic, no half-closed state. TRUE.
+
+## Session 2310 update (Socratic pass 976 — StartBackground lifecycle)
+
+Claim verified: both rate fetchers' StartBackground (fetcher.go:450, hashrate.go:230) is called exactly once per Run() — the loops are plain ticker+ctx-select with `defer ticker.Stop()`, an immediate first fetch, and every Fetch is mutex-guarded single-flight so even a hypothetical double-start is benign (duplicate pollers, no storm or panic). Zero- interval falls back to CacheDuration. TRUE.
