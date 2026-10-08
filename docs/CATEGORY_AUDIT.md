@@ -16271,3 +16271,29 @@ Verification — all six production sites:
 
 Verdict: TRUE — every Repeat count is terminal-clamped
 or constant-bounded; a hostile pool cannot inflate one.
+
+## Session 2815 update (Socratic pass 1481 — double-bookkeeping census)
+
+Claim under test: the (jobs map, jobOrder slice) pair
+cannot desync — both halves update inside a single
+function and a single goroutine.
+
+Verification:
+
+- run.go:117-127 storeBoundedJob is the ONLY mutation
+  path: appends to order only on a fresh key (map check
+  dedups), then inserts into the map, then the FIFO
+  eviction loop deletes jobs[order[0]] and advances
+  order — both halves always updated together.
+- Tip-invalidation (:1205-1210) replaces BOTH structures
+  wholesale (new map + order[:0]) and re-inserts only
+  the named job — a two-step atomic sequence under the
+  session goroutine's ownership, no interleaving.
+- jobsCap=64 bound lives inside the same loop — order
+  length can never exceed the map's membership.
+- Read paths consult jobs[id] for existence; order is
+  the eviction cursor only — no two-way truth to keep
+  in agreement.
+
+Verdict: TRUE — the pair is single-writer, single-
+goroutine, single-function; desync is unreachable.
