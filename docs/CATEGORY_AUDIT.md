@@ -12038,3 +12038,7 @@ Claim verified: backup payout addresses are validated as strictly as the primary
 ## Session 2357 update (Socratic pass 1023 — starvation tripwire symmetry)
 
 Claim verified: the two tripwires are identical-shape in both session loops — job-silence warn once per episode with rearm on recovery at run.go:1100–1108 (V1) and :1629–1637 (V2); both suppress under isCurtailed so deliberate curtailment can't masquerade as starvation; the V2 estimated-interval warn (>3600s between shares → "income effectively zero") shares the same once-per-episode/rearm discipline; quantile gauges published only when p95>0 so a cold session can't emit a synthetic zero. TRUE.
+
+## Session 2358 update (Socratic pass 1024 — tls_ca_file degrade symmetry)
+
+Claim verified: both session paths handle the optional CA bundle identically — unreadable file → warn + fall back to system roots only (never silent plaintext; run.go:849–852 V2, :1452–1457 V1); malformed PEM hard-fails via TLSConfigWithExtraCAs error rather than connecting with a broken trust set (:853–856); the dial is bounded at poolDialTimeout (15s) so a blackholed endpoint can't hold failover (:859–862); stratum+v2tls:// calls stratum.DialTLS — a certificate-verified connection, never the V1 mislabeled-plaintext class. TRUE.
