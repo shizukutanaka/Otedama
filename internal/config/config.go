@@ -89,8 +89,8 @@ type Config struct {
 	// list them explicitly here.
 	Pools []PoolConfig `yaml:"pools"`
 
-	// Workers controls how Otedama names itself to pools. If empty,
-	// a hostname-derived name is used automatically.
+	// Workers controls how Otedama names itself to pools. If the name is
+	// empty, the bare payout address is sent as the user identity.
 	Workers WorkerConfig `yaml:"workers"`
 
 	// Language is the IETF BCP 47 language tag for UI messages and logs,
@@ -244,8 +244,8 @@ type PoolConfig struct {
 
 // WorkerConfig controls how Otedama identifies itself to pools.
 type WorkerConfig struct {
-	// Name is the worker name reported to pools. If empty, the hostname
-	// is used.
+	// Name is the worker name reported to pools. If empty, the pool sees
+	// only the payout address (no ".name" suffix is appended).
 	Name string `yaml:"name"`
 }
 

@@ -86,7 +86,7 @@ pools:
 # ── Workers ──────────────────────────────────────────────────────────────────
 workers:
   # Human-readable worker name sent to the pool for identification.
-  # Defaults to the hostname if empty.
+  # If empty, the bare payout address is sent as the user identity.
   name: ""
 
 # ── Language ─────────────────────────────────────────────────────────────────

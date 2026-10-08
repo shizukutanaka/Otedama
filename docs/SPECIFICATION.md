@@ -68,7 +68,7 @@ its default, and its validation rule:
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
 | `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured for `stratum+tls://` and `stratum+v2tls://` |
-| `workers.name` | — (file only) | `""` → hostname fallback | appended as `.name` to the `user_identity` |
+| `workers.name` | — (file only) | `""` → bare payout address only | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
 | `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
 | `log_format` | `OTEDAMA_LOG_FORMAT` | `text` | ∈ {text, json} |
