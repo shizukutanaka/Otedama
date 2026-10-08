@@ -10502,3 +10502,7 @@ Claim verified: provider lifecycle is structurally leak-free — a second Start 
 ## Session 1978 update (Socratic pass 644 — provider contract honesty)
 
 Claim verified: the payout scheme is stored in atomic.Pointer so a pool failover re-prices subsequent quotes race-free; mutable-after-Start fields (HashrateFunc, NetworkHashrateFunc) carry explicit "not safe after Start" contracts; the package doc discloses that GPU Bitcoin mining is unreachable today (hal reports SHA256d=false for every GPU — arbitration's live decision is CPU-only) and records the custodial markets (RNDR, io.net) as deliberately excluded under ADR-001 so a future contributor cannot naively add them. TRUE.
+
+## Session 1979 update (Socratic pass 645 — fanIn shutdown completeness)
+
+Claim verified: the merged quote/share channel cannot deadlock at shutdown — each per-input goroutine selects ctx on both the receive and the send, so a producer that is never written and never closed cannot pin the merge goroutine (and therefore `out`) past cancellation; `out` closes exactly once when all inputs drain or ctx fires; buffering is proportional to input count but capped at 64; one generic implementation serves both quote and share paths so there is no second copy to drift. TRUE.
