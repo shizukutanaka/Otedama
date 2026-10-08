@@ -15583,3 +15583,32 @@ Verification — all 13 sort sites:
 
 Verdict: TRUE — ordering is always introduced on private
 copies; caller slices are never reordered or overwritten.
+
+## Session 2788 update (Socratic pass 1454 — reader-wrap census)
+
+Claim under test: no buffered reader silently swallows input
+— every bufio wrap is either session-scoped (one reader owns
+the conn for its life) or single-use-per-process.
+
+Verification — all 3 wrap sites:
+
+- stratumv1.go:189 — `bufio.NewReaderSize(conn.raw,
+  maxLineBytes)` stored in s.reader for the session's life;
+  every read goes through the session's readLine. The
+  underlying conn is never read directly while the reader
+  lives (write path uses a separate writeMu channel).
+- engine/setup.go:342 — one `bufio.NewReader(in)` created at
+  the top of the interactive backup-verification flow and
+  reused for every prompt in that flow — correct single-
+  owner pattern.
+- cmd/otedama/wallet.go:237 — `bufio.NewReader(stdin)` is
+  created fresh inside readSecretLine. This would lose
+  read-ahead bytes if called twice on the same stdin — but
+  it is called exactly once per process invocation (single
+  "Recovery phrase: " prompt at wallet.go:137), so no
+  buffered bytes can be orphaned. Rotate/verify flows each
+  run one prompt per process.
+
+Verdict: TRUE — no double-buffered reader can lose input;
+the fresh-per-call bufio is safe only because the call is
+single-use, which the code satisfies.
