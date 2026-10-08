@@ -20032,3 +20032,49 @@ Verification:
 Verdict: TRUE — production bytes
 surface is 2 Equal calls; the
 rest is test fixtures.
+
+## Session 2963 update (Socratic pass 1628 — bufio census)
+
+Claim under test: `bufio` is used
+only for (a) the V1 socket line
+reader (bounded) and (b) local
+interactive stdin (unbounded but
+operator-controlled, not a remote
+surface).
+
+Verification:
+
+- V1 socket: stratumv1.go:189
+  `bufio.NewReaderSize(conn.raw,
+  maxLineBytes)` — the readLine
+  helper at :243 calls ReadSlice
+  and returns an error on
+  `bufio.ErrBufferFull`; the
+  returned slice is copied out
+  of the bufio buffer (comment
+  at :238). Hostile pool input
+  cannot grow the buffer.
+- Interactive stdin:
+  - cmd/otedama/wallet.go:237
+    `bufio.NewReader(stdin).
+    ReadString('\n')` — recovery
+    phrase entry; stdin is the
+    operator's own TTY/pipe.
+  - engine/setup.go:342/350 —
+    backup-verification word
+    entry; same local stdin.
+  Unbounded by design (an
+  operator pasting a huge file
+  is their own resource, not a
+  remote attack surface).
+- Zero `bufio.Scanner`,
+  `bufio.NewWriter`, `ReadLine`,
+  `Peek` in production.
+- Tests: `bufio.NewReader(conn)`
+  at ~14 engine fake-server
+  sites — test fixtures.
+
+Verdict: TRUE — the remote-input
+reader is bounded at the buffer
+capacity; interactive readers
+are local-operator input.
