@@ -10482,3 +10482,7 @@ Claim verified: fetchOne measures clock skew from the HTTP Date header before re
 ## Session 1973 update (Socratic pass 639 — HashrateFetcher parity)
 
 Claim verified: the network-hashrate fetcher implements the same adversarial posture as the BTC/USD fetcher — fan-out to all sources, plausibility band at the source boundary, >4× distrust at exactly two surviving readings, even-n median of the middle pair, freshness reported honestly via CurrentHashrate's (0,false) contract rather than a lie of convenience; bodies are capped, non-200 responses are drained-bounded and errored, requests are ctx-bound under a 10s client timeout, and StartBackground fetches immediately so the provider sees a live value inside the first seconds. TRUE.
+
+## Session 1974 update (Socratic pass 640 — extractor + cache-read honesty)
+
+Claim verified: every source extractor parses the endpoint's real wire shape and parses numbers strictly (ParseFloat + explicit NaN/Inf rejection — "95000foo" and non-finite literals cannot pass); the [100,1e8] USD plausibility band is a deliberate wide rail that kills unit/parse errors and hardens the vulnerable two-source median; BTCUSDRate falls back without pretending freshness (fresh=false before first success), RateAge exposes silent staleness as a monotonic counter, and the single-flight coalescing prevents a background refresh racing a manual fetch from doubling the API request rate (CoinGecko 429 ban). TRUE.
