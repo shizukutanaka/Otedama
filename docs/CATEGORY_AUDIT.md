@@ -12066,3 +12066,7 @@ Claim verified: on every session end all workers get SetWork(nil) before the rec
 ## Session 2364 update (Socratic pass 1030 — pools[] enum/URL validation)
 
 Claim verified: every pools[i] entry is validated at config load — empty URL flagged explicitly, non-empty run through validatePoolURL (scheme table + host:port target) (config.go:683–689); payout_scheme enum-gated to "",fpps,pplns,tides,solo with the offending value quoted in the issue (:690–696); empty payout_scheme is documented "unknown/unset" (not an error); TLSCAFile's contract is verified downstream — verification always performed, file never disables it (:233–240). TRUE.
+
+## Session 2365 update (Socratic pass 1031 — doctor ExitCode + dual-channel honesty)
+
+Claim verified: ExitCode is computed exactly once in Report.ExitCode (doctor.go:111–131) — StatusFail dominates StatusWarn dominates all else, StatusSkip counts toward exit 0 ("passed or skipped"); both output channels share it: Print sanitizes Detail/Fix through poolproto.SanitizePoolText at the terminal boundary (:137–139) while WriteJSON deliberately does NOT sanitize — the JSON encoder escapes control bytes as \u00XX so raw detail is preserved losslessly yet inert for machine consumers (:189–195); doc.ExitCode mirrors ExitCode() so a script can act without re-deriving the verdict (:213); per-status counters identical in both paths. TRUE.
