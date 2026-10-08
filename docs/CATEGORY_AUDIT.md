@@ -13890,3 +13890,21 @@ Verification: `_test.go` file count per package across `internal/` +
 
 Verdict: TRUE — test presence is total; coverage bar is reachable
 everywhere it is claimed.
+
+## Session 2720 update (Socratic pass 1386 — milestone gate re-verification)
+
+Claim under test: the tree at current HEAD is still gofmt-clean,
+builds, vets clean, and the hot packages pass their tests — the
+milestone invariant re-checked after every ~20 passes.
+
+Verification at HEAD (post s2711–s2719 merges):
+
+- `gofmt -l internal cmd` → empty (zero files need formatting).
+- `go build ./...` → clean.
+- `go vet ./internal/... ./cmd/...` → clean.
+- `go test -count=1` on the six audit-heavy packages
+  (arbitration, config, miner, stratum, metrics, cmd/otedama):
+  all PASS.
+
+Verdict: TRUE — milestone gate green; the ledger's claimed
+invariants hold at the current tip.
