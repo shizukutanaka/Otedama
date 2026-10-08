@@ -14428,3 +14428,28 @@ Verification: full non-test site enumeration (8 files, ~20 sites).
 
 Verdict: TRUE — every low-level call is identification, sizing, or
 exposition; no behavior mutation.
+
+## Session 2742 update (Socratic pass 1408 — exit/env-mutation census)
+
+Claim under test: no library package exits the process or mutates
+the environment at runtime.
+
+Verification: `os.Exit`, `os.Setenv`/`os.Putenv`, `os.Getenv` site
+enumeration.
+
+- `os.Exit` — exactly one call site: `cmd/otedama/main.go:110`,
+  `os.Exit(run(args, stdout, stderr))`. The only other occurrence
+  is doctor.go's godoc sentence recommending `os.Exit(report.
+  ExitCode())` — advice, not a call. Library code returns errors;
+  the binary owns the exit.
+- `os.Setenv`/`os.Putenv` — zero non-test sites: no runtime env
+  mutation anywhere (test files use `t.Setenv` for isolation).
+- `os.Getenv`/`os.LookupEnv` non-test readers confined to the three
+  designated seam owners: `config.go` (the env layer — injectable
+  `env func(string) string` param), `daemon/service.go` (systemd
+  unit env resolution), `i18n/messages/bundle.go` (locale detection
+  via the `getenv` function value). Nothing else sniffs the
+  environment — behavior comes from the four-layer config.
+
+Verdict: TRUE — exit is main-only, env mutation absent, env reads
+confined to their seams.
