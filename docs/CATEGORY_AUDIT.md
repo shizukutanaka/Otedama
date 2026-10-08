@@ -16459,3 +16459,27 @@ Verification:
 
 Verdict: TRUE — every wrap carries context; the
 degenerate bare-wrap class is absent.
+
+## Session 2823 update (Socratic pass 1489 — zero-time comparison census)
+
+Claim under test: no Before/After/Sub comparison runs
+on a possibly-zero time — a zero time silently returns
+extreme durations (~year 1) that corrupt staleness and
+rate math.
+
+Verification — all six sites:
+
+- wallet.go:274 — `info.ModTime().Before(cutoff)` —
+  ModTime is guaranteed non-zero by os.Stat.
+- fetcher.go:240 — `f.fetchedAt.IsZero()` guards the
+  freshness math before any comparison (unfetched =
+  not fresh, honest).
+- arbitrate.go:278 — `at.IsZero() || at.After(now)` —
+  zero is checked FIRST, before the comparison, so a
+  never-fetched timestamp cannot alias as "future".
+- stats.go:195/:236 — both accountants guard
+  lastTick.IsZero() before duration math.
+- run.go:1673 is time.After (timer, not comparison).
+
+Verdict: TRUE — every zero-capable timestamp is
+IsZero-guarded before comparison; no year-1 alias.
