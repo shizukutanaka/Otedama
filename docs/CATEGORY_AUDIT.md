@@ -13172,3 +13172,7 @@ All TRUE: 🔵 planned rows are all ADR-tracked by design (thermal→ADR-008 sub
 ## Session 2635 update (Socratic pass 1301 — TROUBLESHOOTING parity)
 
 All TRUE: every cited surface exists — `otedama doctor`, `wallet verify`/`change-passphrase` (shipped #529), `service install`/`status`, `run --log-level`, GOMAXPROCS worker-cap guidance (workers = runtime.NumCPU). The embedded correction note (no `--log-level` on doctor; flags precede subcommand) is itself accurate — flag parsing stops at the first positional. No phantom flags remain post-#558/#573.
+
+## Session 2636 update (Socratic pass 1302 — solo-operations parity)
+
+**FIX APPLIED ×2:** two session-488 corrections had gone stale on this branch — (1) "fuzzing job does not exist" → false since test.yml:205 gained the `fuzz` job running `make fuzz` (session 1266/#1347); (2) "no govulncheck CI job — Makefile local only" → false since security.yml:56 runs govulncheck per push/PR (session 1265/#1346). Both corrections updated to "updated session 2636" notes keeping the original claim history. Remaining rows verified: cosign dead-code note still TRUE (release.yml never invokes goreleaser), CODEOWNERS sample matches the real file, SHA-pinning doctrine matches ci.yml pins.

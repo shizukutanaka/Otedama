@@ -235,7 +235,7 @@ jobs:
 - Signed-Releases（cosign未設定 → 低スコア）**訂正 (session 488)**: `.goreleaser.yaml` に cosign 設定は残るが `release.yml` が goreleaser を一切呼ばないため dead code — 署名リリースは存在せず Scorecard では低スコアのまま
 - Branch-Protection（mainブランチのPR必須ルール → 設定必要）
 - Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → 未設定）**訂正 (session 488)**: `.github/workflows/` にファズジョブは一切存在しない — `make fuzz` はローカル実行のみ
+- Fuzzing（go test -fuzz → 設定済み）**訂正 (session 488 → 更新 session 2636)**: session 488 時点ではファズジョブ無しと記載したが、`test.yml` に `make fuzz` を実行する `fuzz` ジョブが存在する（session 1266 で導入）。Scorecard の Fuzzing チェックは緑化可能な状態
 
 ### 2.3 インシデント対応の事前設計
 
@@ -654,7 +654,7 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
 対策：
-- `govulncheck` は週次自動実行**未**設定（訂正 session 488：CI に govulncheck/osv-scanner ジョブは一切存在せず Makefile ローカルのみ — 第2層の週次ワークフロー例がそのまま必要）
+- `govulncheck` は push/PR 毎に自動実行**済**（訂正 session 488 → 更新 session 2636：session 1265 で `security.yml` に govulncheck ジョブを導入済み — 週次スケジュールは未設定だが push 駆動で実用十分）
 - LDKのセキュリティアドバイザリをGitHub Watch経由で監視
 - ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
 
