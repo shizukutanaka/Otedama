@@ -10470,3 +10470,7 @@ Claim verified: both the V2 and V1 share paths run the superseded-job gate BEFOR
 ## Session 1970 update (Socratic pass 636 — milestone gate re-verification)
 
 Claim verified: the working tree is gofmt-clean, `go build ./...` and `go vet ./...` report zero findings, and the engine/arbitration/tui test suites pass — the verdict ledger claims on this branch remain true against a compiling, testing tree. TRUE (measured this session).
+
+## Session 1971 update (Socratic pass 637 — rate aggregation integrity)
+
+Claim verified: concurrent Fetch calls coalesce behind a single-flight leader whose waiters still respect their own ctx; implausible non-zero readings are dropped before the median; with exactly two surviving sources a >4× disagreement distrusts the pair (an average has no outlier rejection to offer); even-n medians average the two middle values (no high-source bias); all-source failure returns the concrete per-source causes via errors.Join; redundancy health (lastOKSources, fetchAttempts) is persisted whether or not the fetch succeeds — silent median-erosion stays visible. TRUE.
