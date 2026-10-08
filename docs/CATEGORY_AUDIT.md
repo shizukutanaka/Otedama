@@ -22590,3 +22590,53 @@ Verification — census:
   defaults).
 
 Verdict: TRUE.
+
+## Session 3015 update (Socratic pass 1679 — log/slog ledger)
+
+Claim under test: the
+logging surface is a
+single slog facade —
+no stdlib `log`, no
+bypass paths.
+
+Verification — census:
+
+- `slog.NewTextHandler`
+  ×2 + `NewJSONHandler`
+  ×2 — the log_format
+  matrix (text/json, the
+  two constructors at
+  logger init + hot
+  reconfigure).
+- `slog.Logger` ×2 +
+  `slog.New` ×1 +
+  `slog.Handler`/
+  `HandlerOptions` ×1 —
+  the whole handler
+  chain lives in
+  internal/logger.
+- `slog.LevelWarn`/
+  `LevelInfo`/`LevelError`/
+  `LevelDebug` ×1 each —
+  the 4-level enum the
+  config's log_level
+  validator pins.
+- ZERO `"log"` imports —
+  the stdlib logger is
+  fully displaced by
+  slog (verified: single
+  facade, atomic.Pointer
+  holder, CAS singleton
+  init).
+- ZERO `slog.Default()`
+  mutation outside the
+  owner package.
+- Every consumer goes
+  through the logger
+  adapter — no direct
+  fmt.Print* to stdout
+  in library code
+  (verified at the
+  stdout/stderr pass).
+
+Verdict: TRUE.
