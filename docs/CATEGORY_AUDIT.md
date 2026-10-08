@@ -12893,3 +12893,9 @@ Claim verified: ci-cd.yml's diff is real — `go build` corrected to `./cmd/oted
 ## Session 2570 update (Socratic pass 1236 — ADR payload diff check)
 
 Claim verified: the ADR diffs are honest — `docs/adr/README.md` updates ADR-003's dependency boundary to include x/sys (consistent with go.mod `golang.org/x/sys v0.41.0` used by internal/tui terminal-width syscalls, matching the s2556 NOTICE verdict), and ADR-009's +127 lines are append-only ecosystem recheck entries — including the s1661/s1681 self-correction sequence (a recorded misread on sv2-apps tags, corrected by appending, never rewriting). TRUE — honest-ledger protocol applied correctly.
+
+## Session 2571 update (Socratic pass 1237 — docs payload diff check + fix)
+
+Claim verified: API.md diff is honest metric-catalog catch-up (documents the merged `shares_submitted_total`, `shares_submit_in_flight`, `devices_idle`, `effective_yield_sats_per_second`, `power_breakeven_floor_sats_per_second` gauges/counters). SPECIFICATION adds doctor's own 0/1/2 exit-code set and correctly demotes backlog row G3 to "partially resolved" (V1 now routes through poolproto). THREAT_MODEL gains the yaml-path migration + govulncheck hard-gate + measured advisory status.
+
+REAL FIX: THREAT_MODEL's rewritten mitigation undercounts the dependency boundary — "two third-party runtime dependencies" omitted `golang.org/x/sys v0.41.0` (real runtime dep, internal/tui terminal syscalls, acknowledged in go.mod comments + the ADR-003 README update this same branch). Corrected to three, both in the mitigation and the residual-risk line.
