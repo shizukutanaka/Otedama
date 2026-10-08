@@ -34750,3 +34750,182 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3146 update (Socratic pass 1810 — crypto/hash/tls detail ledger)
+
+Claim under test: the
+crypto
+surface is
+stdlib-only:
+sha256
+mining
+hash +
+AES-GCM/
+scrypt/
+pbkdf2
+wallet +
+ecdh
+noise +
+tls.Config
+transport —
+no
+weak
+algorithms,
+no
+manual
+cipher
+use.
+
+Verification —
+census
+(boundary-
+verified):
+
+- `sha256.Sum256`×11 +
+  `sha256.New`×8 —
+  the
+  SHA-256d
+  mining
+  hash
+  and
+  digest
+  uses.
+- `sha512.New`×1 —
+  `seed.go:301`
+  the
+  BIP-39
+  PBKDF2-HMAC-
+  SHA512
+  (spec-
+  correct).
+- `hmac.New`×1 —
+  `seed.go:318`
+  the
+  wallet
+  fingerprint
+  MAC.
+- `pbkdf2.Key`×1 +
+  `scrypt.Key`×2 —
+  the
+  KDF
+  pair
+  (BIP-39
+  seed
+  +
+  wallet
+  encryption).
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `cipher.AEAD`×2 —
+  the
+  wallet
+  AEAD
+  and
+  noise
+  transport
+  AEAD.
+- `ecdh.P256`×3 +
+  `ecdh.PublicKey`×1 +
+  `ecdh.PrivateKey`×1 —
+  the
+  Noise
+  handshake
+  curve
+  ops.
+- `subtle.ConstantTimeCompare`×1 —
+  the
+  passphrase
+  verify.
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  `crypto/rand`
+  only
+  (`rand.Int`
+  is
+  the
+  ±25%
+  jitter
+  in
+  setup.go:297/
+  run.go:486).
+- `x509.NewCertPool`×3 +
+  `x509.SystemCertPool`×2 +
+  `x509.CertPool`×1 —
+  the
+  TLS
+  CA
+  path.
+- `tls.Config`×12 +
+  `tls.VersionTLS12`×4 +
+  `tls.Dialer`×4 —
+  the
+  twin-TLS
+  boundary
+  (TLS≥1.2
+  verified).
+- `tls.Dial`×0
+  real —
+  the
+  hit
+  was
+  a
+  comment
+  (`stratumv1.go:40`
+  mentions
+  the
+  sibling
+  file;
+  actual
+  code
+  uses
+  `tls.Dialer`).
+- `hash.Hash`×4 —
+  the
+  pooled-
+  hasher
+  interface
+  type.
+- Suffix
+  pollution
+  ruled
+  out:
+  `hash.Set`×2
+  was
+  `joulesPerTerahash.Set`
+  (metric
+  setter),
+  `hash.LessOrEqual`×2
+  was
+  a
+  local
+  `hash`
+  variable's
+  method
+  —
+  not
+  stdlib
+  `hash`.
+- ZERO
+  `md5.*`,
+  `sha1.*`,
+  `des.*`,
+  `rc4.*`,
+  `rsa.*`,
+  `ed25519.*`,
+  `elliptic.*`,
+  `chacha.*`,
+  `argon2.*`,
+  `hkdf.*`
+  (direct),
+  `crc.*`,
+  `adler.*`,
+  `maphash.*`,
+  `fnv.New64`,
+  `fnv.New128` —
+  weak
+  and
+  unused
+  primitives
+  absent.
+
+Verdict: TRUE.
