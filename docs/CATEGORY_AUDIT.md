@@ -19469,3 +19469,43 @@ Verdict: TRUE — Lock/Unlock is
 always paired; the asymmetry is
 the documented caller-holds
 helper contract.
+
+## Session 2949 update (Socratic pass 1614 — unicode/utf8 census)
+
+Claim under test: every
+user-visible string passes through
+a sanitizer that rejects control
+or invisible characters; manual
+rune decoding does not exist.
+
+Verification (8 sites, 6 files):
+
+- `unicode.In(r, Cc, Cf, Zl, Zp)`
+  — the sanitize boundary in both
+  poolproto.go:461 and
+  config.go:209. The #1341 fix
+  added Cf/Zl/Zp coverage —
+  directional overrides,
+  zero-width characters, and
+  line/paragraph separators are
+  all rejected.
+- `unicode.IsSpace` —
+  hal/device.go:128 rejects
+  whitespace + `/` in device IDs.
+- `unicode.IsControl` —
+  daemon/service.go:501 quotes
+  service argv tokens that contain
+  control chars (C0+C1).
+- `utf8.ValidString(w)` —
+  lightning/seed.go:133 validates
+  each BIP-39 wordlist entry.
+- Zero `utf8.DecodeRune`,
+  `RuneCount`, `RuneLen`,
+  `EncodeRune` — no manual rune
+  decoding; whole-string
+  validation only.
+
+Verdict: TRUE — the sanitize
+boundary is complete (Cc+Cf+Zl+Zp
+after #1341); no unsafe rune
+walking.
