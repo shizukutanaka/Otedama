@@ -10604,3 +10604,7 @@ Claim verified: stratum+v2tls:// now means a real certificate-verified TLS conne
 ## Session 2003 update (Socratic pass 669 — V2 handshake wire fidelity)
 
 Claim verified: SetupConnection/OpenMiningChannel encoders and decoders are field-order symmetric with per-field error attribution; MaxTargetUnconstrained honestly declares the all-ones bound — max_target is wire-required (a decoder reading it hits a short buffer without the field), so all-ones is the truthful encoding of "no preference" and stays forward-compatible with sv2-spec #236's ≤-channel-max constraint; OpenMiningChannelSuccess reads Extranonce through getB0_255 on purpose (the Postel-lenient half of the asymmetry), and OpenMiningChannelError tolerates a missing error string rather than failing the whole frame. TRUE.
+
+## Session 2004 update (Socratic pass 670 — V2 message decode strictness + dispatch forward-compat)
+
+Claim verified: every fixed-layout decoder verifies minimum payload length before slicing, and the NewMiningJob OPTION flag is strict — a value other than 0 or 1 is an error, not "nonzero means present" leniency that would silently desynchronize the wire format; dispatch routes unknown msg_types to Message.Unknown rather than erroring, which is the documented requirement for forward compatibility with future pool extensions; ValidateSetupConnection enforces protocol=MiningProtocol and Min≤Max; error-message fields tolerate an absent STR0_255 without failing the frame. TRUE.
