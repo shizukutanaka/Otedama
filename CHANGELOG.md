@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1790 — deploy.yml)
+- Removed the ungated archived `actions/create-release@v1` step from `deploy-production` — it raced release.yml's release creation on every `v*` tag push; release.yml remains the single owner
 ### Fixed (session 1789 — deploy.yml)
 - `rollback` job if-gate referenced nonexistent `refs/heads/main` → `refs/heads/master`; manual production deploys from master can now roll back on failure
 ### Fixed (session 1788 — deploy.yml)

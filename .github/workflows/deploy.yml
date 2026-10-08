@@ -267,30 +267,10 @@ jobs:
           kubectl run verify-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
             curl -f http://otedama-api:8080/health
       
-      - name: Create release notes
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## Changes in ${{ github.ref_name }}
-            
-            ### Docker Image
-            - Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            - Tag: ${{ needs.build.outputs.image-tag }}
-            - Digest: ${{ needs.build.outputs.image-digest }}
-            
-            ### Deployment Info
-            - Environment: Production
-            - Namespace: otedama
-            - Chart Version: ${{ github.ref_name }}
-            
-            Full changelog: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }}
-          draft: false
-          prerelease: false
+      # No "create release" step here: release.yml owns GitHub release
+      # creation on v* tags (softprops/action-gh-release upsert). This job's
+      # former actions/create-release@v1 step raced it — and the action is
+      # archived besides.
 
   rollback:
     if: failure() && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
