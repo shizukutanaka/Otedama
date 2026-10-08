@@ -14120,3 +14120,26 @@ Verification at HEAD — deadline surface across both V2 layers:
 Verdict: TRUE — every network phase is deadline-bounded (dial,
 handshake read+write, steady-state read, per-write), none leaks past
 its defer.
+
+## Session 2730 update (Socratic pass 1396 — LE-encoding helper parity)
+
+Claim under test: LE wire encoding doesn't bypass the appendXxxLE
+helpers inconsistently — mixed conventions would risk drift.
+
+Verification: `binary.LittleEndian` call sites outside wire.go.
+
+- 5 files use raw `binary.LittleEndian` — all inside the stratum
+  wire surface and all on FIXED-width fields at static offsets:
+  handshake.go (6 sites: version/flags/nominal_hashrate/reqid),
+  messages.go (40 sites: fixed SV2 message fields), frame.go (3:
+  header parse), noise.go (4: handshake framing), sha256d.go (8:
+  Bitcoin block-header serialization at :61-76 offsets 0,68,72,76).
+- The variable-length encoder helpers (appendU32LE etc. in wire.go)
+  own the variable-width path; raw calls handle only compile-time
+  offsets where the helper would add indirection without benefit.
+- `binary.BigEndian` usage: zero outside tests — endianness is
+  uniformly little-endian across every wire codec (SV2 spec is LE;
+  Bitcoin headers are LE).
+
+Verdict: TRUE — encoding convention uniform; raw calls confined to
+fixed-offset fields, helpers own the variable-width path.
