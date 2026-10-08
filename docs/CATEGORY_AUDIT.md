@@ -19268,3 +19268,32 @@ Verification:
 
 Verdict: TRUE — no deprecated
 packages; modern stdlib throughout.
+
+## Session 2943 update (Socratic pass 1608 — hash-package census)
+
+Claim under test: pooled `hash.Hash`
+objects are always `Reset()` before
+reuse, and one-shot hashers are
+created fresh per call.
+
+Verification:
+
+- `noise_pool.go:getHasher()` —
+  `h.Reset()` unconditionally on
+  every `hashPool.Get()`, plus a
+  type-assertion fallback
+  (`!ok` → fresh `sha256.New()`).
+- `run.go:2172` — `fnv.New32a()` is
+  a fresh one-shot hasher per
+  `v1JobWireID` call; the input is
+  `[]byte(jobID)` and output
+  `h.Sum32()`; `Write` error checked
+  away via `//nolint:errcheck` with
+  a correct comment.
+- Zero `hash/adler32`, `crc32`,
+  `crc64`, `maphash` — no weak or
+  accidental hashing.
+
+Verdict: TRUE — Reset is enforced
+on pool reuse; one-shot hashers are
+fresh per call.
