@@ -17519,3 +17519,24 @@ Verification (`git log -10`):
 
 Verdict: TRUE — convention and sign-off parity
 on the branch tip.
+
+## Session 2872 update (Socratic pass 1537 — secret-pattern scan)
+
+Claim under test: no private-key material, cloud
+credential, or PEM blob is committed anywhere
+in the branch tree.
+
+Verification:
+
+- `rg -il 'BEGIN .*PRIVATE KEY|AKIA[0-9A-Z]{16}|
+  -----BEGIN'` over the whole tree → **one hit**:
+  `internal/engine/coverage_test.go:2155` —
+  a synthetic `-----BEGIN CERTIFICATE-----\n
+  fake\n-----END CERTIFICATE-----` fixture for
+  a TLS-CA code path; not real key material.
+- No AKIA keys, no PEM headers outside that
+  fixture, no secret-looking literals in
+  production `.go` files.
+
+Verdict: TRUE — zero committed secrets; the
+single hit is a deliberate test fixture.
