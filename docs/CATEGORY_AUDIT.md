@@ -9792,3 +9792,7 @@ Claim verified: `govulncheck ./...` on the current tree (Go 1.27.1, govulncheck 
 ## Session 1803 update (Socratic pass 469 — ADR-009 ecosystem recheck)
 
 Claim verified: the sv2-spec open set is unchanged — #238 (optional SetupConnection flags negotiation, Oct 6), #234 (authority key management/rotation), #232 (table style), #203 (coinbase payout extension), #198 (coinbase_witness), #186, #103 — no new normative merges since the last recheck; Otedama's flags-subset validation stays forward-compatible with #238's direction. sv2-apps latest release remains v0.7.0 (the corrected reading from s1661: JDS state isolation, JDC RequestTransactionData race fix, tProxy 0x0002-gated UserIdentity TLVs, pow2 share validation — all translator/pool-side; nothing requiring Otedama wire changes). TRUE — no drift action.
+
+## Session 1804 update (Socratic pass 470 — VERIFY.md vs live release pipelines)
+
+Claim verified: every VERIFY.md assertion still matches the three tag paths — release.yml ships `otedama-<os>-<arch>.tar.gz` + per-asset `.tar.gz.sha256` sidecars (:107–120) plus a combined `checksums.txt` job (:194–212); ci.yml's tag job tars `otedama-*` dirs and uploads `artifacts/checksums.txt` (:672–691); ci-cd.yml's release attaches unsigned bare binaries + `dist/checksums.txt` built by `sha256sum otedama-*` (:224–230). No workflow invokes goreleaser, so "signed pipeline not yet live" remains true — cosign/SBOM references are clearly marked as intended-only, matching the nonexistent-claim prohibition. TRUE — no defect.
