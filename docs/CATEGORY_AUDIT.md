@@ -39313,3 +39313,160 @@ census:
   ledger.
 
 Verdict: TRUE.
+
+## Session 3177 update (Socratic pass 1841 — strconv + time ledger)
+
+Claim under test: numeric
+string
+conversions
+are
+`strconv`
+with
+explicit
+bit
+sizes;
+time
+use
+is
+duration-
+driven
+with
+all
+timers
+paired
+to
+`Stop`;
+no
+wall-
+clock
+string
+parsing
+(`time.Parse`,
+`LoadLocation`,
+`Local`)
+exists.
+
+Verification —
+census:
+
+- `strconv`:
+  `ParseFloat`×12
+  (rate/
+  config
+  parsing,
+  64-bit),
+  `FormatUint`×10,
+  `ParseUint`×7
+  (all
+  wire
+  numbers,
+  bitSize
+  32),
+  `Itoa`×2,
+  `Atoi`×2
+  (port
+  validation
+  only),
+  `Quote`×1
+  (service
+  argv).
+  ZERO:
+  `ParseInt`,
+  `ParseBool`,
+  `ParseComplex`,
+  `FormatInt`,
+  `FormatFloat`,
+  `FormatBool`,
+  `Unquote`,
+  `QuoteToASCII`,
+  `ParseBool`,
+  `AppendQuote`,
+  `ErrorCode` —
+  bools
+  are
+  parsed
+  by
+  explicit
+  switch,
+  ints
+  by
+  `ParseUint`/manual,
+  no
+  `%f`-
+  scanning.
+- `time`
+  head:
+  `Second`×257,
+  `Millisecond`×229,
+  `Now`×116,
+  `Sleep`×86
+  (test-dominated),
+  `After`×71,
+  `Duration`×40,
+  `Time`×37,
+  `Minute`×28,
+  `Since`×26,
+  `NewTicker`×20,
+  `UTC`×13,
+  `Hour`×13,
+  `Date`×13,
+  `Unix`×7,
+  `NewTimer`×3,
+  `ParseDuration`×1,
+  `Nanosecond`×1,
+  `Microsecond`×1.
+  ZERO:
+  `time.Parse`,
+  `time.ParseInLocation`,
+  `time.LoadLocation`,
+  `time.Local`,
+  `time.Tick`
+  (leaky
+  form —
+  all
+  ticks
+  are
+  `NewTicker`
+  +
+  `Stop`,
+  per
+  earlier
+  timer-
+  pairing
+  audit),
+  `time.AfterFunc`,
+  `time.Month`/`Weekday`/
+  calendar
+  types —
+  duration
+  and
+  epoch
+  only,
+  never
+  calendar
+  arithmetic.
+- `time.Now`
+  in
+  production
+  is
+  deadline/
+  metrics
+  oriented;
+  the
+  clock
+  abstraction
+  (`internal/clock`)
+  exists
+  for
+  the
+  single
+  test-
+  clock
+  consumer
+  per
+  the
+  earlier
+  fan-in
+  census.
+
+Verdict: TRUE.
