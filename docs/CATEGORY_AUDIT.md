@@ -10478,3 +10478,7 @@ Claim verified: concurrent Fetch calls coalesce behind a single-flight leader wh
 ## Session 1972 update (Socratic pass 638 — fetchOne boundary hygiene)
 
 Claim verified: fetchOne measures clock skew from the HTTP Date header before reading the body, so a non-200 response still contributes a valid skew observation; the body is capped at 64 KiB (no unbounded read against a hostile or malfunctioning source); a non-200 status returns an error that still carries the measured skew; the request is ctx-bound so a hung source is killed by the fetcher's deadline, and the User-Agent honestly identifies the client. TRUE.
+
+## Session 1973 update (Socratic pass 639 — HashrateFetcher parity)
+
+Claim verified: the network-hashrate fetcher implements the same adversarial posture as the BTC/USD fetcher — fan-out to all sources, plausibility band at the source boundary, >4× distrust at exactly two surviving readings, even-n median of the middle pair, freshness reported honestly via CurrentHashrate's (0,false) contract rather than a lie of convenience; bodies are capped, non-200 responses are drained-bounded and errored, requests are ctx-bound under a 10s client timeout, and StartBackground fetches immediately so the provider sees a live value inside the first seconds. TRUE.
