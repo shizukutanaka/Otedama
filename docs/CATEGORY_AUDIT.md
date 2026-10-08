@@ -10956,3 +10956,7 @@ Claim verified: the worker lifecycle can't deadlock or corrupt the share stream 
 ## Session 2090 update (Socratic pass 756 — hashrate feed honesty)
 
 Claim verified: the network-hashrate feed can't silently poison mining-yield math — each source's body is capped at 64 KiB and its value must sit inside a 1e18–1e23 plausibility band before it can reach the median (a compromised endpoint is rejected, not averaged); if every source fails the fetch errors honestly rather than fabricating a number; a 2-source divergence greater than 4x distrusts the feed outright instead of averaging a poisoned pair; and CurrentHashrate returns a fresh flag that expires after HashrateCacheDuration — stale data is disclosed as stale, never passed off as current. TRUE.
+
+## Session 2091 update (Socratic pass 757 — runtime collector fidelity)
+
+Claim verified: the go_* series faithfully mirror the standard Prometheus Go collector — go_info is a gauge at value 1 carrying the real runtime.Version label (escaped through escapeLabel, not ad-hoc quoting); every memstats field is exposed as a gauge with its correct name and raw value (Alloc/Sys/Heap*/StackInuse); GCCPUFraction is reported unmodified; and go_gc_duration_seconds_total is a counter in seconds (PauseTotalNs/1e9), matching the upstream naming convention exactly — dashboards written for the standard collector work unchanged. TRUE.
