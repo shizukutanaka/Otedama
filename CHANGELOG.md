@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1723 — ci.yml 単一ファイルビルド)
+
+- `build`/`build-unified` ジョブが `go build ... cmd/otedama/main.go`（10ファイル
+  パッケージの1ファイルのみ）を実行し決定論的にリンクエラー → `./cmd/otedama`
+  パッケージ形式へ修正。上流ジョブの既知失敗に隠れて表面化していなかった欠陥。
+
 ### Fixed (session 1719 — security.yml ハードコード IP チェック)
 
 - `security.yml` の compliance-check が正当な IP リテラル（`127.0.0.1` ヘルプ/
