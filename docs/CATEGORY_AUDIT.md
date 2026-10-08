@@ -10632,3 +10632,7 @@ Claim verified: every lazily-created series (per-reason reject counter, per-reas
 ## Session 2010 update (Socratic pass 676 — V1 TLS dialer + bound dial)
 
 Claim verified: the stratum+tls:// dialer shares the identical honest-TLS contract as the v2tls path — system-root verification at TLS ≥1.2, ServerName filled from the dialed host, extra CAs extend trust without ever disabling verification, invalid PEM is an error, and there is no plaintext fallback; each dial attempt is bounded at 15 s (TCP connect plus the TLS handshake) so a blackhole endpoint cannot stall failover at the OS SYN-retry default, and the 30 s handshake bound covers subscribe+authorize+extranonce.subscribe; both bounds are test-overridable vars by design. TRUE.
+
+## Session 2011 update (Socratic pass 677 — V1 handshake ordering)
+
+Claim verified: the negotiate prologue is correctly ordered — subscribe result is parsed and stored before authorize, authorizedUser is stored before authorized=true flips and pre-auth notifies are flushed (no lost jobs, no share carrying an unauthorized name); every mandatory-step failure closes the session and wraps ErrHandshakeFailed, while the optional extranonce.subscribe deliberately swallows both network and "Method not found" errors — an unsupported capability never kills a valid session; the dial path honors precedence (test CA > per-pool CA PEM > system roots) with verification always on, and connection Close is sync.Once-idempotent with compile-time interface asserts. TRUE.
