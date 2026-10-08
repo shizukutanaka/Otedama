@@ -10270,3 +10270,7 @@ Claim verified: Worker.Start is single-call (atomic CAS, panics on a second call
 ## Session 1920 update (Socratic pass 586 — milestone checkpoint)
 
 Milestone: ~19 passes this block (s1899–s1920) all TRUE verdicts, ledger-only. Measured: `go build ./...` 0, `go vet ./...` 0, `gofmt -l` empty, `go test` on engine/provider/arbitration all PASS (engine 25s full suite). Tree remains ancestor-clean off origin/master (276 commits ahead, PR #1405); CI shows the two known non-actionable classes only. Next surfaces: remaining RESEARCH_IMPROVEMENTS live 🟡 rows, deeper internal/ passes, residual doc surfaces.
+
+## Session 1921 update (Socratic pass 587 — doctor wallet check hygiene)
+
+Claim verified: checkWallet reports honest tri-state — absent wallet.dat → warn with the real remediation (set passphrase), stat failure → fail, group/other-readable permissions → warn + chmod fix (restored-backup exposure), and the fingerprint sidecar is displayed only when it matches the 8-hex shape so a corrupt file cannot inject control text into the report. TRUE.
