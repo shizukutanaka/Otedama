@@ -16247,3 +16247,27 @@ Verification — the complete embedding set:
 
 Verdict: TRUE — embedding is confined to the documented
 provider lifecycle; no shadow or surprise promotion.
+
+## Session 2814 update (Socratic pass 1480 — strings.Repeat census)
+
+Claim under test: every strings.Repeat count is bounded
+by a constant or a clamped terminal width — external
+input never drives an allocation size.
+
+Verification — all six production sites:
+
+- dashboard.go:339/:402/:418/:544 — space padding equals
+  (render width − visible content width); render width
+  is the detected terminal cols, already clamped by
+  writeLine/writeSection — a few hundred cells max.
+- checks.go:1040 — fixed middle-ellipsis "···" mask,
+  constant count 3 (payout fingerprint display).
+- stratumv1.go:620 — `strings.Repeat("00",
+  min(max(sz,0), maxExtranonce2Size))` — pool-supplied
+  extranonce2 size is double-clamped by the named bound
+  before it can size a string.
+- No other allocation-from-string primitives (Repeat is
+  the only count-driven one).
+
+Verdict: TRUE — every Repeat count is terminal-clamped
+or constant-bounded; a hostile pool cannot inflate one.
