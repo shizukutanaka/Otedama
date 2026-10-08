@@ -11890,3 +11890,7 @@ Claim verified: HAL's lone `os.ReadFile` (gpu_linux.go:168, inside readSysFile) 
 ## Session 2320 update (Socratic pass 986 — empty DataDir contract)
 
 Claim verified: when no platform data dir can be resolved, `DefaultDataDir` returns "" rather than a fake path — and the "" value is a documented contract (config.go:424–430): `engine.setupWallet` treats it as "not configured" and skips wallet init instead of writing secrets into an arbitrary directory. Graceful degradation with no silent bad-path writes (residual disclosed in KNOWN_LIMITATIONS). TRUE.
+
+## Session 2321 update (Socratic pass 987 — existing-wallet failure posture)
+
+Claim verified: a corrupt/unreadable/wrong-pass wallet.dat can never be silently replaced — loadExisting returns an error (unbounded-input already rejected by UnmarshalEncryptedSeed's 4 KiB cap + version pin, seedstore.go:194–209), NewWalletManager propagates it, setupWallet warns and runs wallet-less. `IsNew` stays false on the failure path so no overwrite/mnemonic flow fires. Wrong-pass surfaces only the opaque ErrWrongPassphrase — no decryption oracle. TRUE.
