@@ -26999,3 +26999,94 @@ call census):
   code.
 
 Verdict: TRUE.
+
+## Session 3087 update (Socratic pass 1751 — strings/bytes complete ledger)
+
+Claim under test: the
+strings surface is
+idiomatic API calls
+— no manual byte
+loops — and bytes
+is Equal-only.
+
+Verification —
+census:
+
+- `strings.HasPrefix`×27
+  — the
+  scheme/
+  prefix
+  gates.
+- `strings.Join`×15 —
+  formatting
+  joins.
+- `strings.Contains`×13 —
+  the
+  substring
+  probes.
+- `strings.TrimSpace`×11 —
+  input
+  trimming.
+- `strings.Builder`×10 —
+  the
+  string
+  builders
+  (TUI,
+  exposition,
+  hasher).
+- `strings.Repeat`×7 —
+  padding.
+- `strings.ToLower`×6 +
+  `EqualFold`×2 +
+  `ToUpper`×1 —
+  case ops.
+- `strings.CutPrefix`×5 +
+  `Split`×3 +
+  `Cut`×0 —
+  the modern
+  cut idiom
+  (no
+  manual
+  Index+slice).
+- `strings.NewReplacer`×3 —
+  the
+  sanitizer
+  replacement
+  tables.
+- `strings.Index*`×6
+  variants —
+  the
+  position
+  finds.
+- `strings.ContainsAny`/
+  `ContainsRune`/
+  `ContainsFunc`×5 —
+  the
+  char-set
+  probes.
+- `strings.Trim*`×3 —
+  Trim/
+  TrimLeft/
+  TrimSuffix.
+- `strings.Map`,
+  `Fields`,
+  `Reader`,
+  `IndexFunc`,
+  `IndexAny`
+  ×1 each —
+  the
+  residuals.
+- `bytes.Equal`×2 —
+  the only
+  bytes call;
+  ZERO
+  `bytes.Buffer`,
+  `bytes.Compare`,
+  `bytes.HasPrefix`
+  — cmp
+  + string
+  API
+  covers
+  it.
+
+Verdict: TRUE.
