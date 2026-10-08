@@ -374,6 +374,7 @@ type LatencyTracker struct {
 	filled  bool
 }
 
+// The zero value is not usable; use NewLatencyTracker.
 // NewLatencyTracker creates a tracker holding the most recent `size`
 // samples (default 256 if size < 1).
 func NewLatencyTracker(size int) *LatencyTracker {

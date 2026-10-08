@@ -13559,3 +13559,44 @@ Re-checked failing jobs on the PR after the latest push; confirmed every failure
 - `[*.{yml,yaml}] indent_size=2` + `trim_trailing_whitespace=true`: valid 2-space nesting everywhere, but 163 whitespace-only blank lines inside `run: |` block scalars across all 7 workflow files carry trailing indent (ci.yml 45, security.yml 33, ci-cd.yml 32, test.yml 27, deploy.yml 21, code-review.yml 3, release.yml 2). Recorded as a cosmetic issue — zero semantic effect (YAML keeps the blank line either way; bash ignores the spaces), and stripping them across 7 files would bury real diffs in whitespace churn. Record-first rule applied; no fix.
 - `insert_final_newline=true` + `end_of_line=lf`: sampled 50 Go files — all LF-terminated with final newline. TRUE.
 - Residual script surface: only `install.sh` remains (bash -n clean); `.sweep.sh` is a session artifact, gitignored. TRUE.
+
+## Session 2706 update (Socratic pass 1372 — mod-tidy drift + zero-value contract census)
+
+Claim under test: `go.mod`/`go.sum` are exactly minimal for the declared
+imports, and every exported/internal type whose zero value is unusable
+says so in its godoc.
+
+Verification:
+
+- **`go mod tidy` drift: zero.** Ran `GOFLAGS=-mod=mod go mod tidy` on
+  the live tree: no changes to `go.mod` or `go.sum` (diff empty). The
+  three direct deps plus their transitives are the exact minimal set —
+  no stale requires, no missing sums.
+- **Zero-value contract census: 23 `New*` constructors inventoried.**
+  The documented-unusable class (`// The zero value is not usable`) had
+  two members — `hal.Registry` and `config.Config` — but two further
+  types with parameterless constructors and unusable zero values were
+  undocumented:
+  - `metrics.Registry` — zero value has nil `counters`/`gauges` maps;
+    any `Register*` call panics (nil map write). A plausible
+    `var r metrics.Registry` reads work (WriteText over empty maps)
+    while writes panic — silent-then-loud hazard. Annotated.
+  - `engine.LatencyTracker` — zero value has `len(samples)==0`; the
+    first `Record` panics with index out of range. Annotated.
+  - Boundary for the annotation: constructors with *required* args
+    (`NewFetcher(fallback)`, `NewDashboard(w)`, `NewBundle(english,...)`,
+    `NewMiningProvider(poolURL, rates)`, `NewWorker(cfg)`, etc.) create
+    no zero-value temptation — `var x T` cannot produce a meaningful
+    object, so the omission is not a contract gap. Only parameterless
+    constructor types were eligible.
+- **`clock.System` is the counter-example that proves the convention**:
+  its zero value is deliberately usable and pinned by
+  `TestSystem_ZeroValueIsUsable` — the system is a three-state contract
+  (usable / documented-unusable / arg-requiring), and after this fix
+  every parameterless-constructor type lands in a named state.
+
+Fix applied: one-line godoc annotations on `metrics.Registry` and
+`engine.LatencyTracker` matching the `hal.Registry` wording (files fully
+read; `gofmt` clean; `go build` + `go test` green on both packages).
+
+Verdict: TRUE-with-fix.
