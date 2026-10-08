@@ -15748,3 +15748,29 @@ Verification — all ~11 division sites:
 
 Verdict: TRUE — no division loses a semantically meaningful
 unit.
+
+## Session 2794 update (Socratic pass 1460 — value-on-error census)
+
+Claim under test: no function returns a half-valid result
+alongside an error — the value slot is always zero (or an
+explicit sentinel) when err != nil.
+
+Verification:
+
+- All error-path returns pair with a zero value:
+  EncryptedSeed{}, rpcResponse{}, ShareResult{}, zero
+  (seedstore/wallet/stratumv1 everywhere).
+- One deliberate sentinel: seed.go:163 `return -1, err` for
+  wordlist index — -1 is "not found", conventionally checked
+  after the error (callers check err first).
+- The single partial-result exception is hal.Detect() —
+  devices detected before a failing driver are returned
+  with the error *and are real*: documented and consumed as
+  such (partial detections still re-gated by
+  Identity.Validate at aggregation, s2418).
+- No `return cfg, err`-style half-initialized structs; every
+  multi-return either fully succeeds or yields zeros.
+
+Verdict: TRUE — callers can trust "err non-nil ⇒ value is
+zero"; the one partial exception is documented and
+re-validated downstream.
