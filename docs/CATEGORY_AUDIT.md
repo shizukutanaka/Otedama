@@ -13044,3 +13044,7 @@ Four-way parity: service.go dispatches exactly `install`/`uninstall`/`status` (s
 ## Session 2603 update (Socratic pass 1269 — config-subcommand parity)
 
 Four-way parity: config.go dispatches exactly `show`/`validate` (config.go:31-33); all three shell completion blocks enumerate the identical two verbs; API.md documents both with their full flag surface (`--config`, `--origin`, `--json` — all verified in the s2596 flag census). Subcommand-verb parity is now complete across all verb-bearing subcommands: config, service, wallet. TRUE.
+
+## Session 2604 update (Socratic pass 1270 — doctor check-count re-verification)
+
+Census: exactly 17 `Check` literals in checks.go (Configuration, Bitcoin address, Failover payout addresses, Data directory, Lightning wallet, Pool reachability, Pool diversity, Pool endpoint diversity, Pool connection encryption, Pool TLS CA files, Power & cost config, Environment variables, Profitability floor, Pool payout schemes, Hardware, Network, System clock accuracy). CLAUDE.md's "17 並行ヘルスチェック" is exactly right; API.md documents the schema+exit codes without naming checks — no contradiction. TRUE.
