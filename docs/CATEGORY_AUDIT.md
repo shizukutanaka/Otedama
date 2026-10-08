@@ -15218,3 +15218,16 @@ either a report or a fork whose loser path fails loudly. One
 bounded comment-accuracy note recorded (fingerprint recreate is
 single-writer semantics, not O_EXCL-atomic) — maintainer domain,
 ledger-noted rather than patched.
+
+## Session 2773 update (Socratic pass 1439 — regexp census)
+
+Claim under test: regex use cannot produce ReDoS or
+compile-in-loop hotspots.
+
+Verification: zero `regexp.` references in non-test code — the
+class is empty by construction. All parsing is hand-rolled
+bounds-checked decoding (strconv, encoding/json, fixed-width
+wire codecs), so neither user-influenced catastrophic
+backtracking nor per-call compilation exists.
+
+Verdict: TRUE — surface absent.
