@@ -13088,3 +13088,7 @@ Correction to s2593 (per the append-only honesty protocol): that entry said "the
 ## Session 2614 update (Socratic pass 1280 — milestone: full gate re-verified)
 
 Milestone re-run: `gofmt -l internal cmd` → clean; `go build ./...` → ok; `go vet ./internal/... ./cmd/...` → clean; `go test -count=1` on config, i18n (+messages), metrics, engine, cmd/otedama → all green (engine 25.3s). No drift since pass 1260's milestone.
+
+## Session 2615 update (Socratic pass 1281 — SPECIFICATION §7 known-limitations)
+
+FALSE claim found & FIXED: §7 enumerated 6 limitations and delegated to KNOWN_LIMITATIONS.md — but the authoritative doc now carries 9 open items (1,2,4,5,6,8,13,14,17; eight resolved/struck). §7 omitted #8 (ASIC undetected), #13 (CI workflows), #14 (DATUM reserved), #17 (install.sh asset contract), and understated #2 (Noise unwired — not just P-256) and #4 (GPU detected-but-cannot-mine). Rewrote §7 to enumerate all 9 open items verbatim-accurate + the partially-open V2/poolproto row. §8 verified: G18's ms-unit claim still accurate (run.go:1259/1315/1793 record Microseconds/1000); open rows G3–G6 match code; "Fixed" rows sampled re-verified.

@@ -225,11 +225,17 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 
 ## 7. Known limitations
 
-Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) **V2** sessions do not yet
-route through the `poolproto` abstraction — V1 sessions do
-(KNOWN_LIMITATIONS §3, resolved session 91); (4) GPU detection is Linux-only;
-(5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
+Authoritative list in `docs/KNOWN_LIMITATIONS.md` (9 open items): (1) AI-inference
+yield is simulated; (2) Noise NX uses P-256, not secp256k1, and is not wired into
+a live connection — use `stratum+v2tls://` for confidentiality; (3) GPU detection
+is Linux-only and detected GPUs cannot mine; (4) post-quantum schemes are
+scaffolded; (5) Lightning is receive-only; (6) ASIC hardware is not detected at
+all; (7) several CI workflows remain non-functional or misdescribed; (8) DATUM is
+a reserved URL scheme, not an implemented protocol; (9) `install.sh` has no
+compatible release yet — every published tag predates the v3 asset-naming
+contract. Partially open: **V2** sessions do not yet route through the
+`poolproto` abstraction — V1 sessions do (KNOWN_LIMITATIONS §3, resolved
+session 91).
 
 ---
 
