@@ -10246,3 +10246,7 @@ Claim verified: HEAD is ancestor-clean off origin/master at 276 commits ahead; `
 ## Session 1914 update (Socratic pass 580 — metrics exposition escaping)
 
 Claim verified: label sets are rendered with sorted keys (deterministic exposition), escapeLabel handles backslash/quote/newline correctly via strings.Replacer, escapeHelp correctly escapes only backslash+newline (quotes are not special in HELP lines), and cloneLabels copies caller maps at registration so post-registration mutation cannot alter stored series. metrics.go:360–405 clean. TRUE.
+
+## Session 1915 update (Socratic pass 581 — httpserver lifecycle)
+
+Claim verified: the HTTP server carries slowloris-appropriate timeouts (ReadHeader 5s / Read 10s / Write 10s / Idle 60s), records a background Serve failure into serveErr for observability rather than dropping it, stores the bound address atomically, and shuts down via ctx with a 5s graceful drain. TRUE.
