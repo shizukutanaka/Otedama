@@ -40225,3 +40225,162 @@ census:
   package.
 
 Verdict: TRUE.
+
+## Session 3184 update (Socratic pass 1848 — os/signal/exec ledger)
+
+Claim under test: signal
+handling
+is
+a
+single
+`NotifyContext`
+root;
+`exec`
+is
+fixed
+binary
++
+argv
+service-
+manager
+calls
+only;
+`os`
+has
+no
+path-
+traversal
+or
+shell
+surface.
+
+Verification —
+census:
+
+- `signal`/`syscall`:
+  `signal.NotifyContext`×1
+  (cmd/otedama
+  run
+  root)
+  +
+  `syscall.SIGTERM`×1
+  constant.
+  ZERO:
+  `signal.Notify`
+  channel
+  form,
+  `signal.Stop`/`Reset`/`Ignore`,
+  `os.Interrupt`
+  refs,
+  other
+  `syscall.*`
+  symbols —
+  one
+  context-
+  driven
+  shutdown
+  root.
+- `exec.Command`
+  production
+  ×5:
+  `systemctl --user show-environment`/`is-active`,
+  `launchctl list`,
+  `sc.exe query`,
+  and
+  `exec.Command(name, args...)`
+  for
+  `systemctl|launchctl|sc.exe|net.exe`
+  fixed
+  names.
+  ZERO:
+  `exec.LookPath`,
+  `.Path`
+  mutation,
+  `exec.Cmd.Dir`/`.Env`/
+  `.Stdin`/`.Stdout`
+  plumbing,
+  `/bin/sh -c`
+  or
+  any
+  shell —
+  argv
+  is
+  literal
+  and
+  quoted
+  via
+  `quoteToken`
+  for
+  definition
+  files,
+  never
+  interpreted.
+- `os`
+  head:
+  `WriteFile`×57,
+  `Stat`×29,
+  `MkdirAll`×23,
+  `Getenv`×23,
+  `ReadFile`×22,
+  `Remove`×19,
+  `File`×18,
+  `UserHomeDir`×14,
+  `ErrNotExist`×12,
+  `CreateTemp`×12,
+  `Chmod`×9,
+  `Stdout`×7,
+  `ReadDir`×7,
+  `Getuid`×5,
+  `Stdin`×4,
+  `Stderr`×4,
+  `Setenv`×4
+  (test),
+  `Rename`×4,
+  `Open`×4,
+  `Executable`×4,
+  `ModeCharDevice`×3,
+  `Unsetenv`×2,
+  `Symlink`×2.
+- `os`
+  tail/ZERO:
+  `O_RDONLY`/`O_WRONLY`
+  open
+  flags
+  minimal,
+  `MkdirTemp`/
+  `Getegid`,
+  `os.Exit`
+  single
+  site
+  (main),
+  ZERO
+  `os.Chdir`,
+  `os.Environ`,
+  `os.Hostname`
+  (s3171
+  verified
+  absent),
+  `os.Pipe`,
+  `os.StartProcess`,
+  `os.FindProcess`,
+  `os.Setuid`/`Setgid`,
+  `os.Chtimes`,
+  `os.Link`,
+  `os.Expand`,
+  `os.Readlink` —
+  no
+  shell,
+  no
+  process
+  control,
+  no
+  filesystem
+  mutation
+  outside
+  the
+  wallet/
+  config/
+  daemon
+  paths.
+
+Verdict: TRUE.
