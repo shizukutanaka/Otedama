@@ -10398,3 +10398,7 @@ Claim verified: the grind loop stamps each share with the issue-time Target (the
 ## Session 1952 update (Socratic pass 618 — SV2 share settlement)
 
 Claim verified: SubmitSharesSuccess with a future LastSequenceNumber is dropped; batch settles record per-share latency for every seq ≤ last; NewSubmitsAccepted is clamped to the locally-observed settled count (a pool can never credit shares we didn't send); SubmitSharesError for a future or already-settled seq is dropped (reject-rate inflation guard), while a valid reject settles latency and cleans both the submitTimes and submitTargets entries. TRUE.
+
+## Session 1953 update (Socratic pass 619 — updateWork target semantics)
+
+Claim verified: workers grind to the pool-assigned shareTarget from OpenMiningChannelSuccess/SetTarget — never the network block target — falling back to the nBits-derived target only when the pool assigned none (zero value); all five header fields are populated and ntime rolls forward per job; arbitration-paused devices are skipped so resume comes from the next Decide, not stale work. Post-sv2-spec-#236 compliance holds structurally: we declare MaxTargetUnconstrained, so every pool SetTarget is within bound by construction. TRUE.
