@@ -10,6 +10,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   GO_VERSION: '1.23.x'
 
@@ -17,6 +20,8 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 15
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -59,6 +64,8 @@ jobs:
     name: Build Binaries
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
     needs: create-release
     strategy:
       matrix:
@@ -115,6 +122,8 @@ jobs:
   build-packages:
     name: Build Distribution Packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 30
     needs: create-release
     steps:

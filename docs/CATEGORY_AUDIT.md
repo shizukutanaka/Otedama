@@ -9282,3 +9282,17 @@ Claim verified: "Dependabot monitors every dependency ecosystem that can drift."
 - **Residual defect (fixed):** `sudo gem install fpm` in release.yml was the last unpinned tool install in the tree — every release rebuilt packages with whatever fpm was current at tag time, including breaking changes. Pinned `fpm -v 1.18.0` (2026-08-26, satisfies the ≥7-day rule). `apt-get install` lists are excluded from the drift class by construction — they resolve from the runner image's pinned Ubuntu repos, refreshed per image release.
 
 Honest residual: dependabot PRs only propose version bumps; nothing enforces that the inline pins are revisited (same class as the semgrep pip pin noted in pass 359 — recorded as a standing limitation, not a fixable defect without a forbidden-dir manifest file).
+
+## Session 1695 update (Socratic pass 361)
+
+**Claim verified: "no workflow runs untrusted PR code with write tokens or repo secrets, and workflow tokens follow least-privilege" — TRUE after one fix; the PR-execution part was already TRUE.**
+
+Method: full `permissions:`/`pull_request_target` census across all 8 workflows.
+
+**Already true (no change):** no workflow uses `pull_request_target` — fork-PR code never executes with repo secrets or a write-capable token; on `pull_request` events `GITHUB_TOKEN` is read-only regardless of job permissions. security.yml/code-review.yml/devin-direct-merge.yml already declared workflow-level least-privilege blocks; security.yml's `issues:write`+`pull-requests:write` is scoped to its issue-filing job, code-review's `pull-requests:write` to its comment job, devin-direct-merge's to its conflict-comment job.
+
+**Defect found and fixed (least-privilege gap):** 5 of 8 workflows had NO workflow-level `permissions:` and only a handful of job-level grants — every unscoped job inherited the repo default token (which, on tag-push/schedule events where the default is write-capable, meant jobs like `test`/`lint`/`fuzz` carried write permission they never use). Added `permissions: contents: read` at the top of `test.yml`, `ci-cd.yml`, `ci.yml`, `deploy.yml`, `release.yml`, then escalated only the jobs that genuinely publish: `contents: write` on release.yml `create-release`/`build-binaries`/`build-packages` (softprops create + `gh release upload` require it) and ci-cd.yml `release`. Existing job-level grants (ci.yml docker/docker-unified packages:write, release contents:write; ci-cd docker; deploy docker) already override the new top-level cap and were left untouched.
+
+**Incidental finding (same pass):** two more `softprops/action-gh-release@v1` stragglers survived pass 359's pin sweep — ci-cd.yml:227 and ci.yml:681 (release.yml's @v3 pinned in s1693 was the only correct one). Bumped both to `@v3`.
+
+Residuals (standing, recorded not fixed): `update-homebrew` uses `secrets.HOMEBREW_TAP_TOKEN` (PAT, opt-in — by design). `Dependency Review` requires repo Settings enablement. The Go 1.20–1.23 matrix pins vs go.mod ≥1.24 remain the known rejected-territory failure class. `pull_request` jobs that run `go test` on fork code still execute that code — unavoidable by design, but read-only token + no secrets bound is the correct posture.
