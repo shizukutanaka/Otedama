@@ -11946,3 +11946,7 @@ Claim verified: Dashboard lifecycle is fully idempotent — Start CAS(false,true
 ## Session 2334 update (Socratic pass 1000 — MILESTONE gate re-verification)
 
 Milestone gate re-run on the full audit branch at pass 1000: `gofmt -l internal cmd` clean, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` green on all 8 scoped packages (metrics, rates, arbitration, engine, poolproto + stratumv1/v2, miner, tui, httpserver). The ledger's ~1000 consecutive TRUE-verdict claims remain self-consistent and the branch continues to merge cleanly. TRUE.
+
+## Session 2335 update (Socratic pass 1001 — decoder defensive contract)
+
+Claim verified: NewDecoder pins MaxFrameSize to the 16 MiB default (frame.go:255–260), and ReadFrame re-validates it defensively (:268–270 — a zero/negative field errors rather than unbounding the read); header decode+Validate precede any allocation, and the payload bound is checked BEFORE the buffer is allocated — memory-exhaustion announce attacks can't reach the make(). TRUE.
