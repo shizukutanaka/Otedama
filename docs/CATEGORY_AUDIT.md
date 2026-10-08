@@ -11078,3 +11078,7 @@ Claim verified: the difficulty→target conversion can't yield a catch-all or a 
 ## Session 2120 update (Socratic pass 786 — milestone gate)
 
 Milestone gate at pass 786: `gofmt -l` clean, `go build ./...` clean, `go vet ./...` clean, `go test` green on stratum, miner, rates, provider, httpserver, metrics, logger, daemon, engine (9 packages). ~60 consecutive TRUE verdicts since the last real fix at session 1649. TRUE.
+
+## Session 2121 update (Socratic pass 787 — coinbase output position parsing)
+
+Claim verified: the coinbase parser can't read out of bounds or be tricked by a hostile length prefix — every CompactSize length is validated against the remaining bytes BEFORE the offset advances (a scriptSig or output length that overruns the buffer is a parse error, not a panic); the segwit marker+flag is detected positionally before vin; vin==0 is rejected (a coinbase with no inputs can't be a real coinbase); the offset is checked between the input loop and the output count (truncated inputs can't bleed into vout parsing); the payout check is bytes.Equal over a length-bounded slice; and readCompactSize bounds every multi-byte varint form (fd/fe/ff need 3/5/9 bytes respectively) before reading. TRUE.
