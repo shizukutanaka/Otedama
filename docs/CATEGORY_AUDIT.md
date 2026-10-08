@@ -18128,3 +18128,37 @@ Verification (`rg 'os\.Exit|log\.Fatal|panic'`):
 
 Verdict: TRUE — exit discipline is absolute;
 library code never terminates the process.
+
+## Session 2899 update (Socratic pass 1564 — Close-error-discard census)
+
+Claim under test: `Close()` error discards are
+safe — either the real error is already being
+returned, or the close is a best-effort
+cleanup with no durability requirement.
+
+Verification (`rg '.Close\(\)'` production):
+
+- Funds-touching path exemplary — wallet.go:
+  Write→Sync→Close each checked; the
+  `_ = tmp.Close()` sites are the error-cleanup
+  branches where the causal error is already
+  returned, and the success path's Close error
+  IS returned (explicit comment: final flush
+  can happen at Close).
+- `defer f.Close()` / `defer resp.Body.Close()`
+  — read-side closes where error is
+  meaningless (configfile, hashrate, fetcher).
+- `defer conn.Close()` / `defer sess.Close()`
+  — teardown closes; failure irrelevant.
+- `_ = c.f.Close()` in rotateLocked — log
+  rotation fallback documented; re-open
+  recovers.
+- `_ = sess.Close()` in dialer error branches
+  — handshake already failed; cleanup-only.
+- `go s.Close()` (stratumv1:467) — async
+  teardown to avoid blocking the read loop;
+  Close is idempotent.
+
+Verdict: TRUE — every discarded Close error is
+structurally safe; the one durability-
+sensitive close (wallet temp) is checked.
