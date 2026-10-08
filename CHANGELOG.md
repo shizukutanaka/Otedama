@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1767 — devin-direct-merge concurrency)
+
+- `.github/workflows/devin-direct-merge.yml`: `concurrency` ブロックを追加
+  （PR 番号キー、`cancel-in-progress: true`）— 同一 PR への連続
+  synchronize で `/fix-conflict` コメントが重複投稿される経路を塞ぐ。
+
 ### Added (session 1754 — OpenSSF Scorecard ワークフロー)
 
 - `.github/workflows/scorecard.yml`: scorecard-action@v2.4.4 を master
