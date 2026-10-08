@@ -20558,3 +20558,24 @@ Verdict: TRUE — x509 surface is
 system roots + extra CA append;
 all verification is delegated
 to crypto/tls.
+
+## Session 2974 update (milestone pass 1470 — full gate)
+
+Ran on the branch at this
+commit:
+
+- `gofmt -l .` — clean.
+- `go build ./...` — clean.
+- `go vet ./...` — clean.
+- `go test` across all 24
+  package legs (stratum,
+  engine, miner, poolproto,
+  stratumv1, stratumv2,
+  doctor, rates, daemon,
+  i18n, i18n/messages,
+  config, httpserver,
+  metrics, logger, version,
+  clock, tui, provider,
+  lightning, btccrypto,
+  hal, arbitration,
+  cmd/otedama) — all `ok`.
