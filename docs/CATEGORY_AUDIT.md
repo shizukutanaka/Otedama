@@ -9796,3 +9796,7 @@ Claim verified: the sv2-spec open set is unchanged — #238 (optional SetupConne
 ## Session 1804 update (Socratic pass 470 — VERIFY.md vs live release pipelines)
 
 Claim verified: every VERIFY.md assertion still matches the three tag paths — release.yml ships `otedama-<os>-<arch>.tar.gz` + per-asset `.tar.gz.sha256` sidecars (:107–120) plus a combined `checksums.txt` job (:194–212); ci.yml's tag job tars `otedama-*` dirs and uploads `artifacts/checksums.txt` (:672–691); ci-cd.yml's release attaches unsigned bare binaries + `dist/checksums.txt` built by `sha256sum otedama-*` (:224–230). No workflow invokes goreleaser, so "signed pipeline not yet live" remains true — cosign/SBOM references are clearly marked as intended-only, matching the nonexistent-claim prohibition. TRUE — no defect.
+
+## Session 1805 update (Socratic pass 471 — install.sh vs live asset names)
+
+Claim verified: install.sh's candidate list covers every asset name the three pipelines actually publish — goreleaser `otedama_<ver>_<os>_<arch>.tar.gz` (both `v`-prefixed TAGVER and bare VERSION forms), ci-cd.yml bare binaries `otedama-<os>-<arch>[.exe]`, release.yml `otedama-<os>-<arch>.tar.gz`. The checksum probe order (`checksums.txt` → `otedama_<ver>_checksums.txt`) matches what ci.yml/ci-cd.yml/release.yml actually upload, and the verified-asset preference correctly resolves multi-pipeline tags. Non-404 fetch failures and absent checksums both fail closed unless `--skip-verify`. TRUE — no defect.
