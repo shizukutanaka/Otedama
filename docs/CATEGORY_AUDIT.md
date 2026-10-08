@@ -14951,3 +14951,27 @@ Verification: 18 strconv call sites; 3 discard err — each checked:
 
 Verdict: TRUE — each discard lands on a sentinel the protocol
 already treats as absent/invalid.
+
+## Session 2763 update (Socratic pass 1429 — json.Unmarshal discard census)
+
+Claim under test: all json.Unmarshal results are checked — or
+deliberately best-effort where a zero field is the correct absent
+signal.
+
+Verification: 26 non-test call sites; exactly 3 discard err, all
+inside parseReconnectDirective (parse.go:286/:298, plus the :292
+guarded fallback):
+
+- The V1 `client.reconnect` method *alone* is a valid directive —
+  params may be absent or garbage without changing the
+  "reconnect" verdict, so each optional field decodes
+  best-effort: Host "" / Port 0 / Wait 0 are the documented
+  absent values and downstream consumers already treat them as
+  such (no reconnect target, no wait override).
+- :286 is annotated `// best-effort; tolerate non-string`.
+- The other 23 Unmarshal sites all check err — every pool-facing
+  parser either returns the error upward or uses it to select the
+  fallback branch (port-as-number vs port-as-string at :292).
+
+Verdict: TRUE — discards confined to a directive whose every
+field is optional by design.
