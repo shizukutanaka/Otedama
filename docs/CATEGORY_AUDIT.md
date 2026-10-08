@@ -10326,3 +10326,7 @@ Claim verified: updateShareRates computes otedama_shares_unaccounted as found−
 ## Session 1934 update (Socratic pass 600 — reject-reason accounting)
 
 Claim verified: rejectByReason's dedicated mutex (added s509/#591) guards every map access — lazy counter creation in rejectReason and the stale-rate read in updateShareRates both hold it; categories come only from rejectClass's closed set so label cardinality stays bounded; touchLastReject pairs each reason with its last-occurrence gauge so operators can tell a live failure mode from a stale one. TRUE.
+
+## Session 1935 update (Socratic pass 601 — earnings-accountant honesty)
+
+Claim verified: satsAccountant integrates the arbitration expected-yield (sats/sec) only over productive seconds — never accrues while idle/stalled/curtailed, never goes backwards (elapsed>0 guard), keeps fractional precision across ticks; uptimeAccountant carries fractional seconds the same way and is nil-counter safe. The TUI number is honestly disclosed as an estimate whose authority is the pool's own accounting (KNOWN_LIMITATIONS §9). TRUE.
