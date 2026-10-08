@@ -10526,3 +10526,7 @@ Claim verified: pausing is scoped strictly to the assigned DeviceID (the multi-S
 ## Session 1984 update (Socratic pass 650 — exposition snapshot integrity)
 
 Claim verified: a /metrics scrape is self-consistent — WriteText holds RLock while reading every counter/gauge value and copying the collector list, so a registration mid-scrape can neither tear a series nor block the network path; sort keys are precomputed once (decorate-sort-undecorate → O(n) key calls per scrape, not O(n log n)); label escaping covers exactly the three special chars and HELP escapes only backslash+newline (quote is not special there — matches the Prometheus spec); label maps are cloned at registration so a caller mutating its map afterwards cannot alter the stored metric; formatFloat uses IsNaN/IsInf rather than magnitude thresholds (a >1e308 finite value would never be mis-rendered "+Inf"). TRUE.
+
+## Session 1985 update (Socratic pass 651 — registration-time whole-scrape protection)
+
+Claim verified: the registry rejects, at registration (panic on compile-time-constant names), the two defect classes that would otherwise reject the *entire* Prometheus scrape — a malformed label name (one bad line discards the whole response) and a metric name carrying both counter and gauge TYPEs; duplicate name+labels registration is idempotent (returns the existing series) so double-registration at startup cannot split a metric; counters are atomic.Uint64, gauges mutex-guarded, and label names are correctly stricter than metric names (no colon). TRUE.
