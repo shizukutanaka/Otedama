@@ -12817,3 +12817,7 @@ Claim verified: `git status` is clean after a full `make build` — the produced
 ## Session 2551 update (Socratic pass 1217 — branch-composition re-census)
 
 Claim verified: `git diff origin/master...HEAD` names exactly 46 files — all inside the audited payload set (9 workflow files, scorecard.yml, docs/ADR updates, doctor panic-proofing, hashrate feed, stratum messages + fuzz file, goreleaser/install/Dockerfile, Makefile, version docs); no docker-compose.yml or kubernetes/ tree exists on the branch (the absent k8s tree stays a disclosed residual). 914 commits ahead of master at the same merge-base; every production-code file in the diff is one already covered by the audit surface. TRUE — branch payload unchanged and accounted for.
+
+## Session 2552 update (Socratic pass 1218 — forbidden-path census)
+
+Claim verified: `internal/` holds exactly the 20 directories named by the CLAUDE.md architecture map (arbitration, btccrypto, clock, config, daemon, doctor, engine, hal, httpserver, i18n, lightning, logger, metrics, miner, poolproto, provider, rates, stratum, tui, version) — zero forbidden paths exist (no providers/, auth/, render/, scientific/, observability/, security/, pkg/, web/, k8s/, cmd/otedamad/); i18n/messages holds bundle.go + 10 language files + test, matching the 10-locale contract. TRUE — directory topology is compliant.
