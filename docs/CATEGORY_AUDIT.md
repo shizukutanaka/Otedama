@@ -26548,3 +26548,90 @@ census:
   untouched.
 
 Verdict: TRUE.
+
+## Session 3082 update (Socratic pass 1746 — regexp/url/template absence ledger)
+
+Claim under test: the
+regexp, url and
+html surfaces are
+structurally absent
+— manual parsing
+where it is
+stricter, one
+trusted template.
+
+Verification —
+census:
+
+- ZERO `regexp.*`
+  imports or
+  calls —
+  no
+  user-
+  controlled
+  pattern
+  can
+  exist
+  (verified
+  regexp-
+  absent
+  class).
+- ZERO `net/url`
+  — no URL
+  parse;
+  the
+  manual
+  scheme +
+  host:port
+  validation
+  is the
+  stricter
+  choice
+  (verified
+  url-parse
+  class).
+- `text/template` ×1
+  site —
+  internal/
+  i18n/
+  message.go —
+  the trusted
+  embedded
+  bundle,
+  not user
+  input
+  (verified
+  template
+  class).
+- ZERO
+  `html/template`
+  — no
+  HTML
+  surface.
+- `filepath.Glob`×1 —
+  the only
+  wildcard.
+- ZERO `"path"`
+  import —
+  filepath
+  everywhere;
+  no OS
+  portability
+  confusion
+  on URL
+  paths.
+- ZERO `strings.NewReplacer`
+  — not
+  needed.
+- ZERO `bufio.Scanner`,
+  `bufio.SplitFunc`
+  — the line
+  reader is
+  Reader+
+  ReadString,
+  not Scanner
+  (line
+  ceiling
+  verified).
+
+Verdict: TRUE.
