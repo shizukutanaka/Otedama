@@ -11858,3 +11858,7 @@ Claim verified: the metrics writer's float rendering is Prometheus-canonical eve
 ## Session 2312 update (Socratic pass 978 — counter monotonicity)
 
 Claim verified: Prometheus counters can never decrease — `Counter` exposes only Inc() and Add(uint64) (metrics.go:189–192); no Dec/Sub/negative-delta path exists, so a decrement is unrepresentable. The Set(0) sites (:577, :623–624) are gauges (rates/index state), which are free to move. Counter invariant holds structurally, not by convention. TRUE.
+
+## Session 2313 update (Socratic pass 979 — exposition label escaping)
+
+Claim verified: label values can't corrupt the exposition — escapeLabel (:383) escapes exactly the three Prometheus-special chars (backslash, double-quote, newline) and escapeHelp (:396) escapes the two valid in HELP text (backslash, newline; quote deliberately not escaped). A pool URL or label value containing " or \n stays inside the series line — no metric injection or malformed scrape. TRUE.
