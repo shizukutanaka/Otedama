@@ -23078,3 +23078,51 @@ Verification — census:
   risk avoided).
 
 Verdict: TRUE.
+
+## Session 3024 update (Socratic pass 1688 — errors ledger)
+
+Claim under test: the
+error surface is the
+idiomatic trio — Is for
+sentinels, As for
+typed, New/Errorf for
+construction — plus
+Join only where an
+aggregate is real.
+
+Verification — census:
+
+- `errors.New`×36 —
+  leaf + sentinel
+  construction (the
+  verb-free literals
+  normalized earlier).
+- `errors.Is`×22 —
+  every sentinel
+  comparison goes
+  through Is (ErrHelp,
+  ErrBufferFull,
+  ErrNotExist, EOF
+  family — verified).
+- `errors.Join`×2 —
+  the config Validate
+  aggregate +
+  shutdown multi-error,
+  both real aggregates.
+- `errors.As`×1 —
+  the one typed-
+  unwrap site
+  (url/pool error
+  classification).
+- ZERO `errors.Unwrap`
+  — chains ride %w,
+  never manual.
+- ZERO `errors.Is` on
+  non-sentinel values
+  (verified —
+  convention is
+  errors.Is for
+  sentinels, == for
+  type identity).
+
+Verdict: TRUE.
