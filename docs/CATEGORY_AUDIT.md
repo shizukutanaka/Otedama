@@ -21550,3 +21550,61 @@ Verification — census:
   btccrypto (stateless).
 
 Verdict: TRUE.
+
+## Session 2994 update (Socratic pass 1658 — encoding surface ledger)
+
+Claim under test: the
+encoding surface is
+LE-only wire codec +
+bounded JSON/YAML with
+no streaming or loose
+decoders.
+
+Verification — census:
+
+- `binary.LittleEndian`
+  ×65 — every wire
+  primitive; zero
+  `binary.BigEndian` —
+  SV1/SV2 both LE per
+  spec.
+- `json.Unmarshal` ×26 —
+  all into declared
+  structs with bounded
+  inputs (upstream
+  LimitReader/line cap
+  verified); fuzz target
+  covers the V1 notify
+  parsers.
+- `json.RawMessage` ×18 —
+  lazy params/result
+  decode in V1 dispatch
+  (verified: only the
+  needed field decoded).
+- `json.NewEncoder` ×3 /
+  `json.Marshal` ×1 —
+  doctor JSON mirror +
+  exposition; encode
+  errors surfaced.
+- `yaml.NewDecoder` ×1 —
+  config file decode;
+  dedicated fuzz target
+  (#502) covers it.
+- `hex.DecodeString` ×6 /
+  `EncodeToString` ×4 —
+  V1 hex fields + wallet
+  fingerprint; all
+  decode results length-
+  checked (verified).
+- Zero base64/base32 in
+  production — Bitcoin
+  encodings are the
+  custom base58/bech32
+  (checksum-verified).
+- Zero `json.NewDecoder`
+  streaming — line-
+  capped ReadString +
+  Unmarshal is the
+  chosen boundary.
+
+Verdict: TRUE.
