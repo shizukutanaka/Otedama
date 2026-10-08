@@ -21918,3 +21918,52 @@ everything else verified
 TRUE. Roughly 1,700 audit
 classes now on the ledger
 across ~1,664 passes.
+
+## Session 3001 update (Socratic pass 1665 — ADR-009 ecosystem recheck)
+
+Claim under test: the
+ecosystem tracking in
+ADR-009 remains current —
+no new normative spec
+changes requiring action.
+
+Verification:
+
+- sv2-spec open set:
+  #202 (GitGab19 —
+  define non-custodial
+  payouts extension,
+  freshness/single-use
+  clarifications in
+  review) and #203
+  (plebhash — push-based
+  alternative avoiding
+  JDP RTT; dust/output
+  cap debate ongoing).
+  Competing designs still
+  unresolved — tracked
+  correctly as open.
+- #194 (error codes for
+  automated actions)
+  merged 2026-06-16 —
+  already on the ledger;
+  the branch records it
+  with adoption notes.
+- No new merged PRs
+  affecting the client
+  normative set since the
+  last check (SRI v1.12.0
+  and sv2-apps v0.8.0
+  already recorded).
+- Otedama's posture —
+  non-custodial mining
+  without JDP — remains
+  orthogonal to the
+  #202/#203 debate (they
+  define pool-side payout
+  construction, not
+  client duties).
+
+Verdict: TRUE —
+quiet window confirmed,
+no action needed.
