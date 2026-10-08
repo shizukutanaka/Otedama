@@ -15968,3 +15968,36 @@ poolproto/, miner/, engine/):
 
 Verdict: TRUE — every conversion is bound-annotated,
 byte-sourced, or spec-non-negative; no silent wrap.
+
+## Session 2803 update (Socratic pass 1469 — V1 method-name census)
+
+Claim under test: the wire method-name literals stay
+consistent between the pre-auth stash filter and the main
+dispatch switch — a method in one but not the other would
+silently drop pool messages.
+
+Verification:
+
+- Pre-auth stash filter stratumv1.go:288-290 lists 7
+  methods; dispatch switch :307-317 lists the same 7:
+  mining.notify, mining.set_difficulty,
+  mining.set_extranonce, client.show_message,
+  {client.reconnect, mining.reconnect},
+  mining.set_version_mask. Identical sets — nothing can
+  be stashed-then-undispatched or dispatched-then-dropped.
+- Outbound calls use the canonical three:
+  mining.subscribe, mining.authorize, mining.submit
+  (dialer.go:152/:175, stratumv1.go:633).
+- The two literal lists sit ~20 lines apart in the same
+  function — drift risk minimal; recorded as an
+  observation, not an Issue (same-file, same-switch
+  adjacency per rule-3 threshold).
+- Unrelated literal "mining." prefix families
+  (provider id "mining.stratum", arbitrate.go:76
+  miningStreamPrefix, arbitration doc examples) are a
+  different domain — stream-family prefixes, not RPC
+  method names; no collision possible since RPC names are
+  matched on the JSON-RPC "method" key only.
+
+Verdict: TRUE — stash filter and dispatch hold the same
+method set; outbound calls are the canonical three.
