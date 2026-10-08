@@ -9568,3 +9568,7 @@ Verified (scope refined): Cat-9 row 3 (OTel traces on connect→handshake→mine
 ## Session 1747 update (Socratic pass 413 — traffic shaping is an ADR trade-off)
 
 Verified (scope refined): Cat-10 row 6 (traffic shaping / "mining cookie" against the arXiv:1703.06545 timing channel) — no shaping or cover traffic exists, correctly: share submits are event-driven and delays would inflate stale rates. The real open question is a *choice* between two countermeasures to the same channel — client-side shaping (bandwidth + latency cost) vs Tor-by-default transport already 🔵 under ADR-007 B7. That trade-off is ADR-level, not an implementation task. Row flipped 🟡→🔵.
+
+## Session 1748 update (Socratic pass 414 — Cat-11 Lightning rows dispositioned)
+
+Four Cat-11 🟡 rows dispositioned. (1) Payout-minimum-in-doctor → 🔵 blocked-on-spec: `checkPayoutScheme` (checks.go:756-790) already surfaces per-pool FPPS/PPLNS/TIDES/Solo context, but no V1/V2 wire field carries a pool's actual minimum payout — the tracked spec path is sv2-spec #203; a hardcoded policy table is the rejected hardcoding class. (2) Min-cost-flow routing → 🔵 conditional, correctly self-scoped — receive-only today (ADR-007). (3) Liquidity-centralisation awareness → 🔵 same condition, ADR-001 stance already on record. (4) SCB reminders → 🔵 conditional on embedded node (ADR-007 B4, unscheduled). Marker updates only.

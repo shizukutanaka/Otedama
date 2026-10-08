@@ -557,24 +557,45 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
    (ADR-007); aligns with the TIDES/OCEAN sovereignty stance the 2026
    comparisons single out.
 2. 🔵 **BOLT12 reusable offers** — ADR-007 B1.
-3. 🟡 **Low Lightning payout-threshold awareness.** OCEAN's 0.00001 BTC LN
-   minimum makes frequent small withdrawals viable; surfacing the pool's
-   minimum payout in `doctor` helps users avoid "trapped" small balances.
+3. 🟡→🔵 **Low Lightning payout-threshold awareness — blocked on protocol
+   surface.** Verified session 1748: `doctor` already surfaces payout
+   *context* — `checkPayoutScheme` (checks.go:756-790) prints per-pool
+   FPPS/PPLNS/TIDES/Solo trade-offs and prompts when `payout_scheme` is
+   unset. But the row asks for the pool's actual *minimum* payout, and
+   neither Stratum V1 nor V2 carries a payout-policy field — the
+   deployed check can only echo the config-declared label. The
+   tracked spec path is sv2-spec #203 (non-custodial payout extension),
+   which is exactly where pool-advertised payout parameters would land;
+   until then a lookup table of pool policies would be unverifiable
+   hardcoding (rejected class). 🔵 (blocked-on-spec). Original request:
+   OCEAN's 0.00001 BTC LN minimum makes frequent small withdrawals
+   viable; surfacing the pool's minimum payout in `doctor` helps users
+   avoid "trapped" small balances.
 4. 🔵 **External-node control (Phoenixd/CLN/lnd/Alby)** — ADR-007 B3.
 5. 🔵 **Embedded LDK Node sidecar (opt-in)** — ADR-007 B4.
-6. 🟡 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &
+6. 🔵 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &
    Richter (arXiv:2107.05322) show optimally-reliable-and-cheap multi-part
    payments are a separable-convex min-cost-flow problem — superior to naive
    shortest-fee-path. Catalogue only; sending is out of alpha scope.
-7. 🟡 **Liquidity-centralisation awareness.** arXiv:2506.19333 shows LN
+   — **Dispositioned (session 1748):** correctly self-scoped as
+   conditional — Otedama is receive-only today (ADR-007), so there is no
+   send path to route. Activates only if a send feature is ever added.
+7. 🔵 **Liquidity-centralisation awareness.** arXiv:2506.19333 shows LN
    liquidity consolidates into dominant hubs under pure cost minimisation; a
    future routing layer should resist defaulting to the same hubs, echoing
    the mining-pool decentralisation stance (ADR-001).
+   — **Dispositioned (session 1748):** same condition as row 6 —
+   hub-preference policy exists only where a send router exists. The
+   ADR-001 decentralisation stance is already on record to apply when
+   that day comes.
 8. 🔵 **Boltz reverse-swap** for trustless LN→on-chain — ADR-007 B6.
 9. 🔵 **Tor-by-default** for LN/pool connections — ADR-007 B7 (also mitigates
    the Category 10 timing side channel).
-10. 🟡 **SCB / static-channel-backup reminders** if an embedded node lands —
+10. 🔵 **SCB / static-channel-backup reminders** if an embedded node lands —
     fund-loss prevention, parallels the seed-backup reminder (Cat 3 #8).
+    — **Dispositioned (session 1748):** conditional by construction —
+    there is no embedded node to back up today (ADR-007 B4 is 🔵
+    unscheduled). When B4 lands, SCB reminders ride with it.
 
 ---
 
