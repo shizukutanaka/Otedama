@@ -10210,3 +10210,7 @@ Claim verified: MiningProvider.publish computes expected sats/sec = deviceHashra
 ## Session 1905 update (Socratic pass 571 — polling-provider lifecycle)
 
 Claim verified: pollingProvider's launch rejects double-start, Stop is safe-when-unstarted and restartable, the quote channel is recreated only after wg.Wait() (the loop goroutine is the sole writer, so no send-on-closed), the non-blocking send drops the oldest buffered quote so the freshest estimate always wins, and every blocking point is ctx-aware. polling.go:38–118 clean. TRUE.
+
+## Session 1906 update (Socratic pass 572 — provider contract + yield math)
+
+Claim verified: provider.go's contract (publish ≥1 quote per MinQuoteInterval or an explicit {SatsPerSecond:0,Confidence:0} rather than silence) is what both providers implement; SatsPerSecond returns 0 for non-positive inputs so no negative/NaN yield reaches arbitration; Yield.Effective rejects non-positive net/confidence and clamps confidence ≤1.0. TRUE.
