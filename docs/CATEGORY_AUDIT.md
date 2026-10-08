@@ -25404,3 +25404,75 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3066 update (Socratic pass 1730 — modern container API ledger)
+
+Claim under test: the
+`slices`/`maps`/`cmp`
+surface is the
+adopted minimal
+subset — `sort`
+package fully
+retired.
+
+Verification —
+census:
+
+- `slices.Sort`×12 —
+  dominant
+  ordering call;
+  all inputs are
+  ordered types.
+- `slices.SortFunc`×2 +
+  `SortStableFunc`×1 —
+  the comparator
+  needs.
+- `slices.Contains`×1 —
+  membership.
+- `cmp.Compare`×5 —
+  comparator
+  helpers.
+- `cmp.Or`×4 —
+  first-nonzero
+  defaults
+  (landed
+  earlier).
+- `maps.Copy`×2 —
+  merge loops.
+- `maps.Clone`×1 —
+  the snapshot
+  seam.
+- ZERO `sort.*` —
+  sort.Ints /
+  sort.Strings /
+  sort.Slice
+  fully retired
+  by the
+  modernization
+  refactors.
+- ZERO
+  `slices.Concat`,
+  `Delete`,
+  `Reverse`,
+  `Equal`,
+  `Compact`,
+  `Max`, `Min`,
+  `BinarySearch`,
+  `Insert` —
+  the wider
+  slices API
+  is unused
+  (deliberately
+  not adopted
+  where loops
+  are clearer).
+- ZERO
+  `maps.Keys`,
+  `maps.Values`,
+  `iter.Seq`,
+  `iter.Pull` —
+  iterator
+  surface
+  unused.
+
+Verdict: TRUE.
