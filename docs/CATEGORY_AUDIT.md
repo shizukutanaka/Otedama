@@ -14508,3 +14508,30 @@ Verification: all 12 non-test panic sites.
 
 Verdict: TRUE — panic on programmer error only; remote input always
 gets errors.
+
+## Session 2745 update (Socratic pass 1411 — path-package census)
+
+Claim under test: `path` (slash-semantics) never touches disk
+paths; URL-shaped strings are parsed by the dedicated poolproto
+machinery, not general-purpose `net/url`.
+
+Verification: `path.Join/Clean/Dir/Base/Ext` and `net/url` site
+enumeration.
+
+- `path.*` — zero non-test sites: no disk path is manipulated with
+  slash-semantics (which would be wrong on Windows).
+- `filepath.*` — 6 files (config, daemon, lightning, engine,
+  cmd/logfile, run) — every filesystem path flows through the
+  OS-aware package.
+- `net/url` — zero imports anywhere. Pool "URLs" are deliberately
+  parsed by `poolproto.StripScheme`/`validatePoolURL` (manual
+  `scheme://` prefix + `host:port` validation that rejects
+  userinfo/path/query), which is stricter than url.Parse and
+  already verified — an important distinction: url.Parse would
+  silently accept `stratum://host/bad?x` forms the miner must
+  reject.
+- Consequence: the codebase has exactly two disjoint path worlds —
+  filepath for disk, StripScheme for pools — and neither leaks
+  into the other.
+
+Verdict: TRUE — path hygiene is package-level strict.
