@@ -13184,3 +13184,7 @@ All TRUE: every cited surface exists — `otedama doctor`, `wallet verify`/`chan
 ## Session 2638 update (Socratic pass 1304 — sustainability parity)
 
 **FIX APPLIED:** "Fuzz test は internal/stratum/ に2つ実装済み" — actual inventory is 23 `func Fuzz` targets in 14 files across 9 packages (7 in internal/stratum/), now smoke-run by the test.yml `fuzz` job. Corrected. Verified TRUE: poolproto abstraction + both dialers shipped (--http-addr/--pprof flag names accurate; otlp flag honestly TBD at v3.3.0), dual-protocol SV1-first strategy matches the shipped dialer set, stdlib slog + internal Prometheus exposition direction matches implementation.
+
+## Session 2639 update (Socratic pass 1305 — VERIFY.md parity)
+
+All claims verified TRUE — `release.yml`:107-120 ships `otedama-<os>-<arch>.tar.gz` + per-asset `.tar.gz.sha256` sidecars exactly as documented; the `checksums:` job (release.yml:194-212) publishes aggregate `checksums.txt`; ci.yml:672-691 tag job also publishes `checksums.txt` (session 1698 claim accurate); ci-cd.yml:227-230 writes the unsigned plain `checksums.txt` install.sh probes. Honest-gap framing is accurate: no cosign signatures, no SBOMs, no `cosign.txt` — `.goreleaser.yaml` cosign config remains dead code (never invoked by release.yml). Identity-regex and source-rebuild instructions are structurally correct.
