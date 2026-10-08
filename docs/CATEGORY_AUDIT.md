@@ -9420,3 +9420,7 @@ Re-verified all 32 auditor-facing rows; three stale/incorrect items corrected in
 ## Session 1712 update (Socratic pass 378 — Makefile pin convergence)
 
 Claim verified: `make setup` installs the same toolchain CI uses — FALSE, fixed. Four of five dev tools were `@latest` while CI pins concrete versions (golangci-lint converged on v1.64.8 in s1703): gosec@gosec@v2.29.0 / govulncheck@v1.1.4 / go-licenses/v2@v2.0.1 (also fixed the module path — `github.com/google/go-licenses` alone is the pre-v2 path) / gofumpt@v0.12.0 (published 2026-09-07, ≥7-day rule). `docs-serve`'s godoc pinned to x/tools v0.50.0 (v0.51.0 released today — too fresh per the 7-day rule). Skip-hint strings in `security`/`licenses`/`audit` updated to match. `make -n` expansion verified; zero `@latest` remains.
+
+## Session 1713 update (Socratic pass 379 — `make audit` target self-consistency)
+
+Claim verified: `make audit` is a faithful, runnable transcription of AUDIT_CHECKLIST's scripted items — TRUE after two corrections. Verified: [1/8]–[8/8] numbering is complete and ordered; step 6's `! git grep`/`||` negation chain fails only when markers exist (re-verified 0 hits); step 7's `bc` exists on stock macOS (`/usr/bin/bc`); step 8 SPDX scan finds no file outside `internal/`+`cmd/` (`find` census: zero stray .go). Found + fixed: (a) the footer claimed a "30-item checklist" — the file has 32 rows; (b) checklist row 30 listed only "ADR-001, ADR-002, ADR-003 present" while ADR-001..011 exist — both corrected in place.

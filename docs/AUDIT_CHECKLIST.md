@@ -69,7 +69,7 @@ If any row does not pass, open a security advisory.
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
 | 29 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
-| 30 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
+| 30 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001..ADR-011 present — **Correction (session 1713):** this row previously listed only ADR-001..003; eleven ADRs now exist |
 | 31 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
 | 32 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
 

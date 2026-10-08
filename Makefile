@@ -240,7 +240,7 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 	fi
 	@echo ""
 	@echo "All audit checks passed. See docs/AUDIT_CHECKLIST.md for the"
-	@echo "full 30-item checklist (manual verification items remain)."
+	@echo "full 32-item checklist (manual verification items remain)."
 
 # --------------------------------------------------------------------------
 # Docker
