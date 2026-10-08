@@ -17162,3 +17162,24 @@ added-line diff):
 
 Verdict: TRUE — zero seam breaches; the one
 addition matches the file's existing pattern.
+
+## Session 2854 update (Socratic pass 1519 — import-surface drift)
+
+Claim under test: branch Go changes introduced no
+new external import — the dependency surface is
+unchanged at the import level, not just go.mod.
+
+Verification (`git diff` added-line scan for
+import-style `"path"` strings across internal/ and
+cmd/):
+
+- Added import strings are only: `bytes`,
+  `encoding/binary`, `errors`, `testing` (all
+  stdlib) and the internal
+  `internal/poolproto` package.
+- **Zero new third-party imports** — consistent
+  with the s2845 `go mod tidy` zero-drift verdict:
+  no hidden dependency slipped in via code.
+
+Verdict: TRUE — import surface = stdlib + one
+internal package only.
