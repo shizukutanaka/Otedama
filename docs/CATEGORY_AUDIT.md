@@ -10166,3 +10166,7 @@ Claim verified: every OTEDAMA_* env var DEPLOYMENT.md uses (BITCOIN_ADDRESS, DAT
 ## Session 1894 update (Socratic pass 560 — TROUBLESHOOTING command parity)
 
 Claim verified: every command TROUBLESHOOTING.md cites exists — `doctor`, `wallet verify`, `wallet change-passphrase` (wallet.go:41–43), `service install/status`, `run --log-level`, and it correctly warns that `otedama --log-level=debug doctor` cannot work (flags are subcommand-scoped). TRUE.
+
+## Session 1895 update (Socratic pass 561 — config-layer precedence re-verification)
+
+Claim verified: ResolveWithOrigins applies strictly ordered layers defaults→file→env→flags (config.go:419–422), each layer overriding only non-empty fields with per-field Origins tracking; the DataDir OS-default fallback fires only when no layer set it and correctly stays OriginDefault. Matches the documented four-layer model. TRUE.
