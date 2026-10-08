@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1827 — docs/API.md)
+- Metrics table now covers the full registered set: `otedama_shares_submitted_total`, `otedama_shares_submit_in_flight`, `otedama_effective_yield_sats_per_second`, `otedama_power_breakeven_floor_sats_per_second` were all missing from the API reference
 ### Fixed (session 1824 — NOTICE)
 - Third-party attribution updated for the shipped dep set: `go.yaml.in/yaml/v3` replaces the archived `gopkg.in/yaml.v3` path (migrated in #444), and `golang.org/x/sys` is now listed as a direct dependency (used by internal/tui for terminal-width syscalls), not an indirect one
 ### Fixed (session 1800 — ci-cd.yml)

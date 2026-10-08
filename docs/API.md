@@ -286,6 +286,8 @@ addresses) appear once their first event occurs.
 | `otedama_shares_submit_dropped_total` | counter | — | Found shares dropped by the submit rate cap (8/s, burst 32) before reaching the wire — normally only under a hostile `mining.set_difficulty`. |
 | `otedama_shares_worker_dropped_total` | counter | — | Found shares dropped at the worker because the share channel was full — found but never submitted. Rising values mean the share consumer is the bottleneck. |
 | `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
+| `otedama_shares_submitted_total` | counter | — | Shares actually transmitted to the pool (`mining.submit` / `SubmitSharesStandard`), counted at send time regardless of the verdict. |
+| `otedama_shares_submit_in_flight` | gauge | — | Shares submitted but not yet judged by the pool. A sustained or growing depth means the pool is slow or not responding. |
 | `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
 | `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
 | `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |
@@ -315,6 +317,7 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
 | `otedama_devices_idle` | gauge | — | Devices left unassigned this cycle (no compatible accepting stream, or none cleared `min_yield_sats_per_sec`). A persistent non-zero value means the floor is parking hardware. |
+| `otedama_effective_yield_sats_per_second` | gauge | — | Gross-minus-losses yield: `otedama_arbitration_expected_yield_sats_per_second` scaled by the lifetime productive fraction (`otedama_productive_seconds_total` / uptime). |
 
 **Economics & power**
 
@@ -327,6 +330,7 @@ addresses) appear once their first event occurs.
 | `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
 | `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
 | `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
+| `otedama_power_breakeven_floor_sats_per_second` | gauge | — | Per-device yield floor derived from `power_watts` × electricity price ÷ BTC/USD, split evenly across managed devices (0 = power-breakeven routing disabled). |
 
 **Payout (non-custodial transparency)**
 

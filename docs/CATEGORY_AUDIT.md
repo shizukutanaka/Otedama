@@ -9887,3 +9887,7 @@ Claim verified: **every** tracked `.go` file (all 197) begins with the `// SPDX-
 ## Session 1826 update (Socratic pass 492 — markdown anchor-link census)
 
 Claim verified: every `[text](file#anchor)` link across all root + docs/ markdown resolves — zero broken fragment links (GitHub heading-slug rules applied: lowercase, punctuation stripped, spaces→hyphens). Complements the s1686 file-existence census: both the file layer and the anchor layer of the internal link graph are whole. TRUE — no dangling references.
+
+## Session 1827 update (Socratic pass 493 — registered-vs-documented metric parity)
+
+Defect found and fixed (API.md drift): the registered-metric census vs the docs/API.md table showed 4 shipped engine metrics missing from the reference: `otedama_shares_submitted_total` (counter, send-time transmit count), `otedama_shares_submit_in_flight` (gauge, in-flight submit depth), `otedama_effective_yield_sats_per_second` (gauge, lifetime-productive-scaled yield), `otedama_power_breakeven_floor_sats_per_second` (gauge, per-device break-even floor). All added to the table in their topic sections with label sets verified against registration (nil labels — an initial quantile misread belonged to submitLatencyP99). Excluded from the diff: `otedama_test_total`/`otedama_x`/`otedama_y`/`otedama_z`/`otedama_hashrate_hps` — metrics_test.go fixtures, not shipped surface. Residual: table now 46 rows = registered set; CI shows the known Go-pin class failure (go.mod ≥1.24 vs 1.20–1.23 matrix pins, rejected territory #1344).
