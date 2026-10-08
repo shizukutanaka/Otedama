@@ -10836,3 +10836,7 @@ Claim verified: the launchd plist preserves argv integrity and log privacy — P
 ## Session 2060 update (Socratic pass 726 — HAL registry + detect contract)
 
 Claim verified: driver plumbing can't misroute or hang — Register rejects nil, empty-named, and duplicate drivers as errors (a configuration bug surfaces at registration, never a silent replacement); Drivers returns a sorted snapshot (deterministic iteration, caller-mutable without affecting the registry); Detect fans out to per-driver goroutines over a buffered channel and, on ctx cancel, returns the devices accumulated SO FAR plus the context error — a hung driver can't starve the others' results; and Identity.Validate rejects empty IDs, invalid families, and whitespace/'/' in the ID before malformed driver output reaches the arbitration layer. TRUE.
+
+## Session 2061 update (Socratic pass 727 — GPU sysfs detection honesty)
+
+Claim verified: GPU enumeration can't over-claim — a missing /sys/class/drm returns nil (no GPUs is not an error); multi-node GPUs deduplicate by EvalSymlinks-canonicalized device path; an identity that fails Validate is skipped WITH a log line, never silently kept; SHA256d is deliberately false (documented: a true value spawned a whole second CPU-only miner pool per GPU and attributed CPU-speed shares/hashrate to the GPU's device ID in both metrics and the arbitrator — now impossible); and GeneralCompute stays true because it spawns no worker threads — the flag alone causes no oversubscription. TRUE.
