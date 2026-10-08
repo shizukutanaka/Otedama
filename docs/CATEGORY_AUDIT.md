@@ -17712,3 +17712,24 @@ excluding tests):
 
 Verdict: TRUE — no downgrade or bypass path in
 any TLS configuration.
+
+## Session 2882 update (Socratic pass 1547 — rand-provenance census)
+
+Claim under test: every production randomness
+source is crypto/rand; math/rand appears only
+in test files.
+
+Verification (`rg` over internal/ + cmd/):
+
+- Production `rand.` calls → all under
+  `crypto/rand` imports: engine/setup.go:297
+  (jitter), engine/run.go:486 (backoff),
+  stratum/noise.go:108 (ECDH ephemeral),
+  lightning/seedstore.go:82, seed.go:89,
+  wallet.go:135,355 (seed/KDF paths).
+- `math/rand` imports → **test files only**
+  (arbitration/*_test.go, lightning/fuzz_test.go)
+  — none in production.
+
+Verdict: TRUE — all security-relevant
+randomness comes from crypto/rand.
