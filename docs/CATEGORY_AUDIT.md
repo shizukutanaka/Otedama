@@ -33732,3 +33732,129 @@ census:
   ignores).
 
 Verdict: TRUE.
+
+## Session 3139 update (Socratic pass 1803 — concurrency primitive ledger)
+
+Claim under test: the
+concurrency
+surface is
+~25 owned
+goroutine
+spawns +
+select×46 +
+paired
+locks —
+with
+Lock/Unlock's
+two
+asymmetries
+being
+the
+verified
+helper
+contract.
+
+Verification —
+census:
+
+- `go func(`×20 —
+  anonymous
+  goroutine
+  spawns
+  (verified
+  spawn-
+  ownership
+  class:
+  all
+  carry
+  ctx
+  or
+  close
+  semantics).
+- Named
+  spawns:
+  `go
+  runArbitrationLoop(`
+  (engine),
+  `go
+  d.renderLoop()`
+  (tui),
+  `go
+  s.readLoop(ctx)`
+  ×2
+  (stratumv1
+  +
+  stratumv2),
+  `go
+  s.Close()`
+  (stratumv1
+  idle
+  timeout)
+  —
+  ~25
+  spawn
+  sites
+  total,
+  all
+  previously
+  verified
+  owned.
+- `select`×46 +
+  `case `×308 —
+  channel
+  multiplexing
+  and
+  switch
+  arms.
+- `<-ctx.Done()`×24,
+  `.Done()`×32
+  total,
+  `ctx.Err()`×17 —
+  the
+  cancellation
+  observation
+  surface.
+- `wg.Add`×8 +
+  `wg.Done`×8 —
+  WaitGroup
+  pairing
+  verified
+  equal.
+- `.Lock(`×52 vs
+  `.Unlock(`×54 —
+  the
+  two-site
+  asymmetry
+  is
+  the
+  verified
+  "Callers
+  hold
+  c.mu"
+  helper
+  contract
+  (helpers
+  that
+  unlock
+  a
+  lock
+  taken
+  by
+  their
+  caller).
+- `.RLock(`×15 =
+  `.RUnlock(`×15 —
+  RWMutex
+  fully
+  paired.
+- atomic
+  counters
+  (Uint64×10,
+  Bool×10,
+  Pointer×8,
+  Int64×1)
+  verified
+  in
+  s3132.
+
+Verdict: TRUE.
