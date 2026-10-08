@@ -9903,3 +9903,7 @@ Claim verified: the CLI flag surface is 1:1 — 15 flags enumerated across all r
 ## Session 1830 update (Socratic pass 496 — config.yaml.example field coverage)
 
 Claim verified: config.yaml.example covers **every** yaml field of the Config struct — all 14 top-level fields (bitcoin_address, bitcoin_addresses, pools, workers, language, log_level, log_format, data_dir, arbitration_hysteresis_pct, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, http_addr) plus all 6 nested fields (url, user, password, payout_scheme, tls_ca_file, name) appear, with optional ones documented as commented examples with semantics. Precedence header (flags > env > file > defaults) matches the verified 4-layer resolver. TRUE — no orphan fields, no phantom keys.
+
+## Session 1831 update (Socratic pass 497 — env-var read-site verification)
+
+Claim verified: each of the 15 documented OTEDAMA_* vars has a live read site — 6 string vars in applyEnvLayer (BITCOIN_ADDRESS, LOG_LEVEL, LOG_FORMAT, LANGUAGE, DATA_DIR, HTTP_ADDR), 5 numeric vars in the numericEnvVars SSOT (ARBITRATION_HYSTERESIS_PCT, MIN_YIELD_SATS_PER_SEC, CURTAIL_BELOW_BTC_USD, POWER_WATTS, ELECTRICITY_PRICE_PER_KWH), OTEDAMA_CONFIG in configfile.go's 3-layer resolution, and 3 wallet vars in cmd/otedama (WALLET_PASSPHRASE, WALLET_NEW_PASSPHRASE, WALLET_MNEMONIC_PASSPHRASE). docs/API.md's env table lists exactly these 15 — zero drift both directions. TRUE.
