@@ -16297,3 +16297,30 @@ Verification:
 
 Verdict: TRUE — the pair is single-writer, single-
 goroutine, single-function; desync is unreachable.
+
+## Session 2816 update (Socratic pass 1482 — interface-boxing census)
+
+Claim under test: no large struct is boxed into an
+interface parameter on any hot path — interface
+consumers take pointers, slice headers, or small values.
+
+Verification — the complete interface-parameter set:
+
+- `any` usage: ~5 sites, all marshal/log adapters
+  already censused (s569/s870 — wire params and log
+  attribute values are small headers).
+- Config passed by value only in the startup layering
+  calls (applyFileLayer/applyFlagLayer) — one-time cost
+  at boot, never in a loop.
+- Entropy/Mnemonic params are byte-slice headers (16B
+  fat) — boxing copies nothing.
+- Scheme, io.Reader/Writer, clock.Clock params are
+  interface values by design — the hugeParam sweep
+  (#527) already pointer-ified every by-value >64B
+  struct parameter.
+- The grind loop's hot path (SetWork/share submission)
+  carries pointer receivers only — verified in the
+  s2781-s2800 sweeps.
+
+Verdict: TRUE — boxing is confined to startup and
+small-header call sites; no hot-path copy exists.
