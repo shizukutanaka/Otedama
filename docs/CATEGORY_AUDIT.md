@@ -41539,3 +41539,146 @@ census:
   verified).
 
 Verdict: TRUE.
+
+## Session 3193 update (Socratic pass 1857 — math/big/bits/rand ledger)
+
+Claim under test:
+`math`
+is
+NaN/
+Inf
+guards
++
+bit-
+level
+float
+conversion;
+`math/big`
+is
+the
+nBits↔
+target↔
+difficulty
+math
+only;
+production
+randomness
+is
+100%
+`crypto/rand`
+with
+`math/rand`
+test-
+only.
+
+Verification —
+census:
+
+- `math`:
+  `Inf`×19,
+  `IsInf`×16,
+  `NaN`×11,
+  `IsNaN`×11,
+  `Float64bits`×7,
+  `Abs`×6,
+  `Float64frombits`×5,
+  `Float32bits`×2,
+  `Trunc`×1,
+  `MaxFloat64`×1,
+  `Max`×1,
+  `Float32frombits`×1.
+  ZERO:
+  all
+  transcendental
+  (`Sin`/`Cos`/`Pow`/`Sqrt`/`Log`/`Exp`/`Log2`/`Log10`),
+  `Ceil`/`Floor`/`Round`,
+  `Mod`/`Remainder`,
+  `Nextafter`/`Copysign`/`Dim`/`Frexp`/`Ldexp`/`Signbit`,
+  `Gamma`/`Erf`/`J0`/`Y0`/`Ilbert` —
+  finite-
+  guard
+  +
+  IEEE-754
+  bit
+  shuffling
+  only.
+- `math/big`:
+  `Int`×12,
+  `NewInt`×9,
+  `Float`×4,
+  `NewFloat`×1
+  —
+  nBits
+  decode,
+  target
+  compare,
+  difficulty
+  division.
+  ZERO:
+  `Rat`,
+  `big.MaxPrec`-
+  default
+  drift
+  (`NewFloat`
+  sets
+  precision
+  explicitly),
+  `nat`/
+  internal
+  digits.
+- `math/bits`:
+  ZERO —
+  no
+  `LeadingZeros`/`TrailingZeros`/`OnesCount`/
+  `Add`/`Sub`/`Mul`/`Div`/
+  `RotateLeft` intrinsics
+  (bit
+  work
+  is
+  `<<`/`>>`/`&`/`|`/`^`
+  operators).
+- `crypto/rand`
+  vs
+  `math/rand`:
+  production
+  randomness
+  is
+  `rand.Int(rand.Reader, big.NewInt(n))`
+  for
+  reconnect
+  jitter
+  and
+  the
+  wallet
+  backup
+  quiz
+  (`crypto/rand`
+  imports
+  ×10+),
+  plus
+  `rand.Reader`×19
+  and
+  `rand.Read`×6
+  for
+  nonces/IVs.
+  `math/rand`
+  imports
+  ×3 —
+  `arbitration/engine_test.go`,
+  `arbitration/fuzz_test.go`,
+  `lightning/fuzz_test.go`
+  only
+  (deterministic
+  seeded
+  test
+  streams).
+  ZERO:
+  `math/rand/v2`,
+  `math/rand`/
+  `rand.Seed`
+  global
+  source
+  in
+  production.
+
+Verdict: TRUE.
