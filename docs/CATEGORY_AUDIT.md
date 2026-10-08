@@ -9928,3 +9928,7 @@ Defects found and fixed:
 ## Session 1836 update (Socratic pass 502 — version chain end-to-end)
 
 Claim verified: the version flow is single-sourced — `VERSION` (`v3.0.0-alpha.1`) → Makefile `VERSION :=` → ldflags `-X internal/version.{Version,Commit,BuildDate}` → `otedama version`; the in-code default `v3.0.0-alpha.1-dev` intentionally marks unversioned builds (s546 alignment holds). Release gates: `check-version` requires the VERSION file AND a dated CHANGELOG entry (Makefile:295-298); `make tag` signs `git tag -s`. TRUE.
+
+## Session 1837 update (Socratic pass 503 — branch-filter completeness re-census)
+
+Claim verified: every workflow's `branches:` trigger list includes `master` — ci-cd.yml, ci.yml, security.yml, test.yml, deploy.yml all carry `[main, master, (develop)]` or equivalent; deploy.yml's push+PR filters both include master (lines 6-7, 13-14). Residual `main`/`develop` entries are inert — they match no existing branch but cost nothing and future-proof a rename. `main.go` in ci.yml:286 is code-comment prose, not a ref. TRUE — s1270/s1293 fixes hold.
