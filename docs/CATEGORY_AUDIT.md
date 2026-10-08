@@ -27559,3 +27559,118 @@ census:
   API.
 
 Verdict: TRUE.
+
+## Session 3093 update (Socratic pass 1757 — net/http complete ledger)
+
+Claim under test: the
+HTTP surface is
+Client+Server with
+a private pprof
+mux — MethodGet
+only, request-ctx
+bound, no bare
+helpers.
+
+Verification —
+census:
+
+- `http.Client`×6 —
+  the outbound
+  callers —
+  all
+  Timeout
+  bound
+  (verified
+  http-timeout
+  class).
+- `http.Server`×2 —
+  the admin
+  server +
+  the pprof
+  mux —
+  private
+  muxes
+  only
+  (verified
+  http-server
+  class).
+- `http.NewRequestWithContext`×3 +
+  `MethodGet`×3 +
+  `NoBody`×3 —
+  all
+  outbound
+  calls
+  carry
+  the
+  caller's
+  ctx.
+- `http.Request`×10 +
+  `ResponseWriter`×4 —
+  the
+  handler
+  signature
+  types.
+- `http.ParseTime`×3 —
+  the
+  response-
+  header
+  time
+  parse.
+- `http.NewServeMux`/`ServeMux`/`NotFound`/`Error`/`ErrServerClosed`×1
+  each —
+  the
+  private
+  mux +
+  graceful
+  drain.
+- `http.DefaultServeMux`×1 —
+  a
+  comment
+  reference
+  documenting
+  why it is
+  not used
+  (verified
+  default-mux
+  class).
+- `pprof.{Index,
+  Cmdline,
+  Profile,
+  Symbol,
+  Trace,
+  Handler}`×6 —
+  the
+  opt-in
+  private-
+  mux
+  routes
+  (`--pprof`,
+  non-
+  loopback
+  warning).
+- Status
+  codes:
+  `StatusOK`×5 +
+  `StatusServiceUnavailable` +
+  `StatusInternalServerError` —
+  the
+  full
+  status
+  surface.
+- ZERO `httputil`,
+  `cookiejar`,
+  `http2`/`h2`,
+  `http.Get`/`Post`/`Head`/`Do`
+  bare
+  helpers,
+  `DefaultClient`,
+  `DefaultTransport`,
+  `http.ListenAndServe`
+  bare —
+  every
+  HTTP
+  entry
+  is
+  bounded.
+
+Verdict: TRUE.
