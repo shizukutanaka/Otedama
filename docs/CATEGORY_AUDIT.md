@@ -19062,3 +19062,33 @@ Verification:
 
 Verdict: TRUE — per-subcommand
 FlagSets, no global argv state.
+
+## Session 2935 update (Socratic pass 1600 — template + container census)
+
+Claim under test: `text/template` is
+used on trusted content only, and
+there is no html/template or
+container/* misuse.
+
+Verification:
+
+- `container/*` → zero imports (no
+  heap/list/ring misuse).
+- `html/template` → zero imports.
+- `text/template` → one site:
+  i18n/message.go:334 parses message
+  bundles' `{{.Field}}` placeholders.
+- Input is the bundle's own message
+  text (trusted), not user input;
+  the render runs only when `raw`
+  contains `{{` and `data != nil`.
+- Parse/execute errors return the
+  raw string + a wrapped error —
+  degraded display, never a panic.
+- text/template (not html) is the
+  right choice — output goes to
+  logs/CLI, not HTML.
+
+Verdict: TRUE — template input is
+trusted bundle text; text/template
+is the correct package.
