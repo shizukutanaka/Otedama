@@ -16833,3 +16833,28 @@ Verification — the one shared-pointer publication:
   the map wholesale, s2815).
 
 Verdict: TRUE — publication is always the last write.
+
+## Session 2838 update (Socratic pass 1504 — dynamic-bound loop census)
+
+Claim under test: no loop re-evaluates a bound whose
+body fails to converge — a `for len(x) > N` that
+never shrinks x is an infinite loop, and one that
+shrinks the wrong element is a logic bug.
+
+Verification — all six dynamic-bound sites:
+
+- base58.go:47, stratumv1.go:534 — read-only scans
+  (`i < len(s)`) where the body never mutates the
+  collection; index increments normally.
+- parse.go:354 (`len(b) > 0` line-end trim),
+  stratumv2/dialer.go:317 (pendingOrder FIFO),
+  run.go:122 (jobsCap eviction) — each body shrinks
+  the measured collection by head/tail removal;
+  strict decrease ⇒ termination guaranteed.
+- setup.go:296 `len(out) < k` — body appends;
+  strict increase to fixed k ⇒ converges.
+- Zero loops whose bound is recomputed from a value
+  the body mutates non-monotonically.
+
+Verdict: TRUE — every dynamic bound is either
+immutable during the loop or strictly monotone.
