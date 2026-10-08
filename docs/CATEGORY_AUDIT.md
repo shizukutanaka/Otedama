@@ -9956,3 +9956,7 @@ Defects found and fixed:
 ## Session 1842 update (Socratic pass 508 — release checksum chain parity)
 
 Claim verified: the publish↔verify chain is consistent — ci-cd.yml:227-230 aggregates `sha256sum otedama-* > checksums.txt` (self-inclusion fix from s1665 holds: glob excludes checksums.txt itself since its name doesn't start with `otedama-`); install.sh probes the same names in order (`checksums.txt`, `otedama_<ver>_checksums.txt`, `otedama_<VERSION>_checksums.txt`) and fails closed on fetch error unless `--skip-verify` (lines 150-200). TRUE.
+
+## Session 1843 update (Socratic pass 509 — HTTP endpoint surface parity)
+
+Claim verified: httpserver/server.go:89-95 registers exactly `/healthz`, `/readyz`, `/metrics`, `/` plus opt-in `/debug/pprof/{,cmdline,profile,symbol,trace}` behind `--pprof`; docs/API.md documents all three GET endpoints and the --pprof flag (:34); SPECIFICATION §6:156-157 lists the same four core routes. Docs match code 1:1. TRUE.
