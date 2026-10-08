@@ -20354,3 +20354,52 @@ Verdict: TRUE — template use is
 single-sourced on a trusted
 bundle with graceful error
 degradation.
+
+## Session 2970 update (Socratic pass 1635 — encoding/* census)
+
+Claim under test: `encoding/*`
+imports are `binary`, `hex`,
+`json` only — no `gob`, `xml`,
+`csv`, `base64`, `base32`,
+`asn1`, `ascii85`, `pem`
+outside tests.
+
+Verification:
+
+- `encoding/binary` — the SV2
+  wire layer (frame.go,
+  handshake.go, messages.go,
+  noise.go, wire.go) plus
+  miner/sha256d.go. All
+  `binary.LittleEndian`;
+  verified LE-only at s2942.
+- `encoding/hex` —
+  btccrypto, lightning
+  (seed.go, english_wordlist.go),
+  miner/sha256d.go, stratumv1
+  (parse.go, stratumv1.go).
+  `hex.DecodeString` outputs
+  are length-checked where
+  the wire demands it
+  (verified s2936).
+- `encoding/json` —
+  config.go, version.go,
+  doctor/doctor.go,
+  rates/fetcher.go,
+  rates/hashrate.go,
+  stratumv1 (parse.go,
+  stratumv1.go). All
+  inputs bounded upstream
+  (verified s2917).
+- `encoding/pem` — test-only
+  (tls_test.go, extras_test.go).
+- Zero `encoding/gob`, `xml`,
+  `csv`, `base64`, `base32`,
+  `asn1`, `ascii85`,
+  `encoding` (root type) in
+  production.
+
+Verdict: TRUE — encoding use
+is confined to the three
+codecs (binary LE, hex, JSON)
+with all inputs bounded.
