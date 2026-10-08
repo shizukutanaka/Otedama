@@ -160,12 +160,15 @@ periodically — both are operator choices, not code.
 version.
 
 **Mitigation:** Only two third-party runtime dependencies:
-`golang.org/x/crypto` and `gopkg.in/yaml.v3` (plus the Go standard
-library). All GitHub Actions pinned by SHA. Dependabot auto-updates
-with review. govulncheck runs in CI. See ADR-003.
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
-with review. govulncheck runs in CI. See ADR-003.
+`golang.org/x/crypto` and `go.yaml.in/yaml/v3` (plus the Go standard
+library). Dependabot auto-updates with review. govulncheck is a hard
+CI gate in security.yml (no `continue-on-error`). See ADR-003.
+
+**Advisory status (verified 2026-10-08, govulncheck v1.1.4, source
+mode):** 0 reachable vulnerabilities; 18 module-level findings exist
+in required modules but no reachable call path exists into any of
+them. No advisory IDs currently apply to the shipped call graph —
+re-record on each dependency bump or on any govulncheck CI failure.
 
 **Residual risk (CI supply chain):** GitHub Actions are referenced by
 release tags (`@v4`, `@v5`, …), not commit SHAs, so a compromised or

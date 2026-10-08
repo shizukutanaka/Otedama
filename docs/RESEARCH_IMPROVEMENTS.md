@@ -905,18 +905,29 @@ endpoint against current vendor documentation. Tags as before
     verify. Add provenance + `cosign sign-blob` (GitHub OIDC, no stored
     keys) to release.yml and document `cosign verify-blob` /
     `gh attestation verify`. (sigstore/cosign, slsa.dev)
-23. 🟡 **Publish an OpenSSF Scorecard workflow as a release gate.**
+23. ✅ **Publish an OpenSSF Scorecard workflow as a release gate.**
     `ossf/scorecard-action` checks Branch-Protection / Pinned-Dependencies /
     Signed-Releases / Token-Permissions and bundles osv-scanner; the
     Signed-Releases check rewards #22 and Pinned-Dependencies reinforces
     Cat 10 #10. (github.com/ossf/scorecard)
+    — **Applied (session 1754):** added `.github/workflows/scorecard.yml`
+    (scorecard-action@v2.4.4, push-to-master + weekly + dispatch,
+    `contents: read` only). Results upload as a workflow artifact rather
+    than to the code-scanning dashboard (`publish_results: false`) so the
+    job needs no repo settings beyond the default — the Dependency Review
+    failure class showed what an unconfigured publishing endpoint costs.
+    Advisory by design; the hard gates live in ci.yml/security.yml/test.yml.
 24. ✅→🟡 **Make govulncheck a hard CI gate — gate shipped; advisory
     tracking remains evergreen.** Verified in session 1726: security.yml's
     `govulncheck ./...` step runs with no `continue-on-error`, so any
     finding fails the build — the gate this row asked for exists (added
     session 1265). The remaining ask (recording advisory IDs in
-    THREAT_MODEL's dependency assumptions) stays open as an evergreen
-    documentation practice. (Original row kept below.)
+    THREAT_MODEL's dependency assumptions) landed in session 1754:
+    THREAT_MODEL's supply-chain mitigation now carries a dated advisory
+    status block (govulncheck v1.1.4 source mode: 0 reachable, 18
+    module-level findings with no reachable call path) with a re-record
+    trigger on each dep bump — stays an evergreen practice. (Original row
+    kept below.)
     🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
     current Go advisories on the `net/http` surface Otedama exposes
     (`/healthz /readyz /metrics`) — e.g. CVE-2025-22871 (request smuggling),
