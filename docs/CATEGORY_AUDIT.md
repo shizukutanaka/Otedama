@@ -14975,3 +14975,28 @@ guarded fallback):
 
 Verdict: TRUE — discards confined to a directive whose every
 field is optional by design.
+
+## Session 2764 update (Socratic pass 1430 — type-assertion census)
+
+Claim under test: no single-value type assertion `x.(T)` — which
+panics on a mismatch — reaches code where pool- or user-
+controlled values could take another shape.
+
+Verification: two flag-shaped hits + the comma-ok surface.
+
+- stratumv1.go:682 — `switch v := m.ID.(type)` is a type switch,
+  not a panicking assertion: each case normalized (int/int64/
+  string → uint64, else 0); unknown id types degrade to an
+  unmatched pending key.
+- run.go:1667 — `sess.(poolproto.ReconnectWaiter)` with
+  `isWaiter` comma-ok — capability probe, absent capability is
+  the expected path.
+- All single-type assertions use comma-ok: logger.go:180
+  (*Logger from ctx), dialer.go:136 (*connection), tui
+  dashboard.go:583 (*os.File), stratumv1.go:644
+  (resp.result.(bool) submit-ack) — each treats the !ok branch
+  explicitly rather than panicking.
+- Zero bare `x.(T)` assertions across the non-test tree.
+
+Verdict: TRUE — assertion surface cannot panic; capability
+probes degrade where the interface is unmet.
