@@ -12746,3 +12746,7 @@ Milestone checkpoint at pass 1200: `gofmt -l internal cmd` clean (zero unformatt
 ## Session 2535 update (Socratic pass 1201 — lint-config schema currency recheck)
 
 Claim verified: `.golangci.yml` uses the golangci-lint v1 schema consistent with the Makefile's pinned v1.64.8 (v2 migration was rejected at #1391 — config stays v1 by deliberate decision) — `linters.disable-all: true` + curated enable list, no deprecated keys (no skip-dirs/skip-files/maligned/golint/deadline), and `run.go: "1.24"` tracks go.mod's floor with an inline comment explaining the constraint. TRUE — linter config is current for its pinned toolchain.
+
+## Session 2536 update (Socratic pass 1202 — race-detector spot check)
+
+Claim verified: `go test -race -count=1` passes on the boundary packages stratum, config, metrics (1.07s/1.07s/1.03s) — the shared-state surfaces audited for atomic/mutex correctness this cycle (lazy metric series, config layering, frame state machines) hold under the race detector too. TRUE — concurrency invariants confirmed at runtime, not just by inspection.
