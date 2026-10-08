@@ -25194,3 +25194,77 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3063 update (Socratic pass 1727 — time package surface ledger)
+
+Claim under test: the
+`time` package
+surface is the
+clock/duration/timer
+subset — no parse,
+zone, or format
+calls.
+
+Verification —
+package-level
+census:
+
+- `time.Now`×45 —
+  wall reads (clock
+  abstraction
+  verified; the
+  interface
+  seam carries
+  testability).
+- `time.Second`×36,
+  `Minute`×9,
+  `Millisecond`×5,
+  `Duration`×26,
+  `Time`×28 —
+  literal
+  durations and
+  the timestamp
+  types.
+- `time.Since`×17 —
+  elapsed
+  measurement.
+- `time.NewTicker`×10,
+  `NewTimer`×3,
+  `After`×3 — every
+  one paired with
+  Stop() or
+  verified to be
+  short-lived
+  (timer/ticker
+  classes).
+- `time.UTC`×2,
+  `Date`×2,
+  `Sleep`×1 — the
+  narrow remainder.
+- ZERO package-level
+  `Parse`,
+  `ParseDuration`,
+  `AfterFunc`, `Tick`,
+  `Local`,
+  `LoadLocation`,
+  `Unix`,
+  `Until` — all
+  wall-time is
+  read or elapsed,
+  never parsed
+  or zone-shifted
+  on the wire
+  (protocol
+  timestamps are
+  integer seconds
+  handled
+  elsewhere).
+- Method-level
+  `.Before`/`.Equal`/
+  `.Add` used only
+  where semantic
+  (verified
+  time-equality
+  class).
+
+Verdict: TRUE.
