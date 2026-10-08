@@ -9784,3 +9784,7 @@ Defect found and fixed: ci-cd.yml's `deploy` job ran `kubectl apply -f k8s/deplo
 ## Session 1801 update (Socratic pass 467 — docs/DEPLOYMENT.md k8s section audit)
 
 Claim verified: the Kubernetes YAML in DEPLOYMENT.md — the documented replacement for the absent `k8s/` tree — is fully product-consistent: single-replica otedama Deployment (correct — no sharding), `OTEDAMA_BITCOIN_ADDRESS`/`OTEDAMA_DATA_DIR`/`OTEDAMA_WALLET_PASSPHRASE` are real config env names (config.go:516,532), uid/fsGroup 65532 matches the distroless nonroot image (Dockerfile:31,53), `/healthz`+`/readyz` probes on :9090 match httpserver routes, ServiceMonitor selects `app: otedama`/`port: metrics`, resource limits reasonable for a daemon, and the quoted metric names (`otedama_hashrate_hashes_per_second`, `otedama_shares_submitted_total`, `otedama_pool_connection_state`, `otedama_submit_latency_milliseconds`) all exist in the registry. TRUE — no defect.
+
+## Session 1802 update (Socratic pass 468 — govulncheck evergreen re-check)
+
+Claim verified: `govulncheck ./...` on the current tree (Go 1.27.1, govulncheck v1.1.4) reports **0 reachable vulnerabilities** — 18 module-level CVEs exist in the required-dependency graph but none are called by Otedama's code per symbol analysis. RESEARCH_IMPROVEMENTS rows :951/:962 remain 🟡 evergreen — the scan is periodic by nature; this pass re-verified the zero-reachable invariant. THREAT_MODEL's recorded value remains accurate.
