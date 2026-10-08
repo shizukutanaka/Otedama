@@ -9856,3 +9856,7 @@ Coverage checkpoint: every repo-root file (25 files, `git ls-files` minus intern
 ## Session 1819 update (Socratic pass 485 — govulncheck evergreen recheck)
 
 Fresh govulncheck v1.1.4 run over ./...: **0 reachable vulnerabilities** (0 in own code; 18 exist in required modules but none reachable — consistent with the security.yml hard-gate rationale recorded at RESEARCH_IMPROVEMENTS :951/:962). TRUE — supply-chain posture clean.
+
+## Session 1820 update (Socratic pass 486 — binary smoke + branch health)
+
+End-to-end smoke on a fresh `go build`: `otedama version` prints `v3.0.0-alpha.1-dev` with correct ldflags-default metadata (darwin/arm64, go1.27.1); `otedama doctor --json` exits **2** per the status-dominance contract (checks run, worst-status wins); `otedama config validate --config /tmp/nonexistent.yaml` falls back to defaults per design and exits **78** (EX_CONFIG) with the honest `bitcoin_address is required` diagnostic — exit-code contract (0/1/2/78) holds on the live binary. Branch health re-verified: origin/master remains an ancestor of HEAD, working tree clean, CI on #1405 = 22 pending/0 failed (queue saturation, unchanged). TRUE — no defect.
