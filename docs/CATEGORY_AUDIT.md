@@ -13376,3 +13376,10 @@ claim corrected ×3: (a) render ticker "default 250 ms" — actual `time.NewTick
 ## Session 2686 update (Socratic pass 1352 — docs/adr/ADR-005 full pass)
 
 claim corrected ×3: (a) "ten metric definitions" — engine/metrics.go now registers 49 series; (b) "on the order of 250 lines" — metrics.go is 425 lines (+139 runtime.go); (c) Neutral row claimed "No labels normalization — we trust the caller" — stale: `isValidMetricName`/`isValidLabelName` enforce the same regexes as client_golang at registration (metrics.go:102-140). Verified TRUE alongside: Registry/Counter/Gauge types, WriteText 0.0.4 format, label escaping, RuntimeCollector exists but unregistered on the default registry (#1158 rejected — claim still accurate), HELP/TYPE emit + sorted samples, formatFloat NaN/+Inf/-Inf.
+
+## Session 2687 update (Socratic pass 1353 — ADR immutability + docs/adr/ADR-006 full pass)
+
+convention correction: docs/adr/README.md:26-27 mandates immutable accepted ADRs ("do not edit the old one") — session 2685/2686's inline ADR-004/005 edits violated it. Reverted: original text restored, corrections moved to per-file "## Erratum" blocks matching the ADR-006 session-248 pattern (ledger correction, not rewrite).
+
+claim corrected ×2 (via erratum): (a) "same Pool interface" — no `Pool` type exists; the seam is poolproto's Connection/Session/Dialer trio + optional PoolNoticeReceiver/ReconnectWaiter/DifficultyWatcher; (b) Related's `docs/research/` — phantom path; the research doc is docs/SUSTAINABILITY.md.
+claim verified: Scheme/SignerScheme stubs + SchemeForAddressType (btccrypto.go:283), Hash256/TaggedHash (:352/:364), V1+V2 behind one seam, SHA-256d unabstracted in internal/miner/sha256d.go, session-248 erratum still accurate — TRUE.

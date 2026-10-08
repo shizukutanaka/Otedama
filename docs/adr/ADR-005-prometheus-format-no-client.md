@@ -19,11 +19,10 @@ Adopting `client_golang`:
 - ties the project's release schedule to upstream client releases;
 - exposes summary, histogram, and exemplar types Otedama doesn't use.
 
-For Otedama's needs — counters and gauges, ~50 metric definitions
-(engine/metrics.go) —
+For Otedama's needs — counters and gauges, ten metric definitions —
 the Prometheus *text exposition format* is documented and stable, and
-implementing it ourselves is on the order of 425 lines of straightforward
-code (plus ~140 more for the optional runtime collector).
+implementing it ourselves is on the order of 250 lines of straightforward
+code.
 
 ## Decision
 
@@ -78,12 +77,10 @@ Otedama does not use them. If a future need arises, we will reconsider.
 
 ### Neutral
 
-- **Label/metric name validation we wrote ourselves.** `client_golang`
-  validates names at registration; our registry does too —
-  `isValidMetricName` (`[a-zA-Z_:][a-zA-Z0-9_:]*`) and
-  `isValidLabelName` (stricter, no colon) fail fast at registration
-  (metrics.go:102-140), since one malformed label would make
-  Prometheus discard the entire scrape.
+- **No labels normalization.** `client_golang` validates that label
+  names match `[a-zA-Z_][a-zA-Z0-9_]*` at registration. We trust the
+  caller. Otedama only registers a handful of labels at known call
+  sites, so the risk is low.
 
 ## Alternatives Considered
 
@@ -98,7 +95,7 @@ for Otedama's modest metrics surface.
 designed for the same niche we are filling. We chose to write our own
 for two reasons:
 
-1. We cannot validate every dependency's behavior. Owning ~425 lines
+1. We cannot validate every dependency's behavior. Owning ~250 lines
    of code is cheaper than auditing an external library.
 2. Our metric needs are stable and small. The library's full feature
    set would be unused.
@@ -121,6 +118,28 @@ we can adopt OTel incrementally if it becomes the unambiguous winner.
   to make CI diffs stable.
 - Special floats are handled in `formatFloat`: NaN renders as `NaN`,
   positive infinity as `+Inf`, negative as `-Inf`.
+
+## Erratum (added session 2686, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; three factual drifts are recorded here:
+
+1. "ten metric definitions" — `internal/engine/metrics.go` now
+   registers ~49 series (counters + gauges).
+2. "on the order of 250 lines" — `internal/metrics/metrics.go` has
+   grown to 425 lines (+139 lines for `runtime.go`, the optional
+   `RuntimeCollector`).
+3. The Neutral row's "No labels normalization … we trust the caller"
+   is stale: `isValidMetricName` (`[a-zA-Z_:][a-zA-Z0-9_:]*`) and
+   `isValidLabelName` (stricter, no colon) fail fast at registration
+   (metrics.go:102-140) — the registry validates the same regexes as
+   client_golang, because one malformed label makes Prometheus drop
+   the entire scrape.
+
+Unchanged-and-verified: `Registry`/`Counter`/`Gauge` types, WriteText
+0.0.4 output, label escaping, NaN/±Inf emission, `RuntimeCollector()`
+exists but is not registered on the default registry today (claim
+still accurate).
 
 ## Related
 
