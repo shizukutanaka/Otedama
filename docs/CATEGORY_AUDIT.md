@@ -27090,3 +27090,110 @@ census:
   it.
 
 Verdict: TRUE.
+
+## Session 3088 update (Socratic pass 1752 — os/filepath complete ledger)
+
+Claim under test: the
+os surface is the
+environment + file
+lifecycle set —
+Getenv/Stat/
+ReadFile/MkdirAll/
+WriteFile/Remove/
+Rename — with
+filepath.Join the
+sole path
+builder and Exit
+confined to main.
+
+Verification —
+census:
+
+- `filepath.Join`×32 —
+  every path
+  build; ZERO
+  string
+  concat for
+  paths.
+- `os.Getenv`×16 —
+  the 15
+  env-var
+  surface +
+  one lookup.
+- `os.Stat`×10 +
+  `os.File`×10 +
+  `ErrNotExist`×6 —
+  the
+  existence/
+  type
+  probes
+  (verified
+  stat-toctou
+  class).
+- `os.Remove`×9 +
+  `Rename`×2 +
+  `ReadDir`×2 +
+  `Glob`×1 —
+  the file
+  lifecycle.
+- `os.ReadFile`×8 +
+  `WriteFile`×4 +
+  `OpenFile`/`Open`/
+  `CreateTemp`/`Chmod`/
+  `ReadDir`×1 each —
+  the I/O
+  surface;
+  all
+  paths
+  locally
+  controlled.
+- `os.MkdirAll`×5 +
+  `UserHomeDir`×7 —
+  the wallet/
+  config
+  dirs.
+- `os.Stdout`×6 +
+  `Stdin`×4 +
+  `Stderr`×4 +
+  `ModeCharDevice`×3 —
+  the TTY
+  surface.
+- `os.Exit`×2 —
+  cmd/otedama/
+  main.go
+  only —
+  ZERO exit
+  calls in
+  libraries
+  (verified
+  library-exit
+  class).
+- `os.Interrupt`×1 +
+  `Args`×1 +
+  `Executable`×1 +
+  `O_*` flags ×3 —
+  the
+  residuals.
+- ZERO `os.Setenv`,
+  `os.Unsetenv`,
+  `os.Clearenv`,
+  `os.Chdir`,
+  `os.Getwd`,
+  `os.Symlink`,
+  `os.Link`,
+  `os.Lstat`,
+  `os.TempDir`,
+  `os.Getuid`/
+  `Geteuid`,
+  `os.Umask`,
+  `os.Chtimes`,
+  `os.Truncate`,
+  `os.Pipe`,
+  `os.SameFile` —
+  the
+  mutating/
+  nonportable
+  surface is
+  absent.
+
+Verdict: TRUE.
