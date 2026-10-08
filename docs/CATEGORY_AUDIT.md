@@ -10812,3 +10812,7 @@ Live-verified via git ls-remote (unauthenticated API rate-limited): stratum-mini
 ## Session 2054 update (Socratic pass 720 — hygiene + branch-base check)
 
 Claim verified: no dormant debt markers and the branch base is current — zero TODO/FIXME/XXX/HACK strings across all non-test Go sources (nothing is parked invisibly in the code); every t.Skip call carries an explicit environment reason (root-can-rename / Windows chmod / no-home-dir / short-mode timing) — no silent skips; the working tree is clean; and the branch base equals origin/master at 40da2e515 (merged #1404), so the 417 ledger commits sit directly on the latest trunk with no drift underneath. TRUE.
+
+## Session 2055 update (Socratic pass 721 — config zero-value semantics)
+
+Claim verified (fresh-lens re-verification of s1653): the layering can't silently misapply a setting — every float field with a zero-value ambiguity is annotated in place ("0.0 in the file is indistinguishable from 'unset'" with the env-var escape hatch named per field); malformed numeric env values are left unapplied by the layer AND surfaced by EnvWarnings (a bad value can't silently take effect nor silently vanish — s1675 fix confirmed working); the layer-4 DataDir default is documented as required because an empty DataDir would silently disable wallet initialization; and Origins tracks which layer won every field so `config show --origin` can always attribute a value. TRUE.
