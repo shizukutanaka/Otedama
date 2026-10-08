@@ -23226,3 +23226,70 @@ Verification — census:
   `fastjson` deps.
 
 Verdict: TRUE.
+
+## Session 3027 update (Socratic pass 1691 — net/http ledger)
+
+Claim under test: every
+client is bounded +
+redirect-denying, and
+every server is a
+private mux with full
+timeouts.
+
+Verification — census:
+
+- `http.Client`×6
+  identifier sites —
+  the real
+  constructions are
+  the three verified
+  earlier (2 rate
+  feeds + doctor
+  probe), each with
+  Timeout and a
+  CheckRedirect that
+  refuses redirects.
+- `NewRequestWith
+  Context`×3 +
+  `MethodGet`×3 +
+  `NoBody`×3 — every
+  outbound request is
+  ctx-bound GET with
+  no body.
+- `http.Server`×2 —
+  the admin server and
+  the opt-in pprof
+  server, both with
+  Read/Write/Idle
+  timeouts.
+- `ServeMux`/
+  `NewServeMux` — the
+  private mux (index
+  404-gate);
+  `DefaultServeMux`
+  appears only in a
+  comment documenting
+  the deliberate
+  non-use (verified).
+- `Request`×10 +
+  `ResponseWriter`×4 —
+  handler plumbing.
+- `StatusOK`×5 +
+  `ServiceUnavailable`
+  ×1 +
+  `InternalServerError`
+  ×1 — the three-state
+  readyz contract.
+- `ErrServerClosed`×1 —
+  graceful-stop
+  classification.
+- `ParseTime`×3 —
+  header time parsing
+  for probe freshness.
+- ZERO http.Get/
+  DefaultClient,
+  ZERO http.ServeFile
+  (no path passthrough),
+  ZERO httputil.
+
+Verdict: TRUE.
