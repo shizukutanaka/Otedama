@@ -13100,3 +13100,7 @@ Spec §3.1's tls_ca_file row ("honoured for stratum+tls:// and stratum+v2tls://"
 ## Session 2617 update (Socratic pass 1283 — SPECIFICATION §4/§5 lifecycle + transport)
 
 §4 claims all TRUE: exit-78 on config failure; CPU-always + Linux-only GPU; wallet created only when passphrase non-empty (flag or OTEDAMA_WALLET_PASSPHRASE env fallback — setup.go:175 also requires non-empty DataDir, which always defaults); user_identity = per-pool User else active-payout-address + .worker (G7 semantics); pool-failover-fast vs payout-failover-only-while-never-connected (outage cannot redirect earnings); exponential backoff between full cycles; workers grind to the pool-assigned share target with block-target fallback (MaxTargetUnconstrained declared). §5 claims all TRUE: 6-byte header, MaxFrameSize checked before allocation, u24-in-int no-overflow reasoning, Noise NX alpha-state P-256 + u16-prefixed encrypted codec with partial-read buffering.
+
+## Session 2618 update (Socratic pass 1284 — SPECIFICATION §2.1 exit-code contract)
+
+TRUE: doctor.go:109-119 implements exactly the spec'd graded set — 0 when every check is Pass or Skip, 1 on any Warn, 2 on any Fail (Warn/Fail dominance via loop order). The 0/1/64/78 run contract verified across earlier passes (exitOK/exitUsage/exitConfig/exitRuntime sentinels).
