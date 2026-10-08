@@ -24054,3 +24054,56 @@ Verification — census:
   forms stay).
 
 Verdict: TRUE.
+
+## Session 3042 update (Socratic pass 1706 — network-deadline ledger)
+
+Claim under test: every
+blocking network call
+carries a bounded
+deadline — no
+infinite waits.
+
+Verification — census
+of all 9
+`Set*Deadline` sites:
+
+- `SetReadDeadline`×4 —
+  V1 session 5-minute
+  read bound, V2
+  handshake read bound,
+  doctor probe reads.
+- `SetWriteDeadline`×3 —
+  V1 writer's 10s
+  write bound, the
+  V2 write path's
+  pool-write bound
+  (merged fix).
+- `SetDeadline`×2 —
+  the combined
+  handshake deadline
+  sites (V1 dial
+  path, V2 dialer's
+  bounded negotiate).
+- Verified earlier:
+  the deadline is
+  cleared or
+  re-armed on every
+  wait (deadline-
+  pairing class); no
+  deadline-free
+  Read/Write on a
+  pool conn; ctx is
+  layered alongside
+  for cancel.
+- ZERO blocking
+  reads without a
+  deadline on the
+  pool path — the
+  only indefinite
+  waits are the
+  goroutine
+  supervision
+  selects which
+  cancel via ctx.
+
+Verdict: TRUE.
