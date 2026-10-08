@@ -39732,3 +39732,145 @@ census:
   audits).
 
 Verdict: TRUE.
+
+## Session 3180 update (Socratic pass 1844 — net/http/url ledger)
+
+Claim under test: outbound
+HTTP
+goes
+through
+timed
+`Client`s
+that
+refuse
+redirects;
+`http.Get`
+is
+test-
+only;
+`net/url`
+is
+deliberately
+absent
+(scheme+
+host:port
+validation
+is
+stricter
+than
+URL
+parsing).
+
+Verification —
+census:
+
+- `net`:
+  `Pipe`×67
+  (test
+  fixture),
+  `Conn`×41,
+  `Listen`×34
+  (test
+  +
+  httpserver),
+  `Dialer`×7,
+  `Listener`×6,
+  `SplitHostPort`×3,
+  `ParseIP`×3,
+  `ErrClosed`×3,
+  `IP`×2,
+  `Error`×1,
+  `DefaultResolver`×1.
+  ZERO:
+  `net.Dial`/`DialTimeout`/`DialContext`
+  bare
+  calls
+  (always
+  `Dialer{Timeout:}.DialContext`),
+  `net.Resolver`
+  instances,
+  `net.LookupHost`,
+  `net.Addr`,
+  `net.TCPConn`/
+  `UDP*`,
+  `net/smtp`,
+  `net/http/cgi`/`fcgi`/`httptest`
+  in
+  prod,
+  `net/netip`.
+- `net/http`
+  server
+  side:
+  `Request`×63,
+  `ResponseWriter`×54,
+  `HandlerFunc`×50,
+  `Handler`×7,
+  `StatusOK`×19,
+  `StatusInternalServerError`×6,
+  `StatusServiceUnavailable`×5,
+  `Error`×6,
+  `TimeFormat`/`ParseTime`
+  —
+  all
+  inside
+  `internal/httpserver`
+  +
+  tests.
+- `net/http`
+  client
+  side:
+  `Client`×15,
+  `NewRequestWithContext`×5,
+  `Response`×4,
+  `RoundTripper`×3,
+  `NoBody`×3.
+  `http.Get`×13
+  —
+  ALL
+  in
+  `internal/httpserver/server_test.go`
+  against
+  loopback
+  fixtures;
+  ZERO
+  in
+  production
+  (prod
+  clients
+  are
+  `&http.Client{Timeout:…,
+  CheckRedirect: refuse}`)
+  per
+  earlier
+  redirect-
+  posture
+  audits.
+  ZERO:
+  `http.Post`,
+  `http.DefaultClient`/`DefaultTransport`,
+  `http.ServeMux`
+  globals,
+  `http.ListenAndServe`
+  bare,
+  `http.Redirect`,
+  `http.Cookie`,
+  `http.ServeFile`/`ServeContent`,
+  `http.Flusher`/`Hijacker`,
+  `http.Server.ServeTLS`.
+- `net/url`:
+  ZERO —
+  no
+  imports;
+  pool
+  endpoints
+  parse
+  `scheme://host:port`
+  manually
+  (rejecting
+  userinfo/path/query
+  is
+  stricter
+  than
+  `url.Parse`).
+
+Verdict: TRUE.
