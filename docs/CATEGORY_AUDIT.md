@@ -12750,3 +12750,9 @@ Claim verified: `.golangci.yml` uses the golangci-lint v1 schema consistent with
 ## Session 2536 update (Socratic pass 1202 — race-detector spot check)
 
 Claim verified: `go test -race -count=1` passes on the boundary packages stratum, config, metrics (1.07s/1.07s/1.03s) — the shared-state surfaces audited for atomic/mutex correctness this cycle (lazy metric series, config layering, frame state machines) hold under the race detector too. TRUE — concurrency invariants confirmed at runtime, not just by inspection.
+
+## Session 2537 update (Socratic pass 1203 — Makefile fuzz target coverage + ledger self-correction)
+
+Claim verified: the Makefile `fuzz` target (fixed at #489) discovers every fuzzer dynamically — `grep -rln 'func Fuzz' internal cmd` + `dirname` enumeration matches the full inventory exactly, including the branch-added `internal/stratum/encryptedframe_fuzz_test.go`; running the target exercises all 23 fuzzers at 30s each. TRUE — no fuzz target can be added without the Makefile picking it up.
+
+Ledger self-correction (honest-ledger protocol): the s2525 entry recorded "23 Fuzz* entrypoints across 14 files in 11 packages" — the entrypoint count (23) and file count (14) are correct, but the package count is wrong: fuzzers live in 9 directories/packages (cmd/otedama, arbitration, btccrypto, config, lightning, miner, poolproto/stratumv1, rates, stratum). Corrected here in a new entry; history not rewritten.
