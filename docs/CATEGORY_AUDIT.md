@@ -15256,3 +15256,31 @@ Verification: 5 bare sends outside select/ctx guards.
 Verdict: TRUE — every bare send is capacity-matched to its
 maximum possible producer count; nothing can wedge on a full
 channel.
+
+## Session 2775 update (Socratic pass 1441 — enum-boundary census)
+
+Claim under test: enum-like ints cannot carry an out-of-range
+value into dispatch or domain logic.
+
+Verification: 5 iota const blocks.
+
+- arbitration.Policy — `Valid()` gate consulted inside Decide
+  (engine.go:311) before any tie-break; invalid values reject,
+  never coerce.
+- doctor.Status — produced internally by check results; never
+  decoded from a wire or file; dominance order is ordinal.
+- btccrypto.AddressType — produced by internal classification;
+  SchemeForAddressType returns ErrSchemeNotImplemented for any
+  value without a registered scheme (fail-loud).
+- config payout_scheme — string enum whitelisted at
+  appendPoolIssues (fpps/pplns/tides/solo); invalid values are
+  validation issues, not enum coercion.
+- logger.Format, config.ValueOrigin — config-layer enums; the
+  format is whitelist-parsed, origins are internal bookkeeping.
+- Wire msg_type — uint8 dispatched through a decode table;
+  unknown values take the forward-compatible path verified in
+  the handshake/message decoders, not a cast into an enum.
+
+Verdict: TRUE — every enum is either Valid()-gated at use,
+whitelist-parsed at config load, internally produced, or map-
+dispatched with an explicit unknown-value path.
