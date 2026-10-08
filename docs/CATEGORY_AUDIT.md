@@ -10218,3 +10218,7 @@ Claim verified: provider.go's contract (publish ≥1 quote per MinQuoteInterval 
 ## Session 1907 update (Socratic pass 573 — quote fan-in + arbitration intake)
 
 Claim verified: fanIn observes ctx on both receive and send (a stuck input can't pin the goroutine), closes out only after all inputs drain, and bounds the merged buffer; the arbitration loop keys quotes through updateStream, tracks per-stream freshness in lastQuoteAt, prunes stale streams each tick, and carries prevAlloc across Decide failures so a transient error never resets hysteresis. TRUE.
+
+## Session 1908 update (Socratic pass 574 — rates fetch integrity)
+
+Claim verified: Fetcher fans out across all sources in parallel, drops readings outside the [100, 1e8] USD plausibility band before the median (protects the two-source case against unit/parse corruption), aggregates clock skew even from failed responses and warns past 120s, keeps per-source errors inspectable via errors.Join, and falls back honestly when every source fails. fetcher.go clean. TRUE.
