@@ -10014,3 +10014,7 @@ Claim verified: §13's post-1658 status text matches current files exactly — d
 ## Session 1856 update (Socratic pass 522 — KL §4 GPU limitation re-verification)
 
 Claim verified: gpu_stub.go (build `!linux`) is a documented no-op — non-Linux enumeration needs IOKit/DXGI out of scope, stub self-annotates the v3.5.0 roadmap milestone; internal/miner has zero GPU dispatch (only a comment); engine's allDeviceFamilies lists FamilyGPU for arbitration enumeration only. Detection is genuinely Linux-only and no mining path consumes GPUs. TRUE.
+
+## Session 1857 update (Socratic pass 523 — KL §1 simulated-yield re-verification)
+
+Claim verified: AkashProvider still quotes the fixed MinUSDPerHour/MaxUSDPerHour midpoint (ai_inference.go:62-63) with no REST call; `Name()` returns the load-bearing "(simulated)" suffix (:70-79) whose comment documents the removal gate (real Akash REST, ROADMAP v3.1.0) — the simulation is visible in TUI/logs/config so users cannot mistake it for income. TRUE — disclosed with unusual honesty.
