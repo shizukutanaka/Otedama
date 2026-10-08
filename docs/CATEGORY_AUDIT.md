@@ -9994,3 +9994,7 @@ Claim verified: docs/adr/ holds exactly ADR-001 through ADR-011 plus README.md; 
 ## Session 1851 update (Socratic pass 517 — KL §8 ASIC-detection gap re-verification)
 
 Claim verified: internal/hal/ contains only device.go, gpu_linux.go, gpu_stub.go, registry.go — no asic driver package; device.go:32 self-documents "No ASIC driver exists at all (docs/KNOWN_LIMITATIONS.md §8)" and :178 reiterates "no ASIC or GPU [beyond linux sysfs]" in the Driver contract doc. Code and KL agree: FamilyASIC is an enum value awaiting a driver, not dead weight. TRUE — the disclosed boundary is honest.
+
+## Session 1852 update (Socratic pass 518 — KL §6 receive-only Lightning re-verification)
+
+Claim verified: internal/lightning exposes only seed-lifecycle functions — GenerateEntropy, MnemonicToSeed/Entropy, EncryptSeed/DecryptSeed, WalletManager, Fingerprint(FilePath), NewEnglishWordList — no payment send, invoice, channel or node API exists anywhere in the package (5 source files, exports enumerated). "Receive-only; no embedded node" is exactly accurate. TRUE.
