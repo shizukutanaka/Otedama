@@ -10446,3 +10446,7 @@ Claim verified: curtailDecision never changes the gate on a non-fresh price — 
 ## Session 1964 update (Socratic pass 630 — gauge publish hygiene)
 
 Claim verified: publishBTCRate only writes gauges from observed state — rate gauge keeps the fetcher fallback before the first fetch (never zeroed), skew/age/source-health gauges publish only after a real fetch ran (a stalled feed stays visible via btcRateAgeSeconds, and median-backed-by-1-of-3 erosion is visible via rateSourcesOK); publishDifficulty treats diff ≤0 as a no-op and emits 0 rather than dividing by a non-positive hashrate. TRUE.
+
+## Session 1965 update (Socratic pass 631 — buildStats single-source invariants)
+
+Claim verified: one windowed hashrate is computed per stats tick and drives the log, the otedama_hashrate gauge, the stall monitor, and the TUI snapshot — they cannot disagree; SharesSent is the real submitted counter, so found-vs-sent divergence on channel-full drops is visible rather than hidden (KNOWN_LIMITATIONS §9 approximation removed); a provider renders Active only when arbitration is actually routing a device to it — existence or a quote does not make it active; nil seams (latency tracker, activity map) degrade to honest zeros. TRUE.
