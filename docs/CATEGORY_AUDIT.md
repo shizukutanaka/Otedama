@@ -16709,3 +16709,26 @@ Verification — the complete decoder set:
 
 Verdict: TRUE — every decode is length-first; the
 read-past-declared class is absent.
+
+## Session 2833 update (Socratic pass 1499 — WaitGroup-reuse census)
+
+Claim under test: no WaitGroup is reused after Wait
+returns — an Add racing a completed Wait is a
+runtime panic or a lost goroutine.
+
+Verification — every WaitGroup:
+
+- All fan-out WaitGroups are `var wg sync.WaitGroup`
+  function-locals (rates/fetcher.go:145,
+  hashrate.go:145, hal/registry.go:152, doctor/checks
+  fan-outs): constructed per call, all Adds precede
+  their spawns, Wait runs once, then the variable
+  goes out of scope — reuse impossible.
+- Dashboard's struct wg is waited exactly once in
+  Stop() during teardown (verified teardown-order
+  census); nothing Adds after it.
+- The single Wait-after-spawn pattern means Add
+  never races a Wait call site.
+
+Verdict: TRUE — every WaitGroup is single-use by
+construction.
