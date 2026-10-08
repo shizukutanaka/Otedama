@@ -10362,3 +10362,7 @@ Claim verified: fetchOne issues a ctx-bound GET, reads at most 64KiB, measures t
 ## Session 1943 update (Socratic pass 609 — fanIn shutdown contract)
 
 Claim verified: fanIn's buffer is bounded (bufFactor×N capped at 64, min 1); every producer goroutine selects on ctx at BOTH the input receive and the output send, so a never-written input or a stalled consumer cannot pin it; the output closes only after all producers drain or ctx fires — no send-on-closed, no leaked goroutine. mergeQuotes uses bufFactor 64 (quote burst tolerance) while mergeShares uses 4 (share backpressure is deliberate — workers keep their own drop accounting). TRUE.
+
+## Session 1944 update (Socratic pass 610 — httpserver lifecycle)
+
+Claim verified: the HTTP surface carries a full timeout stack (ReadHeader 5s slowloris, Read/Write 10s, Idle 60s); the bound address is published atomically so port-0 callers learn the ephemeral port; a background Serve failure is captured in serveErr for supervisor polling instead of vanishing; Stop drains in-flight requests with a 5s budget and fires on ctx cancel; /readyz honestly 503s until the engine calls SetReady; pprof registers only when opted in; /metrics 500s when no registry was configured. TRUE.
