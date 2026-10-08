@@ -12150,3 +12150,7 @@ Claim verified: TargetFromNBits rejects all three malformed classes — negative
 ## Session 2385 update (Socratic pass 1051 — poolproto registry + DialURL)
 
 Claim verified: Register panics on all three misuse classes at init-time fail-fast — nil Dialer, ProtocolUnknown return, and duplicate protocol registration (poolproto.go:367–383); Lookup wraps ErrUnknownProtocol with the id for errors.Is (:388–396); Available enumerates registered protocols for doctor/config validation (:399–409); DialURL runs the full chain FromURL-infer → Lookup → Dial → Negotiate, and on negotiate failure calls conn.Close() so the raw connection is never leaked when the handshake fails (:413–431); sentinel set is complete (ErrUnknownProtocol/ErrHandshakeFailed/ErrShareRejected) (:436–448). TRUE.
+
+## Session 2386 update (Socratic pass 1052 — pool-text sanitizer + userinfo strip)
+
+Claim verified: StripUserinfo redacts a '@' only inside the authority (before the first '/') — a '@' in the path is left alone — so the URL shown at display boundaries never carries the worker/password userinfo (poolproto.go:141–154); unsafePoolRune covers Cc+Cf+Zl+Zp — C0/C1 controls AND the format class (bidi/soft-hyphen Trojan Source + ANSI) AND line/paragraph separators (:461–464); SanitizePoolText drops every unsafe rune via strings.Map then truncates to 256 RUNES (converts to []rune so a multi-byte character isn't split mid-rune) — every log/render boundary for pool-controlled text passes through it (:469–486). TRUE.
