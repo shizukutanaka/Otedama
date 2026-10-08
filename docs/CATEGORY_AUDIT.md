@@ -10142,3 +10142,7 @@ Claim verified: docs/API.md's run-flag table covers all 15 flags registered in r
 ## Session 1888 update (Socratic pass 554 — service/doctor flag parity)
 
 Claim verified: `service install`'s six flags (config, data-dir, bitcoin-address, log-level, log-format, language) match API.md's bracketed list exactly, and `doctor`'s four (config, bitcoin-address, data-dir, json) match its usage line. TRUE.
+
+## Session 1889 update (Socratic pass 555 — locale-set parity)
+
+Claim verified: the message catalog ships exactly the 10 languages API.md:191 documents (en/ja/zh/ko/es/fr/de/pt/ru/ar — Lang* census confirms all ten have real catalogs), matching CLAUDE.md's "主要10言語" claim. TRUE.
