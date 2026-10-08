@@ -32679,3 +32679,170 @@ census:
   layer.
 
 Verdict: TRUE.
+
+## Session 3132 update (Socratic pass 1796 — sync/atomic/runtime/unsafe/reflect complete ledger)
+
+Claim under test: the
+concurrency surface is
+Mutex/RWMutex/
+WaitGroup/Once/
+Pool/Map +
+typed atomics
+only —
+with sync.Cond,
+the
+bare
+Add-family,
+unsafe,
+and
+reflect
+all
+zero.
+
+Verification —
+census:
+
+- `sync.Mutex`×21 +
+  `sync.RWMutex`×8 +
+  `sync.WaitGroup`×8 +
+  `sync.Once`×4 +
+  `sync.Pool`×2 +
+  `sync.Map`×1 —
+  the
+  full
+  sync
+  inventory
+  (all
+  pairing/
+  ownership
+  invariants
+  previously
+  verified).
+- `atomic.Uint64`×10 +
+  `atomic.Bool`×10 +
+  `atomic.Pointer`×8 +
+  `atomic.Int64`×1 —
+  typed
+  API
+  only
+  (verified
+  atomic-
+  free-
+  func
+  class).
+- `runtime.GOOS`×10 +
+  `runtime.NumCPU`×6 +
+  `runtime.Version`×2 +
+  `runtime.ReadMemStats`×2 +
+  `runtime.NumGoroutine`×1 +
+  `runtime.MemStats`×1 +
+  `runtime.GOARCH`×1 —
+  read-only
+  platform/
+  stats
+  probes.
+- ZERO
+  `sync.Cond`,
+  `sync.Locker`,
+  `sync.OnceFunc`,
+  `sync.OnceValue`,
+  `sync.OnceValues` —
+  Cond
+  and
+  the
+  Go1.21
+  once-
+  wrappers
+  absent.
+- ZERO
+  `atomic.Int32`,
+  `atomic.Uint32`,
+  `atomic.Uint8`,
+  `atomic.Uint16`,
+  `atomic.Uintptr`,
+  `atomic.Value`,
+  `atomic.AddInt32`,
+  `atomic.AddInt64`,
+  `atomic.AddUint32`,
+  `atomic.AddUint64`,
+  `atomic.AddUintptr`,
+  `atomic.Load*`,
+  `atomic.Store*`,
+  `atomic.Swap*`,
+  `atomic.CompareAndSwap*`,
+  `atomic.AndInt32`,
+  `atomic.AndUint32`,
+  `atomic.AndUint64`,
+  `atomic.OrInt32`,
+  `atomic.OrUint32`,
+  `atomic.OrUint64` —
+  the
+  legacy
+  free-
+  function
+  surface
+  entirely
+  absent
+  (migration
+  complete).
+- ZERO
+  `runtime.GC`,
+  `GOMAXPROCS`,
+  `SetFinalizer`,
+  `Gosched`,
+  `Goexit`,
+  `GoroutineProfile`,
+  `Stack`,
+  `Caller`,
+  `Callers`,
+  `CallersFrames`,
+  `FuncForPC`,
+  `LockOSThread`,
+  `UnlockOSThread`,
+  `ThreadCreateProfile`,
+  `BlockProfile`,
+  `MutexProfile`,
+  `SetCPUProfileRate`,
+  `CPUProfile`,
+  `GOROOT`,
+  `Compiler`,
+  `NumCgoCall`,
+  `SetBlockProfileRate`,
+  `SetMutexProfileFraction`,
+  `SetCgoTraceback`,
+  `KeepAlive`,
+  `GODEBUG`,
+  `MemProfile`,
+  `MemProfileRecord`,
+  `Breakpoint`,
+  `PanicNilError` —
+  the
+  tuning/
+  profiling/
+  scheduler
+  surface
+  absent;
+  the
+  package
+  is
+  read-only.
+- ZERO
+  `unsafe.` —
+  every
+  unsafe
+  symbol
+  absent
+  (re-verified:
+  zero
+  in
+  non-test
+  code).
+- ZERO
+  `reflect.` —
+  every
+  reflect
+  symbol
+  absent
+  (re-verified).
+
+Verdict: TRUE.
