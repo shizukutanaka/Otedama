@@ -12768,3 +12768,7 @@ Claim verified: `origin/master` remains frozen at `40da2e51` (post-#1404 tip, un
 ## Session 2540 update (Socratic pass 1206 — skills-directory inventory check)
 
 Claim verified: `skills/` contains all four CLAUDE.md-named skill files (tdd.md, code-review.md, security-audit.md, release-procedure.md) plus two additional curated quality-pass guides (quality-pass-opus.md, quality-pass-sonnet.md — extra files beyond the documented four are additive, not drift; the enumeration in CLAUDE.md names a minimum set); no `.agents/skills/` or `.devin/skills/` shadow copies exist. TRUE — the skill surface matches its documented contract.
+
+## Session 2541 update (Socratic pass 1207 — workflow file-reference census)
+
+Claim verified: workflow-referenced local paths — release.yml's `./config.yaml.example` in the DEB/RPM fpm mappings (line 164/178 match `config.yaml` inside `config.yaml.example`) and `install.sh` — resolve to existing files. The only unresolvable references are deploy.yml's `./kubernetes/helm/otedama/values*.yaml` paths (lines 186/252), which live inside the already-recorded dormant deploy job (triggers on `main` only — never fires from `master`): ⚠️ same-class residual, previously disclosed with deploy.yml's dead npm/Node steps, not a new defect. Also confirmed `.sweep.sh` no longer exists (removed in a prior round) and nothing references it. TRUE — all live workflow file references valid.
