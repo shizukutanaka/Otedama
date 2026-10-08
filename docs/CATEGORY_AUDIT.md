@@ -20120,3 +20120,46 @@ Verification:
 Verdict: TRUE — the sort API
 is fully modernized to slices+cmp;
 zero legacy sort calls remain.
+
+## Session 2965 update (Socratic pass 1630 — log + log/slog census)
+
+Claim under test: the stdlib
+`log` package is absent, and
+`log/slog` is confined to the
+internal/logger wrapper — all
+production logging routes
+through logger.Logger.
+
+Verification:
+
+- `log` — zero production
+  imports. The `log.Adapter`
+  hits are the wrapper's own
+  Adapter type (satisfies
+  `log.Logger`-compatible
+  sinks for stdlib-interop).
+- `log/slog` — ONLY in
+  internal/logger/logger.go:
+  - `slog.NewTextHandler` ×2
+    (plain + TUI sinks),
+  - `slog.NewJSONHandler` ×2
+    (JSON sinks),
+  - `slog.New` ×1,
+  - `slog.Level{Debug,Info,
+    Warn,Error}` constants +
+    `slog.Level` type,
+  - `slog.HandlerOptions`,
+    `slog.Handler`.
+- No `log.Print`, `log.Fatal`,
+  `log.SetOutput`, `slog.Info`
+  calls outside the wrapper —
+  all production code calls
+  `logger.Logger` methods.
+- The wrapper's atomic.Pointer
+  Default was verified at
+  s2420.
+
+Verdict: TRUE — logging is
+single-sourced; bare `log`
+and ad-hoc `slog` calls are
+absent.
