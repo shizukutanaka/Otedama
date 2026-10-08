@@ -34929,3 +34929,130 @@ verified):
   absent.
 
 Verdict: TRUE.
+
+## Session 3147 update (Socratic pass 1811 — sync + sync/atomic detail ledger)
+
+Claim under test: the
+sync
+surface is
+mutex/
+waitgroup/
+once
+dominated
+and
+the
+atomic
+surface is
+100%
+typed
+API —
+no
+bare
+Add/Load/
+Store/CAS,
+no
+sync.Cond.
+
+Verification —
+census:
+
+- `sync.Mutex`×21 —
+  the
+  dominant
+  exclusion
+  primitive.
+- `sync.RWMutex`×8 —
+  read-mostly
+  state
+  (stats,
+  provider
+  yields).
+- `sync.WaitGroup`×8 —
+  lifecycle
+  rendezvous
+  (all
+  Add=Done
+  verified).
+- `sync.Once`×4 —
+  close
+  idempotence
+  (closeOnce
+  pattern).
+- `sync.Pool`×1
+  real —
+  `noise_pool.go:27`
+  `hashPool`
+  (the
+  second
+  hit
+  is
+  a
+  doc
+  comment).
+- `sync.Map`×1 —
+  `arbitrate.go:87`
+  `pauseSet`
+  (set-
+  semantics
+  only).
+- `atomic.Uint64`×10 +
+  `atomic.Bool`×10 +
+  `atomic.Pointer`×8 +
+  `atomic.Int64`×1 —
+  every
+  atomic
+  is
+  a
+  Go1.19
+  typed
+  wrapper.
+- ZERO
+  `sync.Cond`,
+  `sync.OnceFunc`,
+  `sync.OnceValue`,
+  `sync.OnceValues` —
+  condition
+  variables
+  and
+  memoize
+  helpers
+  absent
+  (channel
+  patterns
+  instead).
+- ZERO
+  `atomic.AddUint64`,
+  `AddInt64`,
+  `AddUint32`,
+  `LoadUint64`,
+  `LoadInt64`,
+  `LoadUint32`,
+  `LoadBool`,
+  `StoreUint64`,
+  `StoreInt64`,
+  `StoreUint32`,
+  `StoreBool`,
+  `SwapUint64`,
+  `SwapInt64`,
+  `SwapUint32`,
+  `SwapBool`,
+  `CompareAndSwap*`,
+  `atomic.Value` —
+  the
+  entire
+  legacy
+  package-level
+  atomic
+  API
+  is
+  absent;
+  all
+  ops
+  are
+  method
+  calls
+  on
+  typed
+  fields.
+
+Verdict: TRUE.
