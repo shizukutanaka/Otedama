@@ -20885,3 +20885,52 @@ identity has one honest
 source; absent metadata
 shows "-dev"/"unknown"
 rather than faking it.
+
+## Session 2981 update (Socratic pass 1645 — crypto residual surface)
+
+Claim under test: the
+`crypto/*` surface contains
+only audited standard
+primitives — no weak/absent
+algorithms, no homegrown
+crypto.
+
+Verification — production
+imports:
+
+- `crypto/rand` ×12 — all
+  callers verified earlier
+  (jitter, wallet entropy).
+- `crypto/tls` ×7 +
+  `crypto/x509` ×7 — twin
+  TLS boundaries, MinVersion
+  ≥1.2 always.
+- `crypto/sha256` ×7 —
+  sha256d, fingerprints.
+- `crypto/ecdh` ×1 —
+  noise.go (P-256 stub;
+  CODEOWNERS-maintainer
+  area — self-documents as
+  non-production scaffold).
+- `crypto/ecdsa`/`elliptic`
+  — test-only (self-signed
+  CA fixtures); absent from
+  production.
+- `crypto/x509/pkix` —
+  test-only.
+- `crypto/cipher` ×2 —
+  seedstore AES-GCM + Noise
+  AEAD; `crypto/aes` ×1.
+- `crypto/subtle` ×1 —
+  wallet passphrase
+  ConstantTimeCompare.
+- `crypto/sha512` +
+  `crypto/hmac` — BIP-39
+  PBKDF2-HMAC-SHA512 +
+  fingerprint HMAC-SHA256.
+
+Zero: rsa, dsa, ed25519,
+des, md5, sha1, rc4 — no
+weak/absent primitives; no
+custom cipher code.
+Verdict: TRUE.
