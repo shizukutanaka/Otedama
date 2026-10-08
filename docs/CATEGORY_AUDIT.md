@@ -11802,3 +11802,7 @@ Claim verified: every WaitGroup satisfies Add-before-spawn / Done-deferred / Wai
 ## Session 2298 update (Socratic pass 964 — KNOWN_LIMITATIONS re-verification)
 
 Claim verified: every open limitation row remains accurate against current code — §1 simulated inference yield (provider still named "(simulated)"), §2 Noise NX unwired + P-256 stub (maintainer-gated, v2tls:// is the real confidentiality path), §4 GPU Linux-only/SHA256d=false, §5 PQ scaffolded-only, §6 Lightning receive-only, §8 no ASIC detection, §13 CI workflows (Go-pin and dependency-graph gaps persist — rejected classes), §14 DATUM reserved-scheme fail-fast, §17 install.sh still has no compatible release (newest tag remains v2.1.9 — locally confirmed via git tag; the s1664/s1665 pipeline fixes land with the next v* tag). TRUE.
+
+## Session 2299 update (Socratic pass 965 — branch mergeability check)
+
+Claim verified: PR #1405 still merges cleanly — `git merge-tree --write-tree origin/master HEAD` resolves to a clean tree (no conflicts) even after master's advance; the cumulative diff is 44 files / ~5.1k insertions dominated by the audit ledger (11,804 lines) plus the real fixes (doctor panic-proofing, hashrate redirect refusal, fuzz targets, comment fixes). Branch is 662 commits ahead, all on this PR. TRUE.
