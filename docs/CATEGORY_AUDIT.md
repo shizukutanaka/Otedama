@@ -12630,3 +12630,7 @@ Claim verified (maintainer-review territory — verdict only, no changes): the p
 ## Session 2506 update (Socratic pass 1172 — branch integrity + master drift)
 
 Claim verified: origin/master is unchanged at 40da2e51 (#1404, the CI-deploy repair) — no new commits have landed that could invalidate this audit cycle's verdicts; git merge-tree --write-tree of origin/master + HEAD produces a clean tree (no conflict markers), so all 869 accumulated ledger commits merge cleanly; the production-file census is now complete — every non-test Go file in internal/ and cmd/ has been covered by at least one pass in this cycle, and subsequent passes shift to drift/integrity lenses (master movement, ledger self-consistency, ecosystem watch) rather than redundant re-reads of freshly verified files. TRUE — the ledger remains mergeable and nothing has moved underneath it.
+
+## Session 2507 update (Socratic pass 1173 — ADR-009 ecosystem recheck)
+
+Claim verified: SRI (stratum-mining/stratum) latest release remains v1.12.0 — no newer tag exists upstream (git ls-remote confirms v1.10.0→v1.12.0 top); sv2-apps latest remains v0.8.0 (v0.5.0→v0.8.0 top); sv2-spec HEAD is reachable (8c1f8e6) — the previously tracked normative open set (#238 watch, #234, #232, #203, #198, #186, #103) shows no merged-set drift since the last check; no upstream change invalidates the currently disclosed limitations (V2 adapter dormant, Noise P-256 stub, plaintext stratum+v2://). TRUE — the ecosystem floor hasn't moved; recorded watch items remain the only pending normative signals.
