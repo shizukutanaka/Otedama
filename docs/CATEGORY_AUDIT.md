@@ -9932,3 +9932,7 @@ Claim verified: the version flow is single-sourced — `VERSION` (`v3.0.0-alpha.
 ## Session 1837 update (Socratic pass 503 — branch-filter completeness re-census)
 
 Claim verified: every workflow's `branches:` trigger list includes `master` — ci-cd.yml, ci.yml, security.yml, test.yml, deploy.yml all carry `[main, master, (develop)]` or equivalent; deploy.yml's push+PR filters both include master (lines 6-7, 13-14). Residual `main`/`develop` entries are inert — they match no existing branch but cost nothing and future-proof a rename. `main.go` in ci.yml:286 is code-comment prose, not a ref. TRUE — s1270/s1293 fixes hold.
+
+## Session 1838 update (Socratic pass 504 — tree-integrity sanity on accumulated ledger)
+
+Claim verified: after 22 ledger/code commits on this branch, `go build ./...` (0), `go vet ./...` (clean), `gofmt -l` (no output), and scoped `go test ./internal/doctor/ ./cmd/otedama/ ./internal/config/` all pass — the doc-heavy accumulation has not drifted the buildable surface, and the s1649 doctor panic-recovery + s1655/s1659 sanitization + s1675 env-warning pins all hold. TRUE.
