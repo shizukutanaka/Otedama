@@ -12198,3 +12198,7 @@ Claim verified: NewManager resolves os.Executable + EvalSymlinks so the service 
 ## Session 2397 update (Socratic pass 1063 — version build-metadata honesty)
 
 Claim verified: Version/Commit/BuildDate are `var` so the linker can inject via ldflags, and the defaults are honest — "v3.0.0-alpha.1-dev" carries the -dev marker so a plain `go build` can't masquerade as a release, Commit/BuildDate are "unknown" rather than fabricated (version.go:17–34); Get() snapshots real runtime values — GoVersion=runtime.Version(), Platform=runtime.GOOS/GOARCH (:51–60); the JSON path uses a proper json.Encoder, the text path uses the documented stable Info.String() format tools may rely on (cmd/otedama/version.go:15–29); ldflags inject into the real internal/version symbols (the s1193 fix — never the dead main.* paths). TRUE.
+
+## Session 2398 update (Socratic pass 1064 — clock abstraction non-monotonicity honesty)
+
+Claim verified: Clock is a minimal single-Now interface documented as concurrency-safe; System delegates to time.Now (clock.go:40–55); Fake guards its now under RWMutex — Now under RLock, Set/Advance under Lock — so the many-goroutine reads it documents are race-free (:65–99); Set/Advance allow backward movement and the contract states it plainly — "this package does not guarantee monotonicity" — so a test can't pretend monotonicity Fake can't provide (:87–98); compile-time `_ Clock = System{}` and `_ Clock = (*Fake)(nil)` pin the interface so a missing method is a build error (:106–110). TRUE.
