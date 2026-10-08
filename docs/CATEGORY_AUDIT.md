@@ -41794,3 +41794,180 @@ census:
   slice.
 
 Verdict: TRUE.
+
+## Session 3195 update (Socratic pass 1859 — flag/fmt/log-slog ledger)
+
+Claim under test: flags
+are
+per-
+subcommand
+`NewFlagSet(ContinueOnError)`;
+`fmt`
+is
+`Errorf`/`Sprintf`/`Fprintf`
++
+`Fprint(ln)`
+output;
+`Sscanf`
+remains
+comment-
+only
+(rejected
+API);
+slog
+is
+the
+logger
+adapter
+with
+text/
+JSON
+handlers.
+
+Verification —
+census:
+
+- `flag`:
+  `ErrHelp`×7,
+  `NewFlagSet`×5
+  (run/
+  config/
+  service/
+  doctor/
+  wallet),
+  `ContinueOnError`×5,
+  `FlagSet`×4,
+  `Parse`×1,
+  `Flag`×1.
+  ZERO:
+  `flag.Parse`
+  global
+  (the
+  ×1
+  is
+  on
+  a
+  `FlagSet`),
+  `flag.CommandLine`,
+  `ExitOnError`,
+  `flag.Args`/`Arg`/`NArg`
+  outside
+  dispatch,
+  `flag.Var`-
+  misuse —
+  every
+  subcommand
+  owns
+  its
+  set
+  and
+  returns
+  `ErrHelp`
+  for
+  usage.
+- `fmt`:
+  `Errorf`×267,
+  `Sprintf`×223,
+  `Fprintf`×170,
+  `Fprintln`×16,
+  `Fprint`×12,
+  `Sprint`×4.
+  `Sscanf`×3
+  hits
+  are
+  ALL
+  comment-
+  only
+  (`engine/run.go:2164`,
+  `stratumv2/dialer.go:432`,
+  `rates/fetcher.go:52`
+  +
+  two
+  tests
+  —
+  each
+  records
+  why
+  `Sscanf`
+  truncation
+  was
+  rejected
+  for
+  `strconv.Parse*`).
+  ZERO
+  call
+  sites
+  for:
+  `Sscanf`/`Scanf`/`Scan`/`Scanln`,
+  `fmt.Println`/`Printf`/`Print`/`Println`
+  bare
+  (output
+  goes
+  through
+  `Fprint*`-
+  to-
+  writer
+  or
+  the
+  logger),
+  `fmt.Errorf`-
+  without-
+  verb
+  (verb-
+  free
+  literals
+  use
+  `errors.New`,
+  #1185).
+- `log/slog`:
+  `slog.New`×1,
+  `NewTextHandler`×2,
+  `NewJSONHandler`×2,
+  `Logger`×2,
+  `Level`/`LevelDebug`/`LevelInfo`/`LevelWarn`/`LevelError`×5,
+  `HandlerOptions`×1,
+  `Handler`×1
+  —
+  the
+  `internal/logger`
+  sink
+  matrix
+  only.
+  `log.Adapter`×6
+  is
+  the
+  package-
+  local
+  adapter
+  symbol
+  (not
+  stdlib
+  `log`).
+  ZERO:
+  stdlib
+  `log.`*
+  (`log.Print`/`Fatal`/`New`/
+  `log.SetFlags`/`SetOutput`/
+  `log.Default`),
+  `slog.Default`/`SetDefault`,
+  `slog.Log`/`Info`/`Error`
+  package-
+  level
+  (the
+  singleton
+  logger
+  is
+  injected),
+  `slog.GroupValue`/`Record`-
+  manual
+  attr
+  building
+  (attrs
+  via
+  `slog.String`/`.Int`-style
+  helpers
+  inside
+  logger.go
+  only).
+
+Verdict: TRUE.
