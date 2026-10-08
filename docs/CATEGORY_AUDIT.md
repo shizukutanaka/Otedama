@@ -12829,3 +12829,7 @@ Claim verified: per-package coverage holds the ≥90% bar on a fresh sample — 
 ## Session 2554 update (Socratic pass 1220 — MILESTONE GATE)
 
 Claim verified: full milestone re-run — `gofmt -l internal cmd` prints zero files, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, and the COMPLETE test suite (`go test -count=1 ./internal/... ./cmd/...`, every package including stratum/lightning/engine/doctor/provider) exits 0 — the strongest possible gate for this tree, not a scoped subset. TRUE — pass-1220 milestone: build/vet/format/test all green end to end.
+
+## Session 2555 update (Socratic pass 1221 — merged-invariant spot re-verification)
+
+Claim verified: invariants from the merged fix wave are all present on `origin/master` — `maxExtranonce2Size = 64` bound (#428) enforced via `extranonce2SizeOK`, retarget-reject detection (#447 transitionReject), V2 share-target publication + starvation warn (#407/#396/#408), SubmitSharesSuccess sequence validation (#422/#423), reject-reason accounting with mutex discipline (#591, 42 reject references in run.go). TRUE — master retains every merged guard; no regression by later merges.
