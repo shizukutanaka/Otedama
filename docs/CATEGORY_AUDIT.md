@@ -19541,3 +19541,39 @@ Verification (9 sites, 6 files):
 Verdict: TRUE — runtime is used
 for read-only queries only; no
 hidden scheduling or GC control.
+
+## Session 2951 update (Socratic pass 1616 — fmt-package census)
+
+Claim under test: no bare
+`fmt.Print*` writes to stdout —
+all output goes through explicit
+`fmt.Fprintf(stderr|stdout)` or
+the logger.
+
+Verification:
+
+- Zero bare `fmt.Print`,
+  `Println`, `Printf`, `Scan`,
+  `Sscanf`, `Fscanf`, `Stringer`,
+  `GoStringer` in production.
+  The only `Print`-family hits
+  are `Fprint`/`Fprintf` to a
+  named Writer (stderr/stdout/
+  w).
+- `fmt.Errorf` — leaf errors and
+  error wrapping; already
+  audited at s2901
+  (%w-free fmt.Errorf census).
+- `fmt.Sprintf` — HashRateString
+  and a handful of formatting
+  sites; no parse path.
+- The rates/fetcher.go comment
+  explicitly documents using
+  `strconv.ParseFloat` instead of
+  `fmt.Sscanf` because Sscanf is
+  greedy — parse discipline
+  recorded in-tree.
+
+Verdict: TRUE — fmt is output-
+side only; no uncontrolled
+stdout prints, no Scan.
