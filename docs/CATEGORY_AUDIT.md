@@ -21670,3 +21670,56 @@ Verification — census:
   separately.)
 
 Verdict: TRUE.
+
+## Session 2996 update (Socratic pass 1660 — errors/log surface ledger)
+
+Claim under test: error
+wrapping uses %w exactly
+where a chain is needed;
+the log surface is the
+slog facade only.
+
+Verification:
+
+- `errors.New` ×36 —
+  leaf sentinels at
+  package level.
+- `errors.Is` ×22 —
+  every comparison via
+  Is, never == on
+  wrapped errors.
+- `errors.As` ×1 —
+  single typed-unwrap
+  site (pointer target).
+- `errors.Join` ×2 —
+  config Validate
+  aggregate + one
+  composite.
+- Zero `errors.Unwrap` —
+  chain traversal only
+  through Is/As.
+- `fmt.Errorf` — 258
+  call sites, 108 carry
+  `%w`; the remaining
+  150 are leaf errors
+  (no wrap needed —
+  verified discipline).
+- slog surface — the
+  logger facade only:
+  NewTextHandler×2,
+  NewJSONHandler×2,
+  slog.New,
+  HandlerOptions×1,
+  Level×{Warn,Info,Error,
+  Debug} — no default-
+  logger leaks.
+- stdlib `log.` — ZERO
+  production calls
+  (verified earlier).
+- Zero `panic(err)` for
+  non-construction
+  invariants (verified
+  panic census: 12
+  init-time sites only).
+
+Verdict: TRUE.
