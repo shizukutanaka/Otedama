@@ -18699,3 +18699,29 @@ Verification (6 sites):
 
 Verdict: TRUE — runtime calls are all
 read-only introspection.
+
+## Session 2922 update (Socratic pass 1587 — for-range-channel census)
+
+Claim under test: no `for range <-ch`
+drain loop that would deadlock if the
+writer never closes the channel.
+
+Verification:
+
+- `rg 'for.*range *<'` → **zero** hits
+  (exit 1).
+- All channel consumption is via
+  `select` (stratumv1 readLoop, hal
+  detect fan-in, polling) — always
+  paired with `ctx.Done()` so a
+  never-closing channel cannot hang
+  the consumer.
+- `for _, ch := range channels` at
+  fanin.go:32 is over a `[]<-chan`
+  slice, not a channel itself —
+  collects fan-in inputs, each of
+  which is then `select`-consumed.
+
+Verdict: TRUE — no drain-loops on
+channels; every consumer selects on
+ctx.Done() as an exit.
