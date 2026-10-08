@@ -12861,3 +12861,7 @@ Claim verified: `origin/master` remains at `40da2e51` (#1404); clean `git merge-
 ## Session 2562 update (Socratic pass 1228 — config.yaml.example full parity re-check)
 
 Claim verified: the example covers all 20 yaml tags — 10 as active keys (bitcoin_address, pools{url,user,password}, workers{name}, language, log_level, data_dir, log_format) and 9 as documented commented entries (bitcoin_addresses, payout_scheme, tls_ca_file, http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct) — every field documented with honest semantics (scheme list, failover order, DefaultPoolURL fallback with the session-498 correction, curtailment trust semantics). TRUE — complete parity, earlier s1898 verdict stands.
+
+## Session 2563 update (Socratic pass 1229 — new-test quality check)
+
+Claim verified: the branch-added `subcommands_test.go` tests are real regression pins, not coverage padding — `TestConfigShow_SanitizesLogFields` injects ANSI escapes (`\x1b[2J`, `\x1b[?25l`) through config-file log fields and asserts no ESC byte reaches stdout; `TestConfigShow_SurfacesMalformedEnvWarning` sets `OTEDAMA_POWER_WATTS=abc` and pins both the named-var stderr warning and the silent-fallback default output. Both pin exactly the two behaviors this branch added — mutation would fail them. TRUE — test additions carry real assertion weight.
