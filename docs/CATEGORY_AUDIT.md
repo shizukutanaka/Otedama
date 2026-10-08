@@ -13388,3 +13388,9 @@ claim verified: Scheme/SignerScheme stubs + SchemeForAddressType (btccrypto.go:2
 
 claim corrected ×2 (via erratum): (a) Decision preamble's "eleven features (B1–B11)" — accepted set is ten (B1–B10); B11/B12 are the rejected items per the rejection section and cost table; (b) "45% of available budget" — 575/1,040 ≈ 55% consumed (~45% remaining); fraction inverted or wording ambiguous.
 claim verified: cost table total 575h, min-viable B1+B2+B7 = 125h, B11/B12 rejection consistency, seedstore AES-256-GCM (internal/lightning/seedstore.go), WalletManager = seed/mnemonic surface (KNOWN_LIMITATIONS §6), ldk-node ≥v0.7.0 target, ADR-009's cross-referenced 575h — TRUE.
+
+## Session 2689 update (Socratic pass 1355 — docs/adr/ADR-008 full pass)
+
+claim corrected ×1 (via erratum): Risks §2's "go-nvml is BSD-licensed" — upstream LICENSE is Apache-2.0 (verified); conclusion unchanged (permissive + dlopen).
+note ×2: cross-ADR budget-convention inconsistency (this doc's 4-week-month 720h vs ADR-007's calendar-week 1,040h — each internally consistent); Scenario C "$3.10/day" loose ($2.80–3.03 at $48–52/PH/day).
+claim verified: cost table 595h sum, all scenario arithmetic (A −$7.01/−$6.20, B +$110.40→+$127.30, ~$6,096/yr uplift), cluster graph, halving block 1,050,000, cut thresholds, internal/power absent (proposal) — TRUE.
