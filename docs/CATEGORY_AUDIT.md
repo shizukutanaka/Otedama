@@ -9960,3 +9960,7 @@ Claim verified: the publish↔verify chain is consistent — ci-cd.yml:227-230 a
 ## Session 1843 update (Socratic pass 509 — HTTP endpoint surface parity)
 
 Claim verified: httpserver/server.go:89-95 registers exactly `/healthz`, `/readyz`, `/metrics`, `/` plus opt-in `/debug/pprof/{,cmdline,profile,symbol,trace}` behind `--pprof`; docs/API.md documents all three GET endpoints and the --pprof flag (:34); SPECIFICATION §6:156-157 lists the same four core routes. Docs match code 1:1. TRUE.
+
+## Session 1844 update (Socratic pass 510 — G10 readiness semantics re-verification)
+
+Claim verified: SPECIFICATION.md G10's "Fixed (session 61)" annotation still holds — `OnReady(true)` fires only after a pool session handshake completes (run.go:583), `OnReady(false)` on session end (:596) and via defer on run shutdown (:417-418), so `/readyz` reflects actual pool connectivity rather than process liveness; a k8s pod unable to reach any pool correctly reports not-ready. TRUE.
