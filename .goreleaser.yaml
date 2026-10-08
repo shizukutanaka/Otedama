@@ -60,8 +60,9 @@ checksum:
   algorithm: sha256
 
 signs:
-  # 1. Cosign keyless signing of every archive + checksums file.
-  #    Produces .sig and .pem next to each artifact.
+  # 1. Cosign keyless signing of the checksums file — it is the trust
+  #    root: verify checksums.txt.sig once, then trust every hash inside.
+  #    Produces .sig and .pem next to the checksums artifact.
   - id: cosign
     cmd: cosign
     certificate: "${artifact}.pem"

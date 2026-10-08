@@ -8283,3 +8283,7 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 ### Fixed (session 1699 — release.yml チェックサム検証不能)
 
 - release.yml に `checksums` ジョブ追加 — 公開済み `otedama-*.tar.gz` をハッシュした集約 `checksums.txt` を公開し、install.sh の検証プローブが一致（従来は per-asset `.sha256` のみで検証不能だった）
+
+### Docs (session 1701 — VERIFY.md/goreleaser コメント訂正)
+
+- VERIFY.md ステータス欄更新 — release.yml/ci.yml の集約 `checksums.txt` 配布開始を反映、cosign/SBOM 不在は継続記載。.goreleaser.yaml の sign コメントを実挙動（checksums のみ署名）へ訂正

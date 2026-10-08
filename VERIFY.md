@@ -1,9 +1,10 @@
 # Verifying Otedama Release Artifacts
 
 > **Status: the signed-release pipeline described below is not yet live.**
-> The current `release.yml` workflow builds tarballs and ships a per-asset
-> `<name>.tar.gz.sha256` sidecar (session 1664) — useful for transit-corruption
-> checks — but no aggregate `checksums.txt`, cosign signatures, or SBOMs. The `.goreleaser.yaml`
+> The current `release.yml` workflow ships per-asset `<name>.tar.gz.sha256`
+> sidecars plus an aggregate `checksums.txt` (sessions 1664/1699), and the
+> `ci.yml` tag job also publishes `checksums.txt` (session 1698) — all useful
+> for transit-corruption checks — but **no cosign signatures or SBOMs**. The `.goreleaser.yaml`
 > config that would generate them exists but is not wired into CI. The
 > separate `ci-cd.yml` tag job may attach an **unsigned** plain
 > `checksums.txt` (what `install.sh` checks) — that only detects transit

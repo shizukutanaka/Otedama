@@ -9347,3 +9347,11 @@ Residuals: `checksums.txt` is created after `build-binaries` finishes, so there 
 ## Session 1700 update (Socratic pass 366 — ADR-009 recheck)
 
 **Ecosystem recheck — no normative drift.** sv2-spec normative open set unchanged (#238/#234/#203/#198; #238 refreshed 2026-10-06 but still open). SRI pinned at v1.12.0. sv2-apps latest corrected to v0.8.0 via the authoritative releases/latest redirect (s1661's v0.7.0 reading superseded). Recorded in the ADR-009 file.
+
+## Session 1701 update (Socratic pass 367)
+
+**Claim verified: "the goreleaser config signs 'every archive + checksums file'" — FALSE (comment overclaim), corrected.** `signs[].artifacts: checksum` signs only the checksums file — which is the *correct* design (the checksums file is the trust root; verify one signature, trust all hashes) but the comment described the wrong scope. Comment corrected.
+
+**Also verified — dormant-config census (all TRUE):** (a) `.goreleaser.yaml` is invoked by no workflow — verified by grep; it is a local `goreleaser release` path whose archive/checksum names do match install.sh's candidate list (`otedama_<ver>_<os>_<arch>.tar.gz`, `otedama_<ver>_checksums.txt`); (b) `before.hooks: go generate ./...` is a harmless no-op (zero `//go:generate` directives in the tree); (c) VERIFY.md's "not yet live" banner was stale post-s1698/1699 — updated to state that aggregate `checksums.txt` now ships from both release.yml and ci.yml while cosign/SBOM remain absent (transit-corruption coverage, not tamper provenance).
+
+Residuals: goreleaser `brews` points at `shizukutanaka/homebrew-tap` which may not exist — same opt-in class as release.yml's HOMEBREW_TAP_REPO gate; only reachable when someone runs goreleaser manually.
