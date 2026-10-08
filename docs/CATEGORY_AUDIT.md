@@ -9816,3 +9816,7 @@ Defect found and fixed: GODEBUG_NOTES.md quoted a `go 1.22` + `toolchain go1.24.
 ## Session 1809 update (Socratic pass 475 — P-256 Noise stub re-verification)
 
 Claim re-verified: RESEARCH_IMPROVEMENTS Category 10 row 1 (P-256 Noise stub → real secp256k1) is confirmed-open and unchanged — `noise.go:27-32,107-150` still uses `crypto/ecdh` P256 with the documented stub comment (secp256k1 + ElligatorSwift scheduled v3.1.0); no partial migration has landed. Stays 🟡: the path is inside the CODEOWNERS maintainer-review zone (`/internal/stratum/noise*` → @shizukutanaka only), so the audit records the verdict rather than implementing — wire incompatibility with real SV2 endpoints remains the repo's #1 disclosed gap (50/50 audit P0 row). The pass also re-confirmed `skills/*.md` (6 files) reference only real targets (`make test`, `test-integration`, `fuzz`, `go test`, golangci-lint/gosec/govulncheck, no stale version pins).
+
+## Session 1810 update (Socratic pass 476 — mergeability checkpoint)
+
+Claim verified: the audit branch still merges cleanly — `origin/master` is an ancestor of HEAD (169 commits ahead), `git merge-tree --write-tree` reports no conflicts, working tree clean. TRUE. Also re-verified in this window: `skills/*.md` (6 files) reference only real targets/commands (`make test`, `make test-integration`, `make fuzz`, `go test ./...`, `go test -coverprofile`, `go test -fuzz`, golangci-lint/gosec/govulncheck) with no stale version pins.
