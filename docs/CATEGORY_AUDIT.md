@@ -22677,3 +22677,58 @@ Verification — census:
   primitive level.
 
 Verdict: TRUE.
+
+## Session 3017 update (Socratic pass 1681 — strconv ledger)
+
+Claim under test: every
+numeric conversion is
+the bit-width-faithful
+strconv API — no
+coerced Atoi or
+Sscanf.
+
+Verification — census:
+
+- `strconv.FormatUint`
+  ×10 — the unsigned
+  display/wire format
+  everywhere numbers
+  render.
+- `strconv.ParseUint`
+  ×7 — all callsites use
+  explicit bitSize (32
+  for wire numbers —
+  verified: V1 id, V2
+  sequence, coinbase
+  fields) so overflow
+  can't smuggle a wide
+  value into a u32.
+- `strconv.ParseFloat`
+  ×6 — config numeric
+  env resolution +
+  V1 set_difficulty —
+  NaN/Inf rejection
+  verified upstream of
+  every range check.
+- `strconv.Atoi` ×2 —
+  port parsing only,
+  range-validated.
+- `strconv.Quote` ×1 —
+  service argv quoting
+  (C0/C1 control chars
+  escaped, verified at
+  s3011/pass 1675).
+- `strconv.Itoa` ×1.
+- ZERO `ParseBool` —
+  booleans come from
+  the flag package or
+  explicit string
+  equality.
+- ZERO `fmt.Sscanf`/
+  `strconv`-style
+  scanning — verified
+  earlier; the comment
+  at the JSON boundary
+  records why.
+
+Verdict: TRUE.
