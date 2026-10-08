@@ -12925,3 +12925,7 @@ Claim verified: Makefile's diff is all honest hardening — dev tools pinned to 
 ## Session 2577 update (Socratic pass 1243 — root-doc diff check)
 
 Claim verified: CLAUDE.md's diff is honest map upkeep — `wallet` subcommand added to the entrypoint list (cmd/otedama/wallet.go exists), quality-pass skills + scorecard.yml added to the workflow inventory, and the branch-strategy text corrected main→master. CONTRIBUTING's translation note now honestly discloses that the machine-translated catalogs are unimplemented (locales fall back to English). GODEBUG_NOTES correctly collapses the stale `go 1.22` + `toolchain go1.24.0` split narrative to the single `go 1.24.0` floor, and honestly records that shipped CI artifacts still build under go1.23.x→auto(1.24.0) so the container-aware GOMAXPROCS (Go 1.25+) is not in releases. TRUE.
+
+## Session 2578 update (Socratic pass 1244 — ledger-append integrity + research-doc integrity)
+
+Claim verified: CHANGELOG.md is a pure +296-line append (zero content deletions) — honest-ledger invariant holds. RESEARCH_IMPROVEMENTS.md's 84 removed lines are all stale "next action" table entries replaced by its maintained priority index (within that doc's own convention — it is the research synthesis layer, not the verdict ledger); the surviving body has 212 status-marked items across 10 domains with honest 🟡/🔵/✅/❌ marking and 271 session citations. The docs-payload verification is now complete: all 10 files' diffs audited, two real defects fixed (THREAT_MODEL + AUDIT_CHECKLIST x/sys undercounts).
