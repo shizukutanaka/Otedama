@@ -10318,3 +10318,7 @@ Claim verified: no drift since s1910 — sv2-apps latest release remains v0.8.0 
 ## Session 1932 update (Socratic pass 598 — payout metrics hygiene)
 
 Claim verified: setActivePayout never exposes a raw address — only the masked first6…last4 form reaches otedama_payout_info; exactly one series reads 1 (previous zeroed before the new one is set); gauges are lazily created per masked address and bounded to the configured failover list; the unchanged/empty inputs are no-ops; the whole update runs under a dedicated mutex. TRUE.
+
+## Session 1933 update (Socratic pass 599 — share-rate reconciliation)
+
+Claim verified: updateShareRates computes otedama_shares_unaccounted as found−judged clamped at 0 (a stats tick racing an accept burst can transiently show judged>found — a negative would be meaningless), divides reject/stale rates only when judged>0, reads the stale reason counter under its own mutex, and returns (rate, judged) so callers gate warnings on actual evidence. TRUE.
