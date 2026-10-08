@@ -43956,3 +43956,159 @@ census:
   overrides.
 
 Verdict: TRUE.
+
+## Session 3210 update (Socratic pass 1872 — milestone gate + numbering errata)
+
+Claim under test:
+the
+dependency/
+symbol
+ledger
+phase
+leaves
+the
+tree
+green;
+the
+ledger's
+own
+numbering
+is
+consistent.
+
+Verification —
+census:
+
+- `gofmt
+  -l
+  .`:
+  empty.
+- `go
+  build
+  ./...`:
+  clean.
+- `go
+  vet
+  ./...`:
+  clean.
+- `go
+  test
+  -count=1`:
+  all
+  24
+  package
+  legs
+  `ok`
+  (engine
+  25.5s,
+  lightning
+  12.1s,
+  doctor
+  7.1s
+  the
+  heavy
+  legs;
+  every
+  package
+  ran
+  fresh).
+- Numbering
+  errata
+  (ledger
+  self-
+  integrity):
+  the
+  s3197
+  and
+  s3198
+  blocks
+  were
+  written
+  with
+  stale
+  pass
+  numbers
+  "1859"/"1860";
+  the
+  correct
+  pass
+  numbers
+  are
+  **1861**/**1862**
+  (pass
+  =
+  session
+  −
+  1336).
+  This
+  block
+  records
+  the
+  correction;
+  subsequent
+  passes
+  (s3199–s3210
+  =
+  1863–1872)
+  are
+  numbered
+  correctly.
+- Phase
+  summary:
+  passes
+  s3192–s3210
+  completed
+  the
+  dependency
+  +
+  stdlib
+  symbol
+  census —
+  direct
+  deps
+  3/3
+  at
+  their
+  go.mod
+  rationale
+  seams;
+  stdlib
+  surface
+  fully
+  ledgered
+  (math/big/bits/rand,
+  directives,
+  flag/fmt/slog,
+  net/http,
+  tls/x509/ecdh,
+  crypto
+  residual,
+  sync/atomic,
+  errors/%w,
+  context,
+  strconv/hex/binary,
+  sort/hash,
+  io/bufio,
+  bytes,
+  time,
+  os/signal/exec,
+  unicode/utf8,
+  runtime/pprof).
+  One
+  factual
+  correction
+  applied
+  in-
+  ledger
+  (s3196a:
+  `net.DefaultResolver`
+  is
+  real
+  production
+  at
+  doctor/checks.go:482,
+  not
+  comment-
+  only).
+
+Verdict: TRUE.
