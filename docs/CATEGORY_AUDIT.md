@@ -11762,3 +11762,7 @@ Claim verified: no file/socket descriptor leaks on any error path — the wallet
 ## Session 2288 update (Socratic pass 954 — randomness-provenance census)
 
 Claim verified: every randomness consumer uses crypto/rand — wallet/seed/seedstore nonce+entropy draws read rand.Reader; the Noise ephemeral key is P-256 over crypto/rand; even the reconnect-jitter draw (run.go:486) and worker nonce partition (setup.go:297) use rand.Int(crypto/rand). Zero math/rand imports in production — no security-relevant value derives from a predictable PRNG. TRUE.
+
+## Session 2289 update (Socratic pass 955 — ADR-009 ecosystem recheck)
+
+Claim verified: the sv2-spec normative open set is unchanged — #238 (optional SetupConnection flags negotiation; forward-compat with our subset validation — still the tracked watch item), #234 (authority key mgmt), #232, #203 (coinbase payouts extension), #198, #186, #103 (WIP proxy annex). Releases endpoints were GitHub-rate-limited this pass; last confirmed floors stand (sv2-apps v0.8.0, SRI v1.12.0) with no contradicting evidence in the accessible search index. TRUE.
