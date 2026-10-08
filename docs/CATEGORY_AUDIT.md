@@ -40919,3 +40919,149 @@ census:
   required).
 
 Verdict: TRUE.
+
+## Session 3189 update (Socratic pass 1853 — testing-surface ledger)
+
+Claim under test: test
+code
+uses
+the
+modern
+`testing`
+API
+surface
+(`TempDir`,
+`Setenv`,
+`Cleanup`,
+`Parallel`,
+`Fuzz`,
+`Short`)
+with
+zero
+legacy
+`TestMain`/
+global
+fixtures
+or
+`testing/quick`.
+
+Verification —
+census
+(test
+files
+only;
+`f.*`/`b.*`
+locals
+that
+are
+fixture
+variables,
+not
+testing
+API,
+excluded):
+
+- `testing.T`×1866
+  sites;
+  helpers:
+  `TempDir`×122,
+  `Skip`×81,
+  `f.Add`×81
+  +
+  `f.Fuzz`×23
+  +
+  `testing.F`×23
+  (23
+  fuzz
+  targets),
+  `Helper`×50,
+  `Run`×48,
+  `Cleanup`×36,
+  `Setenv`×32,
+  `Parallel`×19,
+  `Short`×18
+  guards,
+  `testing.B`×11
+  +
+  `ReportAllocs`×11
+  +
+  `b.N`×11
+  +
+  `ResetTimer`×8
+  benchmarks.
+- `t.Helper()`×50
+  —
+  all
+  shared
+  assertion/
+  fixture
+  helpers
+  mark
+  themselves
+  (attribution
+  lands
+  on
+  the
+  caller
+  line).
+- ZERO:
+  `testing.Main`/`MainStart`,
+  `testing/quick`,
+  `testing/fstest`,
+  `testing/iotest`,
+  `testing/synctest`,
+  `t.Fatal`/`Fatalf`
+  inside
+  goroutines
+  (earlier
+  goroutine-
+  assertion
+  audit
+  verified),
+  `os.Exit`
+  in
+  tests,
+  `flag.Parse`
+  in
+  `init`/`TestMain`,
+  `t.SkipNow`-
+  misuse,
+  `b.Setenv`/`b.RunParallel`-
+  misuse —
+  benchmarks
+  are
+  sequential
+  with
+  `ReportAllocs`,
+  parallel
+  tests
+  declare
+  `t.Parallel`
+  only
+  where
+  state
+  is
+  isolated
+  (earlier
+  t.Parallel
+  audit).
+- `t.Setenv`×32
+  pairs
+  with
+  `t.Parallel`×19 —
+  the
+  env-
+  mutation
+  tests
+  never
+  mark
+  `Parallel`
+  (Go
+  forbids
+  the
+  combination;
+  compiler
+  enforces
+  it).
+
+Verdict: TRUE.
