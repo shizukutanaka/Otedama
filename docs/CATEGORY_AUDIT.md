@@ -10254,3 +10254,7 @@ Claim verified: the HTTP server carries slowloris-appropriate timeouts (ReadHead
 ## Session 1916 update (Socratic pass 582 — config-example ↔ yaml-tag parity)
 
 Claim verified: every yaml tag in internal/config/config.go (19 unique keys) is covered by config.yaml.example — active top-level keys (bitcoin_address, data_dir, language, log_format, log_level), nested pools[] fields (url, user, password, bitcoin_addresses, payout_scheme, tls_ca_file), and commented optional keys with prose (http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct). No orphan tags, no example keys that fail to decode. TRUE.
+
+## Session 1917 update (Socratic pass 583 — ldflags version injection parity)
+
+Claim verified: internal/version declares exactly the var symbols (Version, Commit, BuildDate) that the release workflows inject via `-X github.com/shizukutanaka/Otedama/internal/version.*` in ci-cd.yml:137, ci.yml:287, ci.yml:343 — no dead main.* paths remain (fixed in #1275), and Get() snapshot semantics are honest. TRUE.
