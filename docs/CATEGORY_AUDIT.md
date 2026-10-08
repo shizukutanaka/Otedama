@@ -21781,3 +21781,53 @@ Verification — census:
   handler signatures only.
 
 Verdict: TRUE.
+
+## Session 2998 update (Socratic pass 1662 — TLS/x509 ledger)
+
+Claim under test: every
+TLS endpoint verifies,
+floor is TLS 1.2, and
+the custom-CA path is
+fail-closed.
+
+Verification — census:
+
+- `tls.Config` ×12 —
+  the twin-V1/V2-TLS
+  dialer configs + the
+  stratumv2 adapter.
+- `tls.Dialer` ×4 +
+  `tls.Dial` ×1 — all
+  dial paths through
+  verified configs.
+- `tls.VersionTLS1.2`
+  ×4 — MinVersion pins
+  on every config;
+  default cipher suites
+  (no explicit list =
+  Go's modern set).
+- `x509.NewCertPool` ×3
+  + `SystemCertPool` ×2
+  + `CertPool` type —
+  the TLSCAFile path:
+  bad CA = hard error
+  (fail-closed, verified
+  twin-TLS audit).
+- `InsecureSkipVerify` —
+  ZERO anywhere in
+  internal/ (no opt-out
+  knob exists).
+- Zero `tls.X509KeyPair`
+  — client never presents
+  certs (pool auth is
+  worker name, not mTLS).
+- Zero crypto/x509/pkix
+  or private-key handling
+  — wallets are BIP-39
+  in lightning/, not
+  PKIX.
+- No manual cert parsing
+  or fingerprint pinning
+  — system roots only.
+
+Verdict: TRUE.
