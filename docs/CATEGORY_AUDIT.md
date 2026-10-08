@@ -32486,3 +32486,196 @@ ZERO
 list.
 
 Verdict: TRUE.
+
+## Session 3131 update (Socratic pass 1795 — external-dependency symbol ledger)
+
+Claim under test: the
+three direct
+dependencies expose
+exactly the symbols
+documented in
+their go.mod
+rationales —
+chacha20poly1305/
+scrypt/pbkdf2
+(x/crypto),
+unix+windows
+width ioctls
+(x/sys),
+yaml decode
+(yaml.v3).
+
+Verification —
+census:
+
+- `chacha20poly1305.New`×3 —
+  the
+  Noise
+  CipherSuite
+  AEAD
+  (`internal/stratum/noise.go`);
+  the
+  only
+  x/crypto
+  cipher
+  used.
+- `scrypt.Key`×2 —
+  the
+  seedstore
+  KDF
+  (`internal/lightning/seedstore.go`).
+- `pbkdf2.Key`×1 —
+  BIP-39
+  seed
+  derivation
+  (`internal/lightning/seed.go`);
+  provenance
+  note:
+  the
+  import
+  is
+  `golang.org/x/crypto/pbkdf2`
+  (s3126
+  recorded
+  the
+  symbol
+  under
+  the
+  crypto
+  ledger —
+  the
+  package
+  lives
+  in
+  x/crypto).
+- `unix.TIOCGWINSZ` +
+  `unix.IoctlGetWinsize` —
+  the
+  sole
+  unix
+  syscalls
+  (`internal/tui/width_unix.go`
+  terminal
+  width).
+- `windows.Handle` +
+  `windows.GetConsoleScreenBufferInfo` +
+  `windows.ConsoleScreenBufferInfo` —
+  the
+  Windows
+  console
+  counterpart
+  (`width_windows.go`).
+- `yaml.NewDecoder`×1 —
+  the
+  config-file
+  decode
+  boundary
+  (strict
+  KnownFields
+  — verified
+  config-load
+  class).
+- `syscall.SIGTERM`×1 —
+  the
+  only
+  direct
+  syscall
+  symbol
+  (signal
+  wiring;
+  verified
+  exec/
+  signal
+  class).
+- ZERO
+  `x/term`,
+  `x/text`,
+  `x/net`,
+  `x/mod`,
+  `x/tools`,
+  `x/sync`,
+  `x/exp`,
+  `x/time` —
+  no
+  other
+  x/
+  module
+  in
+  the
+  import
+  graph.
+- ZERO
+  `argon2`,
+  `bcrypt`,
+  `blake2b`,
+  `blake2s`,
+  `blowfish`,
+  `bn256`,
+  `cast5`,
+  `chacha20`×raw,
+  `cryptobyte`,
+  `curve25519`,
+  `ed25519`×x/crypto,
+  `hkdf`,
+  `md4`,
+  `nacl/*`,
+  `ocsp`,
+  `openpgp`,
+  `otr`,
+  `poly1305`,
+  `ripemd160`,
+  `salsa20`,
+  `sha3`,
+  `ssh`,
+  `tea`,
+  `twofish`,
+  `xtea`,
+  `xts` —
+  every
+  other
+  x/crypto
+  package
+  absent.
+- ZERO
+  `unix.*`,
+  `windows.*`,
+  `cpu.*`
+  beyond
+  the
+  five
+  symbols
+  above —
+  x/sys
+  is
+  consumed
+  only
+  by
+  the
+  TUI
+  width
+  probe
+  (verified
+  x/sys
+  surface
+  class).
+- ZERO
+  `yaml.Unmarshal`,
+  `yaml.Marshal`,
+  `yaml.NewEncoder`,
+  `yaml.Node`,
+  `yaml.TypeError`,
+  `yaml.UnmarshalStrict`,
+  `yaml.Decoder`×type —
+  residual
+  yaml
+  absent;
+  the
+  single
+  Decoder
+  drives
+  the
+  strict
+  file
+  layer.
+
+Verdict: TRUE.
