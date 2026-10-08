@@ -10282,3 +10282,7 @@ Claim verified: pool reachability probes are bounded (maxReachabilityProbes=8 �
 ## Session 1923 update (Socratic pass 589 — doctor clock-skew check)
 
 Claim verified: checkClockSkew probes with a 5s ctx-bound request via an injectable client seam, drains the body with an 8KiB bound before Close (keep-alive reuse; no unbounded read on a hostile endpoint), and reports honestly — missing/unparseable Date headers degrade to Warn (never fabricated data), skew above the fail threshold gets a Fix explaining the real impact (TLS validity + mining nTime). TRUE.
+
+## Session 1924 update (Socratic pass 590 — doctor economics checks)
+
+Claim verified: four advisory checks stay honest — checkPowerEconomics warns on a half-set pair naming the exact metric that dies; checkEnvVars surfaces silently-dropped malformed OTEDAMA_* vars (same warnings run/config validate print); checkProfitabilityFloor refuses to guess a "too high" threshold and instead points at the observable otedama_devices_idle gauge; checkPayoutScheme gives accurate per-scheme variance/custody context and only nudges (Pass+Fix) when unset. TRUE.
