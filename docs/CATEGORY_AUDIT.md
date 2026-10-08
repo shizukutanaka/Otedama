@@ -12865,3 +12865,7 @@ Claim verified: the example covers all 20 yaml tags — 10 as active keys (bitco
 ## Session 2563 update (Socratic pass 1229 — new-test quality check)
 
 Claim verified: the branch-added `subcommands_test.go` tests are real regression pins, not coverage padding — `TestConfigShow_SanitizesLogFields` injects ANSI escapes (`\x1b[2J`, `\x1b[?25l`) through config-file log fields and asserts no ESC byte reaches stdout; `TestConfigShow_SurfacesMalformedEnvWarning` sets `OTEDAMA_POWER_WATTS=abc` and pins both the named-var stderr warning and the silent-fallback default output. Both pin exactly the two behaviors this branch added — mutation would fail them. TRUE — test additions carry real assertion weight.
+
+## Session 2564 update (Socratic pass 1230 — branch-test runtime verification)
+
+Claim verified: all branch-added tests execute green — `TestConfigShow_SanitizesLogFields`, `TestConfigShow_SurfacesMalformedEnvWarning` (cmd/otedama), `TestRunner_PanickingCheckBecomesFailResult` (internal/doctor) all PASS; the sanitize pin actually exercises the `\x1b`-injection path and the panic pin exercises the recover path, so they would catch regressions, not just observe. TRUE — payload tests are executable and passing.
