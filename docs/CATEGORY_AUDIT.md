@@ -18473,3 +18473,29 @@ Verification:
 
 Verdict: TRUE — machine-verified; zero
 lock-copy sites.
+
+## Session 2913 update (Socratic pass 1578 — sync.Map census)
+
+Claim under test: the single `sync.Map`
+(`pauseSet`) uses only membership ops —
+no ordering, no check-then-act races.
+
+Verification (arbitrate.go:87-115):
+
+- `pauseSet` is the only `sync.Map` —
+  one writer (the arbitration loop)
+  calls `reconcileArbPauses` to store/
+  delete exactly the devices whose
+  assignment is idle or non-mining.
+- `Paused()` is a pure `Load` lookup;
+  membership ops are idempotent so the
+  single-writer/reader split is correct
+  without a mutex.
+- Zero `Range` — no iteration-order
+  assumption.
+- Zero `Load`-then-`Store` read-modify-
+  write on shared keys — set semantics
+  make each op atomic.
+
+Verdict: TRUE — canonical set-membership
+usage, race-free.
