@@ -18373,3 +18373,28 @@ Verification (112 append sites; spot-check on
 
 Verdict: TRUE — no append-aliasing hazard;
 every append owns its backing store.
+
+## Session 2909 update (Socratic pass 1574 — break-in-select census)
+
+Claim under test: no `break` inside `select`
+relies on the loop-exit assumption (break
+exits select, not the for).
+
+Verification:
+
+- hal/registry.go:174-193 — the only
+  `select` inside `for` uses `break loop`
+  with an explicit label targeting the
+  outer for; both `!ok` and ctx.Done()
+  cases exit correctly.
+- run.go:614 `break` — inside a `for` body
+  (not a select case); exits the
+  reconnection loop properly on ctx.Err().
+- dashboard.go:529 `break` — inside a
+  `for ... range` over runes; plain
+  loop exit on maxVisible.
+- Zero unlabeled `break` inside a
+  `select` case.
+
+Verdict: TRUE — the only select-in-loop
+labels its break; no select-scoping bug.
