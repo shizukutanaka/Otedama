@@ -12074,3 +12074,7 @@ Claim verified: ExitCode is computed exactly once in Report.ExitCode (doctor.go:
 ## Session 2366 update (Socratic pass 1032 — V1 write-path serialization + bounded wait)
 
 Claim verified: writeMu guards SetWriteDeadline+Write as one unit (stratumv1.go:719–722) — no deadline clobber mid-flight and each JSON-RPC line is a single Write so frames can't interleave; 10s write deadline so a wedged conn can't hold the mutex forever; on write error the pending[id] entry is deleted before returning — no channel leak or zombie waiter for a request that never left the box (:724–728); the response wait is bounded at callTimeout 60s with defer timer.Stop() so a live-but-silent pool can't leak the goroutine or pending entry for the session's life (:731–740); IDs come from atomic nextID. TRUE.
+
+## Session 2367 update (Socratic pass 1033 — V1 close idempotence + send/close race)
+
+Claim verified: session.Close is idempotent via closeOnce — ctxCancel, cancelPending, conn.Close run exactly once (stratumv1.go:659–668); closeChannels is the sole closer of jobsCh/diffCh/noticeCh under sendMu so any send racing the close either lands beforehand or is skipped — send-on-closed is structurally impossible (:560–568); sendJob re-checks closed under the same sendMu and, on CleanJobs, drains jobsCh fully before queueing new-block work — stale jobs can't reach workers (the #1 reject cause) (:572–590); rpcMessage.uintID accepts float64/int/int64/string ids and a negative wraps to an unmatched key only — documented benign (:681–691). TRUE.
