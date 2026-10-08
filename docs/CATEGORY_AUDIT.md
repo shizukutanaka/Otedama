@@ -13292,3 +13292,7 @@ PR template: every referenced path exists (CONTRIBUTING.md, CLAUDE.md, skills/td
 ## Session 2665 update (Socratic pass 1331 — docs/adr/README index parity)
 
 All 11 index rows match: filenames exist, H1 titles in each ADR match the index descriptions, and Status fields agree exactly (Accepted: 001-006 + 011; Proposed: 007-010; index's "partially superseded by ADR-006" on 002 is consistent with file-level Accepted). No phantom ADR numbers (012+ absent from both index and directory). claim verified: docs/adr/README.md — TRUE
+
+## Session 2666 update (Socratic pass 1332 — oss-fuzz readiness claims)
+
+Verified .github/oss-fuzz-integration.md package coverage: doc lists 9 package paths for "23 targets" — actual `func Fuzz` census = 23 targets in 14 test files across exactly those 9 dirs (stratum, poolproto/stratumv1, miner, lightning, btccrypto, config, arbitration, rates, cmd/otedama). Perfect parity; readiness criteria unchanged (no public v3.0.0 tag yet, upstream PR unfilled). claim verified: .github/oss-fuzz-integration.md — TRUE
