@@ -14711,3 +14711,26 @@ Verification: all 3 non-test open sites.
   cleanup, and both its error paths clean up.
 
 Verdict: TRUE — 3 sites, 3 owners, zero leak paths.
+
+## Session 2753 update (Socratic pass 1419 — http.Client census)
+
+Claim under test: every http.Client is bounded in time and refuses
+redirects — no default client, no silent 30x.
+
+Verification: all 3 client constructions.
+
+- `rates/fetcher.go:182` — Timeout 10s + CheckRedirect refusing
+  all (comment: hardcoded HTTPS sources; a redirect can only be a
+  hostile downgrade).
+- `rates/hashrate.go:110` — same 10s + refusal (the #2251 fix,
+  still intact).
+- `doctor/checks.go:875` `clockSkewDefaultClient` — redirect
+  refusal; no client Timeout because every use wraps the request
+  in `context.WithTimeout(ctx, 5s)` (:895) — bound moved from
+  client field to request ctx, equivalent coverage plus it honors
+  the check-level deadline.
+- Zero `http.Get/Post`, zero `http.DefaultClient`/`DefaultTransport`
+  use — nothing inherits the unbounded defaults.
+
+Verdict: TRUE — all outbound HTTP is time-bounded and
+redirect-proof.
