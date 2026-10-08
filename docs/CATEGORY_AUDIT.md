@@ -15696,3 +15696,30 @@ Verification — all 13 sites:
 
 Verdict: TRUE — no unpaired timer; the lone time.After is
 bounded and structurally single-use.
+
+## Session 2792 update (Socratic pass 1458 — parse-fidelity census)
+
+Claim under test: every string→number parse uses the base
+and bit size the producer intends, and range-checks where
+the domain is narrower than the type.
+
+Verification — all 14 sites:
+
+- V1 wire hex fields: ParseUint(16, 32) for
+  version/nbits/ntime (parse.go:94/:99/:103) — u32 wire
+  fields, overflow rejected.
+- V2/RPC ids: ParseUint(10, 32) dialer.go:436,
+  run.go:2168 — u32 per spec, //nolint:gosec justified
+  inline; ParseUint(10, 64) stratumv1.go:690 — u64;
+  id-coercion negatives wrap only to an unmatched map key
+  (nolint documented), unmatchable responses are ignored.
+- Ports: config.go:810 Atoi → immediate `p < 1 || p > 65535`
+  range check; parse.go:293 reconnect-directive port from
+  JSON has no range check but is a hint only — a bad value
+  fails the next dial bounded attempt, never connects.
+- ParseFloat(64) sites: fetcher:105, hashrate:68,
+  config:405/:549 — 64 is the only float width; non-finite
+  literals rejected downstream (#437/#478 merged fixes).
+
+Verdict: TRUE — every parse is base/bitsize-correct with
+bounds checked or failure-safe.
