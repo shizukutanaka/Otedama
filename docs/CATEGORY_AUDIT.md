@@ -25130,3 +25130,67 @@ census:
   unused.
 
 Verdict: TRUE.
+
+## Session 3062 update (Socratic pass 1726 — io/bufio surface ledger)
+
+Claim under test: the
+io surface is the
+Reader/Writer
+contract plus the
+bounded-read
+helpers — no exotic
+io plumbing.
+
+Verification —
+census:
+
+- `io.Writer`×45,
+  `io.Reader`×28 —
+  the interface
+  contract is the
+  dominant use.
+- `io.ReadFull`×16 —
+  fixed-length
+  scratch reads
+  (the wire codec
+  shape).
+- `io.LimitReader`×4 —
+  every remote
+  read is capped.
+- `io.ReadAll`×2,
+  `io.Copy`×2 —
+  only behind
+  LimitReader or
+  fixed bounds
+  (verified).
+- `io.WriteString`×5,
+  `io.MultiWriter`×1 —
+  the log fan-out.
+- `io.Discard`×3,
+  `io.Closer`×2,
+  `io.EOF`×5 +
+  `ErrUnexpectedEOF`×1 +
+  `ErrBufferFull`×2 —
+  the complete
+  error surface.
+- `io.NewReader`×2 —
+  the doc helper.
+- bufio: `NewReader`×2,
+  `NewReaderSize`×1,
+  `Reader`×4,
+  `ErrBufferFull`×2 —
+  the V1 line-reader
+  seam only.
+- ZERO `Seek`, `Pipe`,
+  `TeeReader`,
+  `SectionReader`,
+  `MultiReader`,
+  `NopCloser`,
+  `ReadAtLeast`,
+  `CopyBuffer`,
+  `OffsetWriter` —
+  the streaming
+  helpers are
+  unused.
+
+Verdict: TRUE.
