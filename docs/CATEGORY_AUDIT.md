@@ -9911,3 +9911,7 @@ Claim verified: each of the 15 documented OTEDAMA_* vars has a live read site �
 ## Session 1832 update (Socratic pass 498 — package import-direction audit)
 
 Claim verified: the dependency DAG matches the architecture map exactly — engine is imported by cmd/otedama/run.go only; arbitration imports hal only (pure logic) and is imported by engine only; provider→hal, doctor→{btccrypto,config,poolproto}, daemon→config, config→btccrypto, httpserver→metrics; all 13 leaf packages (poolproto, stratum, lightning, metrics, miner, rates, tui, btccrypto, clock, i18n, logger, version, hal) import zero internal packages. No cycles, no upward imports, no skip-layer edges. TRUE — Martin's dependency-inversion boundary holds structurally.
+
+## Session 1833 update (Socratic pass 499 — fuzz target self-discovery)
+
+Claim verified: the test.yml `fuzz` job runs `make fuzz`, which discovers targets dynamically — `grep -rln 'func Fuzz' --include='*_test.go' internal cmd` then `-fuzz="^FN$" -fuzztime=30s` per target. Enumerated 23 `func Fuzz` across 9 packages (stratum×7, stratumv1×5, lightning×2, miner×3, arbitration, btccrypto, config, rates, cmd): all reachable with no hardcoded list that could drift. New fuzz tests are picked up automatically; `found=0` guard prints rather than failing on an empty set. TRUE.
