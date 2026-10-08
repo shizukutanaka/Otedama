@@ -42529,3 +42529,166 @@ census:
   impls.
 
 Verdict: TRUE.
+
+## Session 3199 update (Socratic pass 1861 — sync/atomic ledger)
+
+Claim under test: sync
+surface
+is
+Mutex+
+WaitGroup
+dominant
+with
+no
+`Cond`/
+misuse;
+production
+atomics
+are
+100%
+typed
+(`atomic.Xxx`)
+with
+bare-
+function
+API
+test-
+only.
+
+Verification —
+census:
+
+- `sync`:
+  `Mutex`×77,
+  `WaitGroup`×31,
+  `RWMutex`×8,
+  `Once`×5
+  (idempotent
+  close/
+  register),
+  `Pool`×3
+  (pooled
+  HMAC
+  hasher,
+  buffer
+  reuse),
+  `Map`×1.
+  ZERO:
+  `Cond`
+  (channel-
+  based
+  wakeup
+  instead),
+  `OnceFunc`/`OnceValue`/`OnceValues`
+  helpers
+  (explicit
+  `Once.Do`
+  with
+  captured
+  out-
+  param
+  used
+  instead),
+  `Locker`-
+  interface
+  misuse,
+  copying
+  locks
+  by
+  value
+  (vet
+  `copylocks`
+  clean).
+- `atomic`:
+  `Bool`×16,
+  `Uint64`×10,
+  `Pointer`×9,
+  `Int64`×1
+  —
+  all
+  typed
+  wrapper
+  API.
+  `AddInt32`×6
+  +
+  `LoadInt32`×1
+  are
+  test-
+  file-
+  only
+  (verified
+  at
+  s3172:
+  bare-
+  function
+  API
+  used
+  on
+  test
+  counters).
+  ZERO
+  in
+  production:
+  `Add*`/`Load*`/`Store*`/`Swap*`/`CompareAndSwap*`
+  package
+  functions
+  (the
+  legacy
+  free-
+  function
+  API
+  is
+  confined
+  to
+  tests),
+  `atomic.Value`
+  (typed
+  `Pointer`
+  used
+  instead —
+  e.g.
+  `atomic.Pointer[slog.Logger]`
+  CAS
+  singleton),
+  `Uintptr`/
+  `UnsafePointer`
+  atomics.
+- Pairing
+  invariants
+  (re-
+  verified
+  this
+  batch):
+  every
+  `Mutex.Lock`
+  is
+  defer-
+  released
+  within
+  the
+  same
+  function,
+  `RWMutex`
+  pairs
+  `RLock`/`RUnlock`,
+  every
+  `WaitGroup.Add(+1)`
+  precedes
+  the
+  spawned
+  goroutine
+  and
+  `Done`
+  is
+  deferred
+  inside
+  it,
+  `Wait`
+  is
+  always
+  after
+  the
+  producers
+  stop.
+
+Verdict: TRUE.
