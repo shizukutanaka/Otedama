@@ -13736,3 +13736,23 @@ stronger justification than a one-word trailing note and matches the
 s903 httpserver verdict.
 
 Verdict: TRUE — 51/51 suppressions are self-documenting.
+
+## Session 2713 update (Socratic pass 1379 — errcheck-suppression justification audit)
+
+Claim under test: each of the 62 `//nolint:errcheck` suppressions
+discards an error that is safe to drop.
+
+Verification: split the surface. **60/62 are in test files** (6 files:
+stratumv2 dialer_test fake-pool reads/writes, hal registry_test,
+doctor extras_test, etc.) — discarding fake-connection results in
+tests is the standard pattern. **Non-test sites: exactly 2.**
+
+- `internal/engine/run.go:2172` — `h.Write([]byte(jobID))`, justified:
+  `hash.Hash.Write` never returns an error by interface contract.
+- `internal/tui/dashboard.go:262` — `io.WriteString(d.w, sb.String())`:
+  discarding is semantically fine (a dead terminal is unrecoverable and
+  the next render tick rewrites anyway), **but the site had no reason
+  text**. Added a matching justification comment.
+
+Verdict: FALSE (one unjustified suppression) → fixed; all errcheck
+suppressors now carry or inherit a reason.
