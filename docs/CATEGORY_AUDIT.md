@@ -13629,3 +13629,22 @@ Verification:
   reflect-driven marshalling exists to produce alignment/tag bugs.
 
 Verdict: TRUE on all five classes.
+
+## Session 2708 update (Socratic pass 1374 — race-detector stress)
+
+Claim under test: the concurrency contracts asserted by earlier passes
+(worker lifecycle, pending-map ownership, atomic counters, channel
+handoff) hold under the runtime race detector, not just under reading.
+
+Verification: `go test -race` on the five concurrency-heaviest packages —
+`internal/engine` (count=1, 32.3s: pools/fan-in/workers/jobsCh all
+exercised), `internal/poolproto/stratumv1` (count=1), plus
+`internal/arbitration`, `internal/metrics`, `internal/clock` at count=2
+so every test runs twice. Result: all PASS, zero race reports.
+
+Earlier passes established the same invariant statically (session-2534
+-race spot checks); this re-runs it at the current HEAD after the
+s2630–s2696 merges, so the claim is verified against today's code, not
+the code as of those merges.
+
+Verdict: TRUE.
