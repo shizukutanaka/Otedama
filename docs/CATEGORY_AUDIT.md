@@ -22303,3 +22303,55 @@ Verification — census:
   (verified earlier).
 
 Verdict: TRUE.
+
+## Session 3009 update (Socratic pass 1673 — math/big/bits ledger)
+
+Claim under test: float
+handling is NaN/Inf-
+guarded everywhere it
+enters, money math is
+big.*, and bit tricks
+are absent.
+
+Verification — census:
+
+- `math.IsInf` ×13 +
+  `math.IsNaN` ×6 —
+  the NaN/Inf-first
+  rejection order
+  verified across config
+  validation, rates
+  plausibility, and
+  arbitration inputs.
+- `math.Float64bits`/
+  `Float64frombits` ×10 —
+  the canonical float
+  form in metrics
+  exposition (verified —
+  nan-keyed map cannot
+  split a series).
+- `big.Int`×7/`NewInt`×5/
+  `big.Float`×4/`NewFloat`
+  ×1 — nBits↔target↔
+  difficulty bitmath,
+  all guards verified
+  (negative mantissa,
+  exp<3, zero target,
+  256-bit overflow).
+- `math.Trunc`/`Max`/
+  `Inf`/`Abs` — small
+  utilities only.
+- ZERO `math/bits` —
+  no custom bit twiddling;
+  shifts/masks are
+  spelled out.
+- ZERO `math/rand` in
+  production (all
+  randomness is
+  crypto/rand).
+- ZERO `math.Exp`/`Log`/
+  `Pow` on unbounded
+  inputs — the only
+  exp is 2^32 fixed.
+
+Verdict: TRUE.
