@@ -19893,3 +19893,36 @@ Verdict: TRUE — every dial has
 an explicit timeout; every HTTP
 client refuses redirects; all
 requests are GET.
+
+## Session 2959 update (Socratic pass 1624 — encoding/* census)
+
+Claim under test: production
+code uses only `binary`, `hex`,
+`json` — gob/base64/xml/csv/
+asn1/pem are absent.
+
+Verification:
+
+- `encoding/binary` — 6 prod
+  imports: stratum wire,
+  frame, messages, handshake,
+  noise, miner sha256d.
+- `encoding/hex` — miner
+  sha256d (hash output), plus
+  test fixtures.
+- `encoding/json` — cmd
+  version.go + config.go
+  (CLI output); engine json
+  usage is inside the wire
+  packages.
+- `encoding/pem` — test-only
+  (3 test files generate PEM
+  fixtures); production passes
+  raw PEM bytes to crypto/x509.
+- `encoding/gob`, `base64`,
+  `xml`, `csv`, `asn1` — zero
+  in production.
+
+Verdict: TRUE — encoding surface
+is binary + hex + json only;
+all text formats absent.
