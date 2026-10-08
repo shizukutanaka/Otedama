@@ -27762,3 +27762,90 @@ census:
   only.
 
 Verdict: TRUE.
+
+## Session 3095 update (Socratic pass 1759 — netip/url/path absence ledger)
+
+Claim under test: the
+net surface stops
+at Conn/Dialer/
+SplitHostPort —
+netip, url, bare
+path, httptrace
+all absent.
+
+Verification —
+census:
+
+- ZERO `netip.*`
+  — no
+  `Addr`,
+  `AddrPort`,
+  `Prefix`,
+  `MustParseAddr`
+  — the IP
+  surface is
+  `net.ParseIP`
+  + host:port
+  strings
+  only.
+- ZERO `net/url` —
+  verified
+  url-parse
+  class:
+  manual
+  scheme +
+  host:port
+  validation
+  is
+  stricter.
+- ZERO `"path"`
+  (bare) —
+  no
+  slash-
+  path
+  handling;
+  `path/filepath`
+  ×6 is the
+  only
+  path
+  package
+  (verified
+  path-
+  portability
+  class).
+- ZERO `net/http/
+  httptrace` —
+  no
+  client
+  trace
+  hooks.
+- ZERO `netip.Prefix`,
+  `netip.AddrFromSlice`,
+  `netip.ParsePrefix`,
+  `netip.AddrFrom16` —
+  the
+  structured
+  IP
+  surface
+  absent.
+- ZERO `ipam`,
+  `ipnet`,
+  `httplimit`,
+  `hpack`,
+  `h2c`,
+  `mp3`,
+  `mp4`,
+  `r2` —
+  no
+  unmapped
+  net
+  surface.
+- `net.ParseIP`×1 —
+  the
+  sole IP
+  parse
+  (verified
+  ip-parse
+  class).
+
+Verdict: TRUE.
