@@ -10138,3 +10138,7 @@ Claim verified: docs/API.md's metrics table lists exactly the 46 production `ote
 ## Session 1887 update (Socratic pass 553 — API.md flag parity)
 
 Claim verified: docs/API.md's run-flag table covers all 15 flags registered in run.go's FlagSet (incl. --wallet-mnemonic-passphrase, --pprof); config show's --origin/--json, version --json, service install's flag set, and doctor's --json are each documented in their own sections. TRUE.
+
+## Session 1888 update (Socratic pass 554 — service/doctor flag parity)
+
+Claim verified: `service install`'s six flags (config, data-dir, bitcoin-address, log-level, log-format, language) match API.md's bracketed list exactly, and `doctor`'s four (config, bitcoin-address, data-dir, json) match its usage line. TRUE.
