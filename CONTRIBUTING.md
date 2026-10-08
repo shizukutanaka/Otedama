@@ -16,7 +16,7 @@ Otedamaプロジェクトは多様な形式の貢献を歓迎します。コー�
 
 ## 開発環境のセットアップ / Development Environment Setup
 
-Otedamaの開発には以下の環境が必要です。Go 1.24以上（go.mod の `go 1.22` 宣言に加え、`toolchain go1.24.0` と `godebug tlsmlkem` が実効的に Go ≥1.24 を要求——訂正 session 495）、Git、Docker（オプション、統合テスト用）、Make（ビルド自動化）、テキストエディタまたはIDE（VSCode、GoLand、Vim、Emacsなど任意）。クローンとビルドは以下のコマンドで実行できます。
+Otedamaの開発には以下の環境が必要です。Go 1.24以上（go.mod が `go 1.24.0` を直接宣言——session 495 訂正時点では `go 1.22` + `toolchain go1.24.0` の間接要求でしたが、その後 toolchain 行を廃止して直接宣言に移行）、Git、Docker（オプション、統合テスト用）、Make（ビルド自動化）、テキストエディタまたはIDE（VSCode、GoLand、Vim、Emacsなど任意）。クローンとビルドは以下のコマンドで実行できます。
 
 ```bash
 git clone https://github.com/shizukutanaka/Otedama.git

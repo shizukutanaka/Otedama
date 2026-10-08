@@ -13276,3 +13276,7 @@ Corrected: (1) two stale `main` merge-target refs (:26, :60) → `master`; (2) c
 ## Session 2661 update (Socratic pass 1327 — BENCHMARKS.md CI section)
 
 Corrected: benchmark CI paragraph still said "every push to main" (no main ref — actual triggers [main,master,develop] on push; only master exists) and named the uploaded file `benchmark.txt` (actual: `benchmark-results.txt`). Verified the session-484 correction block itself remains accurate (no comparison job or PR comment exists — benchmark job only tee+s upload-artifact). claim corrected: BENCHMARKS.md
+
+## Session 2662 update (Socratic pass 1328 — CONTRIBUTING.md environment section)
+
+Corrected: the session-495 erratum described the go.mod layout as "`go 1.22` + `toolchain go1.24.0`" — the toolchain line has since been removed and go.mod declares `go 1.24.0` directly (godebug block preserved). Updated the correction text itself to the current state while noting the layered history. claim corrected: CONTRIBUTING.md
