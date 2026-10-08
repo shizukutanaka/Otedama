@@ -21723,3 +21723,61 @@ Verification:
   init-time sites only).
 
 Verdict: TRUE.
+
+## Session 2997 update (Socratic pass 1661 — net/http ledger)
+
+Claim under test: the HTTP
+surface is exactly three
+bounded clients + one
+private-mux server — no
+default-mux pollution, no
+unbounded bodies.
+
+Verification — census:
+
+- `http.Client` sites:
+  doctor clock-skew
+  (checks.go:875),
+  rates hashrate (:110),
+  rates fetcher (:182) —
+  all Timeout 10s +
+  CheckRedirect refuse
+  (verified s2920s+).
+- `http.Server` ×2 refs —
+  the single httpserver
+  (ReadHeaderTimeout +
+  graceful shutdown
+  verified).
+- `http.NewRequestWith
+  Context` ×3 — all
+  outbound calls are
+  ctx-bound GET
+  (`MethodGet`×3,
+  `NoBody`×3).
+- `http.ParseTime` ×3 —
+  Date-header skew check
+  in doctor.
+- `http.ServeMux` ×1
+  private mux — comment
+  at server.go:44
+  documents the deliberate
+  DefaultServeMux
+  avoidance (pprof would
+  register globally).
+- `http.ErrServerClosed`
+  — shutdown error
+  classification.
+- Zero `http.Get`/
+  `http.Post` package
+  functions, zero
+  `http.DefaultClient`,
+  zero `DefaultTransport`
+  use, zero `http.Handle*`
+  global registration,
+  zero `ListenAndServe`
+  package func.
+- `http.Request` ×10 /
+  `ResponseWriter` ×4 —
+  handler signatures only.
+
+Verdict: TRUE.
