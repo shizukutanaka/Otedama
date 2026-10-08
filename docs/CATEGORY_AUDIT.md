@@ -10162,3 +10162,7 @@ Claim verified: RESEARCH_IMPROVEMENTS.md marker counts unchanged since the s1821
 ## Session 1893 update (Socratic pass 559 — DEPLOYMENT env/surface parity)
 
 Claim verified: every OTEDAMA_* env var DEPLOYMENT.md uses (BITCOIN_ADDRESS, DATA_DIR, WALLET_PASSPHRASE) resolves in code, and every flag in its examples (--config/--data-dir/--http-addr/--log-file plus the service-install set) is a real registered flag; the doc makes no false completeness claims. TRUE.
+
+## Session 1894 update (Socratic pass 560 — TROUBLESHOOTING command parity)
+
+Claim verified: every command TROUBLESHOOTING.md cites exists — `doctor`, `wallet verify`, `wallet change-passphrase` (wallet.go:41–43), `service install/status`, `run --log-level`, and it correctly warns that `otedama --log-level=debug doctor` cannot work (flags are subcommand-scoped). TRUE.
