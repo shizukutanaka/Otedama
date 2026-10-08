@@ -16016,3 +16016,33 @@ re-derived via cap().
 
 Verdict: TRUE (vacuous) — the confusion class cannot
 occur; capacity lives only in named constants.
+
+## Session 2805 update (Socratic pass 1471 — secret-echo census)
+
+Claim under test: no secret material (mnemonic, seed,
+passphrase, private key) is ever written to a log line or
+an error string; the only plaintext emission is the
+deliberate first-run display.
+
+Verification:
+
+- Every error string in lightning/ carries counts or
+  metadata only ("mnemonic has %d words", "unlock
+  failed", "incorrect old passphrase") — never secret
+  bytes.
+- Fingerprint (wallet.go:186, seed.go:317) is the
+  designed public identifier: HMAC-SHA256 over a
+  domain-separated key — cannot derive seed material;
+  stored to wallet.fingerprint 0600 and shown in doctor.
+- The single plaintext emission is
+  setup.go:238 printRecoveryPhrase — nil-writer and
+  empty-mnemonic guards; caller supplies stdout only on
+  the first-run TTY path (verified s2215); the function's
+  own doc notes this is the only point the mnemonic can
+  ever be obtained. Backup verification (setup.go:324)
+  reads chosen words interactively — never logged.
+- Zero slog/printf sites interpolate a mnemonic/seed/
+  passphrase variable anywhere in the tree.
+
+Verdict: TRUE — secrets reach stdout exactly once by
+design, never reach logs or errors.
