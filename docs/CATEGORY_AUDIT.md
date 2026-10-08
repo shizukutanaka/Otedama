@@ -10306,3 +10306,7 @@ Claim verified: checkFailoverAddresses runs the same btccrypto.ValidateAddress c
 ## Session 1929 update (Socratic pass 595 — doctor diversity checks)
 
 Claim verified: checkPoolDiversity warns on 0/1 pools with the honest consequence (mining stops on outage); checkPoolEndpointDiversity goes beneath URL counting — resolves each pool via an injectable resolver, warns when two pools share a resolved IP (illusory failover), honestly skips when fewer than two resolve (offline/sandbox), and documents the missing ASN-dataset limitation. Display is userinfo-stripped throughout. TRUE. Doctor's 17 checks now fully verified this cycle.
+
+## Session 1930 update (Socratic pass 596 — doctor core checks complete)
+
+Claim verified: checkConfig warns (not fails) on an absent file since defaults exist, and fails on Validate() errors; checkBitcoinAddress fails honestly on empty/shape/checksum errors with masked display + kind label (P2TR recognized); checkHardware is honest — no GPU is informational not a warning because no compute dispatch exists (matches KNOWN_LIMITATIONS §4); checkNetwork is a 3s-bounded TCP probe with an actionable fix; clock-skew thresholds (120s warn / 300s fail) match rates.clockSkewWarnThreshold, and the default client refuses redirects (downgrade defense). All 17 doctor checks verified this cycle. TRUE.
