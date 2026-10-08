@@ -39184,3 +39184,132 @@ census:
   ranges.
 
 Verdict: TRUE.
+
+## Session 3176 update (Socratic pass 1840 — flag + fmt print-family ledger)
+
+Claim under test: CLI flags
+are
+bound
+on
+per-
+subcommand
+`FlagSet`s
+(never
+the
+global
+`flag.CommandLine`);
+all
+output
+goes
+through
+explicit
+writers
+(`Fprintf`/
+`Fprint`)
+—
+zero
+`fmt.Print*`-
+family
+direct-to-stdout
+calls.
+
+Verification —
+census:
+
+- `flag`:
+  `ErrHelp`×7,
+  `NewFlagSet`×5,
+  `ContinueOnError`×5,
+  `FlagSet`×4,
+  `Parse`×1,
+  `Flag`×1 =
+  23.
+  ZERO:
+  `flag.CommandLine`,
+  global
+  `flag.String`/`Int`/`Bool`
+  registrations,
+  `flag.Usage`,
+  `flag.Set`,
+  `flag.Lookup`,
+  `PrintDefaults` —
+  each
+  subcommand
+  owns
+  an
+  isolated
+  `FlagSet`
+  with
+  `ContinueOnError`
+  (returns
+  `ErrHelp`
+  for
+  `-h`,
+  never
+  `os.Exit`).
+- `fmt`
+  families:
+  `Errorf`×267
+  (error
+  construction),
+  `Sprintf`×223,
+  `Fprintf`×170,
+  `Fprintln`×16,
+  `Fprint`×12,
+  `Sprint`×4 =
+  692
+  calls.
+  ZERO
+  (call
+  sites):
+  `fmt.Println`,
+  `fmt.Printf`,
+  `fmt.Print`,
+  `fmt.Scan`/`Scanf`/`Scanln`,
+  `fmt.Sscan`,
+  `fmt.Sscanf`,
+  `fmt.Appendf` —
+  output
+  always
+  names
+  its
+  `io.Writer`
+  (stdout/stderr
+  separation
+  preserved);
+  scanning
+  is
+  done
+  with
+  `strconv`,
+  never
+  `%`-verbs.
+  Note:
+  `fmt.Sscanf`
+  appears
+  3×
+  in
+  comments
+  only
+  (rates/fetcher.go:52
+  +
+  two
+  tests)
+  documenting
+  the
+  deliberate
+  rejection
+  of
+  greedy
+  `%f`
+  parsing
+  —
+  consistent
+  with
+  the
+  earlier
+  "Sscanf
+  zero"
+  ledger.
+
+Verdict: TRUE.
