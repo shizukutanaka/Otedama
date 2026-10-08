@@ -10596,3 +10596,7 @@ Closed surfaces in this stretch: clock.Fake mutex-guarded non-monotonic honesty 
 ## Session 2001 update (Socratic pass 667 — wire primitive Postel asymmetry)
 
 Claim verified: encoding is spec-strict while decoding is deliberately lenient where safe — STR0_255/B0_255/B0_32 encoders refuse over-long values, but there is intentionally no strict B0_32 reader: a non-conformant pool sending a 33..255-byte extranonce is still accepted (bounded, allocation-safe) rather than dropped over a field-length violation, and the asymmetry is documented in-line; all integers are little-endian per SV2 §3, the byte-slice reader reports honest io.EOF on both Read and ReadByte, and float32 wire conversion goes through math.Float32bits — no unsafe pointer-cast reinterpretation. TRUE.
+
+## Session 2002 update (Socratic pass 668 — v2tls transport honesty)
+
+Claim verified: stratum+v2tls:// now means a real certificate-verified TLS connection — the pre-fix silent plaintext downgrade is documented and closed; the default config verifies against the system root store at TLS ≥1.2 with ServerName filled from the actually-dialed host (not caller-supplied, so the check binds to the right identity); the extra-CA path *extends* the trust store without ever disabling verification, and a PEM blob with no valid certificates is an error rather than silently narrowing trust; handshake completes inside DialContext so a verification failure surfaces as a dial error, and there is no plaintext fallback path anywhere in the function. TRUE.
