@@ -15284,3 +15284,33 @@ Verification: 5 iota const blocks.
 Verdict: TRUE — every enum is either Valid()-gated at use,
 whitelist-parsed at config load, internally produced, or map-
 dispatched with an explicit unknown-value path.
+
+## Session 2776 update (Socratic pass 1442 — goroutine-cleanup census)
+
+Claim under test: every spawned goroutine either holds no
+resource or releases it via a defer placed at the goroutine's
+top before any early return.
+
+Verification: 20 `go func` sites.
+
+- Refill/ticker goroutines (run.go:2230): `defer t.Stop()` at
+  goroutine head, before the select loop — ticker never leaks
+  on ctx cancel.
+- Session-bound spawns (run.go:902, :1785, polling.go:51,
+  worker.go:168/:174): lifecycle owned by ctx + WaitGroup;
+  per-submit goroutine is resource-free (its work is a single
+  Submit call + latency record, result delivered through the
+  cap-1/pending machinery).
+- Fan-out producers (fetcher.go:297/:454, hashrate.go:148/:231,
+  registry.go:155/:167, doctor.go:235): one bounded send into a
+  capacity-matched channel; doctor's panic→Fail recover defer
+  sits at the goroutine head.
+- Library-owned handler spawns (httpserver.go:119/:129): http
+  package drives the per-conn loop; our resources end with the
+  handler return.
+- fanin.go:34 forwarders exit on ctx or source close; :56
+  closer is `wg.Wait(); close(out)` — guaranteed terminal.
+
+Verdict: TRUE — every goroutine is either resource-free or has
+a top-of-body cleanup defer; none can leak a resource by an
+early-return path.
