@@ -11902,3 +11902,7 @@ Claim verified: EncodeFrame (frame.go:195) can't emit an out-of-spec or lying fr
 ## Session 2323 update (Socratic pass 989 — logger degradation postures)
 
 Claim verified: the logger degrades deliberately in every direction — nil Writer → os.Stderr (:113–115), unknown format → TextHandler (:120–124), Discard() uses LevelError+1 so nothing emits even if a caller misjudges (:130–137), Adapter() routes unrecognized levels to Info rather than dropping them (:143–155). Write errors are swallowed by slog by design — a dead sink is unreportable anyway, matching the verified contract. TRUE.
+
+## Session 2324 update (Socratic pass 990 — payout script type exhaustiveness)
+
+Claim verified: ScriptForAddress (script.go:36–79) can never emit a wrong-type locking script — the address is validated first, the bech32 branch maps witness version to OP_0/OP_1–16 with the ≤40-byte program, the base58 branch builds exact P2PKH/P2SH encodings, and every other type hits an explicit error at :78 — no silent default script. TRUE.
