@@ -13140,3 +13140,7 @@ All TRUE: ADR-004 (custom ANSI TUI, zero framework deps) — internal/tui import
 ## Session 2627 update (Socratic pass 1293 — ADR-009 proposal-vs-code parity)
 
 All TRUE: datum:// sits in the scheme table (poolproto.go:120 → ProtocolDATUM) but run.go:825-833 fails fast with honest "recognized but not implemented — ADR-009" (KNOWN_LIMITATIONS §14) — no silent misdial. Proposed internal/poolproto/{datum,solo}/ correctly absent. payout_scheme enum {fpps,pplns,tides,solo} validated at config.go:692-696 — "solo" there is pool payout accounting, distinct from the ADR's template-authorship solo mode; no conflation in code or doc. ADR's session-503/504 updates recorded inline (NexusPool JDP production, BIP110 chain-signaling) without altering the proposal.
+
+## Session 2628 update (Socratic pass 1294 — architecture.md disclaimer self-parity)
+
+All TRUE: the session-243/487/1233 disclaimer block itself is accurate — hal.Device = {Identity(), Capabilities(), Shutdown(ctx)} (device.go:156-163; `Identity` not `Identify`, no SubmitWork/Metrics); provider.Provider = channel-based {ID(), Name(), Start(ctx,devices), Quotes(), Stop()} (provider.go:145+), not the aspirational request-response shape; internal/ tree = 19 packages all in the CLAUDE.md map (zero plugin/api/auth/observability/providers paths); SRI-inversion erratum holds (internal/stratum is own codec, SRI is Rust-only). Doc's remaining aspirational sections stay bounded by the disclaimer.
