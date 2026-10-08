@@ -11778,3 +11778,7 @@ Claim verified: every bounded-fanout goroutine swarm is sized by an operator-con
 ## Session 2292 update (Socratic pass 958 — merged-invariant spot check)
 
 Claim verified: the merged hardening invariants hold on this branch — worker-partition totals are still computed in uint64 with the ≤2^31 stride guard (setup.go:90, the 32-bit-overflow fix), and pool coinbases are still verified against CoinbasePaysScript with one-shot warnings on both malformed and doesn't-pay outcomes (run.go:1686ff, the TIDES/solo payout verification). No regression against the merged-fix contract. TRUE.
+
+## Session 2293 update (Socratic pass 959 — rpc-id precision census)
+
+Claim verified: V1 response-id correlation cannot lose precision — rpcMessage.ID is `any`; uintID() converts float64/int/int64/string to u64; pending-ledger keys are our own small sequential u64 ids, so any matching response id fits float64's 2^53 exact-integer range and round-trips losslessly. A fractional/negative/non-numeric id truncates to a non-existent key and is dead-lettered (the pending entry then reaps at the 60s call timeout — bounded). TRUE.
