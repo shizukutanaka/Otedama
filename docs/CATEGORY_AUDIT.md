@@ -10342,3 +10342,7 @@ Claim verified: rejectClass checks canonical SV2 SubmitSharesError codes before 
 ## Session 1938 update (Socratic pass 604 — hysteresis incumbent-hold)
 
 Claim verified: incumbentHold requires the challenger to beat the incumbent's own policy-adjusted score by (1+hysteresis) — a relative margin, not an absolute — and sets Held only when a *different*, higher-scoring stream was actually suppressed (incumbent-is-best stays Held=false, so flap-statistics stay honest); ForegoneSatsPerSec = maxRaw − held-yield records exactly what the margin cost so operators can tune hysteresis against evidence. TRUE.
+
+## Session 1939 update (Socratic pass 605 — policyScore metric coherence)
+
+Claim verified: policyScore returns yield-shaped values under every policy — StackBTC applies the bounded 1.05 bonus only to BTC-native streams, privacy/environment scale by rating×0.01 (max +10%), earnings is the identity — so the hysteresis margin in incumbentHold always compares like-for-like in the same policy-adjusted metric (the invariant documented at :39-43). TRUE.
