@@ -14780,3 +14780,30 @@ Verification: `binary.*` call-site tally.
 
 Verdict: TRUE — one endian convention, the cheapest
 serialization form, no exceptions.
+
+## Session 2756 update (Socratic pass 1422 — errors.Is/As census)
+
+Claim under test: errors.Is targets only sentinel errors;
+errors.As only typed extraction — no literal-string comparisons.
+
+Verification: full errors.Is/As call census.
+
+- `errors.As` — exactly 1 site (`run.go:2201`), extracting the
+  failover-typed error from a wrapped chain; pointer-receiver
+  target, the canonical use.
+- `errors.Is` — 19 call sites, all genuine sentinels:
+  `os.ErrNotExist` (×4: wallet fingerprint sidecar, doctor, log
+  rotate, configfile), `flag.ErrHelp` (×4: config ×2, run, main),
+  `context.DeadlineExceeded` (×2: both dialers), `context.Canceled`,
+  `bufio.ErrBufferFull`, `http.ErrServerClosed`, `io.EOF`,
+  `ErrNotBech32`, `ErrNotBase58` (btccrypto's format-dispatch
+  sentinels — the validator returns them so callers branch on
+  which encoding failed).
+- Zero `err == ErrFoo` comparisons (the #1239 modernization
+  completed the convention), zero message-text matching —
+  documented at seedstore.go:35 and btccrypto.go:89 as the
+  intended contract.
+- Every wrapped construction uses `%w` (the %v-wrap audit passed
+  earlier), so all these Is/As lookups unwrap correctly.
+
+Verdict: TRUE — sentinel discipline holds at every site.
