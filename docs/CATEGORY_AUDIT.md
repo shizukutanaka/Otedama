@@ -25009,3 +25009,62 @@ census:
   earlier).
 
 Verdict: TRUE.
+
+## Session 3060 update (Socratic pass 1724 — sync surface ledger)
+
+Claim under test: the
+`sync` package
+surface is minimal —
+Mutex/RWMutex for
+state, Once for
+one-shot, WaitGroup
+for fan-out, and
+nothing exotic.
+
+Verification —
+census:
+
+- `sync.Mutex`×21 —
+  the dominant
+  guard; every
+  Lock/Unlock defer-
+  paired (verified
+  mutex-balance
+  class).
+- `sync.RWMutex`×8 —
+  read-hot
+  registries/stats.
+- `sync.Once`×4 —
+  idempotent close
+  and singleton
+  guards.
+- `sync.Map`×1 —
+  the hot pending
+  map (set/delete
+  only — set-theoretic
+  use, verified
+  sync-map class).
+- `sync.WaitGroup`×8 —
+  fan-out lifetimes;
+  every Add before
+  the goroutine
+  (verified
+  waitgroup-pairing).
+- `sync.Pool`×2 —
+  the hasher
+  reuse pools.
+- ZERO `sync.Cond` —
+  condition
+  variables are
+  unused; channel
+  notification is
+  the design.
+- ZERO `OnceFunc`,
+  `OnceValue`,
+  `OnceValues` —
+  the value-
+  producing once
+  helpers are
+  unused.
+
+Verdict: TRUE.
