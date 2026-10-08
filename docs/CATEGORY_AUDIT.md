@@ -10094,3 +10094,7 @@ Claim verified (already-recorded residual, no code change — rejected #1344 ter
 ## Session 1876 update (Socratic pass 542 — DefaultPoolURL single-source claim)
 
 Claim verified: `config.DefaultPoolURL` (stratum+v2://public.stratum.slushpool.com:3336) is the single source for the built-in fallback pool — referenced by all three documented consumers: engine `defaultPoolURL` (setup.go:374), doctor reachability (checks.go:344), CLI startup banner (run.go:188). No literal duplicates exist. TRUE.
+
+## Session 1877 update (Socratic pass 543 — datum:// dual-layer rejection)
+
+Claim verified: `datum://` URLs are rejected at two independent layers — config `validatePoolURL` (config.go:780 accepts only the four stratum schemes) and the engine's ADR-009 fail-fast (run.go:825–833 with the recognized-but-unimplemented message). Honest note: because every pool URL arrives via config validation first, the engine's datum-specific error text is unreachable in production (prophylactic for future non-config sources); the config-layer message is generic but equally fail-closed. TRUE.
