@@ -10018,3 +10018,7 @@ Claim verified: gpu_stub.go (build `!linux`) is a documented no-op — non-Linux
 ## Session 1857 update (Socratic pass 523 — KL §1 simulated-yield re-verification)
 
 Claim verified: AkashProvider still quotes the fixed MinUSDPerHour/MaxUSDPerHour midpoint (ai_inference.go:62-63) with no REST call; `Name()` returns the load-bearing "(simulated)" suffix (:70-79) whose comment documents the removal gate (real Akash REST, ROADMAP v3.1.0) — the simulation is visible in TUI/logs/config so users cannot mistake it for income. TRUE — disclosed with unusual honesty.
+
+## Session 1858 update (Socratic pass 524 — ADR-009 ecosystem recheck + self-correction)
+
+Re-verified live: **sv2-apps latest is v0.8.0** (2026-09-17, Loupe-audit hardening release — tProxy lifecycle overhaul incl. BIP323 version-rolling mask, typestate runtimes, SetupConnection version enforcement, stratum-core 0.6.0). Self-correction: the s1839 pass entry recorded "latest = v0.7.0" — that was a stale misstatement; ADR-009 itself had tracked v0.8.0 correctly since its release (entries at :1116/:1584/s1730). sv2-spec #203 (push-based non-custodial payouts) still open with the SEQ0_255-vs-64K output-bound debate unresolved; normative set otherwise unchanged. No action required — Otedama's subset-flag validation and version-range handling stay forward-compatible.
