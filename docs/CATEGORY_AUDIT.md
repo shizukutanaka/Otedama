@@ -11982,3 +11982,7 @@ Claim verified: serviceArgv is the canonical slice — fixed "run" plus only the
 ## Session 2343 update (Socratic pass 1009 — wire encode/decode round-trip honesty)
 
 Claim verified: the header wire layer is a strict inverse — EncodeHeader validates before any write (frame.go:171–185); EncodeFrame bounds payload > MaxMessageLength first, re-derives MsgLength from the real payload (never trusts the header field), re-validates, then emits (:195–210); DecodeHeader rejects truncation before any read and reassembles the U24 LE as the exact mirror (:217–228); ChannelID() double-checks channel bit + MinimumChannelPayload before the LE load (:153–161); every ReadFrame payload is freshly allocated, caller-owned, never aliased to the header scratch (:144–148). TRUE.
+
+## Session 2344 update (Socratic pass 1010 — hashrate format + ntime-roll invariants)
+
+Claim verified: HashRateString is a strict non-overlapping tier ladder (TH→GH→MH→kH→H, each ×1e3) with honest fallback — negative/NaN inputs never crash or silently clamp (worker.go:338–349); engine callsites share the single formatter (stats.go:255,475). The grind loop's ntime roll is monotone forward: nonce wrap (nonce < prev) increments ntimeRoll and sets h.Time = jobTime + roll so no header is ever re-hashed (:327–334). TRUE.
