@@ -10042,3 +10042,7 @@ Defects found and fixed: third enumeration drift in the architecture map — `.g
 ## Session 1863 update (Socratic pass 529 — test.yml benchmark annotation parity)
 
 Claim verified: CLAUDE.md annotates `test.yml (fuzz+benchmark)` — test.yml:180-203 carries a real `benchmark` job running `go test -run=XXX -bench=. -benchmem ./...` with artifact upload (plus the s1347 fuzz job). The parenthetical is accurate, not aspirational. TRUE.
+
+## Session 1864 update (Socratic pass 530 — i18n ten-language claim)
+
+Claim verified: CLAUDE.md's "主要10言語" (英・日・中・韓・西・仏・独・葡・露・アラビア) is implemented as `PriorityLanguages()` in i18n/message.go:120 returning exactly those ten Langs, and the doc comment honestly marks non-priority languages "best-effort" — matching the "1,000+ via MT, ten human-reviewed" rulebook text. TRUE.
