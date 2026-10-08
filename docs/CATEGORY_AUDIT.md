@@ -10258,3 +10258,7 @@ Claim verified: every yaml tag in internal/config/config.go (19 unique keys) is 
 ## Session 1917 update (Socratic pass 583 — ldflags version injection parity)
 
 Claim verified: internal/version declares exactly the var symbols (Version, Commit, BuildDate) that the release workflows inject via `-X github.com/shizukutanaka/Otedama/internal/version.*` in ci-cd.yml:137, ci.yml:287, ci.yml:343 — no dead main.* paths remain (fixed in #1275), and Get() snapshot semantics are honest. TRUE.
+
+## Session 1918 update (Socratic pass 584 — hal GPU sysfs boundary)
+
+Claim verified: GPULinuxDriver.Enumerate returns empty (not error) when /sys/class/drm is absent — matching the Detector's partial-failure policy; only renderD* nodes are scanned; EvalSymlinks dedupes multi-node GPUs by canonical device path; parseGPUDevice skips invalid identities with a logFn note; readSysFile trims and never propagates read errors into device construction. TRUE.
