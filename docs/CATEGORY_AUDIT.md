@@ -10070,3 +10070,7 @@ Claim verified: SPECIFICATION row G18 questioned ms-vs-s consistency. Production
 ## Session 1870 update (Socratic pass 536 — ADR-009 ecosystem recheck)
 
 Ecosystem re-verified live: sv2-apps latest tag is **v0.8.0** (`git ls-remote`, ref 7f490743 — the GitHub /releases page truncates at v0.7.0; tag confirmed directly). sv2-spec #203 (non-custodial payouts, push-based JDP extension) remains open with the SEQ0_255-vs-64K output-count debate unresolved. sv2-spec #238 (optional SetupConnection flags negotiation — bits 0-15 required / 16-31 optional, success echoes accepted) remains open; Otedama's offered-flags subset validation (session 1247) is forward-compatible with it. Standing P0 unchanged: no `mining.configure` client-side (tProxy shipped BIP323 version-rolling in v0.8.0).
+
+## Session 1871 update (Socratic pass 537 — README subcommand-table parity)
+
+Claim verified: README's command table (lines 84–93) enumerates all seven dispatch cases in cmd/otedama/main.go:119–131 — run, version, config, service, doctor, wallet (verify + change-passphrase), completion. No missing or phantom subcommand. TRUE.
