@@ -7,6 +7,11 @@ on:
     branches: [master]
     types: [synchronize, opened]
 
+concurrency:
+  # 同一PRへの連続 synchronize で /fix-conflict コメントが重複投稿されるのを防ぐ
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
