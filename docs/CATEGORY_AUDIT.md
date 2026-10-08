@@ -12941,3 +12941,7 @@ Claim verified: `golang.org/x/sys` is imported by exactly two files — `interna
 ## Session 2581 update (Socratic pass 1247 — CHANGELOG head entries vs branch diffs)
 
 Claim verified: the CHANGELOG's newest `[Unreleased]` entries each map to a real verified branch change — README `go 1.24.0` claim, SPECIFICATION §2 doctor exit-code set (0/1/2 via Report.ExitCode), CLAUDE.md master-branch + wallet + scorecard + quality-pass corrections, SPECIFICATION G3 "partially resolved" (V1 through poolproto since session 91), CONTRIBUTING translation-fallback honesty, config.yaml.example canonical `zh`/`ru`/`ar` list. TRUE.
+
+## Session 2582 update (Socratic pass 1248 — dependency freshness vs floor)
+
+Claim verified: `go mod verify` clean. Freshness check shows upstream moved (x/crypto v0.48→v0.57, x/sys v0.41→v0.48) — BUT every newer release declares `go 1.25.0`+ (v0.56+/v0.48+ need `go 1.26.0`). The pins are already at the maximum versions honouring the `go 1.24.0` module floor; any bump necessarily raises the language minimum — a maintainer toolchain-policy decision per GODEBUG_NOTES (same class as the rejected #1344 CI-pin change, which touched the inverse direction). No action available without that decision. TRUE.
