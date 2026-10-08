@@ -10976,3 +10976,7 @@ Claim verified: the price feed can't silently deceive arbitration — clock skew
 ## Session 2095 update (Socratic pass 761 — httpserver admin surface)
 
 Claim verified: the admin HTTP surface can't hang or lie — the full timeout set is present (ReadHeaderTimeout 5s as slowloris mitigation, Read/Write 10s, Idle 60s); pprof handlers are opt-in via enablePprof on a private mux (the //nolint:gosec is justified — nothing lands on the default global mux); /readyz is a tri-state atomic (unready → 503 "not ready", never a fabricated 200); the bound address is stored so a :0 listener reports its real port; non-graceful Serve failures are captured into serveErr instead of vanishing; and Shutdown is bounded at 5s so Stop can't hang forever on a stuck connection. TRUE.
+
+## Session 2096 update (Socratic pass 762 — noise transport primitives)
+
+Claim verified: the Noise NX primitives can't silently weaken confidentiality — the AEAD is derived once and cached (s957's perf fix preserved the single-derivation contract); every frame nonce is a sequential u64 counter placed in bytes 4–11 of the 12-byte nonce — deterministic progression on both encrypt and decrypt sides, so a nonce can never be reused within a session; hmacSHA256Pooled pools hashers (Reset on Get) but returns a freshly allocated 32-byte result — no pooled buffer can alias the output; an over-64-byte key is hashed first per RFC 2104; and handshake state initializes h/ck per the Noise spec (≤32-byte protocol name padded, otherwise hashed). TRUE.
