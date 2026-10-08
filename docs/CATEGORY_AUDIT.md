@@ -12010,3 +12010,7 @@ Claim verified: the transport layer is honest — CipherState sequential u64 non
 ## Session 2350 update (Socratic pass 1016 — share-rate reconciliation honesty)
 
 Claim verified: updateShareRates is honest — judged=accepted+rejected with the div0 branch explicitly zeroing reject/stale rates (metrics.go:605–627); unaccounted=found−judged clamps at 0 so a stats-tick race never emits a negative gauge (:614–619); both rates share the same judged denominator and rejectByReason is read under its mutex (:622–632). TRUE.
+
+## Session 2351 update (Socratic pass 1017 — service-definition body honesty)
+
+Claim verified: the generated systemd unit is honest and hardened — Type=simple with quoteToken'd ExecStart tokens, Restart=on-failure/10s, journald output with SyslogIdentifier, and real hardening (NoNewPrivileges, ProtectHome=read-only, PrivateTmp); ReadWritePaths is emitted only when a data dir exists — never a dangling empty directive (service.go:270–291). launchd writes the plist 0600 before `launchctl load -w` (:296–318). TRUE.
