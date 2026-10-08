@@ -9320,3 +9320,16 @@ Residuals: none new.
 **Also verified:** `actions/dependency-review-action@v4` in the `dependency-review` job remains the known repo-Settings failure class (Dependency graph disabled) — recorded, not gated (it's a real signal once enabled).
 
 Residuals: `review` job's `fetch-depth: 0` is unnecessary (no git-history reads) — left as harmless; fork PRs still get an empty code-review comment path skipped entirely, which is the intended posture.
+
+## Session 1698 update (Socratic pass 364)
+
+**Claim verified: "the ci.yml release job produces assets install.sh can actually verify and install" — FALSE (3 defects), fixed.**
+
+Defects found in the release job's archive/checksum steps:
+1. **Dir-wrapped tarballs broke install.sh.** `tar czf "X.tar.gz" X` nested the platform dir inside the archive; install.sh's post-extract search only looks at TMPDIR top level → "otedama binary not found". Fixed: `tar czf "X.tar.gz" -C X .` produces a flat archive (binary at top).
+2. **SHA256SUMS basename collision.** `artifacts/*/SHA256SUMS` uploaded N same-named files; GitHub rejects duplicate asset names (422) or clobbers — and each file hashed the *binary*, not the tarball, so even a unique name would not verify `${ARCHIVE}.tar.gz`. Replaced with a single `checksums.txt` (`sha256sum otedama-*.tar.gz`) — the exact name install.sh's checksum probe tries first.
+3. **Non-binary artifacts shipped.** `coverage-report/` and `benchmark-results/` dirs were tarred and uploaded to every release. Restricted the loop to `otedama-*/` glob.
+
+Smoke-tested the new loop in /tmp: produces `otedama-linux-amd64.tar.gz` containing `./otedama-linux-amd64` at top level and a `checksums.txt` whose entry matches install.sh's ` ${ARCHIVE}$` grep.
+
+Residuals: release.yml publishes only per-asset `.sha256` files (not a combined checksums.txt), so install.sh still cannot verify release.yml-produced assets without --skip-verify — recorded as a standing limitation, candidate for a future pass.

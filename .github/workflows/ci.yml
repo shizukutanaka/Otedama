@@ -661,21 +661,19 @@ jobs:
         with:
           path: ./artifacts
           
+      - name: Create release archives
+        run: |
+          cd artifacts
+          # Only binary artifacts — coverage/benchmark dirs must not ship.
+          # Flatten the archive (binary at top level) so install.sh can use it.
+          for dir in otedama-*/; do
+            tar czf "${dir%/}.tar.gz" -C "$dir" .
+          done
+
       - name: Create checksums
         run: |
           cd artifacts
-          for dir in */; do
-            cd "$dir"
-            sha256sum * > SHA256SUMS
-            cd ..
-          done
-          
-      - name: Create release archive
-        run: |
-          cd artifacts
-          for dir in */; do
-            tar czf "${dir%/}.tar.gz" "$dir"
-          done
+          sha256sum otedama-*.tar.gz > checksums.txt
           
       - name: Generate release notes
         id: release_notes
@@ -688,7 +686,7 @@ jobs:
         with:
           files: |
             artifacts/*.tar.gz
-            artifacts/*/SHA256SUMS
+            artifacts/checksums.txt
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
