@@ -13108,3 +13108,7 @@ TRUE: doctor.go:109-119 implements exactly the spec'd graded set — 0 when ever
 ## Session 2619 update (Socratic pass 1285 — DEPLOYMENT.md deep parity)
 
 All verified TRUE: OTEDAMA_BITCOIN_ADDRESS / OTEDAMA_WALLET_PASSPHRASE env names (cmd run.go), /healthz /readyz /metrics endpoints, `wallet verify` stdin→fingerprint contract, wallet.fingerprint sidecar auto-recreation, uid 65532 triple-consistency (Docker/k8s/doc), all four SLO metric names exist in the 46-series registry, `service install --config` argv plumbed, mnemonic-as-canonical-backup semantics (BIP-39 deterministic, forward-compatible), non-TLS tls_ca_file honest "no effect" (s2616 fix consistent), previously-annotated corrections (session 485: no checksums/cosign today, deploy-image-pin note) remain accurate.
+
+## Session 2620 update (Socratic pass 1286 — TROUBLESHOOTING.md parity)
+
+All verified TRUE: wallet verify/change-passphrase verbs exist (cmd/otedama/wallet.go:41-43); `service status` three-state Installed/Running output; doctor flag set is exactly {config, bitcoin-address, data-dir, json} — no --log-level, matching the doc's correction that `otedama --log-level=debug doctor` fails as unknown subcommand while `run --log-level=debug` is valid; GOMAXPROCS sizing advice (post-#515 replacement for the phantom --worker-threads flag); pool-latency advice consistent with doctor's probe output.
