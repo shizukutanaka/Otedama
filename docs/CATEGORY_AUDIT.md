@@ -10238,3 +10238,7 @@ Claim verified: Decide rejects nil input, invalid Policy, non-negative/non-finit
 ## Session 1912 update (Socratic pass 578 — chooseForDevice scoring invariants)
 
 Claim verified: candidateStreams filters by family acceptance, positive effective yield, and the minYield floor — with the idle reason distinguishing "below floor" (actionable) from "nothing wanted this device"; maxRaw is captured pre-policy so ForegoneSatsPerSec honestly reports the yield-regardless cost; the sort is stable, score-descending, StreamID-tiebroken (deterministic); hysteresis compares in the same policy-adjusted score space used for selection, so switches only happen on meaningful improvement. TRUE.
+
+## Session 1913 update (Socratic pass 579 — branch health + CI snapshot)
+
+Claim verified: HEAD is ancestor-clean off origin/master at 276 commits ahead; `go build`, `go vet`, `gofmt -l` all clean (s1900 checkpoint); PR #1405 CI shows 22 pending / 0 failed — the two known non-actionable classes remain (Go-pin matrices vs go.mod≥1.24, Dependency Review behind the repo's disabled dependency graph). TRUE.
