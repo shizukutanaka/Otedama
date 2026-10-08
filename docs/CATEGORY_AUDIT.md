@@ -14275,3 +14275,31 @@ Verification: stdlib `log.` + `fmt.Print` + `os.Stdout/Stderr` scan.
 
 Verdict: TRUE — output flows through injected seams; the two direct
 writes are the entry points the seams themselves need.
+
+## Session 2736 update (Socratic pass 1402 — GODEBUG surface census)
+
+Claim under test: every GODEBUG knob the binary depends on is pinned
+in go.mod — no silent behavior drift under a host's GODEBUG env.
+
+Verification: go.mod `godebug` block (go.mod:11-15) + GODEBUG_NOTES.
+
+- Three knobs pinned, all at their go1.24 defaults: `panicnil=0`
+  (panic(nil) panics — the .Error() call would panic on a nil-value
+  panic), `randautoseed=1` (math/rand auto-seed), `tlsmlkem=1`
+  (hybrid X25519MLKEM768 PQ key exchange enabled). The pins freeze
+  the toolchain defaults as the declared contract — an operator's
+  `GODEBUG=tlsmlkem=0` can't silently downgrade the TLS handshake.
+- `tlsmlkem=1` is the honest note: it's default-on in go1.24, the pin
+  makes it explicit and survives env override; the doc correctly
+  records the tlskyber→tlsmlkem rename and why we don't pin =0
+  (server-side behavior is the pool's call, not ours).
+- `fips140` documented as a posture note only — it can't go in
+  go.mod's godebug (build-mode knob) and no code branches on it; the
+  earlier doctor FIPS-check merge (#375-era, verified) is the only
+  surface and it's informational.
+- No other GODEBUG dependency: the codebase doesn't read
+  os.Getenv("GODEBUG") anywhere (zero hits) — behavior is fixed at
+  the manifest, not runtime-inspected.
+
+Verdict: TRUE — declared knob set complete and frozen at defaults;
+no hidden runtime GODEBUG dependencies.
