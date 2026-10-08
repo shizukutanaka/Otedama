@@ -23877,3 +23877,70 @@ Verification — census
   ends per request).
 
 Verdict: TRUE.
+
+## Session 3039 update (Socratic pass 1703 — channel-construction ledger)
+
+Claim under test: every
+channel carries a
+named, justified
+capacity — no
+unbounded relays.
+
+Verification — census
+of all 16
+`make(chan...)` sites:
+
+- Unbuffered
+  `chan struct{}`×3 —
+  pure signal channels
+  (job-version bump,
+  ticker done) where
+  unbuffered is the
+  protocol.
+- Named capacities:
+  `chan Job,8`×2,
+  `chan string,8`,
+  `chan Stats,8`,
+  `chan poolMsg,32`,
+  `chan Share,
+  Threads*4`,
+  `chan rpcResponse,1`
+  — the cap-1 V1
+  response channel
+  verified earlier:
+  the read loop can
+  never block on a
+  late response.
+- Producer-count
+  capacities:
+  `chan result,
+  len(f.sources)` and
+  `len(drivers)` —
+  fan-out buffers
+  equal to the
+  producer count
+  (the channel-
+  capacity class
+  verified sends
+  can't block).
+- `chan float64,
+  len(sources)` + `,1`
+  — the hashrate
+  feed's buffered
+  slots.
+- `chan struct{},
+  submitBurst` — the
+  token bucket (32
+  submit tokens).
+- `chan T, bufSize` —
+  generic fan-in.
+- `chan Quote,
+  cap(quoteCh)` — the
+  provider's clone-on-
+  restart.
+
+Verdict: TRUE —
+all 16 sites carry
+named capacity or
+protocol-intended
+unbuffered.
