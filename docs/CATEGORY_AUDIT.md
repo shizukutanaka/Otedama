@@ -28627,3 +28627,127 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3103 update (Socratic pass 1767 — crypto complete ledger)
+
+Claim under test: the
+crypto surface is
+sha256/sha512/hmac/
+rand/ecdh/aes-gcm/
+x509/subtle —
+plus x/crypto
+scrypt/pbkdf2/
+poly1305 — with
+the weak-crypto
+class absent.
+
+Verification —
+census:
+
+- `sha256.Sum256`×11 +
+  `sha256.New`×8 +
+  `sha512.New`×1 +
+  `hmac.New`×1 —
+  the
+  hash/
+  MAC
+  surface
+  (SHA-256d
+  +
+  HKDF).
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  all
+  crypto/rand.
+- `ecdh.P256`×3 +
+  `ecdh.PublicKey` +
+  `ecdh.PrivateKey` —
+  the
+  Noise-NX
+  P-256
+  stub.
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `cipher.AEAD`×2 —
+  the
+  seedstore
+  AES-GCM.
+- `x509.NewCertPool`×3 +
+  `x509.SystemCertPool`×2 +
+  `x509.CertPool`×1 —
+  the
+  TLS
+  trust
+  roots.
+- `tls.Config`×12 +
+  `tls.VersionTLS12`×4 +
+  `tls.Dialer`×4 +
+  `tls.Dial`×1 —
+  verified
+  TLS
+  class.
+- `subtle.ConstantTimeCompare`×1 —
+  the
+  wallet
+  passphrase
+  constant-
+  time
+  check.
+- x/crypto:
+  `scrypt.Key`×2 +
+  `pbkdf2.Key`×1 +
+  `poly1305.New`×3 —
+  the
+  KDF
+  +
+  Noise
+  AEAD
+  surface.
+- ZERO
+  `md5`,
+  `sha1`,
+  `rsa`,
+  `ecdsa`,
+  `ed25519`,
+  `des`,
+  `rc4`,
+  `elliptic`
+  (bare),
+  `dsa`,
+  `boringcrypto`,
+  `fips140`
+  imports —
+  the
+  weak/
+  off-policy
+  crypto
+  class
+  absent.
+- ZERO
+  `argon2`,
+  `bcrypt`,
+  `chacha20`
+  (bare),
+  `curve25519`,
+  `salsa20`,
+  `blake2`,
+  `blake3`,
+  `ripemd`,
+  `xtea`,
+  `twofish`,
+  `blowfish`,
+  `cast5`,
+  `idea`,
+  `serpent`,
+  `camellia`,
+  `gost`,
+  `sm2`,
+  `sm3`,
+  `sm4` —
+  the
+  exotic
+  cipher
+  class
+  absent.
+
+Verdict: TRUE.
