@@ -15924,3 +15924,17 @@ Periodic re-run of the four gates on the audit branch:
 
 Verdict: TRUE — every audited invariant since s2780 holds
 under the full gate set.
+
+## Session 2801 update (Socratic pass 1467 — embed census)
+
+Claim under test: any go:embed resource exists in-tree and
+is exercised.
+
+Verification: zero `go:embed` directives and zero `embed.FS`
+uses in production code. i18n message bundles are compiled
+Go maps (verified s2325), the BIP-39 wordlist is generated
+Go source (english_wordlist.go, hash-pinned at init), and
+no testdata/ assets are referenced by embed. The class is
+structurally absent — nothing can go missing at runtime.
+
+Verdict: TRUE (vacuous) — no embed surface.
