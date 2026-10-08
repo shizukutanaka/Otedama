@@ -13852,3 +13852,21 @@ error-looking argument — 11 sites reviewed line-by-line.
 
 Verdict: TRUE — `%w`/`%v` split is correct at all 11 sites; no error
 loses unwrap-ability to a `%v` verb.
+
+## Session 2718 update (Socratic pass 1384 — gofmt -s + vet -printf)
+
+Claim under test: the tree is clean under the *stricter* gofmt mode
+(simplification) — the routine `gofmt -l` gate could pass while
+simplifiable idioms accumulate.
+
+Verification:
+
+- `gofmt -s -l .` across the whole tree (internal + cmd + tests):
+  zero files listed. No simplifiable constructs — no `x[a:len(x)]`
+  that could be `x[a:]`, no explicit type annotations gofmt can drop,
+  no `[]T{[]T{...}}` reducible composite literals.
+- `go vet -printf ./...`: zero findings — format-verb/argument
+  agreement verified compiler-side on the current HEAD (covers what
+  the manual verb censuses check by reading).
+
+Verdict: TRUE.
