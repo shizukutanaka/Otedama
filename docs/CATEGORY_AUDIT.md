@@ -10202,3 +10202,7 @@ Claim verified: AkashProvider.Name() returns "AI Inference (Akash Network, simul
 ## Session 1903 update (Socratic pass 569 — simulated-quote determinism + graceful degradation)
 
 Claim verified: AkashProvider.publish sends a zero-yield quote when no GPU devices exist (arbitration excludes it gracefully), falls back to rate=95000 when the BTC feed is stale, grades confidence by feed freshness (0.6 stale / 0.85 fresh), and quotes the fixed midpoint of the documented [0.30, 0.60] USD/hr band with the 20% Akash fee folded into NetSatsPerSecond. Deterministic, bounded, honest. TRUE.
+
+## Session 1904 update (Socratic pass 570 — mining-yield math re-verification)
+
+Claim verified: MiningProvider.publish computes expected sats/sec = deviceHashrate/networkHashrate × 3.125 BTC / 600 s (mining.go:136–154), prefers live worker-measured hashrate over family fallbacks, uses the live network-hashrate feed with degraded-input confidence drop (0.95→0.7) when the wired feed goes stale, skips non-SHA256d devices, and charges no pool fee under solo payout. TRUE.
