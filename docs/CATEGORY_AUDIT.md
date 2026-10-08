@@ -22486,3 +22486,58 @@ Verification — census:
   wiring's operand list).
 
 Verdict: TRUE.
+
+## Session 3013 update (Socratic pass 1677 — net package ledger)
+
+Claim under test: the
+net surface is Conn-
+typed transports plus a
+handful of bounded
+dial/listen sites.
+
+Verification — census:
+
+- `net.Conn` ×14 — the
+  universal transport
+  abstraction across
+  stratumv1, stratumv2,
+  poolproto, and the
+  noise layer.
+- `net.Dialer` ×6 —
+  every dial site uses an
+  explicit Dialer with a
+  deadline (the 15s
+  attempt cap verified
+  at s2985+).
+- `net.SplitHostPort`
+  ×3 — the host:port
+  validation shared by
+  config and the pool
+  URL gate.
+- `net.Listen` ×1 —
+  httpserver/server.go
+  :111, the synchronous
+  listen that makes
+  bind failure a
+  startup error not a
+  runtime surprise.
+- `net.ParseIP` ×1 —
+  run.go:375, the
+  loopback classification
+  for --http-addr and
+  --pprof warnings.
+- `net.DefaultResolver`
+  ×1 — doctor hostname
+  probe (checks.go:482,
+  ctx-bound).
+- `net.Pipe` — comment
+  only (dialer.go:37
+  documents the test
+  injection seam).
+- ZERO netip usage —
+  ParseIP suffices for
+  the one IP check.
+- ZERO net.ListenTCP/
+  ListenUDP — TCP only.
+
+Verdict: TRUE.
