@@ -10486,3 +10486,7 @@ Claim verified: the network-hashrate fetcher implements the same adversarial pos
 ## Session 1974 update (Socratic pass 640 — extractor + cache-read honesty)
 
 Claim verified: every source extractor parses the endpoint's real wire shape and parses numbers strictly (ParseFloat + explicit NaN/Inf rejection — "95000foo" and non-finite literals cannot pass); the [100,1e8] USD plausibility band is a deliberate wide rail that kills unit/parse errors and hardens the vulnerable two-source median; BTCUSDRate falls back without pretending freshness (fresh=false before first success), RateAge exposes silent staleness as a monotonic counter, and the single-flight coalescing prevents a background refresh racing a manual fetch from doubling the API request rate (CoinGecko 429 ban). TRUE.
+
+## Session 1975 update (Socratic pass 641 — mining yield math)
+
+Claim verified: the mining quote computes expected sats/sec as (deviceHashrate/networkHashrate) × 3.125 BTC / 600 s × 1e8 — the correct block-share expectation for solo-style reward — then discounts 1% as a typical SV2 pool fee; a solo payout scheme restores net=gross since the coinbase pays the user directly (no pool cut exists to model); only SHA256d-capable devices get quotes; a wired-but-stale network-hashrate feed degrades the quote to the same 0.7-confidence tier as a stale price feed rather than silently claiming 0.95 on degraded input. TRUE.
