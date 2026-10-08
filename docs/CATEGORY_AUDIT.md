@@ -13056,3 +13056,7 @@ Sequence audit: 1,772 `## Session` blocks, sequence reaches s2605 continuously. 
 ## Session 2606 update (Socratic pass 1272 — branch mergeability re-verification)
 
 Re-verified post-drift: branch is 969 commits ahead, 0 behind origin/master; `merge-base --is-ancestor origin/master HEAD` confirms master is fully contained — the PR remains cleanly mergeable (no conflicts). Working tree clean (0 uncommitted files). TRUE.
+
+## Session 2607 update (Socratic pass 1273 — payout-scheme enum parity)
+
+Census: code accepts exactly `fpps`, `pplns`, `solo`, `tides` (validated enum, empty allowed). SPECIFICATION.md:69 documents "empty, or one of `fpps`/`pplns`/`tides`/`solo`" — exact 4-element parity in both directions. No fifth scheme registered, no documented scheme unimplemented. TRUE.
