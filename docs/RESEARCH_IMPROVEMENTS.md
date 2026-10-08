@@ -222,8 +222,17 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
+3. ✅ **Provider health/heartbeat** — detect a dead inference provider and
    stop routing GPUs to it (parallels HashrateMonitor for mining).
+   — **Already satisfied (verified session 1742):** provider liveness is
+   quote-driven — `pruneStaleStreams` (arbitrate.go:285-298) removes any
+   stream whose last quote is older than `streamStaleTimeout` (3 min,
+   arbitrate.go:128), the pruned keys are logged ("stream %q expired …
+   no longer routing to it", arbitrate.go:196-201), and `quoteFreshness`
+   (arbitrate.go:272-281) clamps zero/future `At` so a dead provider
+   cannot pin its freshness clock forward. A dead provider silently ages
+   out of `Decide`'s input and its devices return to the surviving
+   streams — exactly the stop-routing behaviour asked for.
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
