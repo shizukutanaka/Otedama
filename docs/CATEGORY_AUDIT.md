@@ -11906,3 +11906,7 @@ Claim verified: the logger degrades deliberately in every direction — nil Writ
 ## Session 2324 update (Socratic pass 990 — payout script type exhaustiveness)
 
 Claim verified: ScriptForAddress (script.go:36–79) can never emit a wrong-type locking script — the address is validated first, the bech32 branch maps witness version to OP_0/OP_1–16 with the ≤40-byte program, the base58 branch builds exact P2PKH/P2SH encodings, and every other type hits an explicit error at :78 — no silent default script. TRUE.
+
+## Session 2325 update (Socratic pass 991 — i18n bundle integrity)
+
+Claim verified: NewBundle (message.go:250–268) enforces its contract structurally — English catalog required and must be LangEnglish, nil/duplicate-language catalogs rejected; Render's fallback chain (lang → base-tag → English → conspicuous "!{id}!" placeholder + error) never returns an empty string; MissingTranslations/Languages return fresh sorted collections per call — no shared-map mutation hazard. TRUE.
