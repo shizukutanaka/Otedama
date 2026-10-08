@@ -12881,3 +12881,7 @@ Claim verified: the ci.yml payload is net-real — removes the two k8s deploy jo
 ## Session 2567 update (Socratic pass 1233 — code-review/test.yml diff check)
 
 Claim verified: code-review.yml's −203 lines removed vacuous JS-only secret/console greps (the repo ships no .js/.json) — the honest TODO census + dependency-review action survives, and the inline comment correctly attributes secret scanning to trufflehog in security.yml. test.yml gains concurrency cancellation, `contents: read`, per-job timeouts, and pins golangci-lint v1.64.8 off `latest` (matching the v1-schema config and Makefile). GO_VERSION 1.23.x in both = the same disclosed residual class (#1344). TRUE — both diffs carry honest intent.
+
+## Session 2568 update (Socratic pass 1234 — security/devin-direct-merge diff check)
+
+Claim verified: security.yml pins every floating tool ref off master/main/latest (gosec v2.29.0, trivy v0.36.0, trufflehog v3.97.9, nancy v2.1.0, govulncheck v1.1.4), drops the dead `security-tests` job from the report's needs/table, and scopes the IP-literal check to non-test sources with an honest allowlist (loopback help text + the 1.1.1.1:53 doctor probe). devin-direct-merge.yml restricts to master-PRs only (comment text assumes master), serializes per-PR comments, and drops the pointless full-history checkout (the steps only call `gh` API). TRUE — all honest hardening.
