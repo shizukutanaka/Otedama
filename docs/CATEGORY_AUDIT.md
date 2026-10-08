@@ -9412,3 +9412,7 @@ Claim verified: install.sh's candidate asset names match what the v3 release pip
 ## Session 1710 update (Socratic pass 376 — dependabot ecosystem coverage)
 
 Claim verified: dependabot watches every dependency surface the repo actually has — TRUE. `dependabot.yml` covers `gomod` (weekly, grouped `golang.org/x/*`), `github-actions` (weekly, direct only), and `docker` (weekly). The Dockerfile's two base images (`golang:1.24-alpine`, `gcr.io/distroless/static:nonroot`) both fall under the docker entry at directory `/`. Residual: `gomod` ignores toolchain directives for updates (Go version bumps remain manual — consistent with the rejected pin-update class).
+
+## Session 1711 update (Socratic pass 377 — AUDIT_CHECKLIST re-verification)
+
+Re-verified all 32 auditor-facing rows; three stale/incorrect items corrected in place: (1) row 6's ERE pattern `'TODO\|FIXME\|XXX'` silently passed because `\|` is a literal pipe under `-E` — fixed to `'TODO|FIXME|XXX'` and the claim itself re-verified (0 hits in `*.go`); (2) row 12's "one `@master`" was stale — all mutable HEAD refs pinned to release tags in s1692, posture now correctly described as major-tag refs; (3) row 25 lacked scope — Noise NX is a P-256 placeholder not wired into any live connection (§2), corrected so auditors don't read it as deployed pool-auth encryption. The rest of the checklist (scrypt params, wallet atomicity, dependency set, CI gate summary) re-verified true against current code.
