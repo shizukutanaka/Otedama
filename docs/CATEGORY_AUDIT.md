@@ -31010,3 +31010,123 @@ census:
   class).
 
 Verdict: TRUE.
+
+## Session 3123 update (Socratic pass 1787 — strconv complete ledger)
+
+Claim under test: the
+strconv surface is
+FormatUint/ParseUint/
+ParseFloat/Atoi/
+Quote/Itoa —
+wire numerics plus
+the two display
+conveniences.
+
+Verification —
+census:
+
+- `strconv.FormatUint`×10 +
+  `strconv.Itoa`×1 —
+  the
+  integer→string
+  surface
+  (wire
+  field
+  encoders +
+  display).
+- `strconv.ParseUint`×7 —
+  every
+  call
+  bitSize-32
+  for
+  wire
+  fields
+  or
+  port/
+  extranonce
+  widths
+  (verified
+  numeric-
+  bound
+  class).
+- `strconv.ParseFloat`×6 —
+  the
+  JSON
+  float
+  parsing
+  (rates
+  /
+  share
+  values).
+- `strconv.Atoi`×2 —
+  bounded
+  display
+  ints
+  (env
+  worker
+  count
+  +
+  port
+  parse
+  fallback).
+- `strconv.Quote`×1 —
+  the
+  daemon
+  `quoteToken`
+  service-argv
+  escaping.
+- ZERO
+  `strconv.ParseBool`,
+  `ParseInt`,
+  `ParseComplex`,
+  `ParseUint`×more,
+  `ParseFloat`×more,
+  `Atoi`×more,
+  `FormatBool`,
+  `FormatFloat`,
+  `FormatInt`,
+  `FormatComplex`,
+  `QuoteToASCII`,
+  `QuoteToGraphic`,
+  `QuoteRune`,
+  `QuoteRuneToASCII`,
+  `QuoteRuneToGraphic`,
+  `Unquote`,
+  `AppendQuote`,
+  `AppendQuoteToASCII`,
+  `AppendQuoteToGraphic`,
+  `AppendQuoteRune`,
+  `AppendFloat`,
+  `AppendInt`,
+  `AppendUint`,
+  `AppendBool`,
+  `AppendQuoteRuneToASCII`,
+  `AppendQuoteRuneToGraphic`,
+  `AppendQuoteRuneToGraphic`,
+  `CanBackquote`,
+  `IsPrint`,
+  `IsGraphic`,
+  `InGraphic`,
+  `InList`,
+  `RuneLen`,
+  `UnquoteChar`,
+  `NumError`,
+  `ErrRange`,
+  `ErrSyntax`,
+  `IntSize`,
+  `UintSize`,
+  `BitSize` —
+  residual
+  absent;
+  no
+  quoting
+  or
+  backquote
+  introspection
+  beyond
+  the
+  single
+  `Quote`
+  site.
+
+Verdict: TRUE.
