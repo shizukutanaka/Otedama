@@ -19297,3 +19297,37 @@ Verification:
 Verdict: TRUE — Reset is enforced
 on pool reuse; one-shot hashers are
 fresh per call.
+
+## Session 2944 update (Socratic pass 1609 — errors-API census)
+
+Claim under test: `errors.Is`, `As`,
+`Join`, `New`, `Unwrap` are all used
+correctly — Is on sentinels, As on
+pointer-to-error targets, New for
+leaf errors.
+
+Verification:
+
+- `errors.Is` — every call targets a
+  sentinel: os.ErrNotExist,
+  flag.ErrHelp, context.DeadlineExceeded,
+  context.Canceled, io.EOF,
+  bufio.ErrBufferFull, ErrNotBase58,
+  ErrNotBech32, http.ErrServerClosed.
+- `errors.As` — exactly one site
+  (run.go:2201): `errors.As(err, &fe)`
+  where `fe` is `*fatalError` — the
+  target is a non-nil pointer to a
+  type implementing `error`. Valid.
+- `errors.Join` — one site for the
+  "all sources failed" multi-fetch
+  collapse; preserves each cause.
+- `errors.New` — every call is a
+  leaf sentinel declaration
+  (~40 sites).
+- `errors.Unwrap` → zero sites —
+  error chains are walked by Is/As,
+  not manually.
+
+Verdict: TRUE — all errors API
+usage is canonical.
