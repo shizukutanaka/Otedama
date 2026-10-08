@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1789 — deploy.yml)
+- `rollback` job if-gate referenced nonexistent `refs/heads/main` → `refs/heads/master`; manual production deploys from master can now roll back on failure
 ### Fixed (session 1788 — deploy.yml)
 - `deploy-production` no longer requires `deploy-staging` in `needs:` — the staging if-gate is unsatisfiable on tag pushes and production dispatches, making production deploys unreachable in every trigger mode
 ### Fixed (session 1786 — ci-cd release binaries)

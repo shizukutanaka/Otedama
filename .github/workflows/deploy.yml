@@ -293,7 +293,7 @@ jobs:
           prerelease: false
 
   rollback:
-    if: failure() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: failure() && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     needs: [deploy-production]
     runs-on: ubuntu-latest
     timeout-minutes: 15
