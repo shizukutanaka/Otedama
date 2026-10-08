@@ -16585,3 +16585,26 @@ Verification — the complete writer set:
 Verdict: TRUE — each writer has exactly one writer
 goroutine or a documented serialize-by-construction
 contract.
+
+## Session 2828 update (Socratic pass 1494 — lock-across-receive census)
+
+Claim under test: no channel receive happens inside a
+mutex region — a lock held across `<-` couples the
+lock's availability to channel timing and is a classic
+lock-ordering deadlock.
+
+Verification:
+
+- Structural scan: every `x.Lock()/RLock()` region
+  searched for a `<-` receive before the matching
+  `x.Unlock()/RUnlock()` — zero hits across
+  internal/ and cmd/.
+- Combined with s2808's zero sends-under-lock: no
+  channel operation of either direction occurs inside
+  any mutex extent — lock scope is memory-only.
+- The pending respCh receive (cap-1) and the fan-in
+  select both live outside every lock (verified
+  pass-~1406/s2808 evidence carried).
+
+Verdict: TRUE — the class is absent; locks never wait
+on channels.
