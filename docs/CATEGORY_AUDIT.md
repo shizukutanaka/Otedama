@@ -13526,3 +13526,11 @@ No phantom URLs remain in the doc set. TRUE.
 **Milestone gate re-run (all green):** `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` on engine/config/doctor/poolproto{,/stratumv1,/stratumv2}/stratum/metrics/cmd — all PASS. TRUE.
 
 **Dependency freshness census:** go.yaml.in/yaml/v3 at latest (v3.0.5). x/crypto v0.48.0 and x/sys v0.41.0 are behind latest (v0.57.0 / v0.48.0) but pinned at the maximum compatible with the go.mod go1.24 floor — proxy.golang.org confirms x/crypto v0.49+ requires go1.25.0, v0.57.0 requires go1.26.0; x/sys v0.42+ requires go1.25.0, v0.48.0 requires go1.26.0. The bump remains a maintainer call on raising the Go floor (recorded s2584). TRUE.
+
+## Session 2702 update (Socratic pass 1368 — branch-diff surface census)
+
+Re-diffed `origin/master...HEAD` in full: 68 files, +7210/−904.
+
+- Non-ledger payload = 67 files, all previously audited: 9 workflows (each diff audited line-by-line in earlier passes), root artifacts (VERSION untouched; LICENSE/NOTICE/README/SECURITY/CHANGELOG/etc. all verified), 15 code files carrying only this branch's recorded real fixes (doctor panic-proofing, hashrate redirect refusal, worker partition, DefaultPoolURL, stratum wire fields, fuzz target, config-fixture updates), 11 ADRs (errata-only, immutability rule honored — every edit is an appended "## Erratum" block before the terminal Status/Related section, re-verified), skills/ + docs/ corrections. TRUE.
+- CLAUDE.md diff = 4 earlier-session inventory corrections only (wallet subcommand, quality-pass skills, scorecard.yml, main→master) — no rule changes. TRUE.
+- No unintended file appeared anywhere in the cumulative diff. TRUE.
