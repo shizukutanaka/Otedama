@@ -12877,3 +12877,7 @@ Claim verified: the deploy.yml payload is all real hardening — `deploy-product
 ## Session 2566 update (Socratic pass 1232 — ci.yml diff deep check)
 
 Claim verified: the ci.yml payload is net-real — removes the two k8s deploy jobs that referenced a nonexistent `k8s/` manifest tree (zero kubectl refs remain), pins golangci-lint to v1.64.8 matching the Makefile, pins trivy@v0.36.0/gosec@v2.29.0 off floating `master`, fixes `go build` to target `./cmd/otedama` (naming `main.go` alone fails on the 10-file package), adds `noexec` tmpfs to the hardened container check, and adds cancel-in-progress concurrency + `contents: read`. Residual (disclosed class): `GO_VERSION: '1.23.x'` remains below go.mod's 1.24 requirement — the rejected #1344 pin-raise class, standing debt already recorded.
+
+## Session 2567 update (Socratic pass 1233 — code-review/test.yml diff check)
+
+Claim verified: code-review.yml's −203 lines removed vacuous JS-only secret/console greps (the repo ships no .js/.json) — the honest TODO census + dependency-review action survives, and the inline comment correctly attributes secret scanning to trufflehog in security.yml. test.yml gains concurrency cancellation, `contents: read`, per-job timeouts, and pins golangci-lint v1.64.8 off `latest` (matching the v1-schema config and Makefile). GO_VERSION 1.23.x in both = the same disclosed residual class (#1344). TRUE — both diffs carry honest intent.
