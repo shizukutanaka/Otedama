@@ -18228,3 +18228,29 @@ Verification (`rg 'func init\('` — exactly 4):
 
 Verdict: TRUE — init surface is minimal,
 pure, and fail-fast.
+
+## Session 2903 update (Socratic pass 1568 — sync.Once census)
+
+Claim under test: `sync.Once` is used only for
+the two canonical patterns — idempotent Close
+and exactly-once goroutine start.
+
+Verification (`rg 'sync.Once'` — 4 sites):
+
+- stratumv2/dialer.go:200,233 —
+  `closeOnce` (single close) + `startOnce`
+  (readLoop launched once); Close also
+  stores `closed` before raw.Close so
+  concurrent closes race-safely.
+- stratumv1/dialer.go:224 —
+  `closeOnce` identical pattern.
+- stratumv1/stratumv1.go:159 —
+  `closeOnce` wraps ctxCancel +
+  cancelPending + conn.Close in the
+  single-shot block.
+- Zero `sync.Once` misuse (no Once inside
+  retry loops, no Once guarding non-
+  idempotent work).
+
+Verdict: TRUE — Once usage is canonical and
+race-correct.
