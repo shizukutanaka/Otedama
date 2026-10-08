@@ -17540,3 +17540,24 @@ Verification:
 
 Verdict: TRUE — zero committed secrets; the
 single hit is a deliberate test fixture.
+
+## Session 2873 update (Socratic pass 1538 — forbidden-path census)
+
+Claim under test: no path the CLAUDE.md
+architecture map forbids exists on the branch,
+and `internal/` contains only the mapped
+packages.
+
+Verification:
+
+- All 10 forbidden paths absent: cmd/otedamad,
+  internal/providers, internal/auth,
+  internal/render, internal/scientific,
+  internal/observability, internal/security,
+  pkg/, web/, k8s/.
+- `ls internal/` → exactly the 20 mapped
+  packages (arbitration … version) — no
+  unmapped addition.
+
+Verdict: TRUE — tree shape stays within the
+declared architecture map.
