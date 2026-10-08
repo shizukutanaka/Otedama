@@ -31528,3 +31528,205 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3126 update (Socratic pass 1790 — crypto complete ledger)
+
+Claim under test: the
+crypto surface is
+sha256/rand/hmac/
+aes-gcm/subtle/
+pbkdf2/scrypt/ecdh —
+the five named
+primitives plus
+the Noise
+handshake.
+
+Verification —
+census:
+
+- `sha256.Sum256`×11 +
+  `sha256.New`×8 +
+  `hmac.New`×1 +
+  `fnv.New32a`×1 +
+  `hash.Hash`×4 —
+  the
+  hash
+  class
+  (SHA-256d
+  work +
+  HMAC
+  pool +
+  the
+  one
+  FNV
+  job-id
+  map
+  key
+  +
+  the
+  interface
+  refs).
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  `crypto/rand`
+  ONLY
+  (verified
+  crypto-
+  rand
+  class;
+  zero
+  math/rand
+  in
+  the
+  same
+  files).
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `cipher.AEAD`×2 —
+  the
+  wallet
+  AES-GCM
+  + the
+  Noise
+  AEAD
+  wrapper.
+- `subtle.ConstantTimeCompare`×1 —
+  the
+  wallet
+  passphrase
+  compare
+  (verified
+  manual-
+  secret-
+  compare
+  class).
+- `pbkdf2.Key`×1 +
+  `scrypt.Key`×2 —
+  BIP-39
+  seed
+  derive +
+  seedstore
+  KDF.
+- `ecdh.P256`×3 +
+  `ecdh.PublicKey`×1 +
+  `ecdh.PrivateKey`×1 —
+  the
+  Noise
+  NX
+  P-256
+  curve
+  (the
+  honest
+  stub
+  recorded
+  at
+  s3007).
+- `crypto.*`×15 —
+  the
+  repo's
+  OWN
+  `internal/
+  btccrypto`
+  package
+  aliased
+  `crypto`
+  (ValidateAddress/
+  ScriptForAddress/
+  CoinbasePaysScript/
+  ClassifyAddress/
+  AddressP2{PKH,SH,WPKH,WSH,TR}/
+  Hash256) —
+  not
+  the
+  stdlib
+  crypto
+  package.
+- `hash.Set`/`hash.LessOrEqual` —
+  variable-
+  suffix
+  false
+  positives
+  (`blockHash.Set`,
+  `hash.LessOrEqual`
+  on
+  big.Int
+  variables).
+- ZERO
+  `crypto.Signer`,
+  `crypto.PublicKey`,
+  `crypto.PrivateKey`,
+  `crypto.Decrypter`,
+  `crypto.Hash`×stdlib,
+  `md5`,
+  `sha1`,
+  `sha512`,
+  `sha3`,
+  `ripemd160`,
+  `blake2b`,
+  `blake2s`,
+  `ed25519`,
+  `ecdsa`,
+  `ecdh.X25519`,
+  `ecdh.P384`,
+  `ecdh.P521`,
+  `rsa`,
+  `dsa`,
+  `des`,
+  `rc4`,
+  `blowfish`,
+  `twofish`,
+  `tea`,
+  `xtea`,
+  `cast5`,
+  `salsa20`,
+  `poly1305`,
+  `nacl/*`,
+  `bcrypt`,
+  `argon2`,
+  `hkdf`×stdlib,
+  `subtle.ConstantTimeByteEq`,
+  `subtle.ConstantTimeSelect`,
+  `subtle.ConstantTimeCopy`,
+  `subtle.ConstantTimeLessOrEq`,
+  `subtle.ConstantTimeEq`,
+  `cipher.NewCBCEncrypter`,
+  `cipher.NewCBCDecrypter`,
+  `cipher.NewCFBEncrypter`,
+  `cipher.NewCFBDecrypter`,
+  `cipher.NewCTR`,
+  `cipher.NewOFB`,
+  `cipher.NewGCMWithNonceSize`,
+  `cipher.NewGCMTLS`,
+  `cipher.NewGCMWithRandomNonce`,
+  `cipher.NewGCMWithTagSize`,
+  `cipher.Block`,
+  `cipher.BlockMode`,
+  `cipher.Stream`,
+  `cipher.StreamReader`,
+  `cipher.StreamWriter`,
+  `cipher.NewGCMWithTagSize` —
+  every
+  stream
+  cipher,
+  legacy
+  hash,
+  public-
+  key
+  primitive
+  beyond
+  P-256
+  ECDH
+  absent;
+  HKDF
+  is
+  hand-rolled
+  via
+  the
+  pooled
+  HMAC
+  (verified
+  hkdf-
+  chain
+  class).
+
+Verdict: TRUE.
