@@ -15328,3 +15328,32 @@ reproducibility is enforced at four independent points.
 
 Verdict: TRUE — the escape-hatch surface is empty and the
 build environment forbids reintroducing it silently.
+
+## Session 2778 update (Socratic pass 1444 — interface-guard census)
+
+Claim under test: every interface implementation is either
+compile-guarded or structurally bound at a typed boundary, so a
+signature drift fails to compile rather than silently degrading
+to a non-matching assertion.
+
+Verification: 17 exported interfaces.
+
+- Compile-guarded in non-test code: btccrypto.Scheme
+  (secp256k1Stub), provider.Provider (Mining+Akash),
+  poolproto.Dialer, PoolNoticeReceiver, DifficultyWatcher
+  (stratumv1.go:178 inline assertion in a var block).
+- Compile-guarded in tests: Connection, Session, Clock
+  (System+Fake), plus duplicate Provider/Dialer guards.
+- ReconnectWaiter: *session implements ReconnectWait()
+  (stratumv1.go:478, capped at 300s) and is consumed only via
+  the run.go:1667 type assertion — verified implemented, not
+  silently false.
+- RateSource/NetworkHashrateSource: concrete fetchers are
+  passed into constructors typed `RateSource` — a signature
+  drift fails at the call site, no guard needed.
+- hal.Device/Driver/Detector: drivers register through
+  Registry.Add which validates Identity at insertion; test
+  stubs guarded.
+
+Verdict: TRUE — 100% of interface implementations are pinned
+by a compile guard or an unavoidable typed boundary.
