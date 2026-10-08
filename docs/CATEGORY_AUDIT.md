@@ -17058,3 +17058,21 @@ three packages cover the mutex/atomic/WaitGroup
 idioms the sweeps verified.
 
 Verdict: TRUE — zero races detected.
+
+## Session 2849 update (Socratic pass 1514 — in-tree fuzz smoke)
+
+Claim under test: the wire-boundary fuzz targets
+still crash-free on the current tree.
+
+Verification (20s each, `go test -fuzz`):
+
+- FuzzDecodeHeader — ~2.75M execs, 9 interesting
+  inputs, **zero crashes**.
+- FuzzDecoder_ReadFrame — ~406k execs, 28
+  interesting inputs, **zero crashes**.
+
+Re-arms the earlier fuzz smoke after the
+accumulated commits; the decoders' bound-before-
+alloc and U24 guards hold under mutation.
+
+Verdict: TRUE — zero crashes on the frame decoders.
