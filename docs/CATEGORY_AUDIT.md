@@ -36022,3 +36022,163 @@ census:
   surface.
 
 Verdict: TRUE.
+
+## Session 3154 update (Socratic pass 1818 — sort + slices + maps + cmp detail ledger)
+
+Claim under test: the
+ordering
+surface
+is
+100%
+the
+generic
+packages —
+slices/
+cmp/
+maps —
+with
+zero
+remaining
+`sort.`
+legacy
+API.
+
+Verification —
+census:
+
+- `slices.Sort`×12 —
+  every
+  plain
+  sort
+  (metric
+  names,
+  device
+  ids,
+  doctor
+  check
+  names).
+- `slices.SortFunc`×2 +
+  `SortStableFunc`×1 —
+  the
+  custom-
+  comparator
+  sorts.
+- `slices.Contains`×1 —
+  the
+  sole
+  membership
+  helper
+  (manual
+  loops
+  verified
+  as
+  deliberate
+  in
+  the
+  manual-
+  contains
+  class).
+- ZERO
+  `sort.` —
+  the
+  entire
+  legacy
+  sort
+  package
+  is
+  gone
+  (Slice,
+  SliceStable,
+  Strings,
+  Ints,
+  Float64s,
+  Search,
+  Reverse,
+  StringSlice —
+  all
+  absent;
+  modernization
+  complete
+  via
+  #619/#1235).
+- `cmp.Compare`×5 +
+  `cmp.Or`×4 —
+  the
+  ordered
+  comparisons
+  and
+  first-
+  nonzero
+  defaults
+  (#1339).
+- `maps.Copy`×2 +
+  `maps.Clone`×1 —
+  map
+  merge/
+  clone
+  (#1335).
+- ZERO
+  `slices.BinarySearch`,
+  `BinarySearchFunc`,
+  `Reverse`,
+  `Equal`,
+  `Index`,
+  `IndexFunc`,
+  `Delete`,
+  `DeleteFunc`,
+  `Insert`,
+  `Replace`,
+  `Compact`,
+  `CompactFunc`,
+  `Concat`,
+  `Grow`,
+  `Min`,
+  `Max`,
+  `All`,
+  `Backward`,
+  `Collect`,
+  `AppendSeq`,
+  `Repeat`,
+  `Values`,
+  `Keys`,
+  `SortedSeq`,
+  `SortedSeqFunc`,
+  `ConcatSeq`,
+  `Sorted`,
+  `ContainsFunc`,
+  `IsSorted`,
+  `IsSortedFunc`,
+  `Chunk` —
+  no
+  iterator/
+  seq
+  APIs,
+  no
+  binary
+  search
+  (tiny
+  collections
+  sorted
+  eagerly).
+- ZERO
+  `maps.All`,
+  `maps.Keys`,
+  `maps.Values`,
+  `maps.Collect`,
+  `maps.Insert`,
+  `maps.DeleteFunc`,
+  `maps.Equal`,
+  `maps.EqualFunc`,
+  `maps.Clone`×0? —
+  correction:
+  `maps.Clone`×1
+  as
+  counted
+  above;
+  the
+  iterator
+  family
+  is
+  absent.
+
+Verdict: TRUE.
