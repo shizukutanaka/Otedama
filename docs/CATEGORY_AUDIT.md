@@ -13244,3 +13244,7 @@ Two FALSE claims found and corrected in-place (errata appended, originals preser
 ## Session 2653 update (Socratic pass 1319 — competitive-analysis full re-sweep)
 
 All verifiable claims re-checked: failover claim at :83 already carries the corrected wording (pools[] config-driven, list-order auto-failover at run.go:515-526 with per-pool User/TLSCAFile/Password resolution — no dedicated UI, exactly as disclosed); session-506 corrections present (v30 ships the experimental IPC Mining Interface — `bitcoin -m node -ipcbind=unix` — not SV2 itself; LDK→stdlib BIP-39/scrypt/AES-256-GCM divergence and x/text→internal/i18n divergence disclosed); ZKP authentication correctly marked v4.0-构想 with no current implementation (CLAUDE.md internal/auth consistent); fuzz-continuous-application claim backed by 23 targets + test.yml fuzz job; `otedama run --bitcoin-address` simplified entry real; snapshot qualifiers at :3/:9 honest. claim verified: docs/competitive-analysis.md — TRUE
+
+## Session 2654 update (Socratic pass 1320 — milestone gate)
+
+Full local gate re-run: `gofmt -l internal cmd` empty, `go build ./...` clean, `go vet ./internal/... ./cmd/...` clean, `go test -count=1` all 24 package legs green (engine 24.9s, lightning 12.5s, doctor 7.1s). claim verified: milestone gate — TRUE
