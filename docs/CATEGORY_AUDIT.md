@@ -13128,3 +13128,7 @@ FALSE claim found + corrected: ADR-010's context describes v3.0.0-alpha.1's engi
 ## Session 2624 update (Socratic pass 1290 — ADR index/status parity)
 
 All TRUE: README index lists all 11 ADRs; file statuses match the index exactly (7 Accepted incl. ADR-011's dash-prefixed Status line, 4 Proposed). ADR-002's index annotation "partially superseded by ADR-006" is consistent with its own errata (V1 dialer shipped via poolproto). Status vocabulary constrained to {Proposed, Accepted, Deprecated, Superseded} per README contract. All index links resolve to real files.
+
+## Session 2625 update (Socratic pass 1291 — ADR-011 + Noise stub parity)
+
+All TRUE: ADR-011's Accepted status vs go.mod — neither dcrec/secp256k1 nor btcec/v2 is a dependency yet (3 direct deps unchanged), consistent with "decision accepted, wiring pending" + KNOWN_LIMITATIONS §2. noise.go self-documents the P-256 stub honestly (:27-32 rationale, :107 v3.1.0 replacement note, :146-152 encoding caveat). Errata correctly consolidate to btcec/v2 ellswift (XElligatorSwift/V2Ecdh) and preserve the CODEOWNERS maintainer-review boundary. Verified against live code, not re-touched (maintainer territory — verdict only).
