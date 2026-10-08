@@ -12873,3 +12873,7 @@ Claim verified: all branch-added tests execute green — `TestConfigShow_Sanitiz
 ## Session 2565 update (Socratic pass 1231 — deploy.yml diff deep check)
 
 Claim verified: the deploy.yml payload is all real hardening — `deploy-production` needs-list fix (removing `deploy-staging`, whose always-false if-gate was silently skipping every production deploy — a genuine structural bug), removal of the archived `actions/create-release@v1` step that raced release.yml's action-gh-release, rollback gate corrected `refs/heads/main` → `refs/heads/master` (previously unfireable), health probe `/health` → `/healthz` matching the real httpserver route, concurrency serialization without canceling in-flight releases, `contents: read` least-privilege, per-job timeouts, PR-gated registry login/push. TRUE — every workflow line carries honest intent.
+
+## Session 2566 update (Socratic pass 1232 — ci.yml diff deep check)
+
+Claim verified: the ci.yml payload is net-real — removes the two k8s deploy jobs that referenced a nonexistent `k8s/` manifest tree (zero kubectl refs remain), pins golangci-lint to v1.64.8 matching the Makefile, pins trivy@v0.36.0/gosec@v2.29.0 off floating `master`, fixes `go build` to target `./cmd/otedama` (naming `main.go` alone fails on the 10-file package), adds `noexec` tmpfs to the hardened container check, and adds cancel-in-progress concurrency + `contents: read`. Residual (disclosed class): `GO_VERSION: '1.23.x'` remains below go.mod's 1.24 requirement — the rejected #1344 pin-raise class, standing debt already recorded.
