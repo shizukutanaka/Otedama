@@ -10122,3 +10122,7 @@ Claim verified: SPECIFICATION §3's config table covers all 20 yaml tags in inte
 ## Session 1883 update (Socratic pass 549 — SPECIFICATION exit-code table)
 
 Defect found and fixed: SPECIFICATION §2's exit-code table presented 0/1/64/78 as the script-reliable contract but omitted `doctor`'s distinct result-graded set (0 pass/skip, 1 warn, 2 fail — doctor.go:111), so a script mapping `1` → "runtime failure" would misclassify a doctor warning. Added the doctor set to §2 with its Report.ExitCode reference.
+
+## Session 1884 update (Socratic pass 550 — README Go-requirement note)
+
+Defect found and fixed: README's Requirements still described the pre-simplification two-part declaration — "`go 1.22` 宣言に加え `toolchain go1.24.0` と `godebug tlsmlkem`" — while go.mod now declares `go 1.24.0` directly (no toolchain line; the godebug block exists but is not the version gate). Corrected to the single-directive statement.

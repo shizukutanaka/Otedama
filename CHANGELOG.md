@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1884 — README.md)
+
+- Requirements note now states the actual go.mod declaration (`go 1.24.0`)
+  instead of the pre-simplification `go 1.22` + toolchain/godebug narrative.
+
 ### Fixed (session 1883 — docs/SPECIFICATION.md)
 
 - SPECIFICATION §2 exit-code table now documents `doctor`'s result-graded
