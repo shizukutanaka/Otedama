@@ -20163,3 +20163,59 @@ Verdict: TRUE — logging is
 single-sourced; bare `log`
 and ad-hoc `slog` calls are
 absent.
+
+## Session 2966 update (Socratic pass 1631 — path/filepath census)
+
+Claim under test: `path` package
+is absent; `path/filepath` is
+the only path API and all joins
+use local-controlled segments
+plus `EvalSymlinks` where the
+filesystem layout matters.
+
+Verification:
+
+- `path` — zero imports.
+- `filepath.Join` — ~121 sites;
+  all segments verified
+  local-controlled at s2967
+  (datadir + fixed names).
+- `filepath.EvalSymlinks` — 2
+  sites:
+  - hal/gpu_linux.go:80 —
+    canonicalize a sysfs entry
+    before opening (verified
+    s2384).
+  - daemon/service.go:88 —
+    canonicalize the service
+    binary path before writing
+    the unit/plist.
+- `filepath.Glob` — 1 site,
+  wallet.go:268 — the
+  `.wallet-*.tmp` temp sweep
+  (verified s2427).
+- `filepath.Separator` — 2
+  sites, both inside
+  `launchdLogPath`'s
+  home-dir-missing fallback:
+  `filepath.Join(string(
+  filepath.Separator), "tmp",
+  name)` builds `/tmp/<name>`
+  portably — graceful-degrade
+  only, launchd branch only.
+- `filepath.IsAbs`, `Base`,
+  `Dir` — test-only.
+- Zero `filepath.Walk`,
+  `WalkDir`, `Abs`, `Rel`,
+  `Ext`, `Match`, `Clean`,
+  `Split`, `VolumeName`,
+  `FromSlash`, `ToSlash`,
+  `HasPrefix` (deprecated),
+  `SplitList`, `Localize`
+  in production.
+
+Verdict: TRUE — path handling
+is confined to filepath.Join
+on local-controlled segments +
+EvalSymlinks for the two
+places that canonicalize.
