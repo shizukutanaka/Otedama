@@ -10286,3 +10286,7 @@ Claim verified: checkClockSkew probes with a 5s ctx-bound request via an injecta
 ## Session 1924 update (Socratic pass 590 — doctor economics checks)
 
 Claim verified: four advisory checks stay honest — checkPowerEconomics warns on a half-set pair naming the exact metric that dies; checkEnvVars surfaces silently-dropped malformed OTEDAMA_* vars (same warnings run/config validate print); checkProfitabilityFloor refuses to guess a "too high" threshold and instead points at the observable otedama_devices_idle gauge; checkPayoutScheme gives accurate per-scheme variance/custody context and only nudges (Pass+Fix) when unset. TRUE.
+
+## Session 1925 update (Socratic pass 591 — doctor transport checks)
+
+Claim verified: checkPoolEncryption names the real adversary payoff for plaintext stratum+tcp:// (payout-address rewrite → stolen earnings) with userinfo-stripped display and honest default-pool skip; checkPoolTLSCA validates each tls_ca_file at diagnose time with the same x509 parser the dialer uses — flagging the silently-ignored non-stratum+tls:// case and unreadable/non-PEM files before they degrade to a confusing dial failure. TRUE.
