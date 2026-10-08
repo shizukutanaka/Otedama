@@ -11730,3 +11730,7 @@ Claim verified: every package-level `var` is an effectively-immutable table or a
 ## Session 2280 update (Socratic pass 946 — path-hygiene census)
 
 Claim verified: no path component in the tree comes from adversarial input — every filepath.Join operand is either a compile-time constant (walletFile, fingerprintFile, systemdUnitName), an operator-controlled value (--data-dir, HOME/XDG/APPDATA env — the operator owns these by definition), or a kernel-generated sysfs basename (Glob/ReadDir over /sys/class/drm — kernel device names cannot contain `..`). Pool-decoded strings never reach the filesystem layer at all, so the traversal surface is structurally absent; the one Glob (.wallet-*.tmp stale-temp sweep) is confined to our own data dir. TRUE.
+
+## Session 2281 update (Socratic pass 947 — log-injection census)
+
+Claim verified: all remote-derived text reaches log lines through the sanitizer or a parse-validated field — V1 reject `result.Reason` and V2 `e.Error` both pass through poolproto.SanitizePoolText before `%s` formatting (run.go:1317/1814); client.show_message notices are sanitized at the parse boundary (parse.go:241) before entering PoolNotices(); "connected to %s" sites log only the URL host component which is parse-validated and userinfo-stripped; remaining `%s` args are compile-time enums, numeric durations, or operator-owned config fields. No path exists where raw pool bytes reach a terminal log line — ANSI injection is structurally blocked at the two boundaries. TRUE.
