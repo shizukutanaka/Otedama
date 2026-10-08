@@ -10952,3 +10952,7 @@ Claim verified: the nBits↔target math can't produce a silently-unwinnable job 
 ## Session 2089 update (Socratic pass 755 — worker lifecycle + MeetsTarget)
 
 Claim verified: the worker lifecycle can't deadlock or corrupt the share stream — Stop before Start returns immediately via the started flag; the cancelReady rendezvous (cancel published before close) structurally eliminates the Start-vs-Stop hang; a second Start panics immediately at the CAS rather than corrupting the channel later; shares close exactly once after wg.Wait so no send-on-closed panic is possible; NonceStep defaults to Threads preserving the residue-class partition; DifficultyFromTarget returns +Inf on a non-positive target (honest infinite difficulty, never a fake finite value); and MeetsTarget inherits the strict TargetFromNBits validation rather than a separate path. TRUE.
+
+## Session 2090 update (Socratic pass 756 — hashrate feed honesty)
+
+Claim verified: the network-hashrate feed can't silently poison mining-yield math — each source's body is capped at 64 KiB and its value must sit inside a 1e18–1e23 plausibility band before it can reach the median (a compromised endpoint is rejected, not averaged); if every source fails the fetch errors honestly rather than fabricating a number; a 2-source divergence greater than 4x distrusts the feed outright instead of averaging a poisoned pair; and CurrentHashrate returns a fresh flag that expires after HashrateCacheDuration — stale data is disclosed as stale, never passed off as current. TRUE.
