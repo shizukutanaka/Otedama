@@ -9907,3 +9907,7 @@ Claim verified: config.yaml.example covers **every** yaml field of the Config st
 ## Session 1831 update (Socratic pass 497 — env-var read-site verification)
 
 Claim verified: each of the 15 documented OTEDAMA_* vars has a live read site — 6 string vars in applyEnvLayer (BITCOIN_ADDRESS, LOG_LEVEL, LOG_FORMAT, LANGUAGE, DATA_DIR, HTTP_ADDR), 5 numeric vars in the numericEnvVars SSOT (ARBITRATION_HYSTERESIS_PCT, MIN_YIELD_SATS_PER_SEC, CURTAIL_BELOW_BTC_USD, POWER_WATTS, ELECTRICITY_PRICE_PER_KWH), OTEDAMA_CONFIG in configfile.go's 3-layer resolution, and 3 wallet vars in cmd/otedama (WALLET_PASSPHRASE, WALLET_NEW_PASSPHRASE, WALLET_MNEMONIC_PASSPHRASE). docs/API.md's env table lists exactly these 15 — zero drift both directions. TRUE.
+
+## Session 1832 update (Socratic pass 498 — package import-direction audit)
+
+Claim verified: the dependency DAG matches the architecture map exactly — engine is imported by cmd/otedama/run.go only; arbitration imports hal only (pure logic) and is imported by engine only; provider→hal, doctor→{btccrypto,config,poolproto}, daemon→config, config→btccrypto, httpserver→metrics; all 13 leaf packages (poolproto, stratum, lightning, metrics, miner, rates, tui, btccrypto, clock, i18n, logger, version, hal) import zero internal packages. No cycles, no upward imports, no skip-layer edges. TRUE — Martin's dependency-inversion boundary holds structurally.
