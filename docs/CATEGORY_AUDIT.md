@@ -18073,3 +18073,32 @@ Verification (worker.go:288-331):
 Verdict: TRUE — hot path is alloc-free and
 IO-free; share delivery is bounded-loss with
 observability.
+
+## Session 2897 update (Socratic pass 1562 — non-blocking-select census)
+
+Claim under test: `select`+`default` sites are
+bounded non-blocking probes, not busy-spin
+loops or silent loss.
+
+Verification (`rg 'select' + 'default:'`):
+
+- worker.go:264 — ctx.Done() poll at each
+  1024-nonce batch boundary (the loop body
+  does real hashing; not a spin).
+- worker.go:315 — share send non-blocking;
+  drop counted via dropCount (observable).
+- run.go:2249 — submit rate-limiter token
+  probe: `return true` on token, `default` →
+  caller drops with accounting.
+- stratumv1.go:216 — ctx poll before dial
+  work; stratumv1.go:391-402 — difficulty
+  overwrite: drain stale then re-send keeps
+  only the newest retarget (documented).
+- clock_test / others — test-only.
+- Zero busy-spin sites (no `for { select
+  { default: } }` without real work between
+  polls).
+
+Verdict: TRUE — every non-blocking select
+either yields real work between polls or
+deliberately drops with observability.
