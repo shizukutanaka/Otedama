@@ -27450,3 +27450,112 @@ census:
   surface.
 
 Verdict: TRUE.
+
+## Session 3092 update (Socratic pass 1756 — net/crypto/tls complete ledger)
+
+Claim under test: the
+net surface is
+Conn/Dialer/
+SplitHostPort/Listen
+and the crypto
+surface is
+sha256/sha512/hmac/
+ecdh/aes/cipher/
+rand — with TLS
+always verified
+and weak crypto
+absent.
+
+Verification —
+census:
+
+- `net.Conn`×14 +
+  `Dialer`×6 +
+  `SplitHostPort`×3 +
+  `Listen`×1 +
+  `Pipe`×1 +
+  `ParseIP`×1 +
+  `DefaultResolver`×1 —
+  the
+  transport
+  surface.
+- `tls.Config`×12 +
+  `VersionTLS12`×4
+  (MinVersion
+  pin at all
+  4 TLS
+  sites) +
+  `Dialer`×4 +
+  `Dial`×1 —
+  verified
+  TLS≥1.2
+  class.
+- `sha256.Sum256`×11 +
+  `sha256.New`×8 +
+  `sha512.New`×1 +
+  `hmac.New`×1 —
+  the
+  hash
+  surface.
+- `ecdh.P256`×3 +
+  `PublicKey`/`PrivateKey`×1 —
+  the
+  Noise
+  NX
+  handshake
+  (stub,
+  maintainer
+  territory).
+- `aes.NewCipher`×2 +
+  `cipher.NewGCM`×2 +
+  `AEAD`×2 —
+  the
+  seedstore
+  encryption.
+- `rand.Reader`×11 +
+  `rand.Int`×2 —
+  all
+  entropy
+  is
+  crypto/rand;
+  ZERO
+  math/rand.
+- `x509.NewCertPool`×3 +
+  `SystemCertPool`×2 +
+  `CertPool`×1 —
+  the
+  TLS root
+  verification
+  surface.
+- `btccrypto` API:
+  `ValidateAddress`×4 +
+  `ScriptForAddress` +
+  `CoinbasePaysScript` +
+  `ClassifyAddress` +
+  `Address*`×5 +
+  `Hash256`×2 —
+  the
+  internal
+  crypto
+  abstraction.
+- ZERO `md5`,
+  `sha1`,
+  `rsa`,
+  `ed25519`,
+  `des`,
+  `rc4`,
+  `dsa`,
+  `ecdsa`,
+  `elliptic` —
+  weak
+  crypto
+  absent.
+- `tls.go`×5
+  matches
+  are
+  file-name
+  references,
+  not
+  API.
+
+Verdict: TRUE.
