@@ -10534,3 +10534,7 @@ Claim verified: the registry rejects, at registration (panic on compile-time-con
 ## Session 1986 update (Socratic pass 652 — HTTP management surface)
 
 Claim verified: the server mounts a private mux (pprof is invoked as handler functions, never blank-imported onto DefaultServeMux — a process-wide leak channel); all four timeouts are configured (5s header timeout is the slowloris bound); readiness is a true tri-state that the engine drives only after the pool handshake, not a static "started"; an unexpected Serve termination is captured into serveErr for supervisor detection rather than vanishing; Stop is a bounded graceful shutdown; the index handler answers "/" only and 404s everything else; the doc honestly states no-auth-by-design with a pprof exposure warning. TRUE.
+
+## Session 1987 update (Socratic pass 653 — go_* runtime collector fidelity)
+
+Claim verified: RuntimeCollector emits client_golang-compatible go_* names so stock Grafana dashboards work unmodified, and honestly documents its one semantic divergence — go_gc_duration_seconds becomes a _total counter (plus go_gc_cycles_total) since no summary type exists, preserving the rate() queries dashboards actually use; the Go version is captured once at construction (build identity cannot drift at scrape time) and is label-escaped via escapeLabel rather than %q (Go quoting ≠ Prometheus quoting). TRUE.
