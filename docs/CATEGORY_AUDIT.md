@@ -12710,3 +12710,7 @@ Claim checked: the ledger's recorded fuzz count (21 targets across 13 files, s10
 ## Session 2526 update (Socratic pass 1192 — per-package test-presence census)
 
 Claim verified: every directory under internal/ and cmd/ that contains non-test .go files also contains at least one *_test.go — zero test-less packages in the tree (CLAUDE.md's 90%-coverage posture is structurally represented, not just numerically). The fuzz census at s2525 complements: 11 of those packages additionally carry property-level Fuzz targets at every wire/parse boundary. TRUE.
+
+## Session 2527 update (Socratic pass 1193 — platform-suffix + build-tag parity census)
+
+Claim verified: the tree has exactly three platform-suffixed sources — hal/gpu_linux.go (`//go:build linux`), tui/width_unix.go (`//go:build unix`), tui/width_windows.go (`//go:build windows`); each carries an explicit tag matching its filename suffix (redundant-but-explicit, keeps the constraint visible in editors/diffs), and the unix|windows pair covers the whole width-detection matrix with no overlap gap. TRUE — cross-platform build hygiene holds; no orphan constraint files, no contradictory tags.
