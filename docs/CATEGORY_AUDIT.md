@@ -12050,3 +12050,7 @@ Claim verified: the SV2 adapter Submit returns ShareResult{Accepted:true} but it
 ## Session 2360 update (Socratic pass 1026 — HashrateMonitor stall honesty)
 
 Claim verified: NewHashrateMonitor defaults a degenerate maxStall<1 to 3 so a single sample can't trigger (stats.go:457–460); warn fires once per stall episode at stallCount>=maxStall && !warned (:467–476) and re-arms only on a recovery above the floor, logging "hashrate recovered" — a stall can't be re-reported as ongoing nor silently retriggered (:478–484); Stalled() mirrors the live warned state for health endpoints (:491); the floor comparison includes exact-floor readings as stalls (:467). TRUE.
+
+## Session 2361 update (Socratic pass 1027 — publishBTCRate observed-vs-unobserved honesty)
+
+Claim verified: the publish boundary never emits an unobserved zero — rate guarded >0, skew guarded >0 (0 = documented "not yet observed") (stats.go:511–516); rate age published only everFetched so a pre-fetch meaningless zero can't masquerade as a fresh feed, and a stalled feed is visible via growing age even while the value looks healthy (:518–521); SourceHealth publishes the constant total always but ok/total only once fetched so silent erosion (1-of-3 median) is visible before outright failure (:523–528); publishDifficulty no-ops diff<=0 (:536–538). TRUE.
