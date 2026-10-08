@@ -38938,3 +38938,141 @@ census:
   needed.
 
 Verdict: TRUE.
+
+## Session 3174 update (Socratic pass 1838 — slog/logger/log ledger)
+
+Claim under test: `log/slog`
+is
+used
+only
+inside
+`internal/logger`
+(the
+wrapper
+owns
+handler
+construction);
+stdlib
+`log`
+is
+never
+used;
+`slog.SetDefault`/
+`slog.Default()`
+is
+never
+mutated
+(the
+package
+singleton
+is
+`atomic.Pointer`-backed).
+
+Verification —
+census:
+
+- `slog`:
+  13
+  hits,
+  all
+  inside
+  `internal/logger/logger.go`
+  —
+  `NewTextHandler`×2,
+  `NewJSONHandler`×2,
+  `Logger`×2,
+  `New`×1,
+  `Handler`×1,
+  `HandlerOptions`×1,
+  `Level`+4
+  `Level*`×1
+  each.
+  ZERO:
+  `SetDefault`,
+  `Default()`,
+  `With`,
+  `Group`,
+  `LogAttrs`,
+  `Record`,
+  `Source` —
+  the
+  global
+  default
+  handler
+  is
+  never
+  touched;
+  each
+  `Logger`
+  owns
+  its
+  handler.
+- stdlib
+  `log`:
+  ZERO —
+  no
+  `import "log"`
+  anywhere;
+  the
+  only
+  `log.`
+  qualifier
+  is
+  the
+  repo's
+  own
+  `log.Adapter`
+  seam
+  (engine
+  callback)
+  ×6.
+- `internal/logger`
+  qualified
+  API:
+  `Discard`×2,
+  `New`×1,
+  `ParseLevel`×1,
+  `Logger`×1,
+  `Config`×1,
+  `FormatText`/`FormatJSON`/`LevelInfo`×1
+  —
+  production
+  call
+  sites
+  pass
+  loggers
+  via
+  `Options.Logger`
+  callbacks
+  or
+  `FromContext`
+  rather
+  than
+  importing
+  the
+  package
+  (only
+  2
+  prod
+  files
+  qualify
+  `logger.`).
+- `logger.Logger`
+  public
+  surface
+  inventory:
+  `ParseLevel`,
+  `New`,
+  `Discard`,
+  `Adapter`,
+  `IntoContext`,
+  `FromContext`,
+  `SetDefault`
+  —
+  matches
+  prior
+  singleton/
+  adapter
+  audits.
+
+Verdict: TRUE.
