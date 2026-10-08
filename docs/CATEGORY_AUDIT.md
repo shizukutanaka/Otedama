@@ -12789,3 +12789,7 @@ Claim verified: every non-GITHUB_TOKEN secret reference in workflows is conditio
 ## Session 2544 update (Socratic pass 1210 — docs/ inventory vs README/CLAUDE.md references)
 
 Claim verified: docs/ holds 14 topical files + 12 ADR files (11 ADRs + index README); every `docs/*.md` path referenced by README.md and CLAUDE.md (DEPLOYMENT.md, KNOWN_LIMITATIONS.md, MIGRATING-FROM-V2.md, architecture.md) exists — the earlier link census (s2532) covered link syntax, this covers the top-level file inventory itself. TRUE — doc surface complete and self-consistent.
+
+## Session 2545 update (Socratic pass 1211 — ledger-sequence integrity spot check)
+
+Claim verified: the ledger now holds 1,712 `## Session` blocks; the most recent 20 headers (s2525–s2544) form a strictly increasing contiguous sequence with zero numbering collisions — the collision class recorded at s2518 (s877/1203/1269) has not recurred since numbering was put under the single-append discipline. TRUE — ledger self-consistency maintained.
