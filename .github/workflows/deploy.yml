@@ -111,7 +111,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            COMMIT_SHA=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.date.outputs.date }}
 
   security-scan:

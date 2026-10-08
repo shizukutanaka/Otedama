@@ -8370,3 +8370,11 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
   コメント — 非存在の `shizukutanaka/homebrew-tap` への formula push で
   `goreleaser release` が必ず失敗していた欠陥を修理（release.yml の
   HOMEBREW_TAP_REPO ゲートと同じ姿勢に統一）。
+
+### Fixed (session 1773 — container version stamping)
+
+- `deploy.yml`: `COMMIT_SHA`（Dockerfile 未宣言のため静かに捨てられていた）
+  を宣言済み ARG 名 `COMMIT`/`VERSION`/`BUILD_DATE` へ修正 — 公開イメージが
+  `dev/unknown` と名乗っていた欠陥を修理。
+- `.goreleaser.yaml`: `dockers` 両アーチに `VERSION`/`COMMIT`/`BUILD_DATE`
+  build-arg を追加（同欠陥の2系統目）。

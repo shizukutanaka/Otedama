@@ -181,6 +181,9 @@ dockers:
     use: buildx
     build_flag_templates:
       - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .Commit }}"
+      - "--build-arg=BUILD_DATE={{ .Date }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.source=https://github.com/shizukutanaka/Otedama"
   - image_templates:
@@ -189,6 +192,9 @@ dockers:
     use: buildx
     build_flag_templates:
       - "--platform=linux/arm64"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .Commit }}"
+      - "--build-arg=BUILD_DATE={{ .Date }}"
 
 docker_manifests:
   - name_template: "ghcr.io/shizukutanaka/otedama:{{ .Version }}"
