@@ -11400,3 +11400,7 @@ Claim verified: address→script generation and coinbase-payment verification ca
 ## Session 2200 update (milestone gate — post-s2199 hygiene)
 
 Milestone re-verification after passes 859–865: `gofmt -l .` — clean (no output); `go build ./...` — clean; `go vet ./...` — clean; `go test` on the packages re-audited this stretch — engine, arbitration, provider, daemon, btccrypto all green (cached passes, no new failures). The branch remains a docs-only delta on the audit ledger; no code changed since the last green gate. TRUE.
+
+## Session 2201 update (Socratic pass 866 — btccrypto registry + address dispatch)
+
+Claim verified: the scheme registry and address dispatch can't silently misroute a key type or a payout address — Register panics on a duplicate scheme name at init (a programmer error surfaces immediately, never at runtime), Lookup wraps ErrUnknownScheme so callers can errors.Is it, and Schemes returns sorted names for deterministic introspection; SchemeForAddressType maps legacy+v0-witness addresses to ecdsa-secp256k1 and P2TR to schnorr-secp256k1, while P2MR (BIP-360) returns an explicit ErrSchemeNotImplemented rather than guessing at an undefined scheme — an honest reservation, not a stub that lies; ClassifyAddress is a prefix-only fast dispatch (bc1p→TR, bc1q→len≥60 WSH else WPKH, "1"→P2PKH, "3"→P2SH, else unknown) that never claims checksum validity — the strict decode still belongs to ValidateAddress; Hash256 is the standard double-SHA256; TaggedHash follows the BIP-340 construction (tag hash serialized twice before the message). TRUE.
