@@ -521,7 +521,18 @@ arXiv grounding (session 41):
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
 5. ✅ **Traffic-analysis side channel documented** in THREAT_MODEL
    (arXiv:1703.06545, session 40).
-6. 🟡 **Traffic shaping / "mining cookie"** to blunt the timing side channel —
+6. 🟡→🔵 **Traffic shaping / "mining cookie" — future hardening, correctly
+   so.** Verified session 1747: no shaping/padding exists (share submits
+   are event-driven as they must be — delays would inflate stale rates),
+   and the row self-declares "future hardening". The real decision is
+   which of two countermeasures to the *same* timing channel to take:
+   shaping/cover traffic (client-side, costs bandwidth and share
+   latency) vs Tor-by-default transport (already 🔵 under ADR-007 B7,
+   mitigates the same observer). That trade-off is an ADR-level decision
+   — the shaping option stays catalogued here alongside B7 rather than
+   being an independent open task. 🔵. Original request follows:
+
+   Traffic shaping / "mining cookie" to blunt the timing side channel —
    the paper's own countermeasure; future hardening.
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,

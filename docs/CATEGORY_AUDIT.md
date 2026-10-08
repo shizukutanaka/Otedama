@@ -9564,3 +9564,7 @@ Verified (scope refined): Cat-8 row 10 (optional carbon-intensity feed) — noth
 ## Session 1746 update (Socratic pass 412 — OTel is roadmap-planned, not a gap)
 
 Verified (scope refined): Cat-9 row 3 (OTel traces on connect→handshake→mine) — confirmed zero OTel dependency and zero spans. But this is already dispositioned by the project's own roadmap rather than an open gap: ADR-005 (:105-110) rejected the OTel metrics SDK "for now" with an incremental-adoption clause, and SUSTAINABILITY.md:105-115 pins the concrete delivery shape — separate `otedama-full` artifact behind `-tags otel`, OTLP/HTTP not gRPC, v3.3.0 scope. Span instrumentation lands with that artifact. Row flipped 🟡→🔵.
+
+## Session 1747 update (Socratic pass 413 — traffic shaping is an ADR trade-off)
+
+Verified (scope refined): Cat-10 row 6 (traffic shaping / "mining cookie" against the arXiv:1703.06545 timing channel) — no shaping or cover traffic exists, correctly: share submits are event-driven and delays would inflate stale rates. The real open question is a *choice* between two countermeasures to the same channel — client-side shaping (bandwidth + latency cost) vs Tor-by-default transport already 🔵 under ADR-007 B7. That trade-off is ADR-level, not an implementation task. Row flipped 🟡→🔵.
