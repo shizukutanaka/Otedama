@@ -18453,3 +18453,23 @@ Verification (~30 sites):
 
 Verdict: TRUE — all variable-size makes
 are upstream-bounded.
+
+## Session 2912 update (Socratic pass 1577 — mutex-copy census)
+
+Claim under test: no struct containing
+sync.Mutex/RWMutex is passed by value.
+
+Verification:
+
+- `go vet -copylocks ./...` → **clean** —
+  the analyzer's whole purpose is
+  detecting lock copies; zero findings.
+- Mutex declarations (~25 sites) — all in
+  structs used via pointer receiver or
+  stored as `*sync.Mutex` (arbitrate.go
+  takes `mu *sync.Mutex` params, run.go
+  wires `activityMu *sync.Mutex`,
+  streamsMu same).
+
+Verdict: TRUE — machine-verified; zero
+lock-copy sites.
