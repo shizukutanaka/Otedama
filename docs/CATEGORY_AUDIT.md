@@ -12913,3 +12913,7 @@ Claim verified: §13's rewrite is honest — the stale "six of seven workflows b
 ## Session 2574 update (Socratic pass 1240 — MILESTONE full-gate rerun)
 
 Milestone verdict: `gofmt -l internal cmd` clean; `go build ./...` clean; `go vet ./internal/... ./cmd/...` clean; `go test -count=1` on ALL 24 package legs green (engine 24.8s, doctor 7.1s, lightning 12.6s — everything passed). This pass-cycle also deep-verified the entire remaining workflow and docs payload: 9 workflow diffs all honest hardening (dead k8s jobs deleted, floating pins fixed, real build/test/csum bugs fixed), ADR-003 dep boundary + THREAT_MODEL + AUDIT_CHECKLIST now count x/sys correctly, KNOWN_LIMITATIONS §13 accurately reflects the repaired CI state with residuals kept as maintainer decisions.
+
+## Session 2575 update (Socratic pass 1241 — Dockerfile/install.sh/.gitignore diff check)
+
+Claim verified: Dockerfile's nonroot data-dir pre-claim is a real fix (named volumes would initialize root:root 0755 and the wallet can't write — same class as DEPLOYMENT's fsGroup fix). install.sh swaps the dead `otedama.io` URL for the real raw.githubusercontent path (phantom-URL class violation corrected) and fixes a genuine logic bug (`require sha256sum || require shasum` could never evaluate the RHS because die() exits — now a real either/or check). .gitignore's new generated-doc exclusion is honest. TRUE.
