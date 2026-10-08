@@ -12801,3 +12801,7 @@ Claim verified: the branch-added scorecard.yml (the only workflow the branch add
 ## Session 2547 update (Socratic pass 1213 — branch-added fuzz file runtime check)
 
 Claim verified: the branch-added `internal/stratum/encryptedframe_fuzz_test.go` compiles and its seeds pass under normal `go test` (FuzzEncryptedConn_Read + FuzzEncryptedConn_LengthPrefix, all seed corpus cases green) — the fuzzers are real executable coverage, not just inventory entries; the Makefile/CI discovery verified at s2537-2538 picks them up. TRUE — branch-added test surface is functional.
+
+## Session 2548 update (Socratic pass 1214 — install.sh syntax + version-injection recheck)
+
+Claim verified: `bash -n install.sh` clean; `make -n build` resolves ldflags to the live `internal/version` symbols (#1275 fix still working) — the dry-run shows `Version=v3.0.0-alpha.1`, `Commit=f1c74d22a` matching the current HEAD commit prefix exactly, `BuildDate` fresh; `make test` expands to `go test -race -timeout 5m ./...`. TRUE — release metadata injection is real, not a dead-symbol path.
