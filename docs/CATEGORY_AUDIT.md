@@ -11066,3 +11066,7 @@ Claim verified: the generic fan-in can't wedge a producer, close early, or leak 
 ## Session 2117 update (Socratic pass 783 — metrics name validation + exposition atomicity)
 
 Claim verified: an invalid metric/label name can never reach the wire — isValidMetricName/isValidLabelName enforce the Prometheus character classes character-by-character with the leading-digit prohibition indexed by position (`i > 0`, so a rune-width-aware check, not a byte-index lie); validateLabelNames panics at registration time — fail-fast at development, never a corrupted scrape in production; WriteText holds RLock through the whole snapshot and formats every value while locked, so a scrape can never interleave a half-updated series; entries are emitted sorted (deterministic exposition); and formatFloat renders NaN/±Inf per the exposition spec rather than a non-parseable decimal. TRUE.
+
+## Session 2118 update (Socratic pass 784 — HTTP admin surface)
+
+Claim verified: the admin server can't slowloris, leak pprof, or mask a crash — all four timeouts are set (ReadHeaderTimeout 5s + Read/Write/Idle), pprof is registered on the private mux only when enablePprof (never DefaultServeMux — a goroutine-dump endpoint can't silently ship on a shared mux); handleIndex serves exactly "/" and 404s the rest (no catch-all); readyz is an atomic tri-state, ServeError captures a listener crash for observation rather than dying silently, and Stop bounds the graceful shutdown at 5s. TRUE.
