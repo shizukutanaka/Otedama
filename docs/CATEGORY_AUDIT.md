@@ -38072,3 +38072,103 @@ module
   itself).
 
 Verdict: TRUE.
+
+## Session 3166 update (Socratic pass 1830 — import-style ledger)
+
+Claim under test: every
+import
+uses
+its
+natural
+package
+name;
+exactly
+two
+blank
+imports
+register
+the
+SV1
+plugin;
+zero
+dot
+imports
+and
+zero
+named
+aliases.
+
+Verification —
+census:
+
+- Blank
+  imports
+  ×2:
+  `cmd/otedama/run.go:28`
+  and
+  `internal/engine/coverage_test.go:35`,
+  both
+  `_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"`
+  —
+  the
+  only
+  side-
+  effect
+  import
+  (SV1
+  self-
+  registration
+  via
+  `init`).
+- Dot
+  imports:
+  ZERO —
+  no
+  `. "pkg"`
+  anywhere
+  (test
+  files
+  included).
+- Named
+  aliases:
+  ZERO —
+  every
+  import
+  keeps
+  its
+  natural
+  name;
+  all
+  `IDENT "path"`
+  regex
+  hits
+  were
+  `case "..."`/
+  `return "..."`
+  tails,
+  not
+  import
+  lines.
+- External
+  imports
+  unaliased:
+  `go.yaml.in/yaml/v3`
+  (configfile.go
+  +
+  config_file_test.go),
+  `x/crypto/chacha20poly1305`
+  (noise.go),
+  `x/crypto/scrypt`
+  (seedstore.go),
+  `x/crypto/pbkdf2`
+  (seed.go),
+  `x/sys/unix`
+  (width_unix.go),
+  `x/sys/windows`
+  (width_windows.go)
+  —
+  all
+  default
+  names.
+
+Verdict: TRUE.
