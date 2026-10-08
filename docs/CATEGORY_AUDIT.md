@@ -39899,11 +39899,9 @@ regex.
 
 Verification —
 census
-(30
+(33
 distinct
-APIs,
-~690
-calls):
+APIs):
 
 - Top
   tier:
@@ -39939,8 +39937,13 @@ calls):
   `EqualFold`×2,
   `TrimLeft`×1,
   `Trim`×1,
-  `Replace`×1,
-  `IndexFunc`×1.
+  `IndexFunc`×1,
+  `IndexAny`×1,
+  `LastIndex`×1,
+  `Map`×1,
+  `ReplaceAll`×1,
+  `ContainsFunc`×1,
+  `Reader`×1.
 - ZERO:
   `strings.Cut`/`CutSuffix`
   (all
@@ -39958,25 +39961,13 @@ calls):
   audit),
   `Compare`,
   `Clone`,
-  `Map`,
   `Title`,
   `ToTitle`,
   `ToValidUTF8`,
-  `IndexAny`,
   `LastIndexAny`,
   `FieldsFunc`,
   `SplitAfter`,
-  `ReplaceAll` —
-  modernized
-  to
-  the
-  `Cut*`
-  or
-  `Contains*`/
-  index
-  forms
-  where
-  adopted;
+  `Replace` —
   regex-
   adjacent
   helpers
