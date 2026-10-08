@@ -12726,3 +12726,7 @@ Claim checked: after #1293's master inclusion, every workflow's push/PR filter s
 ## Session 2530 update (Socratic pass 1196 — license-file parity check)
 
 Claim verified: `LICENSE` exists at repo root and opens with authentic Apache License 2.0 text (January 2004 terms), matching the README's Apache-2.0 badge and the Japanese footer claim — and matching CLAUDE.md's reference link. TRUE — license surface is consistent root↔docs↔rules.
+
+## Session 2531 update (Socratic pass 1197 — module-cache integrity check)
+
+Claim verified: `go mod verify` returns "all modules verified" — every module in the build's dependency graph matches its go.sum checksum against the module cache, so the three-dependency supply chain is bit-for-bit intact locally. TRUE — complements the s2523 manifest-parity census: no content drift, no checksum drift.
