@@ -36548,3 +36548,208 @@ census:
   math).
 
 Verdict: TRUE.
+
+## Session 3157 update (Socratic pass 1821 — external-dependency detail ledger)
+
+Claim under test: the
+three
+declared
+external
+modules
+(yaml,
+x/crypto,
+x/sys)
+are
+used
+only
+at
+their
+rationale
+sites —
+no
+unaccounted
+x/*
+imports.
+
+Verification —
+census +
+go.mod:
+
+- go.mod
+  direct
+  requires:
+  `go.yaml.in/yaml/v3
+  v3.0.5`,
+  `golang.org/x/crypto
+  v0.48.0`,
+  `golang.org/x/sys
+  v0.41.0`
+  —
+  three
+  modules,
+  each
+  with
+  an
+  inline
+  rationale
+  comment.
+- x/crypto
+  usage
+  (exact):
+  `pbkdf2.Key`×1
+  (`seed.go:301`
+  BIP-39),
+  `scrypt.Key`×2
+  (`seedstore.go`
+  wallet
+  KDF),
+  `chacha20poly1305.New`×2
+  (`noise.go:74,225`
+  Noise
+  session
+  AEAD
+  +
+  per-frame
+  fallback;
+  the
+  third
+  hit
+  was
+  a
+  doc
+  comment).
+- x/sys
+  usage
+  (exact):
+  `unix.IoctlGetWinsize`×1 +
+  `unix.TIOCGWINSZ`×1
+  (`width_unix.go`),
+  `windows.Handle`×1 +
+  `windows.GetConsoleScreenBufferInfo`×1 +
+  `windows.ConsoleScreenBufferInfo`×1
+  (`width_windows.go`)
+  —
+  the
+  whole
+  x/sys
+  surface
+  is
+  the
+  TUI
+  width
+  query.
+- yaml
+  usage:
+  `yaml.NewDecoder`×1 —
+  the
+  config-file
+  decode
+  boundary.
+- `gcm.Seal`/`gcm.Open`
+  hits
+  at
+  `seedstore.go:117,150`
+  are
+  method
+  calls
+  on
+  a
+  local
+  `cipher.AEAD`
+  variable —
+  stdlib
+  AES-GCM,
+  not
+  an
+  external
+  package.
+- Suffix
+  pollution
+  ruled
+  out:
+  `text.*`×87+
+  were
+  `context.*`
+  tails;
+  `tls.go`/`noise.go`/
+  `bech32.go`/`base58.go`/
+  `secp256k1.go`/
+  `yaml.in`/`yaml.example`
+  were
+  filename
+  or
+  path
+  tails;
+  `signal.NotifyContext`×1
+  is
+  stdlib
+  os/signal.
+- ZERO
+  `golang.org/x/net`,
+  `x/term`,
+  `x/text`,
+  `x/sync`,
+  `x/tools`,
+  `x/exp`,
+  `x/mod`,
+  `x/oauth2`,
+  `x/image`,
+  `x/mobile`,
+  `x/time`,
+  `x/build`,
+  `x/website` —
+  no
+  other
+  x/*
+  module
+  is
+  imported
+  by
+  production
+  code
+  (`x/term`
+  deliberately
+  avoided
+  —
+  documented
+  at
+  `run.go:273`;
+  `x/text`
+  comment
+  at
+  `message.go:94`
+  explains
+  the
+  own-
+  Tag
+  decision).
+- ZERO
+  `btcec`,
+  `chainhash`,
+  `btcsuite`,
+  `ldk`,
+  `libp2p`,
+  `grpc`,
+  `protobuf`,
+  `gorilla`,
+  `gin`,
+  `cobra`,
+  `viper`,
+  `zap`,
+  `logrus`,
+  `prometheus` —
+  the
+  whole
+  bitcoin/
+  framework/
+  logging/
+  metrics
+  library
+  families
+  absent
+  (stdlib
+  replacements
+  per
+  ADR-003).
+
+Verdict: TRUE.
