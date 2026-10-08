@@ -21608,3 +21608,65 @@ Verification — census:
   chosen boundary.
 
 Verdict: TRUE.
+
+## Session 2995 update (Socratic pass 1659 — time/context ledger)
+
+Claim under test: the
+time/context surface is
+bounded — every timer
+paired, every ctx root
+justified, no Sleep
+loops or leaked Tick.
+
+Verification — census:
+
+- `context.Context` ×87 —
+  ctx is threaded
+  through every blocking
+  seam; zero ctx stored
+  in structs (verified
+  ctx-storage census).
+- `context.WithTimeout`
+  ×7 + `WithCancel` ×5 —
+  all cancel-paired
+  (verified census).
+- `context.Background`
+  ×3 — the justified
+  roots only (dispatch
+  + two top-level seams);
+  zero `context.TODO`.
+- `time.NewTicker` ×10 —
+  each `defer t.Stop()`
+  or select-loop bound.
+- `time.NewTimer` ×3 —
+  each paired Stop on
+  the cancel path.
+- `time.After` ×3 —
+  select-arm usage only;
+  zero `time.Tick` (the
+  leaky API absent).
+- `time.Sleep` ×1 — the
+  single legitimate
+  site (polling backoff);
+  zero Sleep-in-lock
+  (verified).
+- `time.Now` ×45 /
+  `Since` ×17 /
+  `Duration` ×26 /
+  `Second`×36/`Minute`×9/
+  `Millisecond`×5 —
+  named-duration
+  discipline; zero bare
+  arithmetic on raw
+  nanoseconds.
+- `context.DeadlineExceeded`
+  — deadline classification
+  used for honest "dial
+  timeout" surfacing.
+- (runtime.* — GOOS×10,
+  NumCPU×6, ReadMemStats
+  — substring-adjacent
+  census, verified
+  separately.)
+
+Verdict: TRUE.
