@@ -32846,3 +32846,128 @@ census:
   (re-verified).
 
 Verdict: TRUE.
+
+## Session 3133 update (Socratic pass 1797 — builtin function complete ledger)
+
+Claim under test: the
+builtin surface is
+len/make/append/copy/
+close/delete/panic/new
++ the
+min/max
+comparators —
+with println/complex/
+real/imag and
+print
+all
+zero
+in
+code.
+
+Verification —
+census:
+
+- `len(`×335 — the
+  dominant
+  builtin;
+  every
+  container
+  bounds
+  check
+  flows
+  through
+  it.
+- `make(`×126 +
+  `new(`×9 —
+  allocation;
+  `new`
+  is
+  pointer-
+  zero
+  idioms
+  only
+  (verified
+  new-vs-make
+  class).
+- `append(`×125 —
+  self-referential
+  growth
+  (verified
+  append
+  classes).
+- `copy(`×37 —
+  byte-slice
+  copies.
+- `close(`×16 —
+  channel
+  +
+  closer
+  closes
+  (ownership
+  verified).
+- `delete(`×15 —
+  map
+  key
+  removals.
+- `panic(`×12 —
+  the
+  12
+  build-time
+  invariants
+  (verified
+  panic-
+  census:
+  init
+  registry
+  guards
+  +
+  unreachable
+  states).
+- `recover(`×1 —
+  the
+  single
+  doctor
+  check-fan-out
+  panic
+  boundary
+  (verified
+  recover
+  class).
+- `min(`×4 +
+  `max(`×6 —
+  the
+  builtin
+  comparators
+  (Go1.21
+  adoption).
+- `clear(`×1 — the
+  one
+  map
+  reset.
+- `cap(`×1 — the
+  one
+  capacity
+  probe.
+- `print (`×1 —
+  COMMENT-
+  only
+  (`doctor/checks.go:702`
+  prose).
+- ZERO
+  `println`,
+  `complex`,
+  `real`,
+  `imag` —
+  the
+  complex
+  builtins
+  and
+  println
+  never
+  appear;
+  `print`
+  is
+  comment
+  only.
+
+Verdict: TRUE.
