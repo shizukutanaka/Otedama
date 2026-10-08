@@ -10968,3 +10968,7 @@ Claim verified: the arbitration tail can't produce dishonest reasons or numbers 
 ## Session 2093 update (Socratic pass 759 — metrics exposition tail)
 
 Claim verified: the exposition surface can't emit a divergent or malformed series — metricKey sorts label keys so the same labelset always maps to the same series regardless of insertion order (no accidental duplicate series from key-order variance); renderLabels escapes exactly the three characters special to label values (backslash, quote, newline) per the exposition spec; escapeHelp escapes only backslash and newline per help-text rules; label maps are cloned so a caller mutating its map post-registration can't corrupt the registry; and formatFloat renders the canonical NaN/+Inf/-Inf spellings — a non-finite value is disclosed in spec form, never silently "0" or a spec-invalid token. TRUE.
+
+## Session 2094 update (Socratic pass 760 — rates fetcher tail)
+
+Claim verified: the price feed can't silently deceive arbitration — clock skew is measured per source from the HTTP Date header and the max persisted; the warn message above the threshold names the real consequences (TLS certificate validation, mining nTime fields, rate-freshness judgements) instead of a bare number; a 2-source divergence >4x distrusts the feed rather than averaging a poisoned pair; implausible readings are excluded before the median so a single bad source can't drag it; all-sources-fail returns errors.Join preserving every per-source cause; and the skew measurement is still returned even when extract fails. TRUE.
