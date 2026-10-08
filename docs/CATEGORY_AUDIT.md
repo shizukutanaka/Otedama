@@ -35233,3 +35233,187 @@ census:
   absent.
 
 Verdict: TRUE.
+
+## Session 3149 update (Socratic pass 1813 — strings + bytes detail ledger)
+
+Claim under test: the
+string
+surface is
+HasPrefix/
+Join/
+Contains/
+TrimSpace
+dominated
+with a
+long
+predicate
+tail —
+and
+the
+bytes
+surface is
+just
+bytes.Equal.
+
+Verification —
+census:
+
+- `strings.HasPrefix`×27 —
+  the
+  dominant
+  predicate
+  (scheme
+  gates,
+  flag
+  prefix
+  checks).
+- `strings.Join`×15 —
+  argv/
+  list
+  rendering.
+- `strings.Contains`×13 +
+  `ContainsAny`×2 +
+  `ContainsRune`×2 +
+  `ContainsFunc`×1 —
+  substring/
+  class
+  predicates
+  (sanitizers,
+  URL
+  checks).
+- `strings.TrimSpace`×11 +
+  `TrimSuffix`×1 +
+  `TrimLeft`×1 +
+  `Trim`×1 —
+  input
+  normalization.
+- `strings.Builder`×10 +
+  `strings.Reader`×1 —
+  efficient
+  concat
+  (no
+  `+`
+  in
+  hot
+  loops,
+  verified).
+- `strings.Repeat`×7 —
+  padding/
+  dashes
+  in
+  TUI/doctor
+  output.
+- `strings.ToLower`×6 +
+  `ToUpper`×1 +
+  `EqualFold`×2 —
+  case
+  normalization
+  (locale/
+  scheme).
+- `strings.CutPrefix`×5 —
+  the
+  Go1.20
+  cut
+  API
+  (chosen
+  over
+  `Cut`
+  where
+  the
+  prefix
+  is
+  known).
+- `strings.Split`×3 +
+  `Fields`×1 —
+  field
+  split
+  (bounded
+  inputs).
+- `strings.NewReplacer`×3 +
+  `ReplaceAll`×1 —
+  the
+  sanitizer
+  tables.
+- Index
+  family:
+  `LastIndexByte`×2,
+  `IndexRune`×2,
+  `IndexByte`×2,
+  `IndexFunc`×1,
+  `IndexAny`×1,
+  `Index`×1 —
+  byte-level
+  searching.
+- `strings.Map`×1 —
+  the
+  sanitizer
+  rune
+  map.
+- `bytes.Equal`×2 —
+  the
+  ONLY
+  `bytes`
+  package
+  use
+  (digest/
+  target
+  comparisons
+  use
+  `big.Int.Cmp`
+  and
+  constant-
+  time
+  subtle
+  where
+  secrets);
+  the
+  wire
+  codec
+  works
+  on
+  raw
+  slices
+  +
+  `binary.LittleEndian`.
+- ZERO
+  `strings.Cut`,
+  `ToTitle`,
+  `Title`,
+  `Compare`,
+  `Clone`,
+  `Lines`,
+  `SplitSeq`,
+  `SplitN`,
+  `FieldsFunc`,
+  `LastIndex`,
+  `ToValidUTF8`,
+  `NewReader`.
+- ZERO
+  `bytes.Buffer`,
+  `NewBuffer`,
+  `NewBufferString`,
+  `Index`,
+  `Contains`,
+  `HasPrefix`,
+  `Trim*`,
+  `Split`,
+  `Fields`,
+  `Join`,
+  `Repeat`,
+  `Replace*`,
+  `Compare`,
+  `Cut*`,
+  `Runes`,
+  `Clone`,
+  `Grow`,
+  `LimitReader` —
+  the
+  entire
+  `bytes`
+  toolkit
+  except
+  `Equal`
+  is
+  absent.
+
+Verdict: TRUE.
