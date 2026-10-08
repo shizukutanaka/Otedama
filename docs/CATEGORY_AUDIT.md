@@ -9788,3 +9788,7 @@ Claim verified: the Kubernetes YAML in DEPLOYMENT.md — the documented replacem
 ## Session 1802 update (Socratic pass 468 — govulncheck evergreen re-check)
 
 Claim verified: `govulncheck ./...` on the current tree (Go 1.27.1, govulncheck v1.1.4) reports **0 reachable vulnerabilities** — 18 module-level CVEs exist in the required-dependency graph but none are called by Otedama's code per symbol analysis. RESEARCH_IMPROVEMENTS rows :951/:962 remain 🟡 evergreen — the scan is periodic by nature; this pass re-verified the zero-reachable invariant. THREAT_MODEL's recorded value remains accurate.
+
+## Session 1803 update (Socratic pass 469 — ADR-009 ecosystem recheck)
+
+Claim verified: the sv2-spec open set is unchanged — #238 (optional SetupConnection flags negotiation, Oct 6), #234 (authority key management/rotation), #232 (table style), #203 (coinbase payout extension), #198 (coinbase_witness), #186, #103 — no new normative merges since the last recheck; Otedama's flags-subset validation stays forward-compatible with #238's direction. sv2-apps latest release remains v0.7.0 (the corrected reading from s1661: JDS state isolation, JDC RequestTransactionData race fix, tProxy 0x0002-gated UserIdentity TLVs, pow2 share validation — all translator/pool-side; nothing requiring Otedama wire changes). TRUE — no drift action.
