@@ -25757,3 +25757,63 @@ census:
   mention.
 
 Verdict: TRUE.
+
+## Session 3071 update (Socratic pass 1735 — fmt surface ledger)
+
+Claim under test: the
+fmt surface is the
+format/print
+subset — Sprintf/
+Fprintf for
+construction,
+Fprintln/Fprint for
+streams — and
+Sscanf stays a
+documented
+rejection, never
+code.
+
+Verification —
+census:
+
+- `fmt.Errorf`×260 —
+  formatted
+  errors.
+- `fmt.Sprintf`×211 —
+  string
+  construction.
+- `fmt.Fprintf`×74,
+  `Fprintln`×16,
+  `Fprint`×10 —
+  stream output.
+- `fmt.Sscanf` — the
+  single hit is
+  fetcher.go:52's
+  comment citing
+  why ParseFloat
+  was chosen
+  over Sscanf
+  (greedy
+  behavior
+  documented as
+  the rejection
+  rationale) —
+  not code.
+- ZERO `fmt.Scan*`,
+  `fmt.Print`,
+  `Println`,
+  `Printf` —
+  stdout writes
+  all go through
+  Fprint* on
+  os.Stdout/Stderr
+  or the logger
+  (verified
+  earlier).
+- `%w` usage on
+  every wrap
+  site (verified
+  error-verb
+  class).
+
+Verdict: TRUE.
