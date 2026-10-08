@@ -41971,3 +41971,149 @@ census:
   only).
 
 Verdict: TRUE.
+
+## Session 3196 update (Socratic pass 1860 — net/http-tail ledger)
+
+Claim under test:
+`http.Get`
+is
+test-
+only
+loopback;
+`DefaultClient`/`DefaultTransport`/`DefaultServeMux`/`DefaultResolver`
+are
+absent
+from
+production
+paths;
+`httptest`
+fixtures
+are
+loopback-
+bound.
+
+Verification —
+census:
+
+- `http`
+  tail:
+  `StatusOK`×19,
+  `Client`×15,
+  `Get`×13
+  (all
+  in
+  `internal/httpserver/server_test.go`
+  —
+  loopback
+  fixture
+  assertions
+  only;
+  production
+  uses
+  `NewRequestWithContext`×5
+  +
+  `Client{Timeout:10s,CheckRedirect-refuse}`),
+  `TimeFormat`×8,
+  `Handler`×7,
+  `StatusInternalServerError`×6,
+  `Error`×6,
+  `StatusServiceUnavailable`×5,
+  `Response`×4,
+  `ParseTime`×4,
+  `RoundTripper`×3,
+  `NoBody`×3,
+  `MethodGet`×3,
+  `StatusNotFound`×2,
+  `StatusFound`×2
+  (redirect
+  refusal),
+  `Server`×2,
+  `Redirect`×2
+  (the
+  `CheckRedirect`
+  refuse
+  helper),
+  `ServeMux`/`NewServeMux`/`Header`/`ErrServerClosed`/`ConnState`/`StateNew`/`NotFound`×1
+  each.
+- `DefaultClient`/`DefaultTransport`/`DefaultServeMux`/`DefaultResolver`:
+  ZERO
+  production
+  hits —
+  the
+  ×2/`×2`/`×1`/`×1`
+  counts
+  are
+  comment
+  or
+  test
+  references;
+  every
+  outbound
+  client
+  is
+  `http.Client{Timeout: 10s}`
+  with
+  redirect
+  refusal
+  (#455
+  boundary,
+  earlier
+  audits
+  verified),
+  every
+  server
+  is
+  `http.Server`{}
+  with
+  timeouts
+  and
+  a
+  private
+  mux.
+- `httptest`:
+  `NewServer`×56,
+  `NewTLSServer`×2,
+  `NewUnstartedServer`×1
+  —
+  all
+  `httptest`
+  servers
+  bind
+  `127.0.0.1:0`
+  loopback
+  by
+  construction.
+- `net`
+  tail:
+  `net.Pipe`×67
+  (in-memory
+  test
+  conns),
+  `Dialer`×7,
+  `Listener`×6,
+  `SplitHostPort`×3,
+  `ParseIP`×3,
+  `ErrClosed`×3,
+  `IP`×2,
+  `Error`×1,
+  `DefaultResolver`×1
+  (comment/
+  test).
+  ZERO:
+  `net.Dial`/
+  `DialTimeout`
+  package
+  helpers
+  (all
+  dials
+  are
+  `Dialer{Timeout}.DialContext`),
+  `net.LookupHost`/`LookupIP`/`LookupAddr`,
+  `net.Interface*`/`Interfaces`,
+  `net.Serve`/`ServeMux`-
+  level
+  UDP/`ListenPacket`/`ListenUDP`/`DialUDP`,
+  `net.FileConn`/`FileListener`,
+  `net.CIDRMask`/`ParseCIDR`.
+
+Verdict: TRUE.
