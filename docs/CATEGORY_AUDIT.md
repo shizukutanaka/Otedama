@@ -35056,3 +35056,180 @@ census:
   fields.
 
 Verdict: TRUE.
+
+## Session 3148 update (Socratic pass 1812 — time + context detail ledger)
+
+Claim under test: the
+time
+surface is
+Now/
+Duration/
+Ticker
+dominated
+and
+context
+is
+Background +
+WithCancel/
+WithTimeout
+only —
+no
+TODO,
+no
+Cause
+API,
+no
+WithoutCancel.
+
+Verification —
+census:
+
+- `time.Now`×45 —
+  wall-clock
+  reads
+  (plus
+  the
+  clock
+  abstraction
+  for
+  test
+  paths).
+- `time.Second`×36 +
+  `time.Minute`×9 +
+  `time.Millisecond`×5 —
+  the
+  duration
+  constants.
+- `time.Time`×28 +
+  `time.Duration`×26 —
+  the
+  time
+  types.
+- `time.Since`×17 —
+  elapsed
+  measurement.
+- `time.NewTicker`×10 +
+  `time.NewTimer`×3 —
+  the
+  timer
+  fleet
+  (all
+  Stop-
+  paired,
+  verified).
+- `time.After`×1
+  real —
+  `run.go:1673`
+  in
+  a
+  select
+  for
+  the
+  pool-
+  requested
+  reconnect
+  wait
+  (bounded,
+  ctx-
+  racing);
+  the
+  other
+  `After`
+  hits
+  were
+  `AfterFunc`
+  tails.
+- `time.Sleep`×1 —
+  `worker.go:282`
+  the
+  10ms
+  idle
+  yield
+  (verified
+  sleep-
+  busywait
+  class).
+- `time.UTC`×2 +
+  `time.Date`×2 —
+  epoch
+  constants.
+- `time.Seconds`×0
+  real —
+  the
+  hit
+  was
+  `uptime.Seconds()`
+  suffix
+  pollution.
+- ZERO
+  `time.Parse`,
+  `ParseDuration`,
+  `Format`,
+  `Unix`,
+  `UnixMilli`,
+  `UnixNano`,
+  `LoadLocation`,
+  `FixedZone`,
+  `Local`,
+  `Monotonic`,
+  `Tick`,
+  `time.AfterFunc` —
+  parse/
+  timezone/
+  monotonic
+  APIs
+  absent
+  from
+  production.
+- `context.Context`×87 —
+  the
+  ctx
+  type
+  surface.
+- `context.WithTimeout`×7 +
+  `WithCancel`×5 +
+  `CancelFunc`×3 —
+  the
+  ctx
+  constructors
+  (all
+  cancel-
+  paired).
+- `context.Background`×3 —
+  the
+  three
+  root
+  ctxs
+  (verified
+  ctx-origin).
+- `context.DeadlineExceeded`×2 +
+  `context.Canceled`×1 —
+  error
+  comparison.
+- `context.WithValue`×1 —
+  `logger.go:174`
+  ctx
+  logger
+  injection
+  (private
+  typed
+  key).
+- ZERO
+  `context.TODO`,
+  `WithCancelCause`,
+  `WithDeadlineCause`,
+  `WithTimeoutCause`,
+  `Cause`,
+  `WithoutCancel`,
+  `AfterFunc` —
+  the
+  whole
+  Go1.20/1.21
+  ctx-cause
+  API
+  and
+  decouple
+  helper
+  absent.
+
+Verdict: TRUE.
