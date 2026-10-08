@@ -19007,3 +19007,29 @@ Verification (5 sites):
 
 Verdict: TRUE — fixed binaries + args;
 env inheritance is same-uid.
+
+## Session 2933 update (Socratic pass 1598 — http-client census)
+
+Claim under test: every outbound
+`http.Client` has a timeout and
+refuses redirects — a hostile
+response can't redirect to an
+internal address (SSRF) or hang.
+
+Verification (3 clients):
+
+- rates/fetcher.go:182 —
+  `Timeout: 10s`, `CheckRedirect`
+  refusing all redirects.
+- rates/hashrate.go:110 —
+  `Timeout: 10s`, same refusal.
+- doctor/checks.go:875
+  clockSkewDefaultClient —
+  `CheckRedirect` refusal + a
+  `context.WithTimeout(ctx, 5s)`
+  around the probe.
+- Zero `http.DefaultClient` usage;
+  zero bare `http.Get`/`http.Post`.
+
+Verdict: TRUE — all 3 clients refuse
+redirects and bound the request.
