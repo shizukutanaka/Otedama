@@ -15803,3 +15803,29 @@ Verification:
 
 Verdict: TRUE — every filename derives from a constant or a
 documented deliberate mirror; no string drift possible.
+
+## Session 2796 update (Socratic pass 1461 — stream-discipline census)
+
+Claim under test: stdout carries only program output (data,
+help); stderr carries diagnostics and interactive prompts —
+piping stdout must never mix in errors.
+
+Verification — all ~75 Fprint* sites in cmd/:
+
+- Zero error/warning text on stdout: the only "fail" match
+  on stdout is the literal field name
+  `bitcoin_addresses (failover)` in config display.
+- stderr carries: all error paths (exitUsage, run errors),
+  wallet interactive prompts (Recovery phrase / passphrase
+  prompts — correct: prompts on stderr keep piped stdout
+  clean and secrets out of capture), service/doctor status
+  diagnostics.
+- stdout carries: help text (help→stdout+exit0 verified),
+  config safeDisplay output, version info, completion
+  scripts, wallet fingerprint display.
+- TUI writes to its own stream (dashboard owns the
+  terminal); logger sinks independent.
+
+Verdict: TRUE — the stdout/stderr contract is uniform;
+secrets prompts live on stderr where they can't be
+accidentally piped downstream.
