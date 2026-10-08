@@ -11898,3 +11898,7 @@ Claim verified: a corrupt/unreadable/wrong-pass wallet.dat can never be silently
 ## Session 2322 update (Socratic pass 988 — outbound frame bound)
 
 Claim verified: EncodeFrame (frame.go:195) can't emit an out-of-spec or lying frame — payload > U24 MaxMessageLength is rejected before allocation, MsgLength is overwritten from the real payload length so the header can never disagree, and Header.Validate runs before serialization. The outbound side matches the inbound Decoder's strictness. TRUE.
+
+## Session 2323 update (Socratic pass 989 — logger degradation postures)
+
+Claim verified: the logger degrades deliberately in every direction — nil Writer → os.Stderr (:113–115), unknown format → TextHandler (:120–124), Discard() uses LevelError+1 so nothing emits even if a caller misjudges (:130–137), Adapter() routes unrecognized levels to Info rather than dropping them (:143–155). Write errors are swallowed by slog by design — a dead sink is unreportable anyway, matching the verified contract. TRUE.
