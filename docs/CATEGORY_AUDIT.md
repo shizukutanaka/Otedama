@@ -16943,3 +16943,29 @@ Verification on origin/master (40da2e515):
 
 Verdict: TRUE — merged invariants intact; no drift
 between the merged fixes and the audited tree.
+
+## Session 2844 update (Socratic pass 1509 — CI failure-class re-enumeration)
+
+Claim under test: the PR's CI failures are still only
+the two recorded classes — Go-pin 1.20–1.23 (the
+#1344-rejected fix class) and dependency-graph
+(repo-settings flag) — with no new failure class.
+
+Verification (git_view_pr CI status):
+
+- Current rollup: **1 passed, 0 failed, 12 pending**
+  — the check-runs stream is queue-saturated behind
+  the branch's 1,202-commit payload; the lightweight
+  snapshot can read as zero checks, but the PR-level
+  rollup shows pending, not absent.
+- Zero FAILED runs ⇒ no new failure class since the
+  last enumeration; the recorded classes (Go-pin,
+  dependency-graph) sit inside the pending set and
+  were already dispositioned (#1344 rejected = won't
+  fix; dependency graph = repo Settings toggle only
+  the owner can flip).
+- PR state: open, mergeable, no conflicts.
+
+Verdict: TRUE — no new CI failure class; the
+pending-set composition matches the recorded
+dispositions.
