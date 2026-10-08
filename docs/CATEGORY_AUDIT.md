@@ -11850,3 +11850,7 @@ Claim verified: every poolproto Close is concurrency-safe — all four sites use
 ## Session 2310 update (Socratic pass 976 — StartBackground lifecycle)
 
 Claim verified: both rate fetchers' StartBackground (fetcher.go:450, hashrate.go:230) is called exactly once per Run() — the loops are plain ticker+ctx-select with `defer ticker.Stop()`, an immediate first fetch, and every Fetch is mutex-guarded single-flight so even a hypothetical double-start is benign (duplicate pollers, no storm or panic). Zero- interval falls back to CacheDuration. TRUE.
+
+## Session 2311 update (Socratic pass 977 — exposition float formatting)
+
+Claim verified: the metrics writer's float rendering is Prometheus-canonical even in edge cases (metrics.go:411–424) — NaN→"NaN", +Inf→"+Inf", -Inf→"-Inf" via math predicates (not magnitude checks, so 1e308 isn't mis-rendered), everything else %g. Gauges never receive non-finite input anyway (s2301), but the writer itself is correct if they ever did. TRUE.
