@@ -18204,3 +18204,27 @@ production, ~25 sites):
 
 Verdict: TRUE — no stale-field carryover;
 each parse materializes a fresh value.
+
+## Session 2902 update (Socratic pass 1567 — init() side-effect census)
+
+Claim under test: `init()` functions do pure
+registration/self-check only — no I/O,
+env reads, network, or time dependence.
+
+Verification (`rg 'func init\('` — exactly 4):
+
+- stratumv2/dialer.go:31 — registers both
+  V2 dialer instances (plain + TLS);
+  duplicate registration panics at startup
+  (fail-fast, unreachable at runtime).
+- stratumv1/stratumv1.go:758 — registers
+  both V1 dialer instances.
+- btccrypto/secp256k1.go:48 — registers
+  both stub schemes (ecdsa + schnorr).
+- english_wordlist.go:35 — BIP-39 wordlist
+  SHA-256 integrity pin (s2884).
+- All pure: no env, no I/O, no network —
+  import order cannot change behavior.
+
+Verdict: TRUE — init surface is minimal,
+pure, and fail-fast.
