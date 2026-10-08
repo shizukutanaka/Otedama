@@ -9924,3 +9924,7 @@ Claim verified: CLAUDE.md documents "17 並行ヘルスチェック" and Default
 
 Defects found and fixed:
 - config.yaml.example:90 claimed `Supported: en, ja, zh-CN, ko, es, fr, de, pt` — omitting ru and ar, both implemented in internal/i18n/messages/ru_ar.go, and listing `zh-CN` where the canonical catalog tag is `zh` (Base() accepts zh-CN, but the docs/API.md canonical list uses `zh`). Corrected to `en, ja, zh, ko, es, fr, de, pt, ru, ar` — matching the 10 Lang constants in message.go:104-113 and docs/API.md:191. CLAIM FALSE, corrected.
+
+## Session 1836 update (Socratic pass 502 — version chain end-to-end)
+
+Claim verified: the version flow is single-sourced — `VERSION` (`v3.0.0-alpha.1`) → Makefile `VERSION :=` → ldflags `-X internal/version.{Version,Commit,BuildDate}` → `otedama version`; the in-code default `v3.0.0-alpha.1-dev` intentionally marks unversioned builds (s546 alignment holds). Release gates: `check-version` requires the VERSION file AND a dated CHANGELOG entry (Makefile:295-298); `make tag` signs `git tag -s`. TRUE.
