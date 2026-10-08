@@ -14561,3 +14561,24 @@ config 3, lightning 2, stratum/tls 1, doctor 1, base58 1).
 
 Verdict: TRUE (with recorded residual) — functionally identical;
 conversion is a rejected refactor class, not a defect.
+
+## Session 2747 update (Socratic pass 1413 — atomic-API census)
+
+Claim under test: all shared-state access uses typed atomics —
+zero legacy free functions or atomic.Value.
+
+Verification: atomic field decl census + legacy-call grep.
+
+- Field declarations: 9 `atomic.Bool` (tui started, v1/v2 closed,
+  v1 authorized + versionMaskWarned, worker running, engine flags),
+  7 `atomic.Pointer` (logger singleton, http boundAddr/serveErr,
+  provider payoutScheme, stats blobs), 5 `atomic.Uint64`
+  (metrics counters, sats accountant).
+- Zero legacy free calls: no `atomic.LoadX/StoreX/AddX/
+  CompareAndSwapX`, no `atomic.Value` — the typed-receiver API is
+  used at every access site.
+- Consequence: the type checker enforces atomic access (a typed
+  atomic cannot be read bare without vet flagging it); the
+  modernization completed in earlier passes holds at HEAD.
+
+Verdict: TRUE — atomic surface is uniformly typed; no bypass.
