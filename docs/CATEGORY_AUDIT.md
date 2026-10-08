@@ -10992,3 +10992,9 @@ Claim verified: V1's mid-session parsers can't weaken the handshake's guarantees
 ## Session 2099 update (Socratic pass 765 — SV2 job assembler)
 
 Claim verified: the SV2 adapter's job assembler can't grow unboundedly or leak a stale tip — the pending map is bounded at 64 via insertion-order FIFO eviction (a pool flooding NewMiningJob without SetNewPrevHash is evicted, not accumulated); undecodable frames are skipped rather than fatal (correct lenience for a binary protocol riding Noise — a single bad frame can't kill the session); on SetNewPrevHash only the pool-named pending job is carried into the new epoch and the rest of the pending map is reset (orphan jobs from the old tip can't leak forward); ntime takes max(pool NtimeStart, job NtimeStart) so the later roll wins; and emit is context-cancellable so shutdown can't park a sender on a full jobsCh. TRUE.
+
+## Session 2100 update (Socratic pass 766 — BIP-39 seed math + milestone gate)
+
+Claim verified: the BIP-39 implementation can't produce a weak or malformed seed — entropy bits are restricted to the spec's five legal sizes (128/160/192/224/256); io.ReadFull enforces a complete entropy read (a short read errors instead of yielding a partially-random seed); the entropy→mnemonic derivation is the exact spec (checksum = first ent/32 bits of SHA-256 MSB-first, 11-bit word indices); and the intermediate bit-buffer is zeroed before return so secret material doesn't linger on the heap. TRUE.
+
+MILESTONE GATE (s2100): gofmt clean; go build ./... clean; go vet ./... clean; go test all green — lightning, metrics, httpserver, tui, arbitration, poolproto+adapters, stratum.
