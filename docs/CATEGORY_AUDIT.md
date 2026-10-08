@@ -10402,3 +10402,7 @@ Claim verified: SubmitSharesSuccess with a future LastSequenceNumber is dropped;
 ## Session 1953 update (Socratic pass 619 — updateWork target semantics)
 
 Claim verified: workers grind to the pool-assigned shareTarget from OpenMiningChannelSuccess/SetTarget — never the network block target — falling back to the nBits-derived target only when the pool assigned none (zero value); all five header fields are populated and ntime rolls forward per job; arbitration-paused devices are skipped so resume comes from the next Decide, not stale work. Post-sv2-spec-#236 compliance holds structurally: we declare MaxTargetUnconstrained, so every pool SetTarget is within bound by construction. TRUE.
+
+## Session 1954 update (Socratic pass 620 — arbitration pause lifecycle)
+
+Claim verified: pauseSet is a sync.Map with a single writer (the arbitration loop) and lock-free readers (updateWork); reconcileArbPauses rewrites the set to exactly mirror the latest Allocation after every Decide, so a pause can never outlive the assignment that created it; streamStaleTimeout (3 min ≈ 3–6× the 30–60 s quote cadence) prunes dead providers from routing; powerFloor computes the power-breakeven yield in sats/sec only when watts+price+devices are all configured. TRUE.
