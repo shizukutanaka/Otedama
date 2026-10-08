@@ -17281,3 +17281,31 @@ job log):
 
 Verdict: TRUE — same two classes; no new failure
 mode appeared.
+
+## Session 2860 update (Socratic pass 1525 — ecosystem recheck)
+
+Claim under test: the upstream SV2 ecosystem
+positions recorded at s2843 still hold — SRI
+v1.12.0 and sv2-apps v0.8.0 remain the latest
+releases; the standing BIP323 version-rolling-mask
+gap is unchanged.
+
+Verification:
+
+- Web sources confirm **SRI v1.12.0 (2026-09-17)**
+  remains the latest release — channels hardening,
+  codec/framing refactor, BIP323 adaptations,
+  AES-256-GCM removal.
+- `api.github.com` is rate-limited unauthenticated
+  this pass (403) and `gh` carries no cross-repo
+  credential — the sv2-spec open-set probe
+  (#238/#234/#203/#198) could not be re-enumerated
+  by API; the last verified set stands.
+- The BIP323 version-rolling mask remains absent
+  from Otedama's V1 client (no `mining.configure`)
+  — the standing P0 gap recorded in ADR-009.
+
+Verdict: TRUE on the verifiable surface — SRI
+v1.12.0 latest, mask gap stands; the open-set
+re-probe was externally rate-limited, not a
+content change.
