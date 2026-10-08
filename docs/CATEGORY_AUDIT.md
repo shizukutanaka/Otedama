@@ -18928,3 +18928,30 @@ Verification (1 site):
 Verdict: TRUE — the only glob is a
 fixed-pattern sweep inside a
 validated data dir.
+
+## Session 2930 update (Socratic pass 1595 — weak-crypto census)
+
+Claim under test: no weak crypto
+primitives (MD5, SHA-1, DES, RC4)
+in production code.
+
+Verification:
+
+- `crypto/md5`, `crypto/sha1`,
+  `crypto/des`, `crypto/rc4` →
+  **zero** imports.
+- Production `crypto/` imports:
+  sha256, sha512, hmac, aes, cipher,
+  ecdh, rand, subtle, tls, x509 —
+  all modern, fit-for-purpose:
+  sha256 for mining + fingerprint,
+  sha512 for BIP-32, hmac for HKDF,
+  aes/cipher for AES-GCM seedstore,
+  ecdh for Noise NX, rand for nonces,
+  subtle for passphrase compare.
+- `golang.org/x/crypto` deps are
+  chacha20poly1305 + curve25519 —
+  also modern.
+
+Verdict: TRUE — zero weak crypto;
+all primitives are modern.
