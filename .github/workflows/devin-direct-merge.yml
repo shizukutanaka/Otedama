@@ -21,11 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+      # No checkout: both steps only call the GitHub API via gh — cloning
+      # the repo (full history via fetch-depth: 0) was pure waste.
       # コンフリクト状態をチェック
       - name: Check Mergeable Status
         id: check_conflict
