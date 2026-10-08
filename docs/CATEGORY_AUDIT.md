@@ -18677,3 +18677,25 @@ Verification (5 enums):
 Verdict: TRUE — all enums have a
 default-armed exhaustive String();
 no silent unknown-to-empty mappings.
+
+## Session 2921 update (Socratic pass 1586 — runtime-surface census)
+
+Claim under test: runtime calls are
+introspective only — no scheduler
+interference (Gosched/GC/GOMAXPROCS).
+
+Verification (6 sites):
+
+- `runtime.NumCPU()` ×4 — worker
+  thread default, device-model naming,
+  doctor CPU check; each is a read.
+- `runtime.ReadMemStats` +
+  `NumGoroutine` — the runtime collector
+  feeding go_* metrics; read-only.
+- Zero `runtime.Gosched`,
+  `runtime.GC`, `runtime.FreeOSMemory`,
+  `runtime.GOMAXPROCS` — nothing that
+  pokes the scheduler.
+
+Verdict: TRUE — runtime calls are all
+read-only introspection.
