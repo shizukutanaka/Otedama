@@ -14734,3 +14734,26 @@ Verification: all 3 client constructions.
 
 Verdict: TRUE — all outbound HTTP is time-bounded and
 redirect-proof.
+
+## Session 2754 update (Socratic pass 1420 — slices/maps modernization census)
+
+Claim under test: the slices/maps stdlib migration is complete —
+no residual `sort.` package calls.
+
+Verification: slices/maps usage tally + `sort` package grep.
+
+- In use: `slices.Sort` ×11, `slices.SortFunc` ×2,
+  `slices.SortStableFunc` ×1, `slices.Contains` ×1, `maps.Clone`
+  ×1, `maps.Copy` ×2.
+- `sort.` package call sites outside tests: **0** — the migration
+  passes (#619 slices.Sort for Strings, #1235 Ints, plus
+  sort.Slice→SortFunc/SortStableFunc sites) completed with no
+  residue.
+- maps.Copy/Clone adopted where merge/duplicate loops existed
+  (#1335); every other map op is the honest direct-write or
+  bounded iteration the audit already verified.
+- Consequence: sort behavior is uniformly comparator-driven
+  generics — type-safe, no reflect dispatch, no legacy helpers.
+
+Verdict: TRUE — modernization complete; legacy sort surface is
+zero.
