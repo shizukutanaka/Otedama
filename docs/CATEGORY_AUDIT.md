@@ -12006,3 +12006,7 @@ Claim verified: the reconnect loop is honest at every layer — jitteredBackoff 
 ## Session 2349 update (Socratic pass 1015 — Noise transport honesty)
 
 Claim verified: the transport layer is honest — CipherState sequential u64 nonce (LE at nonce[4:12]) increments on every seal/open, so reuse requires ~2^64 messages (noise.go:79–100); aeadFor() refuses pre-handshake transport use (lazy derive, no nil cipher); Write rejects ciphertext > 65535 (u16 wire bound + tag) instead of truncating a desynchronizing frame (:303–318); Read's u16 length prefix makes over-allocation structurally impossible, ReadFull drains the exact frame, and leftover plaintext survives in readbuf for the next call — none dropped (:326–340). TRUE.
+
+## Session 2350 update (Socratic pass 1016 — share-rate reconciliation honesty)
+
+Claim verified: updateShareRates is honest — judged=accepted+rejected with the div0 branch explicitly zeroing reject/stale rates (metrics.go:605–627); unaccounted=found−judged clamps at 0 so a stats-tick race never emits a negative gauge (:614–619); both rates share the same judged denominator and rejectByReason is read under its mutex (:622–632). TRUE.
