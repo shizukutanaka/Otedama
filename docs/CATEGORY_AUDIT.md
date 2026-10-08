@@ -29425,3 +29425,135 @@ census:
   import.
 
 Verdict: TRUE.
+
+## Session 3110 update (Socratic pass 1774 — strings/bytes complete ledger)
+
+Claim under test: the
+strings surface is
+the bounded-search
+family — prefix/
+contains/trim/cut —
+plus Builder/Replacer;
+bytes is a single
+Equal helper.
+
+Verification —
+census:
+
+- `strings.HasPrefix`×27 +
+  `strings.Contains`×13 +
+  `strings.ContainsRune`×2 +
+  `strings.ContainsAny`×2 +
+  `strings.ContainsFunc`×1 —
+  the
+  bounded
+  search
+  class
+  (verified
+  contains-
+  loop
+  class).
+- `strings.Join`×15 +
+  `strings.TrimSpace`×11 +
+  `strings.TrimSuffix`/`TrimLeft`/`Trim`×1
+  each +
+  `strings.ToLower`×6 +
+  `strings.ToUpper`×1 +
+  `strings.EqualFold`×2 —
+  the
+  normalize
+  class.
+- `strings.CutPrefix`×5 +
+  `strings.Split`×3 +
+  `strings.Fields`×1 +
+  `strings.Index`/`IndexAny`/`IndexByte`/`IndexFunc`/`IndexRune`/`LastIndexByte`×(1-2) —
+  the
+  split
+  class.
+- `strings.Builder`×10 +
+  `strings.NewReplacer`×3 +
+  `strings.Repeat`×7 +
+  `strings.ReplaceAll`×1 +
+  `strings.Map`×1 +
+  `strings.Reader`×1 —
+  the
+  build
+  class.
+- `bytes.Equal`×2 —
+  the
+  whole
+  bytes
+  surface:
+  constant-
+  length
+  equality
+  for
+  hash/
+  ID
+  compares.
+- ZERO
+  `strings.Replace`
+  (counted),
+  `strings.FieldsFunc`,
+  `strings.FieldsSeq`,
+  `strings.Lines`,
+  `strings.SplitSeq`,
+  `strings.SplitAfterSeq`,
+  `strings.SplitAfter`,
+  `strings.SplitN`,
+  `strings.ToValidUTF8`,
+  `strings.Title`,
+  `strings.ToTitle`,
+  `strings.ToTitleSpecial`,
+  `strings.ToUpperSpecial`,
+  `strings.ToLowerSpecial`,
+  `strings.Cut`,
+  `strings.CutSuffix`,
+  `strings.Compare`,
+  `strings.NewReader`,
+  `strings.Grow`,
+  `strings.Clones` —
+  the
+  residual
+  strings
+  API
+  absent.
+- ZERO
+  `bytes.Builder`,
+  `bytes.Buffer`,
+  `bytes.Compare`,
+  `bytes.Contains*`,
+  `bytes.Count`,
+  `bytes.Cut*`,
+  `bytes.EqualFold`,
+  `bytes.Fields*`,
+  `bytes.HasPrefix`,
+  `bytes.HasSuffix`,
+  `bytes.Index*`,
+  `bytes.Join`,
+  `bytes.Lines`,
+  `bytes.Map`,
+  `bytes.Repeat`,
+  `bytes.Replace*`,
+  `bytes.Reader`,
+  `bytes.Runes`,
+  `bytes.Split*`,
+  `bytes.Title`,
+  `bytes.ToLower`,
+  `bytes.ToUpper`,
+  `bytes.Trim*`,
+  `bytes.Clone`,
+  `bytes.Concat`,
+  `bytes.Grow`,
+  `bytes.NewBuffer*`,
+  `bytes.MinRead` —
+  the
+  bytes
+  package
+  is
+  essentially
+  unused
+  beyond
+  Equal.
+
+Verdict: TRUE.
