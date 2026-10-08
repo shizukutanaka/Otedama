@@ -15909,3 +15909,18 @@ Verification — the complete set:
 
 Verdict: TRUE — one TLS posture: TLS≥1.2, verify-always,
 system-roots-plus-additive, fail-closed CA parsing.
+
+## Session 2800 milestone (Socratic pass 1466 — gate re-verification)
+
+Periodic re-run of the four gates on the audit branch:
+
+- gofmt -l internal cmd → clean.
+- go build ./... → clean.
+- go vet ./internal/... ./cmd/... → clean.
+- go test -count=1 across all 21 package legs (engine,
+  poolproto×3, stratum, miner, config, rates, provider,
+  lightning, doctor, btccrypto, hal, metrics, i18n×2, tui,
+  httpserver, daemon, arbitration, cmd/otedama) → all PASS.
+
+Verdict: TRUE — every audited invariant since s2780 holds
+under the full gate set.
