@@ -11726,3 +11726,7 @@ Claim verified: every discarded error return is either cleanup-on-failure where 
 ## Session 2279 update (Socratic pass 945 — package-level var census)
 
 Claim verified: every package-level `var` is an effectively-immutable table or a controlled seam — defaultSources/defaultHashrateSources are assigned into Fetcher structs but never mutated (zero `sources =`/`sources[i] =` writes anywhere), EnglishWords is written exactly once inside init() before the 2048-count + SHA256 integrity check and read-only thereafter, validEntropyBits/numericEnvVars are read-only lookup tables, ErrWrongPassphrase is a sentinel, defaultPtr is the CAS-guarded logger singleton, and drmBasePath is the deliberate test-injection seam documented as such. No shared mutable package state exists in internal/. TRUE.
+
+## Session 2280 update (Socratic pass 946 — path-hygiene census)
+
+Claim verified: no path component in the tree comes from adversarial input — every filepath.Join operand is either a compile-time constant (walletFile, fingerprintFile, systemdUnitName), an operator-controlled value (--data-dir, HOME/XDG/APPDATA env — the operator owns these by definition), or a kernel-generated sysfs basename (Glob/ReadDir over /sys/class/drm — kernel device names cannot contain `..`). Pool-decoded strings never reach the filesystem layer at all, so the traversal surface is structurally absent; the one Glob (.wallet-*.tmp stale-temp sweep) is confined to our own data dir. TRUE.
