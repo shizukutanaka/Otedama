@@ -15055,3 +15055,30 @@ Verification: 7 WaitGroups in non-test code.
 
 Verdict: TRUE — Add-before-spawn + defer-Done-at-head is
 uniform; the Add/Wait race class is structurally absent.
+
+## Session 2767 update (Socratic pass 1433 — channel-close census)
+
+Claim under test: every close() has exactly one possible executor —
+no double-close, no send-on-closed.
+
+Verification: 15 close() call sites on 14 distinct channels.
+
+- Closer-goroutine pattern (fanin.go:56, hashrate.go:159,
+  registry.go:169, worker.go:176): `wg.Wait(); close(ch)` inside
+  the designated closer — the sender set and the closer are
+  disjoint by construction.
+- Owner-defer pattern (polling.go:53, dialer.go:246, run.go:903):
+  the channel's sole producer closes via defer on exit.
+- Mutex-serialized double candidates (stratumv1.go:260/:370):
+  cancelPending and the response path both `delete(s.pending, id)`
+  under pendingMu before `close(ch)` — first-to-delete wins, the
+  loser sees !ok and never closes. Documented invariant.
+- Lifecycle channels (dashboard.go:157, worker.go:162): closed in
+  the Start/Stop path guarded by the same CAS that makes the
+  lifecycle idempotent.
+- Single-caller channels (stratumv1.go:563–565): closeChannels
+  under sendMu — one executor on the session teardown path.
+
+Verdict: TRUE — single-closer everywhere; the two multi-path
+candidates are serialized by delete-then-close under the map's
+mutex.
