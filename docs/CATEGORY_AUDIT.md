@@ -12002,3 +12002,7 @@ Claim verified: maskAddr is honest privacy — ≤12-char values verbatim, else 
 ## Session 2348 update (Socratic pass 1014 — reconnect-loop honesty end-to-end)
 
 Claim verified: the reconnect loop is honest at every layer — jitteredBackoff draws ±pct from crypto/rand with nominal fallback on span<=0 or rand error (run.go:481–491); an established session resets backoff BEFORE failover branches so logs report the real delay (:620–627); payout-address failover requires addrConnected==false so an established address is never silently abandoned (earnings can't redirect during an outage) (:639–660); the jittered sleep is drawn once and used for both the log line and the actual wait (:648–650); the sleep is a NewTimer + explicit Stop on ctx.Done (no pre-1.23 timer leak) (:681–688); doubling happens only after the wait, capped (:689–691). TRUE.
+
+## Session 2349 update (Socratic pass 1015 — Noise transport honesty)
+
+Claim verified: the transport layer is honest — CipherState sequential u64 nonce (LE at nonce[4:12]) increments on every seal/open, so reuse requires ~2^64 messages (noise.go:79–100); aeadFor() refuses pre-handshake transport use (lazy derive, no nil cipher); Write rejects ciphertext > 65535 (u16 wire bound + tag) instead of truncating a desynchronizing frame (:303–318); Read's u16 length prefix makes over-allocation structurally impossible, ReadFull drains the exact frame, and leftover plaintext survives in readbuf for the next call — none dropped (:326–340). TRUE.
