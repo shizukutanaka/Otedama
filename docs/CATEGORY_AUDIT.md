@@ -17851,3 +17851,31 @@ Verification (`rg exec.Command`):
 
 Verdict: TRUE — process-spawn surface is
 argv-bound and injection-free.
+
+## Session 2888 update (Socratic pass 1553 — timer/sleep census)
+
+Claim under test: every timer/ticker is stopped
+and every wait is context-cancellable.
+
+Verification (`rg` time.Sleep/After/Tick/
+NewTimer/NewTicker):
+
+- 9 tickers — each paired with `defer Stop()`:
+  arbitrate.go:165, run.go:238/311/936/1489/
+  2232, dashboard.go:189, hashrate.go:236,
+  fetcher.go:459, polling.go:63.
+- 2 timers: stratumv1.go:736 (defer Stop),
+  run.go:682 reconnect timer with explicit
+  Stop() on the ctx-cancel path (documented
+  s2761).
+- run.go:1673 `time.After(w)` for
+  pool-requested reconnect wait — inside a
+  select on ctx.Done(): cancellable.
+- worker.go:281 `time.Sleep(10ms)` — bounded
+  idle yield in the grind loop only when no
+  job is loaded; granularity-bound, never
+  blocks shutdown.
+- Zero `time.Tick(` (the leaking variant).
+
+Verdict: TRUE — no timer leak and no
+uncancellable wait.
