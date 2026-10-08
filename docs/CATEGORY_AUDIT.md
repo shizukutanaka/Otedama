@@ -34409,3 +34409,147 @@ census:
   prefixes).
 
 Verdict: TRUE.
+
+## Session 3144 update (Socratic pass 1808 — hex/base64/json detail ledger)
+
+Claim under test: the
+text
+encoding
+surface is
+json.Unmarshal
+dominated
++
+hex
+digest
+codec —
+with
+base64/base32
+entirely
+absent
+and
+no
+streaming
+json.Decoder.
+
+Verification —
+census:
+
+- `json.Unmarshal`×26 —
+  the
+  dominant
+  decode
+  (V1
+  JSON-RPC
+  lines,
+  config
+  files,
+  wallet,
+  rate
+  responses —
+  every
+  input
+  is
+  a
+  bounded
+  byte
+  slice
+  before
+  Unmarshal,
+  matching
+  the
+  bounded-
+  decode
+  classes).
+- `json.RawMessage`×18 —
+  late-typed
+  params/
+  results
+  in
+  the
+  V1
+  wire
+  structs.
+- `json.NewEncoder`×3 —
+  the
+  V1
+  wire
+  writer.
+- `json.Marshal`×1 —
+  the
+  single
+  marshal
+  site.
+- `hex.DecodeString`×6 —
+  share/
+  coinbase/
+  target
+  hex.
+- `hex.EncodeToString`×4 —
+  digest/
+  fingerprint
+  display.
+- ZERO
+  `json.NewDecoder`,
+  `json.Valid`,
+  `json.MarshalIndent`,
+  `json.Indent`,
+  `json.Compact`,
+  `json.HTMLEscape`,
+  `json.Number`,
+  `json.Delim`,
+  `json.Token`,
+  `json.SyntaxError`,
+  `json.UnmarshalTypeError`,
+  `json.MarshalerError`,
+  `json.UnsupportedTypeError`,
+  `json.UnsupportedValueError`,
+  `json.InvalidUTF8Error`,
+  `json.InvalidUnmarshalError` —
+  no
+  streaming
+  decode,
+  no
+  token
+  walker,
+  no
+  typed
+  error
+  introspection.
+- ZERO
+  `base64.*`
+  and
+  `base32.*`
+  —
+  no
+  base
+  encodings
+  anywhere
+  (payout
+  addresses
+  are
+  base58/
+  bech32
+  via
+  btccrypto;
+  wire
+  payloads
+  are
+  hex
+  or
+  raw
+  binary).
+- ZERO
+  `hex.Decode`,
+  `hex.Encode`,
+  `hex.EncodedLen`,
+  `hex.DecodedLen`,
+  `hex.Dump`,
+  `hex.Dumper`,
+  `hex.NewEncoder`,
+  `hex.NewDecoder` —
+  hex
+  is
+  string-level
+  only.
+
+Verdict: TRUE.
