@@ -13040,3 +13040,7 @@ Read the full ADR-003: its "exactly three external runtime dependencies" list (s
 ## Session 2602 update (Socratic pass 1268 — service-subcommand parity)
 
 Four-way parity: service.go dispatches exactly `install`/`uninstall`/`status` (service.go:28-32); the bash, zsh, and fish completion blocks enumerate the identical three verbs; API.md documents the same three with matching semantics. No start/stop/restart verbs exist anywhere — consistent with the daemon design (launchd/systemd/SCM own lifecycle). TRUE.
+
+## Session 2603 update (Socratic pass 1269 — config-subcommand parity)
+
+Four-way parity: config.go dispatches exactly `show`/`validate` (config.go:31-33); all three shell completion blocks enumerate the identical two verbs; API.md documents both with their full flag surface (`--config`, `--origin`, `--json` — all verified in the s2596 flag census). Subcommand-verb parity is now complete across all verb-bearing subcommands: config, service, wallet. TRUE.
