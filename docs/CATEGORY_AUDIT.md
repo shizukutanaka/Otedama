@@ -13356,3 +13356,7 @@ claim corrected: opus task-queue row 1 "hmacSHA256Pooled の配線判断 — hkd
 ## Session 2681 update (Socratic pass 1347 — skills/quality-pass-sonnet.md task queue)
 
 claim corrected: sonnet task-queue row 2 "依存3件更新" is stale — all three steps shipped (yaml.v3→go.yaml.in/yaml/v3 v3.0.5 at #444, x/crypto→v0.48.0 at #1359, x/sys→v0.41.0 at #1359); only the toolchain bump (go 1.25+) remains, which is a maintainer decision. Task struck through as resolved. skills/ sweep complete: all 6 files passed — tdd.md (s2678), security-audit.md (s2676), release-procedure.md (s2675), code-review.md clean (s2677), quality-pass-opus.md (s2679+s2680), quality-pass-sonnet.md (s2679+s2681).
+
+## Session 2682 update (Socratic pass 1348 — .github/pull_request_template.md)
+
+claim verified: .github/pull_request_template.md (60 lines) — TRUE. Every referenced artifact exists: CONTRIBUTING.md, CLAUDE.md, skills/tdd.md, CHANGELOG.md `[Unreleased]` section, NOTICE, .golangci.yml for the lint checkbox. Legal-compliance section's SPDX claim matches the actual two-line `// SPDX-License-Identifier: Apache-2.0` header present on .go files (verified s1192); DCO sign-off requirement consistent with CONTRIBUTING.md. No stale claims — template is prescriptive-only.
