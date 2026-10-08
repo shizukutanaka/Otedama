@@ -10054,3 +10054,7 @@ Claim verified: `internal/doctor/checks.go` defines exactly 17 named checks (Con
 ## Session 1866 update (Socratic pass 532 — CLAUDE.md branch-name falsehood)
 
 Defects found and fixed: CLAUDE.md's branch-strategy text named `main` twice ("`main` ブランチは常にリリース可能…mainにマージ", "mainへのマージ前に全テスト") but the repository's default (and only trunk) branch is `master` — no `main` ref exists. An agent following the text literally would target a nonexistent branch. Corrected both references to `master`; the GitHub Flow prescription itself is unchanged (feature branches → PR → trunk). Same correction class previously applied to ci.yml/devin-direct-merge.yml/comment text in sessions 1351/1689.
+
+## Session 1867 update (Socratic pass 533 — CONTRIBUTING make-target parity)
+
+Claim verified: CONTRIBUTING.md references exactly four make targets (setup/build/lint/test); all four exist in the Makefile's 32-target inventory. No phantom commands in the contributor guide. TRUE.
