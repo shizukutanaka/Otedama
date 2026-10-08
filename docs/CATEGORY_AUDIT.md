@@ -11750,3 +11750,7 @@ Claim verified: every switch on a wire-decoded discriminant is strict, never sil
 ## Session 2285 update (Socratic pass 951 — response-body census)
 
 Claim verified: every inbound HTTP response body in the tree is read through io.LimitReader — rates fetcher caps at 64 KiB (fetcher.go:436), the hashrate feed caps both the discard-drain and the parse read at maxHashrateBody (hashrate.go:209/212), and the doctor connectivity probe discards at 8 KiB (checks.go:925). No unbounded io.ReadAll/io.Copy touches a network body; a malicious or malformed upstream cannot exhaust memory through the response channel. TRUE.
+
+## Session 2286 update (Socratic pass 952 — scan-family census)
+
+Claim verified: zero `fmt.Scan`/`Sscanf`/`Fscanf`/`binary.Read` decoders exist in production code — the only matches are comments documenting why they were rejected (fetcher.go:52 Sscanf greedy match, dialer.go:432 silent truncation "1a"→1, run.go:2164 echo-verbatim reason). All numeric decoding goes through strconv with explicit bit sizes; all wire decoding is manual length-prefixed reads. TRUE.
