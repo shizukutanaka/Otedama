@@ -12857,3 +12857,7 @@ Claim verified: every remaining code diff on the branch is the reviewed payload 
 ## Session 2561 update (Socratic pass 1227 — master movement + mergeability watch)
 
 Claim verified: `origin/master` remains at `40da2e51` (#1404); clean `git merge-tree` (no conflicts); branch now 924 commits ahead with all diffs inside the audited 46-file payload. TRUE — mergeability holds; ledger growth has not introduced conflict surface.
+
+## Session 2562 update (Socratic pass 1228 — config.yaml.example full parity re-check)
+
+Claim verified: the example covers all 20 yaml tags — 10 as active keys (bitcoin_address, pools{url,user,password}, workers{name}, language, log_level, data_dir, log_format) and 9 as documented commented entries (bitcoin_addresses, payout_scheme, tls_ca_file, http_addr, curtail_below_btc_usd, min_yield_sats_per_sec, power_watts, electricity_price_per_kwh, arbitration_hysteresis_pct) — every field documented with honest semantics (scheme list, failover order, DefaultPoolURL fallback with the session-498 correction, curtailment trust semantics). TRUE — complete parity, earlier s1898 verdict stands.
