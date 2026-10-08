@@ -155,7 +155,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: binaries
-        path: otedama-*
+        # make build-all outputs dist/otedama-<version>-<os>-<arch>
+        path: dist/otedama-*
 
   integration:
     name: Integration Tests

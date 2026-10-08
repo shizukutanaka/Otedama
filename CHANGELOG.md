@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 1718 — test.yml 成果物グロブ)
+
+- `test.yml` build ジョブの成果物アップロードが `otedama-*`（リポジトリ直下）を
+  指し、実出力 `dist/otedama-*` と不一致で常に空アーティファクト → `dist/` へ修正。
+
 ### Fixed (session 1714 — devin-direct-merge 対象ブランチゲート)
 
 - `devin-direct-merge.yml` を `branches: [master]` へ限定 — 非 master 宛 PR への
