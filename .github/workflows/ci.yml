@@ -12,6 +12,13 @@ on:
     # Run nightly builds
     - cron: '0 2 * * *'
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   GO_VERSION: '1.23.x'
   DOCKER_REGISTRY: ghcr.io
@@ -46,7 +53,7 @@ jobs:
             
       - name: Install golangci-lint
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
           
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m ./...
@@ -75,7 +82,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -88,7 +95,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           
       - name: Run gosec security scanner
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.29.0
         with:
           args: '-fmt sarif -out gosec-results.sarif ./...'
           
@@ -275,7 +282,9 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             output_name=${output_name}.exe
           fi
-          go build -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+          # Build the whole package — cmd/otedama is 10 files; naming
+          # main.go alone fails with undefined references.
+          go build -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} ./cmd/otedama
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -331,7 +340,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             output_name=${output_name}.exe
           fi
-          go build -tags=experimental_unified -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+          go build -tags=experimental_unified -ldflags="-s -w -X github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }} -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}" -o ${output_name} ./cmd/otedama
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -499,7 +508,7 @@ jobs:
           CONTAINER=otedama-verify-hardened
           docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
           docker run -d --name "$CONTAINER" --network host \
-            --read-only --cap-drop=ALL --tmpfs /tmp:rw,nosuid,size=64m \
+            --read-only --cap-drop=ALL --tmpfs /tmp:rw,noexec,nosuid,size=64m \
             "$IMAGE_TAG" run --data-dir /tmp/otedama --bitcoin-address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 --http-addr 127.0.0.1:8082 >/dev/null
           for i in {1..60}; do
             if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
@@ -645,27 +654,28 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+        with:
+          # git describe --tags needs full history for the release notes.
+          fetch-depth: 0
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
           
+      - name: Create release archives
+        run: |
+          cd artifacts
+          # Only binary artifacts — coverage/benchmark dirs must not ship.
+          # Flatten the archive (binary at top level) so install.sh can use it.
+          for dir in otedama-*/; do
+            tar czf "${dir%/}.tar.gz" -C "$dir" .
+          done
+
       - name: Create checksums
         run: |
           cd artifacts
-          for dir in */; do
-            cd "$dir"
-            sha256sum * > SHA256SUMS
-            cd ..
-          done
-          
-      - name: Create release archive
-        run: |
-          cd artifacts
-          for dir in */; do
-            tar czf "${dir%/}.tar.gz" "$dir"
-          done
+          sha256sum otedama-*.tar.gz > checksums.txt
           
       - name: Generate release notes
         id: release_notes
@@ -674,89 +684,12 @@ jobs:
           git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> RELEASE_NOTES.md
           
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/*.tar.gz
-            artifacts/*/SHA256SUMS
+            artifacts/checksums.txt
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
           generate_release_notes: true
-
-  # Deploy to Kubernetes (staging)
-  deploy-staging:
-    name: Deploy to Staging
-    if: github.ref == 'refs/heads/develop'
-    needs: [docker]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: staging
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-          
-      - name: Configure kubectl
-        run: |
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
-          
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/01-namespace.yaml
-          kubectl apply -f k8s/02-configmap.yaml
-          kubectl apply -f k8s/03-pvc.yaml
-          kubectl apply -f k8s/04-postgres.yaml
-          kubectl apply -f k8s/05-redis.yaml
-          kubectl apply -f k8s/06-otedama.yaml
-          kubectl apply -f k8s/07-monitoring.yaml
-          kubectl apply -f k8s/08-ingress.yaml
-          kubectl rollout status statefulset/postgres -n otedama
-          kubectl rollout status statefulset/redis -n otedama
-          kubectl rollout status deployment/otedama -n otedama
-
-  # Deploy to Kubernetes (production)
-  deploy-production:
-    name: Deploy to Production
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release]
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    environment: production
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-          
-      - name: Configure kubectl
-        run: |
-          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
-          
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/01-namespace.yaml
-          kubectl apply -f k8s/02-configmap.yaml
-          kubectl apply -f k8s/03-pvc.yaml
-          kubectl apply -f k8s/04-postgres.yaml
-          kubectl apply -f k8s/05-redis.yaml
-          kubectl apply -f k8s/06-otedama.yaml
-          kubectl apply -f k8s/07-monitoring.yaml
-          kubectl apply -f k8s/08-ingress.yaml
-          kubectl rollout status statefulset/postgres -n otedama
-          kubectl rollout status statefulset/redis -n otedama
-          kubectl rollout status deployment/otedama -n otedama
-          
-      - name: Verify deployment
-        run: |
-          kubectl get pods -n otedama-production
-          kubectl get svc -n otedama-production

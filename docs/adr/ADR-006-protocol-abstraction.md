@@ -171,6 +171,25 @@ schemes) — the stub exists purely as forward-compatible scaffolding
 for signing functionality (e.g. Lightning payout authorization) that
 does not exist yet either.
 
+## Erratum (added session 2687, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; two loose references are recorded here:
+
+1. "Stratum V2 lives behind the same `Pool` interface" — no interface
+   literally named `Pool` exists. The shipped seam is `poolproto`'s
+   `Connection`/`Session`/`Dialer` trio plus optional capability
+   interfaces (`PoolNoticeReceiver`, `ReconnectWaiter`,
+   `DifficultyWatcher`) — same abstraction point, different names.
+2. The Related section's `docs/research/` path does not exist. The
+   referenced 10-year sustainability research lives in
+   `docs/SUSTAINABILITY.md`.
+
+Verified unchanged alongside: `Scheme`/`SignerScheme` stubs
+(erratum of session 248 still accurate), `SchemeForAddressType`
+(btccrypto.go:283), `Hash256`/`TaggedHash` (:352/:364), V1+V2 behind
+the one seam, SHA-256d unabstracted in `internal/miner/sha256d.go`.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model (depends on this for future

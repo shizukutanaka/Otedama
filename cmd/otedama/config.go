@@ -52,6 +52,12 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
+	// Malformed numeric env vars resolve silently; surface them here too —
+	// `config show` is exactly where an operator looks when an env override
+	// "isn't taking effect".
+	for _, w := range config.EnvWarnings(nil) {
+		fmt.Fprintf(stderr, "config: warning: %s\n", w)
+	}
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
 
 	if f.jsonOut {
@@ -73,8 +79,8 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(a))
 		}
 	}
-	fmt.Fprintf(stdout, "log_level:       %s%s\n", cfg.LogLevel, tag(origins.LogLevel))
-	fmt.Fprintf(stdout, "log_format:      %s%s\n", cfg.LogFormat, tag(origins.LogFormat))
+	fmt.Fprintf(stdout, "log_level:       %s%s\n", safeDisplay(cfg.LogLevel), tag(origins.LogLevel))
+	fmt.Fprintf(stdout, "log_format:      %s%s\n", safeDisplay(cfg.LogFormat), tag(origins.LogFormat))
 	fmt.Fprintf(stdout, "language:        %s%s\n", safeDisplay(cfg.Language), tag(origins.Language))
 	fmt.Fprintf(stdout, "data_dir:        %s%s\n", safeDisplay(cfg.DataDir), tag(origins.DataDir))
 	fmt.Fprintf(stdout, "worker_name:     %s%s\n", safeDisplay(cfg.Workers.Name), tag(origins.WorkerName))

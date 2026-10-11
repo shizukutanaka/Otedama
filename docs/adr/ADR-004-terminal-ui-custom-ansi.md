@@ -113,6 +113,21 @@ allocation policies live, interactive diagnostic, etc.), we will
 revisit. As of v3.0, the dashboard is read-only and the custom
 implementation suffices.
 
+## Erratum (added session 2685, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; four factual drifts are recorded here:
+
+1. "default 250 ms" ticker — the render loop actually runs on a 1 s
+   ticker (`dashboard.go:188`).
+2. "~400 lines" — dashboard.go has grown to ~600 lines.
+3. "No automatic resize handling … lines wrap" — stale: `detectWidth`
+   re-reads `terminalWidth` every render tick (dashboard.go:228,
+   :572-588, `width_{unix,windows,other}.go`) and truncates lines to
+   the live column count. A shrink mid-session is picked up within
+   one tick.
+4. `headerLine` — the header function is named `header`.
+
 ## Related
 
 - ADR-003 — Zero runtime dependencies

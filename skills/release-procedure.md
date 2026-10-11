@@ -28,15 +28,15 @@ Semantic Versioningに厳密に従います。破壊的変更が一つでも含�
 
 チェックリスト完了後、以下の手順でリリースを実行します。
 
-**第一段階：リリースブランチの作成.** mainブランチから`release/v<version>`ブランチを作成します。このブランチ上で最終的なバージョン更新コミットを作成します。バージョン番号の更新、CHANGELOG.mdへの日付追加、リリースノート草稿の作成を含めます。
+**第一段階：リリースブランチの作成.** masterブランチから`release/v<version>`ブランチを作成します。このブランチ上で最終的なバージョン更新コミットを作成します。バージョン番号の更新、CHANGELOG.mdへの日付追加、リリースノート草稿の作成を含めます。（**訂正 session 2675**: 本文は `main` ブランチと記述していましたが、このリポジトリのデフォルトブランチは `master` です — `main` ref は存在しません。)
 
 **第二段階：リリースノートの作成.** `docs/releases/v<version>.md`として詳細なリリースノートを作成します。リリースノートは以下の構成を持ちます。冒頭サマリー（日本語と英語の両方で、このリリースの意義を1〜2段落で説明）、新機能（ユーザー視点での機能説明と使用例）、変更点（既存機能の改善や挙動変更）、バグ修正、破壊的変更（該当する場合、詳細な移行手順）、セキュリティ修正（CVE番号があれば記載）、貢献者への謝辞、既知の問題、次回リリースへの展望。
 
-**第三段階：タグ作成と公開.** リリースブランチをmainにマージ後、GitHubでタグ`v<version>`を作成します。タグメッセージはリリースノートの冒頭サマリーを含めます。`git tag -s v<version> -m "Release v<version>"`のようにGPG署名付きタグを使用します。タグのプッシュ（`git push origin v<version>`）がGitHub Actionsのリリースワークフローをトリガーし、自動的にバイナリビルドとGitHub Releasesへの公開が行われます。
+**第三段階：タグ作成と公開.** リリースブランチをmasterにマージ後、GitHubでタグ`v<version>`を作成します。タグメッセージはリリースノートの冒頭サマリーを含めます。`git tag -s v<version> -m "Release v<version>"`のようにGPG署名付きタグを使用します。タグのプッシュ（`git push origin v<version>`）がGitHub Actionsのリリースワークフローをトリガーし、自動的にバイナリビルドとGitHub Releasesへの公開が行われます。
 
-**第四段階：バイナリ配布.** GitHub Actionsがクロスプラットフォームバイナリをビルドし、GitHub Releasesに添付します。各バイナリには以下を含めます。実行ファイル本体（圧縮形式は`.tar.gz`または`.zip`）、SHA-256チェックサム、GPG署名、SBOM（Software Bill of Materials）。Docker Hubへのイメージ公開も自動化されます。`otedama:v3.0.0`、`otedama:v3.0`、`otedama:v3`、`otedama:latest`のタグを適切に付与します（プレリリース版は`latest`タグを付けません）。
+**第四段階：バイナリ配布.** GitHub Actionsがクロスプラットフォームバイナリをビルドし、GitHub Releasesに添付します。各バイナリには以下を含めます。実行ファイル本体（圧縮形式は`.tar.gz`または`.zip`）、SHA-256チェックサム（asset別`.sha256`と結合`checksums.txt`）。（**訂正 session 2675**: 本文は「GPG署名、SBOM」を含めると記述していましたが、現行 release.yml に署名・SBOM生成ステップは存在しません — 署名設定は `.goreleaser.yaml` 内の目標構成のみで、CI は未適用です。VERIFY.md も未署名リリースを開示しています。）コンテナイメージは `v*` タグ push で ghcr.io（GitHub Container Registry、Docker Hub ではありません — 訂正 session 2675）へ公開されます。付与タグは ci-cd.yml の semver パターンにより `ghcr.io/shizukutanaka/otedama:3.0.0`・`:3.0`（+ `:sha-<sha>`）で、`otedama:v3` や `latest` タグは現行設定では付与されません（訂正 session 2675 — 本文の `otedama:v3.0.0`/`v3.0`/`v3`/`latest` タグ列挙は実装と一致しませんでした）。
 
-**第五段階：配布チャネルへの展開.** Homebrew formula（macOSとLinux）、Snap package、AUR（Arch User Repository）への展開を行います。これらは自動化されていますが、公開が正常に行われたことを確認します。主要なバイナリハッシュを公式ウェブサイトとドキュメントに掲載し、ユーザーがダウンロードしたバイナリの検証を可能にします。
+**第五段階：配布チャネルへの展開.** Homebrew formula（macOSとLinux）への展開を行います。（**訂正 session 2675**: 本文は Snap package と AUR も「自動化されている」と記述していましたが、release.yml に存在するのは `vars.HOMEBREW_TAP_REPO` 設定時のみ作動する update-homebrew ジョブのみです — Snap/AUR のパイプラインは存在しません。）公開が正常に行われたことを確認します。主要なバイナリハッシュを公式ウェブサイトとドキュメントに掲載し、ユーザーがダウンロードしたバイナリの検証を可能にします。
 
 **第六段階：アナウンス.** リリース後、以下のチャネルでアナウンスを行います。GitHub Discussionsへのリリース投稿、X（旧Twitter）での告知（日本語と英語）、公式Discordサーバーの#announcementsチャネルへの投稿、メーリングリスト購読者への通知。プレリリース版ではなく正式リリース版の場合、HackerNews、Reddit（r/Bitcoin、r/BitcoinMining、r/selfhosted、r/golang）への投稿も検討します。日本市場向けにはZennとQiitaでの技術記事も同時公開します。
 

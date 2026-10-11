@@ -119,6 +119,28 @@ we can adopt OTel incrementally if it becomes the unambiguous winner.
 - Special floats are handled in `formatFloat`: NaN renders as `NaN`,
   positive infinity as `+Inf`, negative as `-Inf`.
 
+## Erratum (added session 2686, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; three factual drifts are recorded here:
+
+1. "ten metric definitions" — `internal/engine/metrics.go` now
+   registers ~49 series (counters + gauges).
+2. "on the order of 250 lines" — `internal/metrics/metrics.go` has
+   grown to 425 lines (+139 lines for `runtime.go`, the optional
+   `RuntimeCollector`).
+3. The Neutral row's "No labels normalization … we trust the caller"
+   is stale: `isValidMetricName` (`[a-zA-Z_:][a-zA-Z0-9_:]*`) and
+   `isValidLabelName` (stricter, no colon) fail fast at registration
+   (metrics.go:102-140) — the registry validates the same regexes as
+   client_golang, because one malformed label makes Prometheus drop
+   the entire scrape.
+
+Unchanged-and-verified: `Registry`/`Counter`/`Gauge` types, WriteText
+0.0.4 output, label escaping, NaN/±Inf emission, `RuntimeCollector()`
+exists but is not registered on the default registry today (claim
+still accurate).
+
 ## Related
 
 - ADR-003 — Zero runtime dependencies

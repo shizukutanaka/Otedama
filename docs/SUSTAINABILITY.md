@@ -25,7 +25,7 @@ The single highest-leverage observation: **the cost of building these foundation
 **研究結論:** Go の6ヶ月リリース・Russ Cox/Austin Clements/Cherry Mui の制度的継続性・Go 1互換性保証により、Go 2のhard breakは2036年まで実質ゼロ。GODEBUG knobによる behavior pinning が2021年以降強化された。
 
 **Otedamaの判断:**
-- `go 1.22` をベースライン、`toolchain go1.24.0` を最低toolchain pin（FIPS 140-3 + tool directive機能取得）。
+- `go 1.24.0` を直接宣言（当初は `go 1.22` ベースライン + `toolchain go1.24.0` pin だったが、言語最低版が toolchain 要求に追いついた時点で集約——訂正 session 2663）。
 - `go.mod` の `godebug` directive で `tlsmlkem=1`, `panicnil=0`, `randautoseed=1` を明示固定
   （`tlsmlkem`はGo 1.24でのX25519Kyber768標準化に伴い、旧`tlskyber`から改名された値）。
 - `GOEXPERIMENT` 機能（`greenteagc`, `jsonv2`等）はproductionで使用しない。
@@ -50,7 +50,7 @@ The single highest-leverage observation: **the cost of building these foundation
 **研究結論:** Bitcoin Core JSON-RPC は実質的に stable（5+ 年変更なし）、6ヶ月リリースで3メジャー並行サポート。Mining-relevantなRPC (`getblocktemplate`, `submitblock`, `getmininginfo`) は何年もABI互換。**変動領域は mempool policy** (Core 30 の OP_RETURN サイズ制限撤廃でKnots分裂、394→2,909ノード)。**2028 halving**: block 1,050,000 (~2028年3-4月)、subsidy 3.125→1.5625 BTC。Hashprice 2026/Q1 で~$27-29/PH/day (史上最低)、CoinShares予測 $35-50/PH/day レンジ。
 
 **Otedamaの判断:**
-- block subsidy は **計算式で導出** (`50e8 >> (height/210000)`)、**ハードコードしない**（既に対応済み）。
+- block subsidy は **計算式で導出** (`50e8 >> (height/210000)`)、**ハードコードしない**を目標とする。**訂正 (session 2670)**: 現状は「既に対応済み」ではなく、`internal/provider/mining.go` の `blockRewardBTC = 3.125` ハードコード定数のまま — yield 推定器は block height を取得する経路（V1 mining.notify には height が無い）を持たないため、ノード統合（Track D / `getblocktemplate` または IPC template）まで formula 導出は実装不可。次回 halving 前の接続時に高める判断。
 - アドレスパーサは witness-version dispatch で**全 prefix 対応**、Bech32m/Bech32 polymod 厳密に区別（混同で資金喪失するため）。
 - coinbase は常に `getblocktemplate` 出力から構築、ハンドメイド consensus rule なし → CTV/CSFS/OP_CAT/BIP-360 全てコード変更なしで吸収。
 - `bitcoind` と `bitcoinknotsd` どちらでも動く（mining RPCは同一）。
@@ -142,7 +142,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **annual "rebuild from cold" 演習**: 全 released tag を fresh VM (caches なし) で再ビルドし checksum 一致を年1回検証。
 - Docker images は digest pin、tag pin しない。
 
-**実装状況:** Fuzz test は v3.0.0-alpha で `internal/stratum/` に2つ実装済み。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring と annual rebuild 演習は今すぐ採用可能。
+**実装状況:** Fuzz test は 23 ターゲット（14 ファイル・9 パッケージ、`internal/stratum/` 7個を含む）に拡大済み — `test.yml` の `fuzz` ジョブが `make fuzz` で smoke 実行する。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring と annual rebuild 演習は今すぐ採用可能。
 
 ### 10. ライセンスと法的安定性 / Licensing and Legal Sustainability
 

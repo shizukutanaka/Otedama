@@ -37,6 +37,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // Status is the outcome of a single check.
@@ -132,9 +134,9 @@ func (r *Report) ExitCode() int {
 func (r *Report) Print(w io.Writer) {
 	var passed, warned, failed, skipped int
 	for _, res := range r.Results {
-		fmt.Fprintf(w, "[%s] %s: %s\n", res.Status.symbol(), res.Name, res.Detail)
+		fmt.Fprintf(w, "[%s] %s: %s\n", res.Status.symbol(), res.Name, poolproto.SanitizePoolText(res.Detail))
 		if res.Fix != "" {
-			fmt.Fprintf(w, "    → fix: %s\n", res.Fix)
+			fmt.Fprintf(w, "    → fix: %s\n", poolproto.SanitizePoolText(res.Fix))
 		}
 		switch res.Status {
 		case StatusPass:
@@ -233,6 +235,19 @@ func (r *Runner) Run(ctx context.Context) *Report {
 		go func(idx int, chk Check) {
 			defer wg.Done()
 			t0 := time.Now()
+			defer func() {
+				// A panicking check must not take the whole diagnostic down:
+				// convert it into a named Fail so the other results survive.
+				if rec := recover(); rec != nil {
+					results[idx] = Result{
+						Name:    chk.Name,
+						Status:  StatusFail,
+						Detail:  fmt.Sprintf("check panicked: %v", rec),
+						Fix:     "this is an internal error; report it",
+						Elapsed: time.Since(t0),
+					}
+				}
+			}()
 			res := chk.Run(ctx)
 			res.Name = chk.Name
 			res.Elapsed = time.Since(t0)

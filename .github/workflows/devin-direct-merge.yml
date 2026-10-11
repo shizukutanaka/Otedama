@@ -2,7 +2,15 @@ name: Trigger Devin Via Comment
 
 on:
   pull_request:
+    # コメント本文は "masterブランチとの競合" 固定 — 他ブランチ宛のPRでは
+    # 誤った案内を投げないよう対象ブランチをmasterへ限定
+    branches: [master]
     types: [synchronize, opened]
+
+concurrency:
+  # 同一PRへの連続 synchronize で /fix-conflict コメントが重複投稿されるのを防ぐ
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,12 +19,10 @@ permissions:
 jobs:
   check-conflict-and-comment:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+      # No checkout: both steps only call the GitHub API via gh — cloning
+      # the repo (full history via fetch-depth: 0) was pure waste.
       # コンフリクト状態をチェック
       - name: Check Mergeable Status
         id: check_conflict
@@ -24,15 +30,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub標準のトークン（Devin用ではない）
         run: |
           PR_NUM=${{ github.event.pull_request.number }}
-          STATUS=$(gh pr view $PR_NUM --json mergeable --jq .mergeable)
+          # mergeable は GitHub が非同期計算 — 初回 UNKNOWN を競合なしと誤認しないよう短くリトライ
+          # --repo は必須: checkout を行わないため gh はローカル .git から
+          # リポジトリを解決できず、"not a git repository" で失敗する
+          STATUS=""
+          for i in 1 2 3; do
+            STATUS=$(gh pr view $PR_NUM --repo ${{ github.repository }} --json mergeable --jq .mergeable)
+            [ "$STATUS" != "UNKNOWN" ] && break
+            sleep 5
+          done
           if [ "$STATUS" = "CONFLICTING" ]; then
             echo "conflict=true" >> $GITHUB_OUTPUT
           fi
 
       # コンフリクトがある場合、PRにコメントを投稿してDevinのSessionを起動
+      # （フォークPRでは書込トークンが降格してコメント不可のため同一リポのPRのみ）
       - name: Comment to Trigger Devin
-        if: steps.check_conflict.outputs.conflict == 'true'
+        if: steps.check_conflict.outputs.conflict == 'true' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "/fix-conflict masterブランチとの競合を git merge で解消し、テストを通してください。"
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "/fix-conflict masterブランチとの競合を git merge で解消し、テストを通してください。"

@@ -193,8 +193,22 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    misconfig (two hostnames that are CNAMEs/round-robin for the same node).
 6. 🔵 **TemplateSource abstraction** — ADR-009 lets a URL scheme select
    pool/JDC/solo template provenance.
-7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
+7. 🔵 **Pool-share-of-hashrate awareness** — optionally inform the user when
    their chosen pool exceeds a large network share, nudging decentralisation.
+   — 🔵 **Scope refined (verified session 1740):** nothing on the stratum
+   wire exposes a pool's network share, so this needs an external pool-stats
+   source — which exists and is already trusted by Otedama: the hashrate
+   feed queries `mempool.space/api/v1/mining/hashrate/1d` (rates/hashrate.go:49),
+   and the same host serves `/api/v1/mining/pools/1w` (per-pool block
+   counts → share). The unsolved piece is *identity mapping*: the API
+   reports pool names ("Foundry USA", "AntPool") while config carries
+   pool URLs (`stratum+tcp://stratum.antpool.com:3333` — corrected
+   session 2693; the earlier `fp2.antpool.com` example no longer
+   resolves); joining them requires
+   either a user-declared pool identity or a curated hostname→pool table —
+   a design decision (new config surface vs. a curated-map maintenance
+   liability) fit for an ADR, not a drive-by heuristic. Deferred pending
+   that design choice rather than implemented speculatively.
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
 9. ✅ **Block-template freshness metric** (session 93):
    `otedama_last_job_received_seconds` (Unix timestamp of last
@@ -207,13 +221,39 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 
 ## Category 5 — AI inference / compute markets
 
-1. 🟡 **Real Akash REST integration** — currently simulated
-   (KNOWN_LIMITATIONS §1). The single biggest placeholder.
+1. ✅→(session 251 #11) — **Folded (session 1757):** this row is the same
+   requirement as the July-pass Akash-integration tracker (session 251
+   Cat-5 #11), which already carries the concrete `GetStatus`/`/status` +
+   JWT(AEP-64) surface AND the unblock boundary recorded in session 1756 —
+   new config/secret surface + new outbound-HTTP surface + real account
+   context are ADR-level prerequisites. Keeping one live tracker prevents
+   duplicate disposition.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
+3. ✅ **Provider health/heartbeat** — detect a dead inference provider and
    stop routing GPUs to it (parallels HashrateMonitor for mining).
-4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
+   — **Already satisfied (verified session 1742):** provider liveness is
+   quote-driven — `pruneStaleStreams` (arbitrate.go:285-298) removes any
+   stream whose last quote is older than `streamStaleTimeout` (3 min,
+   arbitrate.go:128), the pruned keys are logged ("stream %q expired …
+   no longer routing to it", arbitrate.go:196-201), and `quoteFreshness`
+   (arbitrate.go:272-281) clamps zero/future `At` so a dead provider
+   cannot pin its freshness clock forward. A dead provider silently ages
+   out of `Decide`'s input and its devices return to the surviving
+   streams — exactly the stop-routing behaviour asked for.
+4. 🔵 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
+   — **Scope-refined (session 1755):** verified the mechanism boundary —
+   `internal/hal/gpu_linux.go` enumerates via sysfs DRM and reports PCI
+   vendor/model honestly (SHA256d=false since no compute dispatch exists
+   anywhere, the fix documented in the package doc). Suitability scoring
+   needs two layers that do not exist: (a) a compute-capability probe —
+   sysfs exposes `mem_info_vram_total`/`_used` only for amdgpu; NVIDIA
+   needs nvidia-smi/CUDA, which the package doc explicitly rejects (no
+   CGO/OpenCL dependency surface); and (b) any real inference workload to
+   map GPUs onto (Akash provider is the disclosed simulation,
+   KNOWN_LIMITATIONS §1). The honest current state — detect, classify,
+   declare incapable — is the designed stop-routing behaviour; the scoring
+   layer is an ADR/v4.0 decision, not a defect.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
 6. ✅ **Spot-price volatility guard** — hysteresis exists in arbitration and
    now has a user-configurable knob: `arbitration_hysteresis_pct` (YAML) /
@@ -221,9 +261,24 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
+8. ✅ **Inference revenue is denominated/settled correctly** — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in
    accounting.
+   — **Verified (session 1741):** the USD→BTC path is correct —
+   `SatsPerSecond(usdPerHour, rate) = usd/rate × 1e8 / 3600`
+   (provider.go:183-190), rate≤0 → 0 (no sign flip), stale-rate fallback
+   95000 is a named constant, and `Confidence` scales `NetSatsPerSecond`
+   in `EffectiveYield` (provider.go:114-117). Accounting isolation
+   verified: the *only* surface simulated yield reaches is the `estSats`
+   estimate (run.go:1048/1596 via `satsAcc.observe(expectedYieldRate)`),
+   which is labelled `est. earned` in the TUI (dashboard.go:372) and the
+   active provider's name carries the "(simulated)" suffix — the
+   estimate honestly discloses what it contains. No payout ledger,
+   settlement accounting, or pool-reported metric is fed by it:
+   `otedama_shares_total{accepted,rejected}` counts only pool-verified
+   mining shares, which a simulated provider cannot produce. Simulated
+   yield is summed into the *estimate* by design (opportunity accrual)
+   and can never masquerade as settled revenue.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
@@ -241,20 +296,35 @@ arXiv grounding (collected sessions 40–41 and here):
 4. 🔵 **Combinatorial-MAB logarithmic-regret budget allocation** — Zuo &
    Joe-Wong (arXiv:2105.04373); CUCB-DRA treats "allocate budget a to
    resource k" as a base arm and needs no closed-form reward model.
-5. 🟡 **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
+5. 🔵 **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
    near-logarithmic regret for bipartite user↔resource matching with
    Markov state; directly models device↔stream assignment when yields are
    autocorrelated. New grounding for A3's dynamics.
-6. 🟡 **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
+   — **Dispositioned (session 1744):** grounding material for ADR-010 A3,
+   not a defect — today's engine does assignment by hysteresis-guarded
+   greedy `Decide`, and the autocorrelated-yield regime this paper
+   addresses is what A3's dynamics section would formalise. 🔵
+   (planned/ADR-referenced), not 🟡 (newly surfaced gap).
+6. 🔵 **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
    transforms offline bi-criteria approximations into online CMAB with
    sublinear regret *and* sublinear constraint violation; the right frame
    if Otedama ever optimises yield subject to a hard power cap.
+   — **Dispositioned (session 1744):** conditional research, correctly
+   self-scoped — verified no hard power cap exists to violate. Power is
+   handled as a breakeven *floor*: `max(min_yield, powerFloor)`
+   (arbitrate.go:130-139, 206-208), a threshold below which a stream is
+   not worth running — not a constrained-optimisation surface. Becomes
+   relevant only if a power *cap* ships. 🔵.
 7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
 8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
 9. 🔵 **Beta-Bernoulli calibration** — ADR-010 A6.
-10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
+10. ❌ **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.
+    — **Dispositioned (session 1744):** out of scope, as the row itself
+    declared — Otedama is a single-node client by product definition and
+    no multi-node cooperation surface exists. Catalogued for the record;
+    ❌.
 11. ✅ **Arbitration Reason string matches Held flag in all cases** (session 174).
     Socratic probe found a misleading diagnostic: when the incumbent stream was
     already the best option (no challenger beats it), the engine returned
@@ -299,7 +369,14 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
+11. ✅ **Deduplicate the two `Provider` implementations — resolved.**
+    Verified resolved in session 1726: the refactor this row prescribed
+    shipped as `internal/provider/polling.go`'s embedded `pollingProvider`
+    — exactly the proposed `baseProvider` (shared `launch`/`loop`/`Stop`/
+    `sendQuote`, distinct tick intervals via `interval`, preserved
+    channel re-creation for restart, buffered drop-oldest semantics).
+    Only `publish()` now differs per domain. (Historical row kept below.)
+    ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
     recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
     ad hoc"). `MiningProvider` and `AkashProvider`
     (`internal/provider/{mining,ai_inference}.go`) share substantial
@@ -363,8 +440,21 @@ arXiv grounding (session 41):
 9. ✅ **Idle/curtailment hook** (session 112) — `curtail_below_btc_usd` config
    field; BTC rate goroutine calls `SetWork(nil)` when price drops below
    threshold and logs re-start on recovery; `otedama_curtailed` gauge.
-10. 🟡 **Carbon-intensity feed (optional)** — for users who want to mine on
-    low-carbon grid windows; aligns with SUSTAINABILITY.md.
+10. 🟡→🔵 **Carbon-intensity feed (optional) — scope refined.**
+    Verified session 1745: nothing named "carbon" exists in `internal/`
+    (the only match is a BIP-39 wordlist entry) and SUSTAINABILITY.md
+    contains no carbon reference, so the row's alignment claim is
+    aspirational rather than anchored. Implementation is not blocked on
+    code — it is blocked on an external-dependency decision: every
+    carbon-intensity source is region- or key-locked (WattTime /
+    electricityMaps need API keys; free feeds like energy-charts.info
+    cover only the EU). Choosing a source family and how a user declares
+    their grid region is the same class of feed-integration decision as
+    the TOU tariff feeds already parked under ADR-008 sub-domain 4 —
+    that ADR is the natural home for this row. Original request follows:
+
+    For users who want to mine on low-carbon grid windows; aligns with
+    SUSTAINABILITY.md.
 
 ---
 
@@ -373,7 +463,19 @@ arXiv grounding (session 41):
 1. ✅ **Prometheus text-format `/metrics`** without a client dependency
    (ADR-005).
 2. ✅ **Health endpoint** + `ServeError()` accessor (session 31).
-3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span — ADR
+3. 🟡→🔵 **OpenTelemetry traces — already planned, not a gap.**
+   Verified session 1746: no OTel dependency exists in go.mod and no
+   spans exist anywhere — confirmed absent. But the row is already
+   dispositioned by the project's own roadmap, not an unhandled gap:
+   ADR-005 (:105-110) deliberately rejected the OTel metrics SDK for now
+   ("adopt incrementally if it becomes the unambiguous winner"), and
+   SUSTAINABILITY.md:105-115 pins the delivery shape — a separate
+   `otedama-full` binary behind `-tags otel` with OTLP/HTTP (not gRPC),
+   declared v3.3.0 scope. Connect→handshake→mine span instrumentation
+   lands with that artifact. 🔵 (planned/roadmap-anchored). Original
+   request follows:
+
+   OpenTelemetry traces for the connect→handshake→mine span — ADR
    mentions OTel; confirm spans exist on pool dial and submit.
 4. ✅ **Reject-rate & stale-rate gauges** (ties to Category 1). — session 101:
    `otedama_reject_rate` (rejected/judged) and `otedama_stale_rate`
@@ -390,8 +492,14 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
+10. ✅ **SLO documentation** (target uptime, p99 submit latency) to make the
     metrics actionable.
+    — **Shipped (session 1739):** DEPLOYMENT.md gained an "SLO guidance"
+    table under Alerts — availability (`otedama_up` ≥99%/30d), pool
+    connectivity (connection_state=2 ≥99%/24h), share acceptance
+    (rejects ≤5%/10m — matching the shipped alert), and submit latency
+    (p50 <200ms, p99 <500ms — with the stale-share rationale). All named
+    metrics are real registrations.
 
 ---
 
@@ -432,7 +540,18 @@ arXiv grounding (session 41):
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
 5. ✅ **Traffic-analysis side channel documented** in THREAT_MODEL
    (arXiv:1703.06545, session 40).
-6. 🟡 **Traffic shaping / "mining cookie"** to blunt the timing side channel —
+6. 🟡→🔵 **Traffic shaping / "mining cookie" — future hardening, correctly
+   so.** Verified session 1747: no shaping/padding exists (share submits
+   are event-driven as they must be — delays would inflate stale rates),
+   and the row self-declares "future hardening". The real decision is
+   which of two countermeasures to the *same* timing channel to take:
+   shaping/cover traffic (client-side, costs bandwidth and share
+   latency) vs Tor-by-default transport (already 🔵 under ADR-007 B7,
+   mitigates the same observer). That trade-off is an ADR-level decision
+   — the shaping option stays catalogued here alongside B7 rather than
+   being an independent open task. 🔵. Original request follows:
+
+   Traffic shaping / "mining cookie" to blunt the timing side channel —
    the paper's own countermeasure; future hardening.
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
@@ -457,24 +576,45 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
    (ADR-007); aligns with the TIDES/OCEAN sovereignty stance the 2026
    comparisons single out.
 2. 🔵 **BOLT12 reusable offers** — ADR-007 B1.
-3. 🟡 **Low Lightning payout-threshold awareness.** OCEAN's 0.00001 BTC LN
-   minimum makes frequent small withdrawals viable; surfacing the pool's
-   minimum payout in `doctor` helps users avoid "trapped" small balances.
+3. 🟡→🔵 **Low Lightning payout-threshold awareness — blocked on protocol
+   surface.** Verified session 1748: `doctor` already surfaces payout
+   *context* — `checkPayoutScheme` (checks.go:756-790) prints per-pool
+   FPPS/PPLNS/TIDES/Solo trade-offs and prompts when `payout_scheme` is
+   unset. But the row asks for the pool's actual *minimum* payout, and
+   neither Stratum V1 nor V2 carries a payout-policy field — the
+   deployed check can only echo the config-declared label. The
+   tracked spec path is sv2-spec #203 (non-custodial payout extension),
+   which is exactly where pool-advertised payout parameters would land;
+   until then a lookup table of pool policies would be unverifiable
+   hardcoding (rejected class). 🔵 (blocked-on-spec). Original request:
+   OCEAN's 0.00001 BTC LN minimum makes frequent small withdrawals
+   viable; surfacing the pool's minimum payout in `doctor` helps users
+   avoid "trapped" small balances.
 4. 🔵 **External-node control (Phoenixd/CLN/lnd/Alby)** — ADR-007 B3.
 5. 🔵 **Embedded LDK Node sidecar (opt-in)** — ADR-007 B4.
-6. 🟡 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &
+6. 🔵 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &
    Richter (arXiv:2107.05322) show optimally-reliable-and-cheap multi-part
    payments are a separable-convex min-cost-flow problem — superior to naive
    shortest-fee-path. Catalogue only; sending is out of alpha scope.
-7. 🟡 **Liquidity-centralisation awareness.** arXiv:2506.19333 shows LN
+   — **Dispositioned (session 1748):** correctly self-scoped as
+   conditional — Otedama is receive-only today (ADR-007), so there is no
+   send path to route. Activates only if a send feature is ever added.
+7. 🔵 **Liquidity-centralisation awareness.** arXiv:2506.19333 shows LN
    liquidity consolidates into dominant hubs under pure cost minimisation; a
    future routing layer should resist defaulting to the same hubs, echoing
    the mining-pool decentralisation stance (ADR-001).
+   — **Dispositioned (session 1748):** same condition as row 6 —
+   hub-preference policy exists only where a send router exists. The
+   ADR-001 decentralisation stance is already on record to apply when
+   that day comes.
 8. 🔵 **Boltz reverse-swap** for trustless LN→on-chain — ADR-007 B6.
 9. 🔵 **Tor-by-default** for LN/pool connections — ADR-007 B7 (also mitigates
    the Category 10 timing side channel).
-10. 🟡 **SCB / static-channel-backup reminders** if an embedded node lands —
+10. 🔵 **SCB / static-channel-backup reminders** if an embedded node lands —
     fund-loss prevention, parallels the seed-backup reminder (Cat 3 #8).
+    — **Dispositioned (session 1748):** conditional by construction —
+    there is no embedded node to back up today (ADR-007 B4 is 🔵
+    unscheduled). When B4 lands, SCB reminders ride with it.
 
 ---
 
@@ -489,7 +629,23 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 1/2 — mining client & Stratum correctness (from SRI v1.5.0 + ESP-Miner)
 
-1. 🟡 **Validate the SV2 server certificate, not just the Noise DH.** The
+1. 🟡→🔵 **Validate the SV2 server certificate — scope refined.** Verified
+   in session 1731/1732: the premise "only the Noise DH defends today" is
+   stale. Noise NX is **not wired into the live connect path at all**
+   (engine run.go:871-876 warns "Noise NX is not yet wired"; noise.go:107
+   still substitutes P-256 for secp256k1). The MITM defence that *is*
+   deployed is `stratum+v2tls://`: real certificate-verified TLS via
+   `stratum.DialTLS` + `TLSConfigWithExtraCAs` (system roots + optional
+   `tls_ca_file` PEM), with no plaintext downgrade (coverage_test.go:733-787).
+   The genuinely-open remainder is unchanged but narrower: when ADR-011's
+   secp256k1 migration wires Noise NX, add `VerifyServerCert(cert,
+   authorityPubKey, clock.Now())` + a per-pool `authority_pubkey` config
+   field — the SV2-native signed-certificate check (BIP340 Schnorr over
+   `valid_from`/`not_valid_after`/`server_public_key`, with expiry
+   enforcement) the spec mandates. Until then the row is blocked, not
+   silently missing.
+   — (Original row retained below.)
+   Validate the SV2 server certificate, not just the Noise DH. The
    SV2 security spec delivers a signed certificate (`valid_from`,
    `not_valid_after`, `server_public_key`, BIP340 Schnorr sig over the
    fields); the initiator MUST verify the signature against a known
@@ -498,7 +654,7 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
-2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+2. ✅ **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
    `max_target`. In the V2 channel/job path clamp the effective target into
@@ -510,18 +666,32 @@ endpoint against current vendor documentation. Tags as before
    MaxTarget}`; the engine's session loop updates the live share target
    and re-issues the active job so workers compare against it immediately.
    The clamp-to-`[min, max_target]` behavior this item originally asked
-   for is not yet implemented — Otedama accepts whatever target the pool
-   sends outright, since `OpenMiningChannel`'s `max_target` preference
-   field is intentionally not sent (see the dead-field note removed from
-   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
-   message is no longer silently unrecognised, which was the blocking gap.
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+   for is not implemented — Otedama accepts whatever target the pool
+   sends outright.
+   — ✅ **Resolved by design** (verified session 1733): the remaining
+   clamp is vacuous on every axis. Otedama declares
+   `MaxTargetUnconstrained` in `OpenMiningChannel` (run.go:1919,
+   handshake.go:162-168 — the field is now on the wire, the earlier note's
+   "intentionally not sent" is stale), so sv2-spec #236's pool-side
+   SetTarget≤max_target bound can never be violated against this client.
+   A too-EASY pool target is harmless (easy shares are what the pool
+   credits; any resulting submit flood is already bounded by the
+   per-session `submitLimiter` token bucket, run.go:2218-2225). The only
+   adversarial direction is a too-HARD target (share difficulty ≥ block
+   difficulty), which cannot be "clamped" upward — grinding at
+   block-target instead would emit only rejected shares — and is already
+   defended by the episodic starvation tripwire (run.go:951-1096) plus
+   the SetTarget=0 → block-target fallback (run.go:2036-2043). SetTarget
+   is applied and re-issues the active job immediately (run.go:1228-1235).
+3. ✅ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs — not applicable as designed.** Verified in session 1731: Otedama never assembles a coinbase from `coinbase_tx_prefix`/`suffix` — it opens *standard* channels and `NewMiningJob` carries the pool-computed `merkle_root` directly (messages.go:87,101), so the witness-vs-txid choice this row guards against does not exist on the V2 path. The V1 path does assemble coinbase (`coinb1 + en1 + en2 + coinb2` → `Hash256`, stratumv1.go:537-546) but hashes exactly the byte string the pool dictates — V1 coinbase parts carry no witness fields to strip, and the pool reconstructs the identical bytes for verification. The hazard would only materialize if a future Extended-channel/JDP path assembles client-side coinbase; record it as a design constraint for that work.
+   — (Original row retained below.)
+   Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
@@ -541,6 +711,12 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — ✅ **Nuance shipped** (verified session 1726): `stats.go`'s
+   `transitionReject` now tags the difficulty epoch active at issue time
+   and excludes above-target-family rejects that arrive after the pool
+   retargeted (engine run.go:1816-1818 for V1 set_difficulty, run.go:1326
+   for V2 SetTarget). The reject-rate metric no longer counts them —
+   exactly what this item asked.
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
@@ -554,7 +730,7 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
+6. ✅ **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset
    windowed counters on reconnect, use saturating `uint64` accumulators,
@@ -566,26 +742,70 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+   — ✅ **Re-verified (session 1734):** the claim holds against current
+   code, and is stronger than the note records — each `runSession*`
+   declares a fresh `hashrateWindow` (V2: run.go:943, V1: run.go:1492), so
+   reconnect doesn't merely saturate a stale baseline, it gets a whole
+   new window whose first `observe` re-primes to 0. The saturation arm
+   (total < lastTotal → rate 0, stats.go:164-173) additionally covers
+   counter shrink *within* a session. Regression pins exist exactly as
+   asked: `TestHashrateWindow_SaturatesOnCounterReset`,
+   `_ZeroDeltaTimeYieldsZero`, `_FeedsStallMonitor` (run_test.go:875-915).
+   Accumulators are `atomic.Uint64` (worker.go:121). Marker flipped 🟡→✅.
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — ✅ **Already satisfied** (verified session 1735): `internal/stratum/messages.go:11-14`
+   declares "The specification's source of truth is the
+   independently-versioned repository github.com/stratum-mining/sv2-spec
+   (SRI split the roles code out after v1.5.0); stratumprotocol.org
+   renders it. When the codec and the site disagree, trust the repo."
+   `frame.go` cites stable rendered-spec section URLs; `poolproto/stratumv2`
+   reuses that same codec rather than carrying a second protocol truth.
+   The `stratum-mining/stratum` references in CHANGELOG/ADR-009 are
+   ecosystem tracking of the SRI *implementation* releases — correctly
+   distinct from spec truth. No `sv2-rs` or stale link remains.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
    Cat 4 #7.
-9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
+   — ✅ **Already satisfied** (verified session 1736): THREAT_MODEL's
+   Tampering section (:135-152) documents the pool-selfishness threat with
+   the exact citation (undetectable orphan pattern, 38.2% profitability
+   threshold), then frames multi-pool failover + endpoint diversity as
+   "*cheap defection*" — the security framing this row asked for — and
+   cites pool-vs-local share reconciliation as the closest observable
+   signal plus the PPLNS/FPPS residual-risk advice. The mechanisms it
+   names are real: `otedama doctor` ships both "Pool diversity" and
+   "Pool endpoint diversity" checks (checks.go:448, :498 — warns when
+   distinct URLs resolve to one endpoint, "failover is illusory").
+   Reference list entry at :496-497.
+9. 🔵 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
    optimum. Otedama can't change the DAA, but `doctor` can track
    pool-acknowledged shares vs. pool-credited blocks over a window and warn
    on divergence — grounds Cat 1 #10.
+   — 🔵 **Scope refined (verified session 1737):** the share side of the
+   divergence signal already ships — SubmitSharesSuccess reconciliation
+   clamps pool-claimed accepts to locally settled submits (run.go:1252-1270),
+   the starvation tripwires warn once per episode when pool difficulty
+   starves income or a connected pool goes silent (run.go:1498-1505),
+   and rejects are classified by reason for metric attribution. The
+   block side is *structurally unobservable* to a Stratum client: block
+   credit travels over Bitcoin, not the stratum wire, so "pool-credited
+   blocks" has no data source without a chain-explorer API — a new
+   external dependency for doctor, which today is pure config +
+   reachability checks (its only HTTP is the clock-skew probe). Whether
+   that dependency is in scope is an ADR-level product decision, not a
+   maintenance task — deferred rather than implemented speculatively.
 10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
     "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
     2601.02496), constructs PoW letting pool participants retroactively
@@ -595,7 +815,7 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 5 — replacing the simulated Akash provider
 
-11. 🟡 **Concrete Akash integration surface.** Akash exposes a provider REST
+11. 🔵 **Concrete Akash integration surface.** Akash exposes a provider REST
     gateway (`/status`, `/version`, manifest POST on lease-won) and a gRPC
     `akash.provider.v1.ProviderRPC.GetStatus` (per-node GPU model + status,
     allocatable vs allocated), plus SDK `createLease(bidId)` /
@@ -605,65 +825,105 @@ endpoint against current vendor documentation. Tags as before
     routed GPU is actually leased before counting its yield, and gate
     accounting (Cat 5 #8) on real lease state. gRPC adds a dependency —
     weigh against ADR-003; the REST `/status` path may suffice read-only.
-12. 🟡 **Vast.ai as a second, simpler real compute backend.** Vast has a
+    — **Scope-refined (session 1756):** verified the unblock boundary —
+    no Akash endpoint/auth exists in config (the provider is fully
+    hardwired; `NewAkashProvider` takes only a `RateSource`), so a real
+    `GetStatus`/`/status` poll needs three ADR-level prerequisites first:
+    new config surface (endpoint URL, deployment scope, credentials), a
+    new outbound-HTTP dependency surface for the provider path (today
+    only `rates`/`doctor` HTTP exists), and a real account context to
+    point at — fabricating an endpoint is a forbidden nonexistent-URL
+    class. The `Provider`/`publish` seam already isolates the swap.
+12. 🔵 **Vast.ai as a second, simpler real compute backend.** Vast has a
     documented Bearer-token REST API with a *direct-bid* market (`bid_price`
     $/hr; highest bid runs, lower bids pause). Far less code than Akash gRPC
     and a cleaner live testbed for ADR-010 A4 strategic bidding (real
     preemption). A `VastProvider` behind the existing `provider` interface
     gives a non-simulated backend now. (Renting out *own* hardware — fine
     under the non-custodial stance.)
-13. 🟡 **Preemption is the dominant failure mode — price it in.** Duan et al.,
+    — **Scope-refined (session 1756):** same unblock boundary as row 11 —
+    needs a Bearer-token secret surface (no provider-credential field
+    exists in config), a new outbound-HTTP client, and an ADR-010 decision
+    on which real backend lands first. Implementation is mechanical once
+    those are decided; the decision is the blocker, not the code.
+13. 🔵 **Preemption is the dominant failure mode — price it in.** Duan et al.,
     "GFS" (arXiv:2509.11134, ASPLOS '26), forecast GPU demand and keep a
     reserve quota to cut eviction 33%. A preemption-risk term should raise a
     provider's *effective* switch cost in the A2 ledger so the engine
     doesn't churn a GPU onto a stream it loses in minutes. Pairs with #14
     and Cat 5 #6.
+    — **Dispositioned (session 1750):** conditional on a real provider —
+    today's only compute backend is simulated, so there is no preemption
+    signal to price. Anchored to ADR-010 A2's switch-cost ledger (itself
+    🔵) and Cat 5's real-provider row; activates with them.
 
 ### Category 6 — arbitration / online optimisation (arXiv grounding)
 
-14. 🟡 **Randomized deadline-aware spot policy with √K competitive ratio.**
+14. 🔵 **Randomized deadline-aware spot policy with √K competitive ratio.**
     "ROSS" (arXiv:2601.14612) proves deterministic deadline policies are
     stuck at Ω(K) (K = reliable/spot cost ratio) while a randomized reserve
     rule achieves √K (~30% savings). The competitive-analysis counterpart to
     ADR-010 A1/A6; load-bearing only if deadline-constrained inference
     exists.
-15. 🟡 **Adaptive, learned switching cost with sub-linear dynamic regret.**
+    — **Dispositioned (session 1750):** correctly self-scoped — no
+    deadline-constrained inference surface exists today (simulated
+    provider only). Anchored to ADR-010 A1/A6.
+15. 🔵 **Adaptive, learned switching cost with sub-linear dynamic regret.**
     "SCaLE" (arXiv:2601.09042) handles ℓ2 switching costs under noisy bandit
     feedback with no known cost structure. Justifies making ADR-010 A2's
     switch-cost ledger *learned / non-stationary* rather than a fixed
     calibration; the regret-optimal target for A2.
-16. 🟡 **Track which non-stationarity the engine self-tunes against.**
+    — **Dispositioned (session 1750):** an upgrade target for ADR-010 A2
+    (🔵 unscheduled) — the ledger must exist before it can be learned.
+16. 🔵 **Track which non-stationarity the engine self-tunes against.**
     "Non-stationary Bandit Convex Optimization" (arXiv:2506.02980, NeurIPS
     2025) gives regret bounds parameterised by switches / total-variation /
     path-length — exactly the three drift types in hashprice/Akash yield
     (difficulty steps, volatility, diurnal). Use its measures to choose the
     self-tuning signal for the Holt-Winters reset threshold (A1+A8).
+    — **Dispositioned (session 1750):** signal-selection guidance for
+    ADR-010 A1+A8 (🔵) — catalogued, rides with that scope.
 
 ### Category 8 — power: real, currently-live feeds
 
-17. 🟡 **Octopus Agile half-hourly REST (no key for read-only rates).**
+17. 🔵 **Octopus Agile half-hourly REST (no key for read-only rates).**
     `api.octopus.energy/v1/products/<P>/electricity-tariffs/<T>/standard-unit-rates/?period_from=…`
     concretises ADR-008 sub-domain 4; a `power/tariff/octopus.go` poller
     (~30 min) drives the Cat 8 #9 curtailment hook.
-18. 🟡 **Design the tariff interface as a forward *price curve*, not a spot
+    — **Dispositioned (session 1750):** UK-only tariff and one instance
+    of the feed-integration decision already parked 🔵 under ADR-008
+    sub-domain 4 — rides with that scope (region/feed selection is the
+    ADR question, same class as the carbon row). Also note the proposed
+    `power/tariff/` path is not in CLAUDE.md's architecture map — an
+    implementation lands inside an existing package, not a new dir.
+18. 🔵 **Design the tariff interface as a forward *price curve*, not a spot
     price.** Tibber (GraphQL, once-daily curve) and Amber (REST, 5-min AEMO
     forecast) cover EU-Nordic and AU. A "return the forward curve" interface
     accommodates all three and feeds the horizon-aware (Pontryagin) scheduler
     (ADR-008 #2) — plan curtailment windows ahead instead of reacting to spot.
-19. 🟡 **For carbon-aware curtailment use *marginal*, not average, intensity.**
+    — **Dispositioned (session 1750):** interface-shape guidance for the
+    same ADR-008 sub-domain 4 scope; catalogued as the design constraint
+    that any tariff feed must return a curve, not a scalar.
+19. 🔵 **For carbon-aware curtailment use *marginal*, not average, intensity.**
     WattTime MOER (5-min marginal emissions) is the correct signal for
     "pause to cut emissions" because curtailing changes load at the margin;
     Electricity Maps average (AOER) understates the effect. Sharpens Cat 8
     #10; keep optional (keys required) per ADR-003.
+    — **Dispositioned (session 1750):** sharpens Cat 8 #10, which is now
+    🔵 under ADR-008 — catalogued as the signal-selection constraint
+    (marginal, not average) inside that scope.
 
 ### Category 9/10 — observability & supply-chain (current real tooling)
 
-20. 🟡 **Emit trace exemplars on the submit-latency histogram.**
+20. 🔵 **Emit trace exemplars on the submit-latency histogram.**
     prometheus/client_golang v1.23 (Jul 2025) + OpenMetrics 1.0 allow a
     `{trace_id="…"}` exemplar on a histogram bucket so a p99 spike links to
     its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
     (Cat 9 #3); joining them is a small extension to the hand-rolled
     exposition writer (no client_golang dep — keeps ADR-003/005).
+    — **Dispositioned (session 1750):** conditional on Cat 9 #3 — there
+    are no trace IDs to exemplar until OTel ships (🔵, v3.3.0 `-tags otel`
+    artifact). Joins that scope.
 21. ✅ **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
     metrics.** `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
     registry; `RuntimeCollector()` emits 12 standard `go_*` metrics
@@ -678,12 +938,30 @@ endpoint against current vendor documentation. Tags as before
     verify. Add provenance + `cosign sign-blob` (GitHub OIDC, no stored
     keys) to release.yml and document `cosign verify-blob` /
     `gh attestation verify`. (sigstore/cosign, slsa.dev)
-23. 🟡 **Publish an OpenSSF Scorecard workflow as a release gate.**
+23. ✅ **Publish an OpenSSF Scorecard workflow as a release gate.**
     `ossf/scorecard-action` checks Branch-Protection / Pinned-Dependencies /
     Signed-Releases / Token-Permissions and bundles osv-scanner; the
     Signed-Releases check rewards #22 and Pinned-Dependencies reinforces
     Cat 10 #10. (github.com/ossf/scorecard)
-24. 🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
+    — **Applied (session 1754):** added `.github/workflows/scorecard.yml`
+    (scorecard-action@v2.4.4, push-to-master + weekly + dispatch,
+    `contents: read` only). Results upload as a workflow artifact rather
+    than to the code-scanning dashboard (`publish_results: false`) so the
+    job needs no repo settings beyond the default — the Dependency Review
+    failure class showed what an unconfigured publishing endpoint costs.
+    Advisory by design; the hard gates live in ci.yml/security.yml/test.yml.
+24. ✅→🟡 **Make govulncheck a hard CI gate — gate shipped; advisory
+    tracking remains evergreen.** Verified in session 1726: security.yml's
+    `govulncheck ./...` step runs with no `continue-on-error`, so any
+    finding fails the build — the gate this row asked for exists (added
+    session 1265). The remaining ask (recording advisory IDs in
+    THREAT_MODEL's dependency assumptions) landed in session 1754:
+    THREAT_MODEL's supply-chain mitigation now carries a dated advisory
+    status block (govulncheck v1.1.4 source mode: 0 reachable, 18
+    module-level findings with no reachable call path) with a re-record
+    trigger on each dep bump — stays an evergreen practice. (Original row
+    kept below.)
+    🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
     current Go advisories on the `net/http` surface Otedama exposes
     (`/healthz /readyz /metrics`) — e.g. CVE-2025-22871 (request smuggling),
     GO-2025-3563 — and fail the build on any govulncheck finding. CLAUDE.md
@@ -692,23 +970,29 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 11 — Lightning routing & privacy (arXiv grounding)
 
-25. 🟡 **Bias path selection away from high-betweenness channels.** Abdesselam
+25. 🔵 **Bias path selection away from high-betweenness channels.** Abdesselam
     et al., "Payment-failure times for random Lightning paths" (arXiv:
     2511.16376, BRAINS 2025), tie time-to-failure to edge-betweenness — the
     most-traversed channels deplete first. A depletion-aware tie-breaker
     sharpens Cat 11 #6/#7 from qualitative to concrete; catalogue-only while
     receive-only.
-26. 🟡 **Seed the min-cost-flow scorer with a cheap balance prior.** Davis et
+    — **Dispositioned (session 1749):** correctly self-scoped as
+    catalogue — rides with Cat 11 #6 if a send path ever exists.
+26. 🔵 **Seed the min-cost-flow scorer with a cheap balance prior.** Davis et
     al. (arXiv:2405.12087) beat the 50/50-split prior by ~27%. The
     ADR-003-friendly takeaway is a *dependency-free heuristic* prior
     (capacity + degree + age), not the ML model — a small deterministic
     initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
     improving first-attempt success without probing.
-27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
-    "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
-    leaks payment endpoints — the LN analogue of the Stratum timing leak
-    already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
-    B7) mitigates *both*; doc-only linkage.
+    — **Dispositioned (session 1749):** same condition — catalogued as
+    the prior for Cat 11 #6's scorer.
+27. ✅ **One countermeasure, two timing channels — already satisfied.**
+    Verified session 1749: THREAT_MODEL :267-271 already documents
+    exactly this linkage — "the same class of timing channel exists on
+    the payout side: Rohrer & Tschorsch ... HTLC-resolution timing leaks
+    payment endpoints in payment-channel networks", and Tor-by-default
+    (ADR-007 B7) "mitigates both channels at once". Reference entry at
+    :500. No further linkage needed.
 
 ---
 
@@ -716,7 +1000,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -727,28 +1011,47 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
-2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
+   — **Applied (session 1753):** added `FuzzEncryptedConn_Read` and
+   `FuzzEncryptedConn_LengthPrefix` (internal/stratum/
+   encryptedframe_fuzz_test.go) over the Noise u16 length prefix —
+   seeded with real zero-key frames plus adversarial prefixes (max/zero
+   claims, truncation, garbage-after-valid, sub-tag-size claims);
+   invariants asserted: no panic, no oversize allocation, no plaintext
+   on auth failure, reads bounded to the frame budget. 860k+1.9M execs
+   clean in smoke. The existing `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame`
+   already cover the cleartext `MsgLength`/`DefaultMaxFrameSize`
+   arithmetic, which this pass re-verified as already guarded
+   (Validate → MaxFrameSize check → allocate).
+2. ✅ **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
    Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
    strengthens the case for the Job Declaration Client (miner-built templates)
    as the headline v3.x feature. (coindesk.com 2026-05-11)
-3. 🟡 **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
-   Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
-   Providers** — token-based auth on the provider APIs. The real
-   `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must therefore mint
-   and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
-   REST endpoint. Fold JWT acquisition into the provider client design.
-   (messari.io State of Akash Q3 2025; akash.network/docs)
-4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
-   already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
-   enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
-   X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
-   `tlsmlkem=1` is part of that validated module. Low-effort, high-trust wins
-   for a money-handling binary: (a) document that outbound TLS uses hybrid
-   post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
-   for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
-   existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+   — **Applied (session 1751):** ADR-009 :12 now cites the ~75% estimate
+   alongside the ~70% figure current at draft time.
+3. ✅→(row above) **Real Akash provider API now requires JWT auth (AEP-64,
+   Mainnet 14).** Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT
+   Authentication for Providers** — token-based auth on the provider APIs.
+   The real `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must
+   therefore mint and attach a JWT to provider `GetStatus`/lease calls, not
+   just hit an open REST endpoint. Fold JWT acquisition into the provider
+   client design. (messari.io State of Akash Q3 2025; akash.network/docs)
+   — **Folded (session 1751):** the constraint is preserved verbatim in
+   the July-pass Akash row (session 251 #11), which already records "JWT
+   (AEP-64) still applies to the provider *status/lease* REST surface";
+   that row stays 🟡 as the single live Akash-integration tracker.
+4. ✅ **FIPS 140-3 mode — dispositioned by design.** Verified session
+   1751: the row's three asks resolve as follows. (a)+(c) already
+   satisfied — `GODEBUG_NOTES.md` documents `tlsmlkem=1` (hybrid
+   X25519MLKEM768 PQ key exchange, :98-102) and a dedicated `fips140`
+   entry (:161-175), and THREAT_MODEL :451-458 states the FIPS posture
+   explicitly. (b) is *deliberately rejected*: GODEBUG_NOTES :161-175
+   records "**Do not enable**" — `fips140=on` restricts crypto to the
+   validated subset, which excludes ChaCha20-Poly1305 and would break
+   the Noise NX transport; the wallet's AES-256-GCM is the only
+   FIPS-listed construction. Hard-FIPS environments are told to look
+   elsewhere (THREAT_MODEL :458). Marker flipped ✅.
 
 ---
 
@@ -766,7 +1069,10 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+   — **Applied (session 1752):** go.mod now imports `go.yaml.in/yaml/v3`
+   v3.0.5 with a rationale comment (merged via an earlier session PR); the
+   archived path is gone from the dependency set.
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -776,7 +1082,10 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+   — **Applied (session 1752):** bumped to v0.48.0 (merged); the remaining
+   delta to latest is routine dependabot-tracked hygiene, and the cited
+   CVEs were all in unreachable ssh/openpgp subpackages anyway.
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
    are all in the `ssh`/`openpgp` subpackages; Otedama imports only
@@ -784,7 +1093,13 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+3. 🔵 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   — **Dispositioned (session 1752):** Go-version-pin updates are a
+   maintainer-rejected class (the 1.20-1.23 CI pin bump PR was closed
+   unmerged). GODEBUG_NOTES' stale "pins toolchain go1.24.0" claim was
+   corrected this session — go.mod has no `toolchain` line at all; the
+   `go 1.24.0` directive is the only floor, so the knob only materializes
+   once the release toolchain reaches 1.25+.
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
@@ -801,7 +1116,9 @@ month, so the discipline matters.
 
 ### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
 
-5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+5. ✅ **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+   — **Applied (session 1752):** ADR-011 already carries the erratum
+   (:130-153) recording exactly this gap.
    BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
    (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
    `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
@@ -811,7 +1128,9 @@ month, so the discipline matters.
    Go implementation exists)**, materially raising the estimate. **Action:**
    record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
    raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
-6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+6. ✅ **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   — **Applied (session 1752):** KNOWN_LIMITATIONS §5 (:197-214) and
+   ROADMAP :44 already carry the corrected wording.
    signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
    the key-path spend removed — and explicitly defers PQ signatures to "a
    separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
@@ -819,7 +1138,9 @@ month, so the discipline matters.
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
-7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+   — **Applied (session 1752):** ROADMAP :82 already targets the IPC
+   interface with the multiprocess-binary caveat.
    Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
    submit blocks over a unix socket — a cleaner target than legacy
@@ -833,7 +1154,10 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+   — **Applied (session 1752):** ROADMAP :26 already records "SRI past
+   alpha" with the interop-pin note; ADR-009 tracks the live release line
+   (v1.12.0 latest as of session 1751 rechecks).
    ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
    update the rationale text and pin a specific SRI tag as the interop
    reference for Go SV2 conformance tests.
@@ -841,14 +1165,18 @@ month, so the discipline matters.
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+    — **Applied (session 1752):** ADR-010's A4 reframe (:143) already
+    directs the build at `akash-network/chain-sdk`.
     successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
     github.com/akash-network/chain-sdk)
-11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+11. ✅ **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    — **Applied (session 1752):** ADR-010 :143 carries the reframe
+    verbatim (bid-price policy fed to the daemon's on-chain config).
     "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;
     the real auction is on-chain and mediated by the provider daemon's bid
@@ -879,6 +1207,19 @@ month, so the discipline matters.
     detection (ADR-010 A8) should be prioritized alongside the forecaster (A1)
     rather than after it. Sources are real but 403'd the fetcher
     (variant.fund, SSRN 6926798). Recorded as a lead only.
+    — **Verification attempted (session 1758):** primary sources remain
+    inaccessible (variant.fund serves only the firm homepage; SSRN
+    6926798 unfetchable), so the snippet stays a lead — but the claim is
+    now *contested* by primary-verifiable literature: "An exploration to
+    GPU spot price prediction" (Cluster Computing, 2022,
+    doi:10.1007/s10586-022-03581-8) models AWS GPU spot prices with
+    AR/ARIMA/ETS **and GARCH** — i.e. it treats GPU spot volatility as
+    clustered, opposite the snippet's "no volatility clustering" framing.
+    Change-point methods do remain a strong fit for abrupt shifts
+    (MDPI JRFM 13(4):186, 2025 — change-point duration model for spot
+    volatility). Net: A8's priority-vs-A1 question is real but unresolved
+    by this evidence; it is already ADR-010's own design decision, and no
+    code change is warranted from an unverified snippet.
 
 ### Lightning
 
@@ -1339,8 +1680,8 @@ Noise surface stays the documented alpha stub (KNOWN_LIMITATIONS §2).
 
 ## Session 400 — provider liveness gap (surfaced) + publish() audit
 
-**Mining yield quoted while pool is down [🟡 SURFACED — needs design
-decision, not a silent fix].** `MiningProvider.publish` emits full
+**Mining yield quoted while pool is down [🔵 SURFACED — maintainer
+design decision].** `MiningProvider.publish` emits full
 expected yield for every SHA256d device regardless of pool session
 state — there is no connectivity input on the provider. During a
 reconnect gap or total failover exhaustion, arbitration keeps devices
@@ -1464,7 +1805,7 @@ correctly shown in their own contexts. `otedama v` is a real alias for
 
 ## Session 403 — CONTRIBUTING/README command audit + DCO drift [SURFACED]
 
-**DCO sign-off required by CONTRIBUTING.md but not practiced [🟡
+**DCO sign-off required by CONTRIBUTING.md but not practiced [🔵
 SURFACED — maintainer policy decision].** CONTRIBUTING.md §DCO states
 all commits must carry `git commit -s` Signed-off-by, and the PR
 template repeats it. Reality: **zero** of the last 50 commits on

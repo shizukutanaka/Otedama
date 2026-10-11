@@ -26,7 +26,7 @@ otedama <command> [flags]
 
 | Command | Behaviour |
 |---|---|
-| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. |
+| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. On first run it creates a BIP-39 wallet; the encryption passphrase and optional "25th word" are read from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` — preferred over the `--wallet-*` flags, which are visible in process lists. |
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
@@ -48,7 +48,9 @@ otedama <command> [flags]
 
 Scripts may rely on these. `run` returns `78` if the resolved config fails
 validation, `64` for flag-parse errors, `1` for a runtime error, `0` on clean
-shutdown (SIGINT/SIGTERM).
+shutdown (SIGINT/SIGTERM). `doctor` uses its own result-graded set instead —
+`0` all checks passed or skipped, `1` at least one warning, `2` at least one
+failure (`Report.ExitCode`).
 
 ## 3. Configuration
 
@@ -66,7 +68,7 @@ its default, and its validation rule:
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
 | `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured for `stratum+tls://` and `stratum+v2tls://` |
-| `workers.name` | — (file only) | `""` → hostname fallback | appended as `.name` to the `user_identity` |
+| `workers.name` | — (file only) | `""` → bare payout address only | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
 | `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
 | `log_format` | `OTEDAMA_LOG_FORMAT` | `text` | ∈ {text, json} |
@@ -223,11 +225,17 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 
 ## 7. Known limitations
 
-Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) **V2** sessions do not yet
-route through the `poolproto` abstraction — V1 sessions do
-(KNOWN_LIMITATIONS §3, resolved session 91); (4) GPU detection is Linux-only;
-(5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
+Authoritative list in `docs/KNOWN_LIMITATIONS.md` (9 open items): (1) AI-inference
+yield is simulated; (2) Noise NX uses P-256, not secp256k1, and is not wired into
+a live connection — use `stratum+v2tls://` for confidentiality; (3) GPU detection
+is Linux-only and detected GPUs cannot mine; (4) post-quantum schemes are
+scaffolded; (5) Lightning is receive-only; (6) ASIC hardware is not detected at
+all; (7) several CI workflows remain non-functional or misdescribed; (8) DATUM is
+a reserved URL scheme, not an implemented protocol; (9) `install.sh` has no
+compatible release yet — every published tag predates the v3 asset-naming
+contract. Partially open: **V2** sessions do not yet route through the
+`poolproto` abstraction — V1 sessions do (KNOWN_LIMITATIONS §3, resolved
+session 91).
 
 ---
 
@@ -248,7 +256,7 @@ route through the `poolproto` abstraction — V1 sessions do
 | G15 | The miner ground against the **block target** (`TargetFromNBits(job.NBits)`) and discarded the pool-assigned **share target** (`OpenMiningChannelSuccess.Target`), so a worker emitted a share only on an actual block solve — effectively never on a live pool. No shares submitted ⇒ no credited work, no payout, no vardiff feedback. The integration test masked it with an easy block nBits and never asserted shares were submitted. | **Fixed (session 66)**: `handshake` returns the channel share target; `updateWork` grinds to it (block-target fallback only when the pool assigns none). Integration test now asserts `pool.SharesReceived() >= 1`. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 (#2/#4). |
 | G16 | This spec's §3 documented only 8 of the 16 config fields — the power-awareness (`power_watts`, `electricity_price_per_kwh`), arbitration/curtailment (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`), and per-pool (`payout_scheme`, `tls_ca_file`) fields were all live, validated, and printed by `config show`, yet absent from the spec; the 4 numeric `OTEDAMA_*` env vars and the range-validation rules were also undocumented. | **Fixed this session** (session 190): §3 rewritten as a complete schema table (key, env var, default, validation) plus precedence and validation subsections. |
 | G17 | §6 listed 17 metrics, but the engine registers ~39 — the entire power/efficiency, rate-redundancy, clock-skew, pool-difficulty, per-device, payout-info, and arbitration-economics families were exposed at `/metrics` but undocumented, so an operator building dashboards/alerts could not discover them from the spec. | **Fixed this session** (session 190): §6 replaced with the full catalogue grouped by purpose (shares/rejects, hashrate/health/power, pool/payout, arbitration/rates), with type and lazy-creation (†) notes. |
-| G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
+| G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | **Partially resolved (sessions 38–91)**: V1 URLs dispatch through `poolproto.DialURL`/`runSessionV1` with full telemetry parity — KNOWN_LIMITATIONS §3 resolved. Remaining gap: V2 URLs still use the inline `handshake` path (deferred — `poolproto/stratumv2` dialer exists but routing to it would regress submit-latency/reject telemetry until `poolproto.Session` is extended; see CHANGELOG session 55). |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
 | G6 | GPU detection is Linux-only. | Open — KNOWN_LIMITATIONS §4. |

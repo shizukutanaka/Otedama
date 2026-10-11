@@ -177,3 +177,28 @@ func TestHashrateFetcher_AllSourcesFail(t *testing.T) {
 		t.Errorf("CurrentHashrate = (%v, %v), want (0, false) after total failure", h, fresh)
 	}
 }
+
+func TestHashrateFetcher_RedirectRefused(t *testing.T) {
+	// A hashrate source answering with a redirect (even to a
+	// valid-looking URL) must fail rather than follow it — the sources
+	// are hardcoded HTTPS endpoints, so a redirect can only be an
+	// https→http downgrade injecting a manipulated hashrate.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://evil.example/hashrate", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	f := NewHashrateFetcher()
+	f.sources = []HashrateSource{{
+		Name: "redirecting",
+		URL:  srv.URL,
+		extract: func(b []byte) (float64, error) {
+			t.Error("extract must not be reached on a redirect")
+			return 0, nil
+		},
+	}}
+
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch should refuse to follow a redirect")
+	}
+}

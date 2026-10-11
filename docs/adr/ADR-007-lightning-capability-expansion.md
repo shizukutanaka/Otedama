@@ -356,6 +356,27 @@ In combination with Tracks A/C/D (see ROADMAP.md), B4 (180h) is the **single lar
 
 ---
 
+## Erratum (added session 2688, does not alter the proposal)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; two factual slips are recorded here:
+
+1. "eleven features (B1–B11)" in the Decision preamble — the accepted
+   set is **ten features (B1–B10)**; B11 and B12 are the two *rejected*
+   items, exactly as the rejection section and cost table describe.
+2. "575 hours over 24 months at 10h/week = 1,040 hours available →
+   45% of available budget" — the arithmetic gives 575/1,040 ≈ **55%**
+   consumed (≈45% *remaining*). Unless the figure was meant as the
+   remainder, the fraction is inverted.
+
+Verified consistent alongside: cost table total 575h
+(35+50+60+180+30+50+40+25+35+70), minimum-viable B1+B2+B7 = 125h,
+B1–B10/B11–B12 split in the rejection section, seedstore
+AES-256-GCM claim (internal/lightning/seedstore.go), WalletManager
+surface = seed/mnemonic storage (KNOWN_LIMITATIONS §6), B4's
+ldk-node ≥ v0.7.0 version target (session 251 sourcing), ADR-009's
+cross-referenced 575h figure.
+
 ## Status
 
 **Proposed.** This ADR formalizes the prior research thread on Lightning capability expansion into a discrete decision document. It restores the file that was referenced from 9 places (ROADMAP.md, ADR-008, ADR-009, CHANGELOG.md) but did not previously exist on disk — closing a structural integrity gap in the ADR system.

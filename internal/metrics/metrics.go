@@ -56,6 +56,7 @@ const (
 
 // Registry holds all registered metrics.
 // Safe for concurrent use.
+// The zero value is not usable; use NewRegistry.
 type Registry struct {
 	mu         sync.RWMutex
 	counters   map[string]*Counter

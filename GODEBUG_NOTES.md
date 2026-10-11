@@ -30,8 +30,7 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
-toolchain go1.24.0
+go 1.24.0
 
 godebug (
     panicnil=0
@@ -40,19 +39,18 @@ godebug (
 )
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
-the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **preferred build toolchain** — with the
-default `GOTOOLCHAIN=auto`, an older Go (1.21+) downloads go1.24.0
-automatically; under `GOTOOLCHAIN=local` the line is ignored, and the
-pinned `godebug tlsmlkem` then fails to parse on toolchains older
-than 1.24. So despite `go 1.22`, **Go 1.24+ is required to
-build Otedama**; the `go` line governs language defaults, not the
-minimum toolchain.
+**Why a single `go` line:** `go 1.24.0` declares the language semantics
+Otedama's source assumes and doubles as the minimum toolchain — an
+older Go refuses the module outright under `GOTOOLCHAIN=local`, and
+the pinned `godebug tlsmlkem` would fail to parse below 1.24 anyway.
+There is no `toolchain` line to drift apart from this floor. (The
+file previously carried `go 1.22` + `toolchain go1.24.0`; the split
+was collapsed once the language minimum caught up with the toolchain
+requirement.)
 
-The `go` line is bumped roughly once a year, six months after each
-Go minor's release, on a dedicated PR. The `toolchain` line is
-bumped quarterly to track the latest stable Go.
+The `go` line is bumped twice a year, roughly six months after each
+Go minor's release, on a dedicated PR — see "Process for upgrading
+the `go` directive" below.
 
 ## Active knobs
 
@@ -78,8 +76,9 @@ As of 2026-04-30:
 - **`randautoseed=1`** — keep Go 1.20+'s auto-seeding of `math/rand`
   from a cryptographically random source (rather than the historical
   fixed seed 1). Otedama does not rely on `math/rand`'s determinism
-  for anything security-relevant (`crypto/rand` is used there;
-  `math/rand/v2` only for non-security uses), so this pin also has no
+  for anything security-relevant (`crypto/rand` is used there; the
+  only `math/rand` in the tree is v1, in test files — fuzz seeds and
+  engine tests; `math/rand/v2` is unused), so this pin also has no
   observable effect today — same visibility rationale as `panicnil`.
 
 ## Knobs we may need in the next 10 years
@@ -132,16 +131,19 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251):** `go.mod` still pins
-  `toolchain go1.24.0`, which predates this feature — so the
-  container-aware default is **not compiled into current builds**.
-  A Kubernetes miner today still sees the host's full core count. This
-  benefit only materializes once the `toolchain` line is bumped to
-  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
-  over a year old). The bump was scoped but not performed in session
-  251 because this environment's module proxy denies the Go toolchain
-  download (`sum.golang.org` Forbidden). Tracked in
-  RESEARCH_IMPROVEMENTS session-251 item 3.
+- **Not yet in effect (verified session 251; corrected session 1752):**
+  `go.mod` has **no `toolchain` line at all** — the `go 1.24.0`
+  directive is the only version floor, so builds made with a Go <1.25
+  toolchain still lack the container-aware default. A Kubernetes miner
+  built today still sees the host's full core count unless the build
+  toolchain is ≥1.25. (Release CI pins `GO_VERSION: '1.23.x'` with
+  `GOTOOLCHAIN` unset — i.e. the default `auto`, which auto-downloads
+  the minimum satisfying toolchain = go1.24.0 — so official artifacts
+  are also below 1.25.) The benefit materializes once the build
+  toolchain floor reaches 1.25.x; a toolchain-version bump is a
+  maintainer decision (the earlier 1.20-1.23 CI pin-update PR was
+  closed unmerged). Tracked in RESEARCH_IMPROVEMENTS session-251
+  item 3.
 - Otedama impact: positive once the toolchain bump lands — fixes a
   class of "miner saturates noisy-neighbor pod limit" reports we
   expect from Kubernetes users.

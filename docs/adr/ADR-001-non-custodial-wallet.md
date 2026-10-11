@@ -94,6 +94,15 @@ have no way to recover if our infrastructure is compromised.
 party (or a friend of the user) at some point. The added complexity
 does not benefit solo home miners, which is our target audience.
 
+## Erratum (added session 2693, does not alter the accepted decision)
+
+"Stratum V2 pools that support non-custodial payouts (Braiins pool,
+demand.sv2.io, etc.)" names a hostname that no longer resolves —
+`sv2.io` / `demand.sv2.io` are NXDOMAIN today (the pool intended is
+**DMND**, reachable under the `dmnd.work` domain). The claim's
+substance stands: real V2-capable, non-custodial-payout pools exist
+(Braiins Pool at `stratum.braiins.com`, DMND, SRI nodes).
+
 ## Related
 
 - ADR-002 — Stratum V2 as the exclusive pool protocol

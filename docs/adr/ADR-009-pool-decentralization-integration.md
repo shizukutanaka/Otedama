@@ -9,7 +9,7 @@
 
 ## Context
 
-On **May 7, 2026** — five days before this ADR was drafted — seven of the largest Bitcoin mining pools (**Foundry, AntPool, F2Pool, Spiderpool, Block Inc., MARA Foundation, DMND**) formally joined the **Stratum V2 Working Group**. This is the most significant Bitcoin mining-protocol event of the decade: roughly **70% of global hashrate** is now committed to a protocol that lets **individual miners construct their own block templates** rather than blindly hashing pool-imposed transactions.
+On **May 7, 2026** — five days before this ADR was drafted — seven of the largest Bitcoin mining pools (**Foundry, AntPool, F2Pool, Spiderpool, Block Inc., MARA Foundation, DMND**) formally joined the **Stratum V2 Working Group**. This is the most significant Bitcoin mining-protocol event of the decade: roughly **70% of global hashrate** is now committed to a protocol that lets **individual miners construct their own block templates** rather than blindly hashing pool-imposed transactions (subsequent May-2026 coverage put the commitment at ~75%).
 
 The implications:
 
@@ -786,6 +786,25 @@ does not apply; verified no analogous round-up in `TargetFromDifficulty`.
   https://opensats.org/projects/stratumv2
 
 ---
+
+## Erratum (added session 2690, does not alter the proposal)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; corrections and notes:
+
+1. "88% over budget" — the combined 1,940h vs 1,040h arithmetic gives
+   (1,940−1,040)/1,040 ≈ **86.5% over** (a ~1.5pp rounding slip).
+2. Same budget-convention note as ADR-008's erratum: this document's
+   "18 months → 720h available" uses 4-week months, while the combined
+   table's "24 months → 1,040h" uses calendar weeks. Internally
+   consistent per figure, but the two denominators coexist on this page.
+
+Verified consistent alongside: Scenario A net $2.69 → $2.86 (+6.3%
+margin, ~$310/5yr), Scenario B net $131.04 → $137.58 (+$2,352/yr via
+monthly delta), cost table total 480h (80+30+150+120+60+40), combined
+total 1,940h (290+575+595+480 — ADR-010's 290h cross-checked against
+its own cost table), adjusted 1,450h → ~40% over, minimum-viable 715h,
+all cluster pairs, and the non-custodial rejection list.
 
 ## Status
 
@@ -1799,3 +1818,144 @@ Normative open set unchanged: sv2-spec #203 (coinbase payouts extension — push
 ### Session 1630 recheck (ecosystem)
 
 sv2-spec open set changed: **#238 "feat: negotiate optional SetupConnection flags"** (Sjors, opened 2026-10-06) joined the normative set — it reserves bits 0-15 for required features and 16-31 for optional requests; `SetupConnectionSuccess` echoes only the *accepted* optional flags from the request, and errors report only unsupported required bits. Otedama's handshake gate (reject any echoed flag outside the offered set, `msg.Flags &^ sc.Flags != 0` → fatal, session-1329 fix) stays forward-compatible: under #238 a compliant server may only echo a subset of what was offered, so the subset check remains the correct validation — and if Otedama ever offers optional bits (16-31), the same check still applies. Tracking #238: if merged with additional normative language, revisit the check's required/optional split. Other open set stable: #203 (coinbase transaction payouts), #234 (authority key mgmt/rotation), #198 (coinbase_witness), plus non-normative #232/#186/#103. SRI release stream: **v1.12.0 remains latest** (2026-09-17) — a hardening-dominated release (channels_sv2 share-validate/min_ntime/nTime enforcement, bounded job storage on every axis, AES-256-GCM removed from noise_sv2 leaving ChaCha20-Poly1305 the sole cipher, codec/framing refactor). sv2-apps releases stream quiet since v0.8.0. No required changes this cycle beyond continued tracking of #238.
+
+### Session 1651 recheck (ecosystem)
+
+sv2-spec open normative set unchanged: #203 (coinbase payouts extension),
+#234 (authority key management/rotation), #198 (coinbase_witness field),
+#238 (negotiate optional SetupConnection flags — Sjors, opened 2026-10-06,
+splits flags into required bits 0-15 vs optional 16-31; Otedama's current
+subset-check verification remains forward-compatible). Non-normative open:
+#232/#186 (markdown style), #103 (WIP Proxy Annex). SRI latest tag v1.12.0,
+sv2-apps latest v0.8.0 — both unchanged. No action required.
+
+### Session 1656 recheck (ecosystem)
+
+- sv2-spec open PR set (normative): #238 negotiate optional
+  SetupConnection flags (opened 2026-10-06, Sjors) — still open; our
+  subset-flags validation stays forward-compatible (recorded s1630).
+  #234 authority key management and rotation, #203 coinbase-transaction
+  payouts extension, #198 coinbase_witness in NewTemplate — all still
+  open, no merges since the s1651 recheck.
+- Non-normative: #232 (table style), #186 (markdown cells), #103
+  (Proxy Annex draft, untouched since 2024-10).
+- SRI latest: v1.12.0 (2026-09-17) — unchanged. sv2-apps latest:
+  v0.8.0 (2026-09-17) — unchanged.
+- Worth noting from the v0.8.0 changelog for our own gap ledger:
+  the Translator Proxy now honors `mining.extranonce.subscribe` and
+  applies extranonce-prefix changes without recreating channels —
+  the same semantics Otedama's V1 client already implements
+  (s1563 verified) — and adds a BIP323 version-rolling mask on the
+  downstream side. The ecosystem keeps converging on version rolling
+  (tProxy ships the mask); Otedama's V1 client still cannot request
+  it — the recorded P0 throughput gap stands and gains evidence.
+
+### Session 1661 recheck (ecosystem)
+
+- **sv2-spec normative open set unchanged**: #238 (negotiate optional
+  SetupConnection flags — bits 0-15 required / 16-31 optional, proposed
+  2026-10-06, spawned from #225 discussion), #234 (authority key
+  management/rotation docs — last push 09-25, two reviews in), #203
+  (non-custodial payouts), #198. Non-normative: #232, #186, #103 (WIP).
+  No action required for Otedama — the flags-subset check already
+  rejects undefined required bits the way #238 proposes to formalize.
+- **Correction**: prior entries recorded "sv2-apps v0.8.0" as latest —
+  the releases page lists **v0.7.0** (2026-07-24) as newest and no
+  v0.8.0 exists there. The substance attributed to it remains verified
+  under v0.7.0's own notes: tProxy builds `UserIdentity` TLVs only
+  after extension 0x0002 negotiates, payout verification handles split
+  coinbase scriptSigs, and downstream shares validate against the
+  advertised power-of-two difficulty. Treat "v0.8.0" in earlier
+  sessions as a misread tag/unreleased reference.
+- SRI (Stratum V2 Reference Implementation) at v1.12.0, unchanged.
+
+### Session 1681 recheck (ecosystem)
+
+- **sv2-spec normative open set unchanged**: #238 (optional-flag
+  negotiation — opened 2026-10-06, still open), #234 (authority key
+  management/rotation docs — two reviews in), #203 (non-custodial
+  payouts extension), #198 (coinbase_witness). Non-normative: #186,
+  #103. No action required.
+- **Correction to the s1661 correction**: `releases/latest` for
+  sv2-apps resolves to **v0.8.0** (published 2026-09-17). The s1661
+  entry recorded v0.7.0 as newest — whether v0.8.0 was tagged after
+  that fetch or the fetch itself missed it, the authoritative latest
+  is now v0.8.0. Its contents match the hardening wave previously
+  attributed to it: Loupe-audit fixes across the stack, tProxy
+  BIP323 version-rolling mask + `mining.extranonce.subscribe`
+  handling, typestate runtimes for JDC/tProxy/Pool, bounded
+  extranonce allocators, min_ntime share-validation enforcement
+  (the enforcement Otedama already performs), `max_past_jobs` cap,
+  and version-range enforcement on SetupConnection.
+- SRI latest: v1.12.0 (2026-09-17) — unchanged.
+- The P0 gap stands and gains evidence again: tProxy ships the
+  BIP323 version-rolling mask to downstream miners; Otedama's V1
+  client still sends no `mining.configure` and cannot request one.
+
+### Session 1700 recheck (ecosystem)
+
+- sv2-spec open set: #238 (negotiate optional SetupConnection flags — updated 2026-10-06, still open; Otedama's strict subset validation remains forward-compatible), #234 (authority key management/rotation), #203 (coinbase payouts extension), #198 (coinbase_witness field), plus non-normative style PRs #186/#232 and WIP #103. No new normative changes since the s1661 recheck.
+- SRI reference implementation: still **v1.12.0** (unchanged).
+- sv2-apps: `/releases/latest` now resolves to **v0.8.0** — supersedes the s1661 note which read v0.7.0 as latest at that time. v0.8.0's tProxy BIP323 version-rolling mask remains the standing P0 gap evidence for Otedama (no mining.configure / version-rolling client-side).
+
+### Session 1708 recheck (ecosystem)
+
+Re-verified via individual PR pages (GitHub API + list-page HTML both unreliable — scrape hits SPA markup; individual page state is authoritative):
+
+- **#238 open** — negotiate optional SetupConnection flags (new 2026-10-06): reserves bits 0–15 required / 16–31 optional; success echoes accepted optional flags; errors report unsupported *required* bits only. Otedama's subset-flag validation is forward-compatible — an optional-flag echo still satisfies "returned ⊆ offered".
+- **#234 open** — authority key management/rotation doc (clarification only, no wire change; "Pool Authority Key" → "Authority Key", established sessions need not terminate at `not_valid_after`).
+- **#203 open** — non-custodial payouts extension (renamed; still the active JDP-payout proposal).
+- **#198 open** — `coinbase_witness` field on NewTemplate (Sjors coordinating SRI-first deployment order).
+- Releases: SRI **v1.12.0**, sv2-apps **v0.8.0** — both unchanged.
+- Cosmetic-only open items: #186 (markdown table cells), #103 (WIP Proxy Annex draft).
+
+### Session 1730 recheck (ecosystem)
+
+Re-verified live via the GitHub API (2026-10-08): **no drift since
+session 1708.** sv2-spec normative open set unchanged — #238
+(optional SetupConnection flag negotiation; Otedama's subset-flag
+validation stays forward-compatible: an optional-flag echo satisfies
+"returned ⊆ offered"), #234 (authority key management/rotation docs,
+no wire change), #203 (non-custodial payout extension — the tracked
+JDP-payout proposal), #198 (`coinbase_witness` on NewTemplate).
+Cosmetic only: #186, #232, WIP #103. Releases: SRI **v1.12.0**
+(2026-09-17), sv2-apps **v0.8.0** (2026-09-17) — both unchanged; the
+standing P0 gap (no `mining.configure` / BIP323 version-rolling
+client-side, while tProxy v0.8.0 ships the mask) is unaffected.
+
+### Session 1776 recheck (ecosystem)
+
+Re-verified live (GitHub API rate-limited; list-page HTML + git
+ls-remote used instead — same effective sources):
+
+- sv2-spec normative open set unchanged: **#238** (negotiate optional
+  SetupConnection flags — Otedama's subset-flag validation stays
+  forward-compatible: an optional-flag echo satisfies
+  "returned ⊆ offered"), **#234** (authority key management/rotation
+  docs — clarification only), **#203** (non-custodial payout
+  extension), **#198** (`coinbase_witness` on NewTemplate).
+  Cosmetic-only: #232, #186, WIP #103.
+- SRI: still **v1.12.0** (2026-09-17) — the hardening release whose
+  share-validation/coinbase-bound fixes Otedama already performs
+  client-side (min_ntime/nTime bounds, bounded job storage).
+- sv2-apps: still **v0.8.0** (2026-09-17; tag list re-pulled via
+  ls-remote) — tProxy's BIP323 version-rolling mask remains the
+  standing P0 gap evidence (Otedama's V1 client sends no
+  `mining.configure` and cannot request a version mask).
+- No drift since session 1730.
+
+### Session 2843 recheck (ecosystem)
+
+Web search + repo listing re-verified the standing state — no drift:
+
+- sv2-spec: normative open set unchanged — **#238** (optional
+  SetupConnection flags; Otedama's subset-flag validation remains
+  forward-compatible), **#234** (authority key mgmt docs),
+  **#203** (non-custodial payout extension), **#198**
+  (`coinbase_witness`). The June-2026 merges (#194 error codes,
+  sv2-apps #531 sync-API migration) remain the last normative
+  movement — already tracked.
+- SRI: still **v1.12.0** (2026-09-17) — no newer tag.
+- sv2-apps: still **v0.8.0** (2026-09-17) — tProxy's BIP323
+  version-rolling mask remains the standing P0 client-side gap
+  (Otedama's V1 client sends no `mining.configure`).

@@ -365,3 +365,26 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		}
 	}
 }
+
+// Regression pin (session 1659): Detail/Fix carry config-controlled
+// strings (data-dir, config path) — a crafted config could inject
+// terminal escapes through doctor output. Print must strip control
+// characters at the display boundary.
+func TestReport_Print_SanitizesControlChars(t *testing.T) {
+	r := &Report{
+		Results: []Result{
+			{Name: "Config", Status: StatusFail,
+				Detail: "path /tmp/\x1b[2Jbad\u202E missing",
+				Fix:    "re-run \x1b[?25l setup"},
+		},
+	}
+	var buf bytes.Buffer
+	r.Print(&buf)
+	out := buf.String()
+	if strings.ContainsRune(out, '\x1b') || strings.ContainsRune(out, '\u202e') {
+		t.Errorf("Print emitted terminal-control characters:\n%q", out)
+	}
+	if !strings.Contains(out, "path /tmp/[2Jbad missing") {
+		t.Errorf("expected sanitized detail text retained:\n%q", out)
+	}
+}

@@ -24,7 +24,7 @@ Otedamaの設計はJohn Carmack、Robert C. Martin、Rob Pikeの三者の原則�
 
 ```
 Otedama/
-├── cmd/otedama/            # CLI エントリポイント（run/version/config/service/doctor/completion）
+├── cmd/otedama/            # CLI エントリポイント（run/version/config/service/doctor/completion/wallet）
 ├── internal/
 │   ├── arbitration/        # 純粋関数の裁定エンジン（副作用なし）
 │   ├── btccrypto/          # Bitcoin暗号抽象化(secp256k1/Schnorr/ML-DSA scaffold)
@@ -49,8 +49,8 @@ Otedama/
 │   ├── tui/                # ANSI ダッシュボード（外部依存ゼロ）
 │   └── version/            # ビルドメタデータ（ldflags 注入）
 ├── docs/adr/               # ADR-001〜011
-├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md
-└── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml / devin-direct-merge.yml
+├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md / quality-pass-{opus,sonnet}.md
+└── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml / devin-direct-merge.yml / scorecard.yml
 
 # 存在しないパス（作成禁止）:
 # cmd/otedamad/           → デーモンモードは service サブコマンドで代替
@@ -73,13 +73,13 @@ Otedama/
 
 コミットメッセージは Conventional Commits に準拠します。`feat:`、`fix:`、`refactor:`、`docs:`、`test:`、`chore:`、`perf:`、`security:` のプレフィックスを使用し、変更内容を英語で簡潔に記述します。ブレーキングチェンジは `BREAKING CHANGE:` フッターで明示します。
 
-ブランチ戦略は GitHub Flow に準拠します。`main` ブランチは常にリリース可能な状態を保ち、機能開発は `feature/xxx` ブランチで行い、Pull Requestを経てmainにマージされます。`legacy-v2` ブランチは旧バージョンの保全用であり、重大セキュリティ修正以外のコミットは禁止します。
+ブランチ戦略は GitHub Flow に準拠します。デフォルトブランチ `master` は常にリリース可能な状態を保ち、機能開発は `feature/xxx` ブランチで行い、Pull Requestを経てmasterにマージされます。`legacy-v2` ブランチは旧バージョンの保全用であり、重大セキュリティ修正以外のコミットは禁止します。
 
 ## テスト要件
 
 テストカバレッジは90%以上を維持します。ただしカバレッジは手段であり目的ではないため、意味のないテストを追加してカバレッジを水増しすることは禁止します。以下のテスト種別を用途に応じて使い分けます。単体テストは関数・メソッドの正常系と異常系を網羅します。プロパティベーステストはアルゴリズム（裁定エンジン、Lightning決済計算）の不変条件を検証します。ファズテストはパーサ・プロトコル実装（Stratum V2メッセージ処理）に適用します。統合テストはモジュール間連携を検証します。E2Eテストは主要ユーザーフローを検証します。負荷テストはプール接続・AI推論ルーティングのスケーラビリティを検証します。
 
-全てのテストはCI上で自動実行され、mainへのマージ前に全テストが通過することを必須とします。
+全てのテストはCI上で自動実行され、masterへのマージ前に全テストが通過することを必須とします。
 
 ## セキュリティ要件
 

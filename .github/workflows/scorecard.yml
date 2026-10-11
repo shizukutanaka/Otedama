@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Otedama contributors. See NOTICE for details.
+#
+# OpenSSF Scorecard — runs the published supply-chain checks
+# (Branch-Protection, Pinned-Dependencies, Signed-Releases,
+# Token-Permissions, bundled osv-scanner) on every push to master and
+# weekly. Results are archived as a workflow artifact rather than
+# published to the code-scanning dashboard so the job needs no repo
+# settings beyond contents:read (the Dependency Review failure class —
+# "Dependency graph is disabled" — shows what unconfigured publishing
+# endpoints cost). Non-blocking by design: the report is advisory, the
+# hard gates live in ci.yml / security.yml / test.yml.
+name: OpenSSF Scorecard
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    # Weekly, Mondays 07:12 UTC.
+    - cron: '12 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: false
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 30

@@ -628,6 +628,31 @@ Considered and **rejected** features:
 
 ---
 
+## Erratum (added session 2689, does not alter the proposal)
+
+Per `docs/adr/README.md`'s immutability rule, the original text above
+is left unchanged; corrections and notes:
+
+1. Risks §2 calls `github.com/NVIDIA/go-nvml` "BSD-licensed" — the
+   upstream LICENSE is **Apache-2.0**. The conclusion stands (permissive
+   license, dlopen's the system NVML, no NVIDIA binary shipped).
+2. Cross-ADR note: the budget denominator here ("18 months → 720 h
+   available") uses 4-week months, while ADR-007's budget math uses
+   calendar weeks ("24 months → 1,040 h"). Each is internally
+   consistent, but the conventions differ — readers comparing totals
+   should normalize first. (595 h / 720 h → 17% buffer as stated; at
+   calendar weeks, 18 months ≈ 780 h, a ~24% buffer.)
+3. Scenario C's "$3.10/day" is loose (hashprice not restated); at the
+   scenario's own ~10h/day effective runtime and a $48–52/PH/day
+   hashprice the figure lands at $2.80–3.03. Directionally correct.
+
+Verified consistent alongside: cost table total 595h
+(150+90+60+90+55+60+90), all scenario arithmetic (A: −$7.01 stock /
+−$6.20 tuned; B: +$110.40 → +$127.30, ~$6,096/yr uplift via monthly
+delta), {1,3}/{1,4,5} clusters, halving block 1,050,000, and the
+v3.5/v3.6/v3.7 cut thresholds. `internal/power/` does not exist yet
+(this ADR is a proposal).
+
 ## Status
 
 **Proposed.** This ADR consolidates the third major v3.5–v4.0 research thread alongside ADR-010 (arbitration engine evolution) and ADR-007 (Lightning capability expansion). Combined, the three ADRs define the complete roadmap from v3.0 alpha to the April 2028 halving.

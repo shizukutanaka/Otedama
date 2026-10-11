@@ -26,6 +26,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
         -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=${BUILD_DATE}" \
     -o /out/otedama ./cmd/otedama
 
+# Pre-create the data dir owned by the nonroot uid: without it a named
+# volume initializes as root:root 0755 and the wallet cannot be written.
+RUN mkdir -p /var/lib/otedama && chown 65532:65532 /var/lib/otedama
+
 # ---- Final image ----
 # gcr.io/distroless/static contains only the root CA bundle, timezone
 # data, and a minimal libc shim — no shell, no package manager.
@@ -41,6 +45,9 @@ COPY --from=builder /src/NOTICE /NOTICE
 
 # Copy timezone data (needed for correct timestamp formatting).
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy the pre-claimed data dir (see builder stage).
+COPY --from=builder --chown=65532:65532 /var/lib/otedama /var/lib/otedama
 
 # Run as a non-root user (distroless 'nonroot' is uid 65532).
 USER nonroot:nonroot

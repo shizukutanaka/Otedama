@@ -9,6 +9,230 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Fixed (session 2657 — stale claims in the 3.0.0-alpha.1 entry)
+
+Historical entry corrections (the alpha entry itself is preserved; these
+claims no longer describe shipped behavior and were never errata'd):
+
+- "Nightly GitHub Action runs FuzzDecodeHeader and FuzzDecoder_ReadFrame
+  for 30 minutes each, auto-opens issues on crashers" — no nightly or
+  auto-issue job exists; test.yml's `fuzz` job runs `make fuzz` (a brief
+  smoke over all 23 targets) on push/PR only.
+- "PR-time benchstat comparison against main; >5% regression triggers a
+  warning comment" — the `benchmark` job runs `go test -bench=.` and
+  uploads the raw output as an artifact; there is no benchstat step and
+  no threshold comment.
+- "GoReleaser builds signed binaries" — `release.yml` never invokes
+  goreleaser; releases ship plain tarballs + checksums.txt, and no
+  cosign signatures are published (see VERIFY.md and the
+  docs/THREAT_MODEL.md residual-risk note).
+- "Primary branch: master → main" — the default branch is `master`;
+  no `main` ref exists.
+- "V1 is no longer supported" — `internal/poolproto/stratumv1` is a
+  complete working V1 client (stratum+tcp://, stratum+tls://); V1 pool
+  connections dispatch through `poolproto` since session 91.
+- "six parallel checks" for `otedama doctor` — the check set has grown
+  to 17.
+- "Supply chain: all GitHub Actions are SHA-pinned" — no Action is
+  SHA-pinned; every `uses:` is a @v3–@v6 major-version tag (same gap
+  recorded in docs/AUDIT_CHECKLIST.md).
+- "Cosign keyless signing for release artifacts" — release.yml emits no
+  signatures; install.sh retains optional cosign verification but there
+  is nothing signed to verify.
+- `legacy-v2` branch — referenced by the 2.1.9 and Earlier Versions
+  entries, but no such ref exists on origin; the v2.x source is not
+  carried in this repository's branch set.
+
+### Fixed (session 2647 — audit-cycle backlog entries)
+
+- `rates.HashrateFetcher` now refuses HTTP redirects, matching the #455
+  posture on the price fetcher and clock-skew probe: a 30x on the
+  hardcoded HTTPS hashrate sources could downgrade to plaintext http and
+  inject a manipulated network-hashrate reading into yield estimates.
+  Same `CheckRedirect` rejection + regression test (session 2251).
+- `pools[].tls_ca_file` is now honored for `stratum+v2tls://` as well as
+  `stratum+tls://` — the V2 connect path reads the PEM file and builds a
+  `stratum.TLSConfigWithExtraCAs` config instead of silently using system
+  roots; doctor's warning text updated to cover both schemes (session
+  2616, with regression test).
+- `devin-direct-merge.yml`'s check-conflict job now passes `--repo` to its
+  `gh` invocations — the job no longer checks out the repo, so bare `gh`
+  calls failed with "not a git repository" (session 2599).
+
+### Fixed (session 1884 — README.md)
+
+- Requirements note now states the actual go.mod declaration (`go 1.24.0`)
+  instead of the pre-simplification `go 1.22` + toolchain/godebug narrative.
+
+### Fixed (session 1883 — docs/SPECIFICATION.md)
+
+- SPECIFICATION §2 exit-code table now documents `doctor`'s result-graded
+  codes (0 pass/skip, 1 warn, 2 fail) alongside the general 0/1/64/78 contract.
+
+### Fixed (session 1866 — CLAUDE.md)
+
+- Branch-strategy text now names the real default branch `master` in both places (the repo has no `main` ref); GitHub Flow semantics unchanged.
+
+### Fixed (session 1862 — CLAUDE.md)
+
+- Architecture map: added `scorecard.yml` (session-1754 OpenSSF workflow) to the `.github/workflows` enumeration.
+
+### Fixed (session 1860 — CLAUDE.md)
+
+- Architecture map: added the shipped `wallet` subcommand (PR #529) to the `cmd/otedama` enumeration.
+
+### Fixed (session 1859 — CLAUDE.md)
+
+- Architecture map: added `quality-pass-{opus,sonnet}.md` to the `skills/` inventory comment — the two files exist but were undocumented.
+
+
+### Fixed (session 1845 — SPECIFICATION.md)
+
+- Corrected stale G3 status: V1 pool connections dispatch through `poolproto` since session 91; only the V2 inline handshake remains open.
+
+### Fixed (session 1841 — CONTRIBUTING.md)
+
+- Corrected the false claim that non-major languages are covered by machine translation; they fall back to English.
+
+### Fixed (session 1835 — config.yaml.example)
+
+- Corrected the supported-language list: `ru` and `ar` were missing and `zh-CN` was shown instead of the canonical `zh` tag.
+
+### Fixed (session 1827 — docs/API.md)
+- Metrics table now covers the full registered set: `otedama_shares_submitted_total`, `otedama_shares_submit_in_flight`, `otedama_effective_yield_sats_per_second`, `otedama_power_breakeven_floor_sats_per_second` were all missing from the API reference
+### Fixed (session 1824 — NOTICE)
+- Third-party attribution updated for the shipped dep set: `go.yaml.in/yaml/v3` replaces the archived `gopkg.in/yaml.v3` path (migrated in #444), and `golang.org/x/sys` is now listed as a direct dependency (used by internal/tui for terminal-width syscalls), not an indirect one
+### Fixed (session 1800 — ci-cd.yml)
+- Removed the `deploy` job — it applied the nonexistent `k8s/deployment.yaml` on every master push when KUBE_CONFIG was set
+### Fixed (session 1796 — ci.yml)
+- Removed `deploy-staging`/`deploy-production` — vestigial jobs applying nonexistent `k8s/` manifests for a foreign postgres/redis/ingress topology; deploy.yml owns deployment
+### Fixed (session 1794 — code-review.yml)
+- Removed hollow `review` and `performance-check` jobs — unreachable Node.js scaffolds that posted a vacuous comment on every PR and referenced the forbidden `scripts/` tree
+- `common-issues` now greps `*.go` for TODO/FIXME (its JS-only secret/console greps were vacuous; secrets stay covered by trufflehog)
+- `dependency-review` lost its dead `npm outdated`/comment scaffolding (the action itself is unchanged)
+### Fixed (session 1791 — deploy.yml)
+- Smoke/verify curls now hit `/healthz` — they targeted `/health`, which the HTTP server does not register (only `/healthz`, `/readyz`, `/metrics`, `/`), so every real deploy would end in a 404-failed smoke test
+### Fixed (session 1790 — deploy.yml)
+- Removed the ungated archived `actions/create-release@v1` step from `deploy-production` — it raced release.yml's release creation on every `v*` tag push; release.yml remains the single owner
+### Fixed (session 1789 — deploy.yml)
+- `rollback` job if-gate referenced nonexistent `refs/heads/main` → `refs/heads/master`; manual production deploys from master can now roll back on failure
+### Fixed (session 1788 — deploy.yml)
+- `deploy-production` no longer requires `deploy-staging` in `needs:` — the staging if-gate is unsatisfiable on tag pushes and production dispatches, making production deploys unreachable in every trigger mode
+### Fixed (session 1786 — ci-cd release binaries)
+- `ci-cd.yml` multi-platform build now injects `-ldflags -X internal/version.{Version,Commit,BuildDate}` — released binaries previously reported the baked-in default version and empty commit/build-date stamps
+### Fixed (session 1767 — devin-direct-merge concurrency)
+
+- `.github/workflows/devin-direct-merge.yml`: `concurrency` ブロックを追加
+  （PR 番号キー、`cancel-in-progress: true`）— 同一 PR への連続
+  synchronize で `/fix-conflict` コメントが重複投稿される経路を塞ぐ。
+
+### Added (session 1754 — OpenSSF Scorecard ワークフロー)
+
+- `.github/workflows/scorecard.yml`: scorecard-action@v2.4.4 を master
+  プッシュ＋週次で実行（`contents: read` のみ、結果は SARIF アーティファクト
+  として保存 — コードスキャン dashboard 公開は repo 設定非依存を維持するため
+  無効化）。THREAT_MODEL の依存説明も訂正（yaml は go.yaml.in/yaml/v3、
+  govulncheck アドバイザリ状況ブロック追加: 到達可能脆弱性 0）。
+
+### Added (session 1753 — Noise 暗号化フレーム長プレフィックスのファズ)
+
+- `FuzzEncryptedConn_Read` / `FuzzEncryptedConn_LengthPrefix`
+  (internal/stratum/encryptedframe_fuzz_test.go): Noise u16 長プレフィックスの
+  逆直列化経路をファズ — 実フレーム種コーパス＋敵対的プレフィックスで、
+  panic・超過割当・認証失敗時の平文漏洩・ストリーム非同期を不変条件として検査
+  （SRI noise_sv2 オーバーフロー類型の Otedama 相当面）。
+
+### Docs (session 1725 — .goreleaser.yaml ヘッダコメント訂正)
+
+- 「本番実行は release.yml がタグプッシュで起動」という誤記を訂正 — release.yml
+  は goreleaser を呼ばず `go build` + `gh release upload` で構築する。本ファイルは
+  手動の代替経路（cosign/cyclonedx-gomod/syft/git-cliff 必須）。
+
+### Fixed (session 1723 — ci.yml 単一ファイルビルド)
+
+- `build`/`build-unified` ジョブが `go build ... cmd/otedama/main.go`（10ファイル
+  パッケージの1ファイルのみ）を実行し決定論的にリンクエラー → `./cmd/otedama`
+  パッケージ形式へ修正。上流ジョブの既知失敗に隠れて表面化していなかった欠陥。
+
+### Fixed (session 1719 — security.yml ハードコード IP チェック)
+
+- `security.yml` の compliance-check が正当な IP リテラル（`127.0.0.1` ヘルプ/
+  ドキュメント文字列、意図的な doctor 到達プローブ `1.1.1.1:53`、テスト
+  フィクスチャ全般）に毎回マッチし決定論的に失敗 → 非テストソースへ絞り、
+  許可リスト（ループバック＋プローブ）を明示。新規ハードコード IP は依然失敗。
+
+### Fixed (session 1718 — test.yml 成果物グロブ)
+
+- `test.yml` build ジョブの成果物アップロードが `otedama-*`（リポジトリ直下）を
+  指し、実出力 `dist/otedama-*` と不一致で常に空アーティファクト → `dist/` へ修正。
+
+### Fixed (session 1714 — devin-direct-merge 対象ブランチゲート)
+
+- `devin-direct-merge.yml` を `branches: [master]` へ限定 — 非 master 宛 PR への
+  誤った競合コメント（本文が master 固定）を防止。
+
+### Fixed (session 1712 — Makefile ツールピン発散)
+
+- `make setup`/`docs-serve`/skip-hint の `@latest` 4+1 件を CI 整合の固定バージョンへ
+  （gosec v2.29.0・govulncheck v1.1.4・go-licenses/v2 v2.0.1・gofumpt v0.12.0・godoc x/tools v0.50.0）。
+  go-licenses は v2 モジュールパスへも修正。
+
+
+### Fixed (session 1703 — lint ピン発散 + fpm ライセンス表記)
+- `test.yml`/`ci-cd.yml` の golangci-lint `version: latest` が v2（設定スキーマ非互換）へ解決 — Makefile の `v1.64.8` へ統一
+- `ci.yml` の curl インストールピン `v1.55.2` → `v1.64.8`（Makefile 一致）
+- `release.yml` build-packages の fpm `--license "MIT"` → `"Apache-2.0"`（実 LICENSE に一致）
+
+
+### Fixed (session 1682 — install.sh が実在しない otedama.io を usage 例として記載)
+
+`install.sh` の usage ヘッダが `curl -sSL https://otedama.io/install.sh` を
+案内していたが、otedama.io は DNS 未登録で解決不能（CLAUDE.md「存在しない URL の
+記載禁止」違反）。過去の除去作業（skills・RESEARCH_IMPROVEMENTS に記録）は
+他ファイルのみ対象で、最も露出の大きい当該スクリプト自身には残存していた。
+README が記載する正規経路 `raw.githubusercontent.com/.../master/install.sh`
+へ2箇所を置換。`--version`/`--prefix`/`--skip-verify` の各例は実装済みフラグと
+一致することを grep で確認済み。
+
+### Fixed (session 1678 — release-build が macOS で必ず失敗＋生成物未ignore)
+
+`make release-build` が `sha256sum` を直書きしており、stock macOS（`shasum` のみ）ではチェックサム工程で必ず失敗 — install.sh が session 1669 で workaround したのと同じ落とし穴が Makefile に残っていた。`sha256sum || shasum -a 256` の解決へ変更（両方無い場合は明確なエラーで停止）。併せて `make docs` の生成物 `docs/api-reference.txt` が未追跡かつ .gitignore 未収録で作業ツリーを汚していたため ignore へ追加。
+
+### Fixed (session 1675 — config show が不正 env を静かに無視)
+
+`otedama config show` が `config.EnvWarnings` を呼ばず、`OTEDAMA_POWER_WATTS=abc` のようなパース不能な数値 env が警告なくデフォルト値へ落ちていた — env が効かない原因を調べるためのコマンド自体が原因情報を隠していた。`config validate` と同じ警告ループを追加。
+
+### Fixed (session 1669 — install.sh が macOS で必ず失敗)
+
+`require sha256sum || require shasum` — require() 内部の die() がスクリプト全体を exit させるため `||` の右辺へ到達せず、sha256sum を持たない macOS では前提チェックで常に死んで後続の `shasum -a 256` フォールバックが死にコードだった。明示的な「どちらか一方存在」チェックへ置換（どちらも無い場合のみ die）。
+
+### Fixed (session 1667 — devin-merge 競合検出の取りこぼし)
+
+`devin-direct-merge.yml` が `mergeable` を一度だけ読み、初回の `UNKNOWN`（GitHub の非同期計算）を「競合なし」と誤認して本当の競合への /fix-conflict 起動を取りこぼしていた → 3回×5秒リトライ。併せてフォーク PR（書込トークン降格でコメント必ず失敗）ではコメント step をスキップするゲートを追加。
+
+### Fixed (session 1666 — release 作成レースで tarball/package 喪失)
+
+`v*` タグ push で `release.yml` と `ci-cd.yml` が同時起動し、ci-cd の `action-gh-release` が先にリリースを作ると release.yml の `actions/create-release` が 422 で失敗 — `needs: create-release` 伝播で tarball・.deb/.rpm・Homebrew formula 更新の全ジョブが静かにスキップされ、リリースが bare binary だけになる競合があった。upsert 可能な `softprops/action-gh-release@v1` へ置換（`upload_url` 出力・version 契約は不変）。
+
+### Fixed (session 1665 — checksums.txt が自身を列挙)
+
+`ci-cd.yml` の `sha256sum * > checksums.txt` はリダイレクトが先に空の checksums.txt を作るため glob がそれを取り込み、ファイル自身の「空文字列ハッシュ」行が残っていた — リリース全体への `sha256sum -c` が必ず FAILED 行を出す自己矛盾。`sha256sum otedama-*` へ修正（dist/ 内アーティファクトは命名上全て otedama-* なので網羅性は不変）。
+
+### Fixed (session 1664 — release tarball に checksum 無し)
+
+`release.yml` が `otedama-<os>-<arch>.tar.gz` を一切のチェックサムなしで公開しており、直接ダウンロードした利用者が検証不可能だった（checksums.txt は ci-cd 側の bare binary のみを列挙）。各マトリクス脚で `sha256sum` を生成し `<name>.tar.gz.sha256` として同梱アップロードする形へ修正 — 5脚が並列で独立アップロードするため集約ファイルはレースする。install.sh は変更不要（ci-cd の検証済み bare binary を選ぶ経路は s1663 で実証済み）。
+
+### Security (session 1659 — doctor 出力の制御文字混入)
+
+`otedama doctor` の `Print` が各チェックの `Detail`/`Fix` 文字列を無加工で端末へ出力していた — これらには設定ファイル由来のパス（data-dir・config・wallet）が含まれ、制御文字を含む設定値が ANSI エスケープを注入し得た。s1655 の config show と同一クラスを `Print` 単一境界で `poolproto.SanitizePoolText` 経由へ修正（JSON 出力はエンコーダがエスケープ済みのため不変）。回帰ピン: `TestReport_Print_SanitizesControlChars`。
+
+### Fixed (session 1652 — Start/Stop 競合でワーカーが止まらない)
+
+`Worker.Start` は `w.cancel` を mutex 外で代入していたのに対し `Stop` は `w.mu` 下で読んでいたため、Start/Stop が競合すると `Stop` が `cancel==nil` を読んで即時リターンし、grind goroutine が生き続ける可能性があった（呼出し側は停止済みと誤認）。`started` CAS の後に cancel を `w.mu` 下で公開し `cancelReady` チャネルを close する形へ修正 — 途中の `Stop` は publish 完了を待ってから cancel し `done` で終了を待つ。2回目の Start は CAS で panic し共有状態に触れない。回帰検証: `TestWorker_StartTwicePanics` ＋パッケージ全体 `-race` 緑。
+
+### Fixed (session 1649 — doctor の1チェック panic が全結果を喪失)
+
+`internal/doctor` の Runner は各チェックを個別 goroutine で並行実行するが、1件でも panic するとプロセス全体が終了し全17チェックの診断結果が失われていた。goroutine 内に `recover` を追加し、panic を他結果を損なわない `StatusFail` 結果（`check panicked: <value>`）へ変換 — 診断の部分出力が必ず得られる。回帰ピン: `TestRunner_PanickingCheckBecomesFailResult`。
 
 ### Fixed (session 1625 — 正常終了をプール接続失敗として誤計上)
 
@@ -8161,3 +8385,125 @@ Prior v2.x and v1.x releases are documented in the Git history of the `legacy-v2
 
 - stratum: decode SubmitSharesSuccess `new_shares_sum` as U64 per spec §5.3.13 — the field was read as U32 and the frame bound at 16 bytes, accepting 16–19-byte malformed frames and truncating the difficulty-sum field for any future consumer. Encoder/decoder now use the spec's 20-byte wire layout.
 - stratum: correct `MsgSubmitSharesError` to the spec's 0x1d (was 0x1e, which spec reserves). Real pool reject frames now decode and count instead of landing in the unknown-type warn bucket — the reject-classification and sequence-accounting paths verified in earlier passes were unreachable on the wire.
+
+### Fixed (session 1655 — config show が制御文字を端末へ垂れ流す)
+
+`otedama config show` は Validate を通さないため、制御文字入りの `log_level`/`log_format` を持つ設定ファイルを開くと、その値が生の `%s` で端末へ出力され ANSI エスケープ注入になり得た（検査対象のファイルを調べるツール自体が注入経路）。他の全文字列フィールドと同じく `safeDisplay` 経由へ統一。回帰ピン: `TestConfigShow_SanitizesLogFields`（`\x1b` を含む設定ファイルで stdout に ESC が出ないことを検証）。
+### Fixed (session 1689 — deploy/homebrew ワークフローの決定論的失敗をゲート)
+
+- `release.yml` の `update-homebrew` が存在しない `otedama/homebrew-tap` を
+  `GITHUB_TOKEN` でチェックアウトし毎リリース失敗していた — `vars.HOMEBREW_TAP_REPO`
+  + `secrets.HOMEBREW_TAP_TOKEN` によるオプトインへ変更。
+- `ci.yml` `deploy-production` が `v*` タグ毎に空 kubeconfig と非存在 `k8s/` を
+  apply し決定論的に失敗していた — kubeconfig 未プロビジョン時はスキップ
+  （deploy.yml と同じ `env.KUBECONFIG_B64` 規約）、kubeconfig は
+  `~/.kube/config` へ書き出し `export` 不持続バグも解消。
+- `ci-cd.yml` `deploy` のブランチゲートを `main` → `master`（実ブランチ）へ
+  修正し、同一の kubeconfig ゲートを付与。
+
+### Fixed (session 1691 — CI ジョブのタイムアウト欠落)
+
+- test/deploy/release/security/ci-cd/devin-direct-merge の 25 ジョブに
+  `timeout-minutes` が無く、ハング時は GitHub 既定の 360 分まで走り続けた —
+  ci.yml の慣行（lint 15・scan/test/build 30・docker/build-binaries 40・
+  release 20・deploy 20-25）に合わせて全ジョブへ設定。
+
+### Fixed (session 1692 — アクションの mutable HEAD 参照と CI 重複実行)
+
+- `gosec@master`/`trivy-action@master`/`trufflehog@main` の9参照を最新安定
+  タグ（v2.29.0 / v0.36.0 / v3.97.9）へピン — 上流 default ブランチの
+  未レビューコードを GITHUB_TOKEN 保有ジョブで毎回実行していた。
+- ci/ci-cd/test/security へ `concurrency` キャンセルを追加（同一 ref の
+  旧ランを自動キャンセル）、deploy/release は `cancel-in-progress: false`
+  で直列化（実行中リリースを殺さない）。
+### Fixed (session 1693 — ワークフローツールのドリフトとアーカイブ参照)
+
+- security.yml の `go install …@latest` 3件を固定バージョンへピン
+  （nancy/v2@v2.1.0・govulncheck@v1.1.4・go-licenses/v2@v2.0.1）。
+- ci-cd.yml の `upload-sarif@v2` を `@v3` へ統一。
+- アーカイブ済み `actions/upload-release-asset@v1`（4箇所）を
+  `gh release upload --clobber` へ置換、`softprops/action-gh-release` を
+  v1→v3 へ更新。
+- アーカイブ済み `returntocorp/semgrep-action@v1` をピン留めした
+  semgrep CLI（1.178.0）の `semgrep scan` へ置換。
+- release.yml: リリース本文の死んだ `DEPLOYMENT_GUIDE.md` リンクを
+  `DEPLOYMENT.md` へ修正。`build-packages` の fpm 入力は全て非存在
+  （scripts/・config.yaml）で同ジョブは必ず失敗していた —
+  maintainer-script と unit 参照を除去し config.yaml.example を同梱、
+  deb/rpm 規約に合わせバージョン先頭の `v` を除去。
+### Fixed (session 1694 — fpm ツール未ピン)
+
+- release.yml の `gem install fpm` を `fpm -v 1.18.0` へピン — ツリーの
+  最後の未ピン install で、リリース毎に当時最新の fpm で DEB/RPM を
+  構築していた（上流破壊的変更をそのまま吸収する経路）。
+
+### Security (session 1695 — ワークフロー最小権限)
+
+- 全ワークフローへ `permissions: contents: read` を追加し、リリース作成/アセットアップロードを行うジョブのみ `contents: write` へ昇格（release.yml 3ジョブ、ci-cd.yml 1ジョブ）
+- `softprops/action-gh-release` の残存 `@v1` 参照2箇所を `@v3` へ揃え（ci-cd.yml、ci.yml）
+
+### Fixed (session 1696 — リリースノート空化)
+
+- ci.yml `release` ジョブの checkout に `fetch-depth: 0` を追加 — タグ履歴不取得で `git describe` が失敗し "What's Changed" が空になる欠陥を修正
+
+### Fixed (session 1697 — code-review フォークPR失敗)
+
+- code-review.yml の `Post PR comment` / `Comment outdated dependencies` へフォークPRゲート追加 — read-only トークンでの `issues.createComment` が 403 で決定論的失敗する問題を修正
+
+### Fixed (session 1698 — ci.yml リリース資産の構造欠陥)
+
+- ci.yml release: tarball をディレクトリ丸ごと包んでいた問題をフラット化（install.sh が展開可能に）、同名 SHA256SUMS の basename 衝突を単一 `checksums.txt` へ集約、coverage/benchmark アーティファクトがリリースへ混入する問題を `otedama-*/` 限定で解消
+
+### Fixed (session 1699 — release.yml チェックサム検証不能)
+
+- release.yml に `checksums` ジョブ追加 — 公開済み `otedama-*.tar.gz` をハッシュした集約 `checksums.txt` を公開し、install.sh の検証プローブが一致（従来は per-asset `.sha256` のみで検証不能だった）
+
+### Docs (session 1701 — VERIFY.md/goreleaser コメント訂正)
+
+- VERIFY.md ステータス欄更新 — release.yml/ci.yml の集約 `checksums.txt` 配布開始を反映、cosign/SBOM 不在は継続記載。.goreleaser.yaml の sign コメントを実挙動（checksums のみ署名）へ訂正
+
+### Fixed (session 1770 — Dockerfile named-volume perms)
+
+- `Dockerfile`: `/var/lib/otedama` をビルド時に uid 65532 所有で事前作成
+  し最終イメージへ COPY — named volume 初回作成時の root:root 化で
+  nonroot コンテナが wallet.dat を書けなかった欠陥を修理（DEPLOYMENT.md
+  の Docker/Compose/k8s 全例が踏む経路）。
+
+### Fixed (session 1771 — k8s PVC fsGroup)
+
+- `docs/DEPLOYMENT.md`: ポッド `securityContext` に `fsGroup: 65532` +
+  `fsGroupChangePolicy: "OnRootMismatch"` を追加 — 新規 PVC が root:root
+  でマウントされ uid 65532 が wallet.dat を書けなかった欠陥を修理。
+
+### Fixed (session 1772 — goreleaser brews opt-in)
+
+- `.goreleaser.yaml`: `brews` に `skip_upload: "true"` + オプトイン手順の
+  コメント — 非存在の `shizukutanaka/homebrew-tap` への formula push で
+  `goreleaser release` が必ず失敗していた欠陥を修理（release.yml の
+  HOMEBREW_TAP_REPO ゲートと同じ姿勢に統一）。
+
+### Fixed (session 1773 — container version stamping)
+
+- `deploy.yml`: `COMMIT_SHA`（Dockerfile 未宣言のため静かに捨てられていた）
+  を宣言済み ARG 名 `COMMIT`/`VERSION`/`BUILD_DATE` へ修正 — 公開イメージが
+  `dev/unknown` と名乗っていた欠陥を修理。
+- `.goreleaser.yaml`: `dockers` 両アーチに `VERSION`/`COMMIT`/`BUILD_DATE`
+  build-arg を追加（同欠陥の2系統目）。
+
+### Fixed (session 1775 — make docker-build version stamping)
+
+- `Makefile`: `docker-build` に `VERSION`/`COMMIT`/`BUILD_DATE`
+  build-arg を追加 — タグが `$(VERSION)` を名乗るのにイメージ内バイナリは
+  `dev/unknown` を報告していた（s1773 と同型の3系統目）。
+
+### Fixed (session 1777 — release-check vacuous gate)
+
+- `Makefile`: `release-check` の CHANGELOG ゲートを修理 — `## [v...]` の
+  v 接頭不一致と `[Unreleased]` 常時マッチの2重欠陥で、バージョン節の
+  存在を実質検査していなかった。`v` 除去＋日付付き節を必須化。
+
+### Fixed (session 1778 — audit ratio fail-open)
+
+- `Makefile`: `audit` の test:impl 比率ゲートを `bc` から純シェル整数比較
+  へ置換 — bc 不在環境で空値が偽評価となり閾値未検査で素通りしていた
+  fail-open 欠陥を修理。

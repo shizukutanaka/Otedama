@@ -10,6 +10,13 @@ on:
   schedule:
     - cron: '0 0 * * 0' # Weekly security scan
 
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   GO_VERSION: '1.21'
   DOCKER_REGISTRY: ghcr.io
@@ -19,6 +26,7 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -60,6 +68,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
     - name: Checkout code
@@ -73,29 +82,30 @@ jobs:
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
-        version: latest
+        version: v1.64.8
         args: --timeout=10m
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
     - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
+      uses: securego/gosec@v2.29.0
       with:
         args: '-fmt sarif -out gosec-results.sarif ./...'
     
     - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: gosec-results.sarif
     
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@v0.36.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -103,13 +113,14 @@ jobs:
         output: 'trivy-results.sarif'
     
     - name: Upload Trivy results
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: trivy-results.sarif
 
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [test, lint]
     
     steps:
@@ -127,16 +138,17 @@ jobs:
     
     - name: Build for multiple platforms
       run: |
+        LDFLAGS="-s -w -X 'github.com/shizukutanaka/Otedama/internal/version.Version=${{ github.ref_name }}' -X 'github.com/shizukutanaka/Otedama/internal/version.Commit=${{ github.sha }}' -X 'github.com/shizukutanaka/Otedama/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
         # Linux
-        GOOS=linux GOARCH=amd64 go build -o dist/otedama-linux-amd64 cmd/otedama/*.go
-        GOOS=linux GOARCH=arm64 go build -o dist/otedama-linux-arm64 cmd/otedama/*.go
+        GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-linux-amd64 ./cmd/otedama
+        GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/otedama-linux-arm64 ./cmd/otedama
         
         # Windows
-        GOOS=windows GOARCH=amd64 go build -o dist/otedama-windows-amd64.exe cmd/otedama/*.go
+        GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-windows-amd64.exe ./cmd/otedama
         
         # macOS
-        GOOS=darwin GOARCH=amd64 go build -o dist/otedama-darwin-amd64 cmd/otedama/*.go
-        GOOS=darwin GOARCH=arm64 go build -o dist/otedama-darwin-arm64 cmd/otedama/*.go
+        GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/otedama-darwin-amd64 ./cmd/otedama
+        GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/otedama-darwin-arm64 ./cmd/otedama
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -147,6 +159,7 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs: [test, lint]
     permissions:
       contents: read
@@ -195,6 +208,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
     needs: [build, docker]
     if: startsWith(github.ref, 'refs/tags/')
     
@@ -211,10 +227,10 @@ jobs:
     - name: Create checksums
       run: |
         cd dist
-        sha256sum * > checksums.txt
+        sha256sum otedama-* > checksums.txt
     
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         files: |
           dist/*
@@ -223,29 +239,3 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy:
-    name: Deploy to Kubernetes
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'latest'
-    
-    - name: Configure kubectl
-      run: |
-        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
-        export KUBECONFIG=kubeconfig
-    
-    - name: Deploy to Kubernetes
-      run: |
-        kubectl apply -f k8s/deployment.yaml
-        kubectl set image statefulset/otedama otedama=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -n otedama
-        kubectl rollout status statefulset/otedama -n otedama

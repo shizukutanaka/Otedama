@@ -126,6 +126,10 @@ type Worker struct {
 
 	cancel context.CancelFunc
 	done   chan struct{}
+	// cancelReady is closed once Start has published w.cancel, so a
+	// Stop racing Start waits for the publication instead of observing
+	// a nil cancel and returning early while the worker runs on.
+	cancelReady chan struct{}
 }
 
 // NewWorker creates a Worker with the given configuration.
@@ -137,7 +141,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	if cfg.NonceStep == 0 {
 		cfg.NonceStep = uint32(cfg.Threads) //nolint:gosec // Threads defaults to NumCPU and stays far below 2^32
 	}
-	return &Worker{cfg: cfg, done: make(chan struct{})}
+	return &Worker{cfg: cfg, done: make(chan struct{}), cancelReady: make(chan struct{})}
 }
 
 // Start launches the mining goroutines. Found shares are sent on the
@@ -152,7 +156,10 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 	}
 	shares := make(chan Share, w.cfg.Threads*4)
 	innerCtx, cancel := context.WithCancel(ctx)
+	w.mu.Lock()
 	w.cancel = cancel
+	w.mu.Unlock()
+	close(w.cancelReady)
 	w.startTime.Store(time.Now().UnixNano())
 
 	var wg sync.WaitGroup
@@ -176,13 +183,19 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 // Safe to call even if Start was never called; in that case it returns
 // immediately.
 func (w *Worker) Stop() {
+	if !w.started.Load() {
+		return
+	}
+	// Start has begun: its cancel is published before cancelReady closes,
+	// so after this wait the read below cannot miss it.
+	<-w.cancelReady
 	w.mu.Lock()
 	cancel := w.cancel
 	w.mu.Unlock()
 	if cancel != nil {
 		cancel()
-		<-w.done
 	}
+	<-w.done
 }
 
 // SetWork replaces the current mining job. The running goroutines will

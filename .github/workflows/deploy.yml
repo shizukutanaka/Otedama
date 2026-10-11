@@ -24,6 +24,14 @@ on:
           - staging
           - production
 
+concurrency:
+  # Serializes same-ref deploys without canceling an in-flight release.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -31,6 +39,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +61,7 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write
@@ -69,6 +79,9 @@ jobs:
         run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
       
       - name: Log in to Container Registry
+        # Pull requests get a build-only check: a fork's GITHUB_TOKEN is
+        # read-only regardless of job permissions, so a push would fail.
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -90,18 +103,25 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
+          # Only push/tag events publish; pull_request builds validate the
+          # Dockerfile without touching the registry (fork-safe).
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            COMMIT_SHA=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.date.outputs.date }}
 
   security-scan:
+    # Scans the pushed image digest; there is nothing to scan on a
+    # pull_request (no push), so it and the whole deploy chain skip there.
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       
@@ -118,7 +138,7 @@ jobs:
         run: echo "IMAGE_REF=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')@${{ needs.build.outputs.image-digest }}" >> $GITHUB_ENV
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_REF }}
           format: 'sarif'
@@ -133,6 +153,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
     needs: [build, security-scan]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       
@@ -177,12 +198,17 @@ jobs:
         run: |
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=otedama -n otedama-staging --timeout=300s
           kubectl run smoke-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
-            curl -f http://otedama-staging-api:8080/health
+            curl -f http://otedama-staging-api:8080/healthz
 
   deploy-production:
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
-    needs: [build, security-scan, deploy-staging]
+    # deploy-staging is intentionally not in needs: its if-gate is false on
+    # every tag push and production dispatch, so needing it skipped production
+    # unconditionally. Staging-then-prod ordering is already enforced by the
+    # environment choice gate, not by job dependency.
+    needs: [build, security-scan]
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment:
       name: production
     steps:
@@ -239,37 +265,18 @@ jobs:
           kubectl rollout status deployment/otedama -n otedama
           kubectl get pods -n otedama
           kubectl run verify-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
-            curl -f http://otedama-api:8080/health
+            curl -f http://otedama-api:8080/healthz
       
-      - name: Create release notes
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## Changes in ${{ github.ref_name }}
-            
-            ### Docker Image
-            - Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            - Tag: ${{ needs.build.outputs.image-tag }}
-            - Digest: ${{ needs.build.outputs.image-digest }}
-            
-            ### Deployment Info
-            - Environment: Production
-            - Namespace: otedama
-            - Chart Version: ${{ github.ref_name }}
-            
-            Full changelog: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }}
-          draft: false
-          prerelease: false
+      # No "create release" step here: release.yml owns GitHub release
+      # creation on v* tags (softprops/action-gh-release upsert). This job's
+      # former actions/create-release@v1 step raced it — and the action is
+      # archived besides.
 
   rollback:
-    if: failure() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: failure() && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     needs: [deploy-production]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: production
     steps:

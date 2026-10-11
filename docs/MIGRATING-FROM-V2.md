@@ -25,8 +25,11 @@ whether v3 is right for them and how to migrate if so.
   by the pool). v3 is single-user by design.
 - KYC/AML features. v3 is designed around self-custody.
 
-If any of those is a hard requirement, **stay on v2.x**. The
-`legacy-v2` branch is maintained for security fixes until October 2026.
+If any of those is a hard requirement, **stay on v2.x**.
+**Correction (session 2659):** the `legacy-v2` maintenance branch was
+planned but never created — no such ref exists on the remote; treat
+v2.x as unmaintained rather than counting on the October-2026
+security-fix window described below.
 
 ## What changed in v3
 
@@ -41,7 +44,8 @@ If any of those is a hard requirement, **stay on v2.x**. The
 ### Operational
 - **Binary name:** `otedama` (same).
 - **Binary size:** v2 ~65 MB → v3 ~15 MB (distroless).
-- **Dependencies:** v2 had ~50 Go modules; v3 has 2 (`x/crypto`, `yaml.v3`).
+- **Dependencies:** v2 had ~50 Go modules; v3 has 3 direct modules
+  (`x/crypto`, `x/sys`, `go.yaml.in/yaml/v3`).
 - **Config format:** still YAML, but schema completely different.
 - **Service installer:** new in v3 (`otedama service install`).
 
@@ -171,7 +175,9 @@ template.
 
 ## What happens to v2?
 
-- `legacy-v2` branch receives **security fixes only** until 2026-10-24.
+- The `legacy-v2` maintenance branch was planned but never created
+  (**correction, session 2659** — no such ref exists on the remote);
+  in practice v2.x receives no fixes of any kind.
 - No new features, no compatibility bridges.
 - The `v2.x` series is marked End-of-Life on the release page.
 
