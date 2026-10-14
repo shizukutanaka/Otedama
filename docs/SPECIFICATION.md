@@ -120,7 +120,10 @@ configured pool URLs — each tagged with the layer it was resolved from.
      the active payout address, suffixed with `.worker` when `Workers.Name`
      is configured.
    - **Pool failover (fast):** on session failure, advance to the next pool
-     immediately; back off only after every pool has been tried.
+     immediately; back off only after every pool has been tried. A session
+     also ends itself — triggering the same failover — when its own share
+     acceptance falls below 90% after ≥32 judged shares (yield failover;
+     only with multiple `pools[]` configured).
    - **Payout-address failover (slow, safe):** rotate to the next address
      **only while the active address has never established a session**. A
      known-good address is never abandoned, and no session establishes during

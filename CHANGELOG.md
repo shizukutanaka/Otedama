@@ -9,6 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [Unreleased]
+### Added
+
+- **Yield-based pool failover.** When multiple `pools[]` are configured,
+  a session whose own share acceptance falls below 90% after 32 judged
+  (accepted + rejected) shares now ends itself so the reconnect loop
+  fails over to the next pool — a rejecting-but-connected pool previously
+  kept the hashpower indefinitely since only connection failures
+  triggered failover. Single-pool configs are unaffected (no alternate
+  to switch to). Judged on per-session deltas so a prior healthy pool
+  never masks the current pool's rejects.
+
 ### Fixed (session 2657 — stale claims in the 3.0.0-alpha.1 entry)
 
 Historical entry corrections (the alpha entry itself is preserved; these
