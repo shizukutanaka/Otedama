@@ -999,6 +999,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// and reaped alongside submitTimes so the map stays bounded.
 	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
+	// Zero the in-flight gauge on every exit — including the yield-failover
+	// return — so a following (possibly V1) session doesn't inherit a stale
+	// pending depth.
+	defer func() {
+		if opts.m != nil {
+			opts.m.sharesSubmitInFlight.Set(0)
+		}
+	}()
 	// Per-session share verdicts: the counters are engine-lifetime, so a
 	// prior healthy pool must not mask this pool's rejects.
 	var startAccepted, startRejected uint64
@@ -1544,12 +1552,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
-	// Per-session share verdicts (see the V2 loop for why deltas).
-	var startAccepted, startRejected uint64
-	if opts.m != nil {
-		startAccepted = opts.m.sharesAccepted.Value()
-		startRejected = opts.m.sharesRejected.Value()
-	}
+	// Session-owned share verdicts for yield failover: V1 verdicts land in
+	// submit goroutines that can outlive this session, so deltas over the
+	// engine-lifetime counters would attribute this pool's late replies to
+	// the next pool (or hide its rejects behind old accepts).
+	var sessAccepted, sessRejected atomic.Uint64
 	// Tripwire for a silent pool: jobs stop arriving while the connection
 	// stays open. The clock starts at session start — a pool that never
 	// sends a first job is equally starved.
@@ -1670,13 +1677,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 				rate, judged := opts.m.updateShareRates()
-				if opts.yieldFailover && opts.m != nil {
-					sessAccepted := opts.m.sharesAccepted.Value() - startAccepted
-					sessRejected := opts.m.sharesRejected.Value() - startRejected
-					if yieldDegraded(sessAccepted, sessRejected) {
+				if opts.yieldFailover {
+					accepted := sessAccepted.Load()
+					rejected := sessRejected.Load()
+					if yieldDegraded(accepted, rejected) {
 						opts.log("warn", fmt.Sprintf(
 							"engine: session share acceptance %.1f%% — failing over to a different pool",
-							acceptanceRate(sessAccepted, sessRejected)*100))
+							acceptanceRate(accepted, rejected)*100))
 						return errYieldDegraded
 					}
 				}
@@ -1874,6 +1881,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				latency.Record(elapsed)
 				if result.Accepted {
 					opts.log("info", "engine: V1 share accepted")
+					sessAccepted.Add(1)
 					if opts.m != nil {
 						opts.m.sharesAccepted.Inc()
 					}
@@ -1898,6 +1906,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						reason, diagnosis))
+					sessRejected.Add(1)
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()

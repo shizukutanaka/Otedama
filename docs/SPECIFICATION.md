@@ -201,6 +201,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 |---|---|---|
 | `pool_connect_attempts_total` | counter | Connection attempts incl. reconnects. |
 | `pool_connect_failures_total` | counter | Connection failures. |
+| `pool_yield_failovers_total` | counter | Deliberate failovers on degraded share acceptance. |
 | `pool_connection_state` | gauge | 0=disconnected, 1=connecting, 2=connected. |
 | `pool_active_index` | gauge | 0-based index of active pool in the failover list. |
 | `pool_difficulty` | gauge | Current pool-assigned share difficulty. |

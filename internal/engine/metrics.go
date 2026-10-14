@@ -34,6 +34,7 @@ type engineMetrics struct {
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
+	poolYieldFailovers  *metrics.Counter
 	arbitrationSwitches *metrics.Counter
 	// arbitrationHolds counts decisions where a strictly better stream existed
 	// but hysteresis kept the device on its current one. Together with
@@ -276,6 +277,10 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		poolConnectFailures: reg.NewCounter(
 			"otedama_pool_connect_failures_total",
 			"Total pool-connection failures.",
+			nil),
+		poolYieldFailovers: reg.NewCounter(
+			"otedama_pool_yield_failovers_total",
+			"Deliberate failovers triggered by degraded share acceptance.",
 			nil),
 		arbitrationSwitches: reg.NewCounter(
 			"otedama_arbitration_switches_total",
