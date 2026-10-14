@@ -44277,3 +44277,228 @@ census:
   cycle.
 
 Verdict: TRUE.
+
+## Session 3212 update (Socratic pass 1876 — post-merge gate)
+
+Claim under test:
+master's
+tree
+after
+the
+#1405
+squash
+merge
+is
+green
+(gofmt/build/vet).
+
+Verification —
+census:
+
+- `gofmt
+  -l
+  .`
+  on
+  merged
+  master:
+  empty
+  output.
+- `go
+  build
+  ./...`:
+  clean,
+  no
+  diagnostics.
+- `go
+  vet
+  ./...`:
+  clean,
+  no
+  diagnostics.
+- Post-merge
+  invariant:
+  the
+  squash
+  commit
+  `6f12508b9`
+  carried
+  ~3
+  days
+  of
+  ledger
+  passes
+  plus
+  the
+  doctor
+  panic-guard
+  and
+  CI
+  review-
+  finding
+  fixes;
+  the
+  merged
+  tree
+  compiles
+  and
+  vets
+  first
+  try
+  on
+  the
+  new
+  cycle-3
+  branch.
+- Test
+  legs
+  deferred
+  to
+  the
+  next
+  milestone
+  pass
+  (gate
+  cadence
+  convention);
+  build+vet
+  alone
+  suffice
+  for
+  the
+  post-merge
+  sanity
+  claim.
+
+Verdict: TRUE.
+
+## Session 3213 update (Socratic pass 1877 — Go-1.23+ new-API surface census)
+
+Claim under test:
+the
+tree's
+modernization
+surface
+is
+complete
+and
+honest
+—
+Go
+1.23+
+iterator/unique/weak/structs/maphash/netip/synctest
+APIs
+are
+either
+adopted
+with
+purpose
+or
+verifiably
+absent.
+
+Verification —
+census:
+
+- Import
+  census
+  (`rg
+  '"iter"|"unique"|"weak"|"structs"|"hash/maphash"|"net/netip"|"testing/synctest"'`):
+  ZERO
+  —
+  no
+  Go
+  1.23+
+  iterator,
+  unique,
+  weak-pointer,
+  host-layout,
+  maphash,
+  netip,
+  or
+  synctest
+  imports
+  anywhere
+  in
+  internal/
+  or
+  cmd/.
+- Lexical
+  false-
+  positive
+  check:
+  the
+  five
+  `iter.`
+  and
+  one
+  `unique.`
+  rg
+  hits
+  are
+  `writer.`
+  comment
+  text
+  and
+  a
+  "unique"
+  prose
+  word
+  —
+  no
+  symbol
+  usage.
+- Adoption
+  census
+  (real):
+  `slices.Sort`×13,
+  `slices.{SortFunc,Equal}`×2
+  each,
+  `slices.{SortStableFunc,IsSortedFunc,Contains}`×1
+  each;
+  `maps.{Copy×2,Clone}`;
+  `cmp.{Compare×5,Or×4}`;
+  builtins
+  `min`×4
+  /`max`×6
+  /`clear`×1.
+  The
+  modernization
+  is
+  Go
+  1.21–1.22
+  complete;
+  nothing
+  in
+  the
+  codebase
+  has
+  a
+  natural
+  iter.Seq
+  use
+  (all
+  enumeration
+  is
+  small-slice
+  loops),
+  so
+  absence
+  is
+  correct,
+  not
+  drift.
+- `min(`/`max(`/`clear(`:
+  builtin
+  usage
+  only
+  (no
+  shadowed
+  identifiers
+  —
+  the
+  earlier
+  builtin-shadow
+  census
+  confirmed).
+
+Verdict: TRUE.
