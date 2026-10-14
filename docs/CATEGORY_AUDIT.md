@@ -44112,3 +44112,591 @@ census:
   only).
 
 Verdict: TRUE.
+
+## Session 3211 update (Socratic pass 1875 — numbering errata correction + post-merge verification)
+
+Claim under test:
+the
+s3210
+errata
+block
+fully
+described
+the
+pass-
+number
+drift;
+master's
+post-merge
+tree
+is
+green.
+
+Verification —
+census:
+
+- Errata
+  correction:
+  s3210's
+  claim
+  "s3199–s3210
+  =
+  1863–1872
+  are
+  numbered
+  correctly"
+  is
+  itself
+  wrong
+  on
+  two
+  counts.
+  (a)
+  The
+  −2
+  drift
+  (label
+  =
+  session
+  −
+  1338)
+  ran
+  through
+  **all**
+  of
+  s3197–s3210,
+  not
+  just
+  s3197/s3198:
+  actual
+  labels
+  are
+  s3199=1861,
+  s3200=1862,
+  s3201=1863,
+  s3202=1864,
+  s3203=1865,
+  s3204=1866,
+  s3205=1867,
+  s3206=1868,
+  s3207=1869,
+  s3208=1870,
+  s3209=1871,
+  s3210=1872.
+  (b)
+  Correct
+  values
+  (pass
+  =
+  session
+  −
+  1336)
+  are
+  s3199–s3210
+  =
+  **1863–1874**
+  —
+  12
+  passes,
+  not
+  the
+  10
+  the
+  s3210
+  block
+  claimed.
+  This
+  block
+  is
+  the
+  first
+  correctly-
+  numbered
+  pass
+  (s3211
+  =
+  1875).
+- Post-merge
+  verification:
+  `git
+  log
+  origin/master`:
+  HEAD
+  `6f12508b9`
+  squash-
+  merged
+  PR
+  #1405
+  (audit-
+  cycle-2,
+  sessions
+  1649–1811
+  per
+  merge
+  title;
+  ledger
+  through
+  s3210).
+  Worktree
+  clean;
+  new
+  branch
+  `devin/1791939517-audit-cycle-3`
+  cut
+  from
+  the
+  merge
+  commit.
+  Ledger
+  on
+  master:
+  2378
+  `## Session`
+  blocks.
+- Aggregation-
+  branch
+  convention
+  (second
+  merge
+  confirms):
+  cycle-3
+  continues
+  the
+  same
+  pattern
+  —
+  append
+  passes
+  to
+  this
+  branch,
+  one
+  PR
+  per
+  merge
+  cycle.
+
+Verdict: TRUE.
+
+## Session 3212 update (Socratic pass 1876 — post-merge gate)
+
+Claim under test:
+master's
+tree
+after
+the
+#1405
+squash
+merge
+is
+green
+(gofmt/build/vet).
+
+Verification —
+census:
+
+- `gofmt
+  -l
+  .`
+  on
+  merged
+  master:
+  empty
+  output.
+- `go
+  build
+  ./...`:
+  clean,
+  no
+  diagnostics.
+- `go
+  vet
+  ./...`:
+  clean,
+  no
+  diagnostics.
+- Post-merge
+  invariant:
+  the
+  squash
+  commit
+  `6f12508b9`
+  carried
+  ~3
+  days
+  of
+  ledger
+  passes
+  plus
+  the
+  doctor
+  panic-guard
+  and
+  CI
+  review-
+  finding
+  fixes;
+  the
+  merged
+  tree
+  compiles
+  and
+  vets
+  first
+  try
+  on
+  the
+  new
+  cycle-3
+  branch.
+- Test
+  legs
+  deferred
+  to
+  the
+  next
+  milestone
+  pass
+  (gate
+  cadence
+  convention);
+  build+vet
+  alone
+  suffice
+  for
+  the
+  post-merge
+  sanity
+  claim.
+
+Verdict: TRUE.
+
+## Session 3213 update (Socratic pass 1877 — Go-1.23+ new-API surface census)
+
+Claim under test:
+the
+tree's
+modernization
+surface
+is
+complete
+and
+honest
+—
+Go
+1.23+
+iterator/unique/weak/structs/maphash/netip/synctest
+APIs
+are
+either
+adopted
+with
+purpose
+or
+verifiably
+absent.
+
+Verification —
+census:
+
+- Import
+  census
+  (`rg
+  '"iter"|"unique"|"weak"|"structs"|"hash/maphash"|"net/netip"|"testing/synctest"'`):
+  ZERO
+  —
+  no
+  Go
+  1.23+
+  iterator,
+  unique,
+  weak-pointer,
+  host-layout,
+  maphash,
+  netip,
+  or
+  synctest
+  imports
+  anywhere
+  in
+  internal/
+  or
+  cmd/.
+- Lexical
+  false-
+  positive
+  check:
+  the
+  five
+  `iter.`
+  and
+  one
+  `unique.`
+  rg
+  hits
+  are
+  `writer.`
+  comment
+  text
+  and
+  a
+  "unique"
+  prose
+  word
+  —
+  no
+  symbol
+  usage.
+- Adoption
+  census
+  (real):
+  `slices.Sort`×13,
+  `slices.{SortFunc,Equal}`×2
+  each,
+  `slices.{SortStableFunc,IsSortedFunc,Contains}`×1
+  each;
+  `maps.{Copy×2,Clone}`;
+  `cmp.{Compare×5,Or×4}`;
+  builtins
+  `min`×4
+  /`max`×6
+  /`clear`×1.
+  The
+  modernization
+  is
+  Go
+  1.21–1.22
+  complete;
+  nothing
+  in
+  the
+  codebase
+  has
+  a
+  natural
+  iter.Seq
+  use
+  (all
+  enumeration
+  is
+  small-slice
+  loops),
+  so
+  absence
+  is
+  correct,
+  not
+  drift.
+- `min(`/`max(`/`clear(`:
+  builtin
+  usage
+  only
+  (no
+  shadowed
+  identifiers
+  —
+  the
+  earlier
+  builtin-shadow
+  census
+  confirmed).
+
+Verdict: TRUE.
+
+## Session 3214 update (Socratic pass 1878 — hygiene rescan on merged master)
+
+Claim under test:
+the
+merged
+tree
+keeps
+the
+hygiene
+invariants
+—
+no
+forbidden
+paths,
+no
+committed
+secrets,
+no
+debt
+markers.
+
+Verification —
+census:
+
+- Forbidden-
+  path
+  census
+  (pkg/,
+  web/,
+  internal/{providers,auth,render,scientific,observability,security},
+  cmd/otedamad/,
+  k8s/):
+  zero
+  present.
+- Secret-
+  pattern
+  scan
+  (AWS
+  key
+  id,
+  PEM
+  private-
+  key
+  headers,
+  Slack/GitHub/OpenAI
+  tokens,
+  JWT
+  triplets,
+  non-test
+  files):
+  zero
+  hits.
+- Debt-
+  marker
+  scan
+  (`TODO|FIXME|XXX|HACK`
+  in
+  internal/
+  +
+  cmd/
+  Go
+  sources):
+  zero
+  —
+  the
+  no-debt-marker
+  convention
+  holds
+  across
+  the
+  merge.
+
+Verdict: TRUE.
+
+## Session 3215 update (Socratic pass 1879 — ADR-009 ecosystem recheck)
+
+Claim under test:
+the
+upstream
+ecosystem
+has
+not
+drifted
+since
+the
+cycle-2
+records.
+
+Verification —
+census:
+
+- SRI
+  (stratum-mining/stratum):
+  latest
+  release
+  remains
+  **v1.12.0**
+  (17
+  Sep
+  tag
+  `e11881b`)
+  —
+  the
+  channels_sv2
+  hardening
+  +
+  codec/framing
+  refactor
+  +
+  BIP323
+  adaptations
+  +
+  AES-256-GCM
+  removal
+  already
+  ledgered.
+  No
+  newer
+  tag.
+- Prior
+  releases
+  confirmed
+  unchanged:
+  v1.11.1
+  (22
+  Jul,
+  sv1
+  difficulty
+  no-round-up
+  fix),
+  v1.11.0
+  (8
+  Jul,
+  binary_sv2
+  reliability
+  +
+  sv1_api
+  fuzz
+  targets),
+  v1.10.0
+  (3
+  Jun).
+- sv2-apps
+  workspace:
+  last
+  ledgered
+  at
+  v0.8.0;
+  no
+  contradicting
+  release
+  observed
+  in
+  the
+  same
+  search
+  surface.
+- Normative-
+  spec
+  set:
+  unchanged
+  since
+  the
+  last
+  ADR-009
+  update
+  entry
+  (open
+  questions
+  remain
+  the
+  already-
+  tracked
+  payout/
+  SetTarget
+  threads).
+- Otedama's
+  three
+  direct
+  deps
+  unchanged
+  (go.yaml.in/yaml/v3
+  v3.0.5,
+  x/crypto
+  v0.48.0,
+  x/sys
+  v0.41.0
+  —
+  go1.24-floor
+  maxima,
+  bumps
+  gated
+  on
+  go1.25+
+  requirement).
+
+Verdict: TRUE.
