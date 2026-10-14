@@ -676,7 +676,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			case poolIdx == prevPool:
 				// Every pool carries a degradation mark: the epoch is
 				// spent. Clear it so recovered pools get a fresh
-				// judgement window, and retry from the primary after
+				// judgment window, and retry from the primary after
 				// the backoff below.
 				clear(yieldDegradedPools)
 				poolIdx = 0
@@ -747,8 +747,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 
 // nextFailoverPool walks failover selection to the next pool that does not
 // carry a yield-degradation mark, preserving priority order. It returns the
-// start index only when every pool is marked, signalling the epoch is spent
-// and marks should be reset so recovered pools get a fresh judgement window.
+// start index only when every pool is marked, signaling the epoch is spent
+// and marks should be reset so recovered pools get a fresh judgment window.
 func nextFailoverPool(start, n int, degraded map[int]bool) int {
 	next := start
 	for {

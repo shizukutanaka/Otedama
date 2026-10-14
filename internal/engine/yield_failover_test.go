@@ -48,8 +48,8 @@ func TestErrYieldDegradedIsNotFatal(t *testing.T) {
 }
 
 // Failover selection must skip pools marked yield-degraded instead of
-// re-dialling them every rotation; only when every pool is marked does the
-// walk return to the start index, signalling an epoch reset.
+// re-dialing them every rotation; only when every pool is marked does the
+// walk return to the start index, signaling an epoch reset.
 func TestNextFailoverPool(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

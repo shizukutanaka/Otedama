@@ -3248,7 +3248,7 @@ boundaries only, avoiding aliasing across the producer/consumer handoff.
 
 Remaining deferred debt: the 12 `gocyclo` findings (cyclomatic complexity) —
 those need decomposition refactors, not signature changes, and stay parked as
-a separate judgement call.
+a separate judgment call.
 
 *Evidence: `golangci-lint run` hugeParam count 53 → 0; `go vet` clean;
 `go test ./...` all 24 packages green including `-race` on the engine suite.*

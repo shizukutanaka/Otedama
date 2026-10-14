@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   bfgminer `--disable-rejecting` strategy: pools that continually
   reject shares are automatically disabled). When every pool carries a
   mark, the epoch resets — marks are cleared so recovered pools get a
-  fresh judgement window — and rotation retries from the primary after
+  fresh judgment window — and rotation retries from the primary after
   the usual backoff. Disconnect-only pools are unaffected; marks come
   solely from judged share acceptance.
 
@@ -5906,7 +5906,7 @@ wallet file existence, power/cost coherence. These answer "is the setup correct?
 but not "is the system currently healthy in the ways that matter for mining?"
 
 The key gap: clock skew is the most dangerous silent failure. TLS certificate
-validation, mining `nTime` fields, and rate-freshness judgements all depend on
+validation, mining `nTime` fields, and rate-freshness judgments all depend on
 the local clock being accurate. A developer machine with NTP disabled or a VM
 that drifted after a snapshot restore can appear fully configured but produce no
 accepted shares. Before this session, `doctor` could not detect this.
@@ -5966,7 +5966,7 @@ yields zero interval; zero difficulty is a no-op (gauge stays unchanged, not zer
 ### Feat (session 134 — temporal self-awareness: does the engine know its time axis is correct?)
 
 A Socratic new perspective — mining is deeply time-sensitive (nTime in submitted
-shares, TLS certificate validity windows, rate-freshness judgements all depend on
+shares, TLS certificate validity windows, rate-freshness judgments all depend on
 the local clock), yet Otedama had no way to detect that its system clock is
 wrong. The engine knew *what* was happening, but not *when* it was happening
 relative to the rest of the world.
