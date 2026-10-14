@@ -616,7 +616,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// ctx.Err(). A graceful stop is not a connect failure; only count
 		// exits that happened while the engine still intended to run.
 		if sessionErr != nil && ctx.Err() == nil {
-			r.metrics.poolConnectFailures.Inc()
+			if errors.Is(sessionErr, errYieldDegraded) {
+				r.metrics.poolYieldFailovers.Inc()
+			} else {
+				r.metrics.poolConnectFailures.Inc()
+			}
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
 		if r.opts.OnReady != nil {
