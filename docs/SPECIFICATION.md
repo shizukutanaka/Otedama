@@ -123,7 +123,10 @@ configured pool URLs — each tagged with the layer it was resolved from.
      immediately; back off only after every pool has been tried. A session
      also ends itself — triggering the same failover — when its own share
      acceptance falls below 90% after ≥32 judged shares (yield failover;
-     only with multiple `pools[]` configured).
+     only with multiple `pools[]` configured). A pool that produced such a
+     verdict is marked and skipped by failover selection until every pool
+     carries a mark, at which point the marks reset (a fresh judgement
+     epoch) and rotation retries from the primary.
    - **Payout-address failover (slow, safe):** rotate to the next address
      **only while the active address has never established a session**. A
      known-good address is never abandoned, and no session establishes during

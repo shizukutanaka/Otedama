@@ -527,6 +527,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	addrConnected := false // has the active address ever established a session?
 	attempt := 0
 	backoff := reconnectBackoffInitial
+	// Pools proven to waste hashpower are excluded from failover rotation
+	// for the rest of the epoch (the bfgminer --disable-rejecting
+	// strategy): without memory, a pure round-robin re-dials a degraded
+	// pool after every other pool merely disconnects.
+	yieldDegradedPools := make(map[int]bool, len(pools))
 
 	statsInterval := r.opts.StatsInterval
 	if statsInterval <= 0 {
@@ -618,6 +623,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if sessionErr != nil && ctx.Err() == nil {
 			if errors.Is(sessionErr, errYieldDegraded) {
 				r.metrics.poolYieldFailovers.Inc()
+				yieldDegradedPools[poolIdx] = true
+				r.log("warn", fmt.Sprintf(
+					"engine: pool %d/%d share acceptance below yield floor; excluded from failover rotation",
+					poolIdx+1, len(pools)))
 			} else {
 				r.metrics.poolConnectFailures.Inc()
 			}
@@ -661,8 +670,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// before touching the payout address or backing off. A single-pool
 		// config skips this and falls through to address failover / backoff.
 		if len(pools) > 1 {
-			poolIdx = (poolIdx + 1) % len(pools)
-			if poolIdx != 0 {
+			prevPool := poolIdx
+			poolIdx = nextFailoverPool(poolIdx, len(pools), yieldDegradedPools)
+			switch {
+			case poolIdx == prevPool:
+				// Every pool carries a degradation mark: the epoch is
+				// spent. Clear it so recovered pools get a fresh
+				// judgement window, and retry from the primary after
+				// the backoff below.
+				clear(yieldDegradedPools)
+				poolIdx = 0
+				r.log("warn", fmt.Sprintf(
+					"engine: all %d pools measured below the share-acceptance yield floor; "+
+						"clearing degradation marks", len(pools)))
+			case poolIdx != 0:
 				r.log("warn", fmt.Sprintf("engine: session ended: %v; failing over to next pool", sessionErr))
 				continue // next pool immediately, no backoff
 			}
@@ -722,6 +743,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 	}
 	return ctx.Err()
+}
+
+// nextFailoverPool walks failover selection to the next pool that does not
+// carry a yield-degradation mark, preserving priority order. It returns the
+// start index only when every pool is marked, signalling the epoch is spent
+// and marks should be reset so recovered pools get a fresh judgement window.
+func nextFailoverPool(start, n int, degraded map[int]bool) int {
+	next := start
+	for {
+		next = (next + 1) % n
+		if !degraded[next] || next == start {
+			return next
+		}
+	}
 }
 
 // ----- Session -----

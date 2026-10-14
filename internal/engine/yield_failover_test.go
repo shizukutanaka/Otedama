@@ -46,3 +46,34 @@ func TestErrYieldDegradedIsNotFatal(t *testing.T) {
 		t.Error("errYieldDegraded must not be fatal — it routes to pool failover")
 	}
 }
+
+// Failover selection must skip pools marked yield-degraded instead of
+// re-dialling them every rotation; only when every pool is marked does the
+// walk return to the start index, signalling an epoch reset.
+func TestNextFailoverPool(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		start, n int
+		degraded map[int]bool
+		want     int
+	}{
+		{"no marks advances normally", 0, 3, map[int]bool{}, 1},
+		{"skips a degraded pool", 0, 3, map[int]bool{1: true}, 2},
+		{"skips several degraded pools", 0, 4, map[int]bool{1: true, 2: true}, 3},
+		{"wraps past trailing degraded pools", 2, 4, map[int]bool{3: true}, 0},
+		{"degraded current pool is still left", 0, 3, map[int]bool{0: true}, 1},
+		{"all degraded returns start (epoch spent)", 1, 3, map[int]bool{0: true, 1: true, 2: true}, 1},
+		{"single pool always returns start", 0, 1, map[int]bool{}, 0},
+		{"partial marks never skip a clean pool", 2, 4, map[int]bool{0: true}, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := nextFailoverPool(tt.start, tt.n, tt.degraded); got != tt.want {
+				t.Errorf("nextFailoverPool(%d, %d, %v) = %d, want %d",
+					tt.start, tt.n, tt.degraded, got, tt.want)
+			}
+		})
+	}
+}

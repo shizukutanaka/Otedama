@@ -22,6 +22,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   replies can't leak into the next pool's judgment — and counted on
   `otedama_pool_yield_failovers_total`, distinct from connection
   failures.
+- **Verdict-aware failover pool selection.** A pool that produced a
+  yield-degraded verdict is now marked and skipped by failover
+  selection instead of being re-dialled every round-robin turn (the
+  bfgminer `--disable-rejecting` strategy: pools that continually
+  reject shares are automatically disabled). When every pool carries a
+  mark, the epoch resets — marks are cleared so recovered pools get a
+  fresh judgement window — and rotation retries from the primary after
+  the usual backoff. Disconnect-only pools are unaffected; marks come
+  solely from judged share acceptance.
 
 ### Fixed (session 2657 — stale claims in the 3.0.0-alpha.1 entry)
 
