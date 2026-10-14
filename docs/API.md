@@ -304,6 +304,7 @@ addresses) appear once their first event occurs.
 |--------|------|--------|-------------|
 | `otedama_pool_connect_attempts_total` | counter | — | Pool dial attempts, including reconnects. |
 | `otedama_pool_connect_failures_total` | counter | — | Pool dial failures. |
+| `otedama_pool_yield_failovers_total` | counter | — | Deliberate failovers triggered by degraded share acceptance. |
 | `otedama_pool_connection_state` | gauge | — | 0=disconnected, 1=connecting, 2=connected. |
 | `otedama_pool_active_index` | gauge | — | 0-based index of the active pool in the failover list. |
 | `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |

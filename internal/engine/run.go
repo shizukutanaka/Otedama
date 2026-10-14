@@ -103,6 +103,32 @@ var poolSilenceTimeout = 30 * time.Minute
 // timeout (~127s on Linux). Var so tests can shrink it.
 var poolDialTimeout = 15 * time.Second
 
+// yieldFailoverMinJudged is how many shares a session must have judged
+// (accepted + rejected) before its acceptance rate is trusted enough to
+// abandon the pool — below that, early-session reject bursts (retarget
+// races, stale-job stragglers) would churn failover instead of recovering
+// revenue.
+const yieldFailoverMinJudged = 32
+
+// yieldFailoverAcceptanceFloor is the per-session share acceptance below
+// which the pool is measurably destroying revenue: every rejected share
+// is hashes spent but never credited. 90% is far below the >99% a
+// healthy pool delivers, so any configured alternate is the better bet.
+const yieldFailoverAcceptanceFloor = 0.90
+
+// errYieldDegraded ends a session whose pool provably wastes hashpower.
+// It is not fatal: the reconnect loop treats it like any session end and
+// fails over to the next configured pool.
+var errYieldDegraded = errors.New("engine: pool share acceptance below yield floor")
+
+// yieldDegraded reports whether a session's own accepted/rejected counts
+// have fallen below the revenue floor after enough judged shares to be
+// trustworthy.
+func yieldDegraded(accepted, rejected uint64) bool {
+	return accepted+rejected >= yieldFailoverMinJudged &&
+		acceptanceRate(accepted, rejected) < yieldFailoverAcceptanceFloor
+}
+
 // jobsCap bounds the outstanding SV2 job map: a hostile or buggy pool that
 // floods distinct job IDs without rotating the tip would otherwise grow
 // memory without limit. 64 is far above legitimate churn (pools rarely hold
@@ -574,6 +600,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword:    poolPassword,
 			payoutAddr:      payoutAddr,
 			payoutScheme:    payoutScheme,
+			yieldFailover:   len(pools) > 1,
 			activityMu:      r.activityMu,
 			activity:        r.activity,
 			onConnected: func() {
@@ -589,7 +616,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// ctx.Err(). A graceful stop is not a connect failure; only count
 		// exits that happened while the engine still intended to run.
 		if sessionErr != nil && ctx.Err() == nil {
-			r.metrics.poolConnectFailures.Inc()
+			if errors.Is(sessionErr, errYieldDegraded) {
+				r.metrics.poolYieldFailovers.Inc()
+			} else {
+				r.metrics.poolConnectFailures.Inc()
+			}
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
 		if r.opts.OnReady != nil {
@@ -747,6 +778,10 @@ type sessionOpts struct {
 	// nominalHashrate is the capability-derived hashrate estimate used in
 	// OpenMiningChannel when live worker stats are still zero.
 	nominalHashrate float64
+	// yieldFailover enables the low-acceptance session exit; set only when
+	// the config lists an alternate pool to move to — on the only pool a
+	// degraded session must stay, since there is nowhere better to go.
+	yieldFailover bool
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -968,6 +1003,21 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// and reaped alongside submitTimes so the map stays bounded.
 	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
+	// Zero the in-flight gauge on every exit — including the yield-failover
+	// return — so a following (possibly V1) session doesn't inherit a stale
+	// pending depth.
+	defer func() {
+		if opts.m != nil {
+			opts.m.sharesSubmitInFlight.Set(0)
+		}
+	}()
+	// Per-session share verdicts: the counters are engine-lifetime, so a
+	// prior healthy pool must not mask this pool's rejects.
+	var startAccepted, startRejected uint64
+	if opts.m != nil {
+		startAccepted = opts.m.sharesAccepted.Value()
+		startRejected = opts.m.sharesRejected.Value()
+	}
 	// seenUnknown keys the once-per-type warning for unrecognized SV2
 	// msg_types (forward-compat drops). Bounded at 256 by the uint8
 	// msg_type space — a pool cannot grow it past the type space.
@@ -1071,6 +1121,19 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// "acceptable" band (industry guidance: >1% reject ≈
 				// <99% acceptance warrants attention).
 				rate, judged := opts.m.updateShareRates()
+				// Yield failover: a pool crediting under ~90% of this session's
+				// shares burns hashpower without revenue; exit so the reconnect
+				// loop fails over to the next configured pool.
+				if opts.yieldFailover && opts.m != nil {
+					sessAccepted := opts.m.sharesAccepted.Value() - startAccepted
+					sessRejected := opts.m.sharesRejected.Value() - startRejected
+					if yieldDegraded(sessAccepted, sessRejected) {
+						opts.log("warn", fmt.Sprintf(
+							"engine: session share acceptance %.1f%% — failing over to a different pool",
+							acceptanceRate(sessAccepted, sessRejected)*100))
+						return errYieldDegraded
+					}
+				}
 				opts.m.sharesSubmitInFlight.Set(float64(len(submitTimes)))
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
@@ -1493,6 +1556,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Session-owned share verdicts for yield failover: V1 verdicts land in
+	// submit goroutines that can outlive this session, so deltas over the
+	// engine-lifetime counters would attribute this pool's late replies to
+	// the next pool (or hide its rejects behind old accepts).
+	var sessAccepted, sessRejected atomic.Uint64
 	// Tripwire for a silent pool: jobs stop arriving while the connection
 	// stays open. The clock starts at session start — a pool that never
 	// sends a first job is equally starved.
@@ -1613,6 +1681,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 				rate, judged := opts.m.updateShareRates()
+				if opts.yieldFailover {
+					accepted := sessAccepted.Load()
+					rejected := sessRejected.Load()
+					if yieldDegraded(accepted, rejected) {
+						opts.log("warn", fmt.Sprintf(
+							"engine: session share acceptance %.1f%% — failing over to a different pool",
+							acceptanceRate(accepted, rejected)*100))
+						return errYieldDegraded
+					}
+				}
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
@@ -1807,6 +1885,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				latency.Record(elapsed)
 				if result.Accepted {
 					opts.log("info", "engine: V1 share accepted")
+					sessAccepted.Add(1)
 					if opts.m != nil {
 						opts.m.sharesAccepted.Inc()
 					}
@@ -1831,6 +1910,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						reason, diagnosis))
+					sessRejected.Add(1)
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()
