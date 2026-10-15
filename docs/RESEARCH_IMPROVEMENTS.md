@@ -3248,7 +3248,7 @@ boundaries only, avoiding aliasing across the producer/consumer handoff.
 
 Remaining deferred debt: the 12 `gocyclo` findings (cyclomatic complexity) —
 those need decomposition refactors, not signature changes, and stay parked as
-a separate judgement call.
+a separate judgment call.
 
 *Evidence: `golangci-lint run` hugeParam count 53 → 0; `go vet` clean;
 `go test ./...` all 24 packages green including `-race` on the engine suite.*
@@ -4595,3 +4595,20 @@ fuzzing.
 every field read is preceded by a `len < need` guard, every
 length-prefixed read goes through `io.ReadFull`, and the
 `byteSliceReader` cannot over-read. The fuzzer confirms empirically.
+
+## Session 368 — verdict-aware failover selection (bfgminer disable-rejecting)
+
+**Coverage [FIXED].** External scan: bfgminer ships `--disable-rejecting`
+("automatically disable pools that continually reject shares") and
+`--failover-switch-delay`; cgminer exposes FAILOVER/ROUND_ROBIN/ROTATE/
+LOAD_BALANCE strategies, and operator guidance (Foreman) treats >2%
+rejected shares as a warning. The merged yield failover (#1407) ended a
+degraded session, but the reconnect loop then advanced pools by pure
+round-robin — a marked-degraded pool was re-dialled on every rotation
+whenever other pools merely disconnected. Failover selection now
+subdivides into judged/unjudged sets: pools whose session produced a
+share-acceptance verdict below the yield floor are excluded from the
+rotation until every pool carries a mark, at which point the epoch
+resets and rotation retries from the primary. Disconnect-only pools are
+never marked (no verdict, no exclusion). `nextFailoverPool` is covered
+by a boundary test table.
