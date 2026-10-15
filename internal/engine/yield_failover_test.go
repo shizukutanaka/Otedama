@@ -66,6 +66,8 @@ func TestNextFailoverPool(t *testing.T) {
 		{"all degraded returns start (epoch spent)", 1, 3, map[int]bool{0: true, 1: true, 2: true}, 1},
 		{"single pool always returns start", 0, 1, map[int]bool{}, 0},
 		{"partial marks never skip a clean pool", 2, 4, map[int]bool{0: true}, 3},
+		{"only the current pool unmarked returns start", 0, 3, map[int]bool{1: true, 2: true}, 0},
+		{"marked primary wraps to first clean pool", 2, 3, map[int]bool{0: true}, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

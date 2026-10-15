@@ -673,7 +673,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			prevPool := poolIdx
 			poolIdx = nextFailoverPool(poolIdx, len(pools), yieldDegradedPools)
 			switch {
-			case poolIdx == prevPool:
+			case poolIdx == prevPool && yieldDegradedPools[prevPool]:
 				// Every pool carries a degradation mark: the epoch is
 				// spent. Clear it so recovered pools get a fresh
 				// judgment window, and retry from the primary after
@@ -683,11 +683,13 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 				r.log("warn", fmt.Sprintf(
 					"engine: all %d pools measured below the share-acceptance yield floor; "+
 						"clearing degradation marks", len(pools)))
-			case poolIdx != 0:
+			case poolIdx > prevPool:
 				r.log("warn", fmt.Sprintf("engine: session ended: %v; failing over to next pool", sessionErr))
 				continue // next pool immediately, no backoff
 			}
-			// poolIdx wrapped to 0: every pool failed for this address.
+			// The walk wrapped (or the current pool is the only unmarked
+			// one): every eligible pool failed for this address, so back
+			// off — skipping a marked primary must not skip the backoff.
 		}
 
 		// Payout-address failover (slow, deliberately conservative): rotate
@@ -747,8 +749,9 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 
 // nextFailoverPool walks failover selection to the next pool that does not
 // carry a yield-degradation mark, preserving priority order. It returns the
-// start index only when every pool is marked, signaling the epoch is spent
-// and marks should be reset so recovered pools get a fresh judgment window.
+// start index when every other pool is marked; if start is marked too the
+// epoch is spent and marks should be reset so recovered pools get a fresh
+// judgment window.
 func nextFailoverPool(start, n int, degraded map[int]bool) int {
 	next := start
 	for {
