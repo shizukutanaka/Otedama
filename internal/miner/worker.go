@@ -290,12 +290,20 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 
 		h := localWork.Header
 		h.Time += ntimeRoll
+		// published tracks how much of the current batch's hash count has
+		// been flushed to hashCount (see the Add below the loop).
+		published := 0
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(&h)
-			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {
+				// Flush progress so a reader of Stats() that wakes on this
+				// share sees the hashes that produced it, not a zero count.
+				if pending := i + 1 - published; pending > 0 {
+					w.hashCount.Add(uint64(pending))
+					published = i + 1
+				}
 				share := Share{
 					ChannelID:  localWork.ChannelID,
 					JobID:      localWork.JobID,
@@ -331,6 +339,13 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				h.Time = localWork.Header.Time + ntimeRoll
 			}
 		}
+		// Publish the batch's hash count once instead of per nonce: an
+		// atomic RMW inside the inner loop makes every thread's cache
+		// line ping-pong on every hash — the contended atomic is itself
+		// measurable overhead on a hot path that exists only to grind.
+		// Stats() reads this only for display/reporting, so settling at
+		// batch granularity (≤1024 per thread) is free.
+		w.hashCount.Add(uint64(batchSize - published))
 	}
 }
 
