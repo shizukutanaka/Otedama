@@ -36,13 +36,25 @@ func (f *fakeScheme) SignatureFromBytes(_ []byte) (Signature, error) {
 // Registry
 // ============================================================================
 
+// registerForTest adds s to the process-wide registry and removes it when
+// the test ends, so registry tests stay repeatable under -count=N.
+func registerForTest(t *testing.T, s Scheme) {
+	t.Helper()
+	t.Cleanup(func() {
+		registryMu.Lock()
+		delete(registry, s.Name())
+		registryMu.Unlock()
+	})
+	Register(s)
+}
+
 func TestRegister_DuplicateNamePanics(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("Register did not panic on duplicate name")
 		}
 	}()
-	Register(&fakeScheme{name: "test-duplicate"})
+	registerForTest(t, &fakeScheme{name: "test-duplicate"})
 	Register(&fakeScheme{name: "test-duplicate"})
 }
 
@@ -84,7 +96,7 @@ func TestSchemes_DeterministicOrdering(t *testing.T) {
 func TestRegistry_ConcurrentLookupSafe(t *testing.T) {
 	// Register one scheme then hammer Lookup from many goroutines.
 	// Run with -race to catch unprotected map access.
-	Register(&fakeScheme{name: "test-concurrent"})
+	registerForTest(t, &fakeScheme{name: "test-concurrent"})
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {

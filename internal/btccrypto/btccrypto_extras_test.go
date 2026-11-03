@@ -153,11 +153,17 @@ func TestRegistry_ConcurrentRegisterDifferentNames(t *testing.T) {
 	// Concurrent Register with different names must not race or panic.
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
+		name := testRegisterName(i)
+		t.Cleanup(func() {
+			registryMu.Lock()
+			delete(registry, name)
+			registryMu.Unlock()
+		})
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer func() { _ = recover() }() // some may collide via Register's panic
-			Register(&stubScheme{name: testRegisterName(i)})
+			Register(&stubScheme{name: name})
 		}()
 	}
 	wg.Wait()
