@@ -1162,7 +1162,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// Yield failover: a pool crediting under ~90% of this session's
 				// shares burns hashpower without revenue; exit so the reconnect
 				// loop fails over to the next configured pool.
-				if opts.yieldFailover && opts.m != nil {
+				if opts.yieldFailover {
 					sessAccepted := opts.m.sharesAccepted.Value() - startAccepted
 					sessRejected := opts.m.sharesRejected.Value() - startRejected
 					if yieldDegraded(sessAccepted, sessRejected) {

@@ -18,7 +18,7 @@ import (
 
 // fanIn merges N input channels into a single output channel.
 // It closes the output when all inputs are drained or ctx is done.
-// Buffer size is bufFactor * len(channels), capped at 64 for small N.
+// Buffer size is bufFactor * len(channels), capped at 64 and at least 1.
 func fanIn[T any](ctx context.Context, channels []<-chan T, bufFactor int) <-chan T {
 	bufSize := bufFactor * len(channels)
 	if bufSize > 64 {
