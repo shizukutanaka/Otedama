@@ -1365,6 +1365,53 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 	}
 }
 
+func TestCheckPoolEndpointDiversity_StripsUserinfo(t *testing.T) {
+	ctx := context.Background()
+	orig := poolIPResolver
+	t.Cleanup(func() { poolIPResolver = orig })
+
+	// A pool URL carrying userinfo must resolve the bare host, not the
+	// credential string — and the credentials must not leak into Detail.
+	var resolved []string
+	poolIPResolver = func(_ context.Context, host string) ([]string, error) {
+		resolved = append(resolved, host)
+		return []string{"203.0.113.9"}, nil
+	}
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://worker1:secret1@pool1.example.com:3333"},
+			{URL: "stratum+tcp://worker2:secret2@pool2.example.com:3333"},
+		},
+	}
+	r := checkPoolEndpointDiversity(&cfg).Run(ctx)
+	if len(resolved) != 2 {
+		t.Fatalf("resolver calls = %d, want 2 (status %v)", len(resolved), r.Status)
+	}
+	for _, h := range resolved {
+		if strings.Contains(h, "@") || strings.Contains(h, "secret") {
+			t.Errorf("resolver got credentials-bearing host %q", h)
+		}
+	}
+	if strings.Contains(r.Detail, "secret") {
+		t.Errorf("credentials leaked into detail: %q", r.Detail)
+	}
+}
+
+func TestCheckPayoutScheme_StripsUserinfo(t *testing.T) {
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://worker1:secret1@pool.example.com:3333", PayoutScheme: "pplns"},
+		},
+	}
+	r := checkPayoutScheme(&cfg).Run(context.Background())
+	if strings.Contains(r.Detail, "secret") || strings.Contains(r.Detail, "worker1@") {
+		t.Errorf("credentials leaked into detail: %q", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "pool.example.com:3333") {
+		t.Errorf("detail lost the host: %q", r.Detail)
+	}
+}
+
 // ============================================================================
 // checkClockSkew — live clock accuracy check (session 136)
 // ============================================================================

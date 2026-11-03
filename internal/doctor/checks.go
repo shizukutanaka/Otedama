@@ -505,7 +505,10 @@ func checkPoolEndpointDiversity(cfg *config.Config) Check {
 			ipToPools := map[string][]string{}
 			resolved := 0
 			for _, p := range cfg.Pools {
-				host := stripScheme(p.URL)
+				// Strip userinfo before scheme parsing, same as probePools:
+				// a user:pass@host URL resolves DNS on the credential string
+				// and is otherwise silently skipped from the comparison.
+				host := stripScheme(poolproto.StripUserinfo(p.URL))
 				if host == "" {
 					continue
 				}
@@ -765,7 +768,10 @@ func checkPayoutScheme(cfg *config.Config) Check {
 			var lines []string
 			anyUnknown := false
 			for _, p := range cfg.Pools {
-				host := stripScheme(p.URL)
+				// Strip userinfo BEFORE stripScheme: a user:pass@host URL
+				// otherwise displays its credentials in this check's Detail —
+				// the exact leak StripUserinfo exists to prevent.
+				host := stripScheme(poolproto.StripUserinfo(p.URL))
 				if host == "" {
 					host = poolproto.StripUserinfo(p.URL)
 				}
