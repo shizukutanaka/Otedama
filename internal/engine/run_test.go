@@ -2016,20 +2016,22 @@ func TestNewHashrateMonitor_DefaultMaxStallWhenZero(t *testing.T) {
 }
 
 // ============================================================================
-// maskAddr — short-address path (len ≤ 12 returned as-is)
+// maskAddr — short-address path (len <= 10 returned as-is; unified in display, #2)
 // ============================================================================
 
 func TestMaskAddr_ShortAddressReturnedAsIs(t *testing.T) {
 	short := "bc1q1234"
 	if got := maskAddr(short); got != short {
-		t.Errorf("maskAddr(%q) = %q, want unchanged (len≤12)", short, got)
+		t.Errorf("maskAddr(%q) = %q, want unchanged (len<=10)", short, got)
 	}
 }
 
-func TestMaskAddr_ExactlyTwelveCharsReturnedAsIs(t *testing.T) {
+func TestMaskAddr_TwelveCharsIsMasked(t *testing.T) {
+	// The unified threshold is len <= 10 (display.MaskAddress, #2);
+	// engine's previous threshold of 12 no longer applies.
 	addr := "123456789012" // exactly 12 chars
-	if got := maskAddr(addr); got != addr {
-		t.Errorf("maskAddr(%q) = %q, want unchanged (len==12)", addr, got)
+	if got := maskAddr(addr); got != "123456···9012" {
+		t.Errorf("maskAddr(%q) = %q, want masked form", addr, got)
 	}
 }
 

@@ -26,6 +26,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/display"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -1033,11 +1034,11 @@ func isFingerprint(s string) bool {
 	return true
 }
 
+// maskAddress renders an address for doctor output. The canonical
+// implementation is display.MaskAddress (issue #2); this wrapper only
+// keeps the package-local name the checks already use.
 func maskAddress(s string) string {
-	if len(s) <= 10 {
-		return s
-	}
-	return s[:6] + strings.Repeat("·", 3) + s[len(s)-4:]
+	return display.MaskAddress(s)
 }
 
 // stripScheme returns the host[:port] portion of a pool URL, or "" if

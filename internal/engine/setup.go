@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/display"
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/lightning"
 	"github.com/shizukutanaka/Otedama/internal/miner"
@@ -435,13 +436,14 @@ func sessionUser(poolUser, addr, worker string) string {
 	return addr
 }
 
-// maskAddr renders a payout address for logs without printing it in full,
-// so operator logs do not needlessly expose the complete address.
+// maskAddr renders a payout address for logs without printing it in
+// full, so operator logs do not needlessly expose the complete
+// address. The canonical implementation is display.MaskAddress
+// (issue #2); engine previously had its own copy with a len<=12
+// threshold and a "…" ellipsis, so the same address rendered
+// differently in engine logs than in doctor output.
 func maskAddr(a string) string {
-	if len(a) <= 12 {
-		return a
-	}
-	return a[:6] + "…" + a[len(a)-4:]
+	return display.MaskAddress(a)
 }
 
 // ----- Built-in CPU driver -----
