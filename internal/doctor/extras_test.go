@@ -1902,7 +1902,10 @@ func TestCheckPoolReachability_AllMalformedFail(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{
 			{URL: "not-a-url-1"},
-			{URL: "datum://no.dial:1"},
+			// An unrecognized scheme is unparseable. (datum:// used to
+			// serve as the second fixture here, but it is a recognized
+			// pool scheme since the stripScheme consolidation, #3.)
+			{URL: "http://no.dial:1"},
 		},
 	}
 	r := checkPoolReachability(&cfg).Run(context.Background())
