@@ -1040,16 +1040,20 @@ func maskAddress(s string) string {
 	return s[:6] + strings.Repeat("·", 3) + s[len(s)-4:]
 }
 
+// stripScheme returns the host[:port] portion of a pool URL, or "" if
+// the scheme is not one Otedama recognises. The canonical prefix list
+// lives in poolproto.StripScheme; this adapter only maps its error to
+// "" for diagnostic display, where an unrecognised scheme simply means
+// "no dialable host". (This was previously a private copy of the
+// prefix list, which had already drifted: it did not know datum://,
+// so doctor could disagree with the engine about pool reachability.
+// See issue #3.)
 func stripScheme(url string) string {
-	for _, p := range []string{
-		"stratum+v2tls://", "stratum+v2://",
-		"stratum+tls://", "stratum+tcp://",
-	} {
-		if rest, ok := strings.CutPrefix(url, p); ok {
-			return rest
-		}
+	host, err := poolproto.StripScheme(url)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return host
 }
 
 // (Report.Results is already deterministic: Runner.Run writes results
