@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1565,6 +1566,9 @@ func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
 }
 
 func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bad-path simulation via /dev/null does not fail on Windows")
+	}
 	// /dev/null is a device, not a directory; creating a child under it fails.
 	var logs []string
 	log := func(_, m string) { logs = append(logs, m) }

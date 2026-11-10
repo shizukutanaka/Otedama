@@ -264,6 +264,9 @@ func TestWalletManager_WrongPassphrase(t *testing.T) {
 // ----- Atomic write -----
 
 func TestWalletManager_WalletFileHasRestrictivePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("root user ignores file permissions")
 	}

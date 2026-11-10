@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -191,6 +192,9 @@ func TestWalletManager_WalletFileExists(t *testing.T) {
 }
 
 func TestWalletManager_WalletFileNotWorldReadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on Windows")
+	}
 	dir := t.TempDir()
 	wl, _ := NewEnglishWordList()
 

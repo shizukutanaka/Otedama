@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -126,6 +127,9 @@ func TestCappedLogFile_AppendReopen(t *testing.T) {
 }
 
 func TestCappedLogFile_Mode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on Windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "otedama.log")
 	c, err := openCappedLogFile(path)

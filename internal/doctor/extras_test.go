@@ -1673,6 +1673,9 @@ func TestAddressKind_KnownP2WSH(t *testing.T) {
 // os.Stat returns an error that is NOT os.IsNotExist (ENOTDIR) when a path
 // component is a regular file. The check must report Fail "cannot stat".
 func TestCheckDataDir_StatErrorNotNotExist_Fails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stat error kinds under a regular file differ on Windows")
+	}
 	f, err := os.CreateTemp(t.TempDir(), "blocker")
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
@@ -1693,6 +1696,9 @@ func TestCheckDataDir_StatErrorNotNotExist_Fails(t *testing.T) {
 // os.Stat on the wallet path returns ENOTDIR (path under a regular file),
 // which is neither IsNotExist nor nil, so the check reports Fail.
 func TestCheckWallet_StatErrorNotNotExist_Fails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stat error kinds under a regular file differ on Windows")
+	}
 	f, err := os.CreateTemp(t.TempDir(), "blocker")
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
