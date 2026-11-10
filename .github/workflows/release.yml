@@ -37,17 +37,23 @@ jobs:
       run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
     - name: Generate changelog
-      id: changelog
       run: |
-        # 前タグが無い (初回リリース) 場合は全履歴を対象にする。
-        # デリミタはコミット件名と衝突しない一意な文字列を使う
-        # (旧実装は EOF 衝突で GITHUB_OUTPUT の処理に失敗していた)。
+        # 変更履歴は $GITHUB_OUTPUT を経由させずファイルで受け渡す。
+        # 全履歴分の巨大な複数行 output はランナーの file command 処理で
+        # デリミタ不一致エラーになり、初回リリースが作れなかったため。
         PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
         if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
         git log --pretty=format:"- %s" "$RANGE" > changelog.txt
-        echo "changelog<<CHANGELOG_CONTENT_EOF" >> $GITHUB_OUTPUT
-        cat changelog.txt >> $GITHUB_OUTPUT
-        echo "CHANGELOG_CONTENT_EOF" >> $GITHUB_OUTPUT
+
+    - name: Assemble release body
+      run: |
+        {
+          echo "## What's Changed"
+          head -n 300 changelog.txt
+          echo ""
+          echo "## Installation"
+          echo "See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT.md) for installation instructions."
+        } > release_body.md
 
     - name: Create Release
       id: create_release
@@ -56,12 +62,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         name: Release
-        body: |
-          ## What's Changed
-          ${{ steps.changelog.outputs.changelog }}
-          
-          ## Installation
-          See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT.md) for installation instructions.
+        body_path: release_body.md
         draft: false
         prerelease: false
 
