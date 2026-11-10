@@ -49,12 +49,12 @@ func ScriptForAddress(addr string) ([]byte, error) {
 		}
 		op := byte(0x00) // OP_0 for witness v0; OP_1..OP_16 for v1+.
 		if version > 0 {
-			op = 0x50 + byte(version)
+			op = 0x50 + byte(version) // #nosec G115 -- version is a bech32 5-bit value (0-31) //nolint:gosec
 		}
 		out := make([]byte, 0, 2+len(program))
-		out = append(out, op, byte(len(program))) //nolint:gosec // witness programs are ≤ 40 bytes (BIP-141)
+		out = append(out, op, byte(len(program))) // #nosec G115 -- witness programs are ≤ 40 bytes (BIP-141) //nolint:gosec
 		for _, v := range program {
-			out = append(out, byte(v))
+			out = append(out, byte(v)) // #nosec G115 -- v is an 8-bit value produced by convertBits //nolint:gosec
 		}
 		return out, nil
 	}
@@ -108,10 +108,10 @@ func CoinbasePaysScript(tx, script []byte) (bool, error) {
 		off += 36 // prev txid + vout index
 		sl, err := readCompactSize(tx, &off)
 		//nolint:gosec // readCompactSize leaves off <= len(tx), so len(tx)-off is non-negative
-		if err != nil || sl > uint64(len(tx)-off) {
+		if err != nil || sl > uint64(len(tx)-off) { // #nosec G115 -- bounds established by the checks above //nolint:gosec
 			return false, fmt.Errorf("btccrypto: bad scriptSig length")
 		}
-		off += int(sl) + 4 //nolint:gosec // scriptSig + sequence; sl <= len(tx)-off per the check above
+		off += int(sl) + 4 // #nosec G115 -- scriptSig + sequence; sl <= len(tx)-off per the check above //nolint:gosec
 	}
 	if off >= len(tx) {
 		return false, fmt.Errorf("btccrypto: truncated coinbase inputs")
@@ -124,14 +124,14 @@ func CoinbasePaysScript(tx, script []byte) (bool, error) {
 		off += 8 // value
 		pkLen, err := readCompactSize(tx, &off)
 		//nolint:gosec // readCompactSize leaves off <= len(tx), so len(tx)-off is non-negative
-		if err != nil || pkLen > uint64(len(tx)-off) {
+		if err != nil || pkLen > uint64(len(tx)-off) { // #nosec G115 -- bounds established by the checks above //nolint:gosec
 			return false, fmt.Errorf("btccrypto: bad output script length")
 		}
 		//nolint:gosec // pkLen <= len(tx)-off per the check above, so the slice stays in bounds
-		if bytes.Equal(tx[off:off+int(pkLen)], script) {
+		if bytes.Equal(tx[off:off+int(pkLen)], script) { // #nosec G115 -- bounds established by the checks above //nolint:gosec
 			return true, nil
 		}
-		off += int(pkLen) //nolint:gosec // pkLen <= len(tx)-off per the check above
+		off += int(pkLen) // #nosec G115 -- pkLen <= len(tx)-off per the check above //nolint:gosec
 	}
 	return false, nil
 }

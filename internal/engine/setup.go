@@ -88,13 +88,13 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 		// total can never exceed the nonce space: stride stays a power
 		// of two ≤ 2^31 and every offset is < total.
 		//nolint:gosec // Threads and the device count are small positives; total is bound-checked on the same line
-		if total := uint64(cfg.Threads) * uint64(len(sha256d)); len(sha256d) > 1 && total > 0 && total <= 1<<31 {
+		if total := uint64(cfg.Threads) * uint64(len(sha256d)); len(sha256d) > 1 && total > 0 && total <= 1<<31 { // #nosec G115 -- bounds established by the checks above //nolint:gosec
 			stride := uint32(1)
 			for uint64(stride) < total {
 				stride <<= 1
 			}
 			//nolint:gosec // i*Threads < total ≤ 2^31 per the guard above
-			cfg.NonceOffset = uint32(i * cfg.Threads)
+			cfg.NonceOffset = uint32(i * cfg.Threads) // #nosec G115 -- bounds established by the checks above //nolint:gosec
 			cfg.NonceStep = stride
 		}
 		w := miner.NewWorker(cfg)

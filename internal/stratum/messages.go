@@ -399,7 +399,7 @@ func WrapMessage(msgType uint8, isChannelMsg bool, payload []byte) (Frame, error
 	h := Header{
 		ExtensionType: ext,
 		MsgType:       msgType,
-		MsgLength:     uint32(len(payload)), //nolint:gosec // payload is bounded by MaxFrameSize at construction
+		MsgLength:     uint32(len(payload)), // #nosec G115 -- payload is bounded by MaxFrameSize at construction //nolint:gosec
 	}
 	if err := h.Validate(); err != nil {
 		return Frame{}, err

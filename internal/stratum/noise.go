@@ -309,7 +309,7 @@ func (c *EncryptedConn) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("noise: message too large: %d-byte ciphertext exceeds %d (plaintext %d)", len(ct), maxNoiseFrame, len(p))
 	}
 	var lenBuf [2]byte
-	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct))) //nolint:gosec // len(ct) <= maxNoiseFrame is checked two lines above
+	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct))) // #nosec G115 -- len(ct) <= maxNoiseFrame is checked two lines above //nolint:gosec
 	if _, err := c.rw.Write(lenBuf[:]); err != nil {
 		return 0, err
 	}

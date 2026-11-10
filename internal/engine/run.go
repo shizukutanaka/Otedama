@@ -2300,6 +2300,7 @@ func v1JobWireID(jobID string) uint32 {
 // behavior (it is part of the effective nonce space); a future ntime
 // is kept verbatim since undershooting ntime_start is itself a reject.
 func rollNTime(declared uint32) uint32 {
+	// #nosec G115 -- ntime is a u32 wire field per SV2 spec; wraps at 2106
 	if now := uint32(time.Now().Unix()); declared < now { //nolint:gosec // ntime is a u32 wire field per SV2 spec; wraps at 2106
 		return now
 	}

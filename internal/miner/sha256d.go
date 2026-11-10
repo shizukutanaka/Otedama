@@ -189,7 +189,7 @@ func NBitsFromTarget(target Hash) uint32 {
 	if b[0]&0x80 != 0 {
 		b = append([]byte{0x00}, b...)
 	}
-	exp := byte(len(b)) //nolint:gosec // b is the nbits mantissa, bounded to <=33 bytes above
+	exp := byte(len(b)) // #nosec G115 -- b is the nbits mantissa, bounded to <=33 bytes above //nolint:gosec
 	var mant uint32
 	switch len(b) {
 	case 0:
