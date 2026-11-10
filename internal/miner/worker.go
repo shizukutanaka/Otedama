@@ -139,7 +139,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		cfg.Threads = runtime.NumCPU()
 	}
 	if cfg.NonceStep == 0 {
-		cfg.NonceStep = uint32(cfg.Threads) //nolint:gosec // Threads defaults to NumCPU and stays far below 2^32
+		cfg.NonceStep = uint32(cfg.Threads) // #nosec G115 -- Threads defaults to NumCPU and stays far below 2^32 //nolint:gosec
 	}
 	return &Worker{cfg: cfg, done: make(chan struct{}), cancelReady: make(chan struct{})}
 }
@@ -167,7 +167,7 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			w.grind(innerCtx, uint32(threadID), shares) //nolint:gosec // threadID < Threads, far below 2^32
+			w.grind(innerCtx, uint32(threadID), shares) // #nosec G115 -- threadID < Threads, far below 2^32 //nolint:gosec
 		}(i)
 	}
 

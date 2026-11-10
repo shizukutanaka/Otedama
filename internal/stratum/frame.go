@@ -180,9 +180,9 @@ func EncodeHeader(dst []byte, h Header) error {
 	binary.LittleEndian.PutUint16(dst[0:2], h.ExtensionType)
 	dst[2] = h.MsgType
 	// U24 little-endian: low, mid, high.
-	dst[3] = byte(h.MsgLength)       //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
-	dst[4] = byte(h.MsgLength >> 8)  //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
-	dst[5] = byte(h.MsgLength >> 16) //nolint:gosec // MsgLength bounded by Validate() against MaxMessageLength above
+	dst[3] = byte(h.MsgLength)       // #nosec G115 -- MsgLength bounded by Validate() against MaxMessageLength above //nolint:gosec
+	dst[4] = byte(h.MsgLength >> 8)  // #nosec G115 -- MsgLength bounded by Validate() against MaxMessageLength above //nolint:gosec
+	dst[5] = byte(h.MsgLength >> 16) // #nosec G115 -- MsgLength bounded by Validate() against MaxMessageLength above //nolint:gosec
 	return nil
 }
 
@@ -197,7 +197,7 @@ func EncodeFrame(f Frame) ([]byte, error) {
 		return nil, fmt.Errorf("stratum: payload length %d exceeds U24 maximum %d", len(f.Payload), MaxMessageLength)
 	}
 	h := f.Header
-	h.MsgLength = uint32(len(f.Payload)) //nolint:gosec // payload is bounded by MaxFrameSize at construction
+	h.MsgLength = uint32(len(f.Payload)) // #nosec G115 -- payload is bounded by MaxFrameSize at construction //nolint:gosec
 	if err := h.Validate(); err != nil {
 		return nil, err
 	}
