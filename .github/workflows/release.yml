@@ -39,10 +39,15 @@ jobs:
     - name: Generate changelog
       id: changelog
       run: |
-        git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD > changelog.txt
-        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        # 前タグが無い (初回リリース) 場合は全履歴を対象にする。
+        # デリミタはコミット件名と衝突しない一意な文字列を使う
+        # (旧実装は EOF 衝突で GITHUB_OUTPUT の処理に失敗していた)。
+        PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+        if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+        git log --pretty=format:"- %s" "$RANGE" > changelog.txt
+        echo "changelog<<CHANGELOG_CONTENT_EOF" >> $GITHUB_OUTPUT
         cat changelog.txt >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        echo "CHANGELOG_CONTENT_EOF" >> $GITHUB_OUTPUT
 
     - name: Create Release
       id: create_release
