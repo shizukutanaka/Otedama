@@ -778,6 +778,9 @@ func blockLibraryDir(t *testing.T) {
 // ----- systemdUnitPath error branches -----
 
 func TestSystemdUnitPath_MkdirAllError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	m := &Manager{}
@@ -789,6 +792,9 @@ func TestSystemdUnitPath_MkdirAllError(t *testing.T) {
 // ----- installSystemd unit-path error branch -----
 
 func TestInstallSystemd_UnitPathError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -801,6 +807,9 @@ func TestInstallSystemd_UnitPathError(t *testing.T) {
 // ----- uninstallSystemd unit-path error branch -----
 
 func TestUninstallSystemd_UnitPathError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	stubSystemdSpecPath(t)
 	blockConfigDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -813,6 +822,9 @@ func TestUninstallSystemd_UnitPathError(t *testing.T) {
 // ----- launchdPlistPath error branch -----
 
 func TestLaunchdPlistPath_MkdirAllError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	blockLibraryDir(t)
 	m := &Manager{}
 	if _, err := m.launchdPlistPath(); err == nil {
@@ -823,6 +835,9 @@ func TestLaunchdPlistPath_MkdirAllError(t *testing.T) {
 // ----- installLaunchd plist-path error branch -----
 
 func TestInstallLaunchd_PlistPathError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	blockLibraryDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
@@ -834,6 +849,9 @@ func TestInstallLaunchd_PlistPathError(t *testing.T) {
 // ----- uninstallLaunchd plist-path error branch -----
 
 func TestUninstallLaunchd_PlistPathError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	blockLibraryDir(t)
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
@@ -845,6 +863,9 @@ func TestUninstallLaunchd_PlistPathError(t *testing.T) {
 // ----- installSystemd WriteFile error branch -----
 
 func TestInstallSystemd_WriteFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	stubSystemdSpecPath(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -864,6 +885,9 @@ func TestInstallSystemd_WriteFileError(t *testing.T) {
 // ----- installLaunchd WriteFile error branch -----
 
 func TestInstallLaunchd_WriteFileError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filesystem error injection does not behave the same on Windows")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	// Create a DIRECTORY at the plist path to force WriteFile to fail.

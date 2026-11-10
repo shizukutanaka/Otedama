@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -473,6 +474,9 @@ func TestBuildLogger_NoTUIWithLogFileWritesBoth(t *testing.T) {
 }
 
 func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on Windows")
+	}
 	path := filepath.Join(t.TempDir(), "audit.log")
 	f := runFlags{noTUI: true, logFile: path}
 	_, cleanup := buildLogger(&f, &config.Config{LogLevel: "info"}, &bytes.Buffer{})

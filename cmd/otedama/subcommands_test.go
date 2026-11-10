@@ -643,6 +643,9 @@ func TestConfigValidate_MalformedNumericEnvVar_PrintsWarning(t *testing.T) {
 // ============================================================================
 
 func TestLoadConfigFile_UnreadableFile_WarnsOnOpen(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("running as root bypasses file permission checks")
 	}
