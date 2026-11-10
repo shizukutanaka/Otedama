@@ -519,7 +519,7 @@ func xmlEscape(s string) string {
 // runCmd is a var so tests can replace it with a stub that avoids real
 // OS service calls (systemctl, launchctl, sc.exe).
 var runCmd = func(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(name, args...) // #nosec G204 -- callers pass fixed command literals (systemctl/launchctl/sc.exe); args are internally constructed unit names and paths //nolint:gosec
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s %v: %w: %s", name, args, err, out)
 	}
