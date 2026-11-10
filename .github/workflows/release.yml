@@ -188,14 +188,14 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
-        gh release upload "${{ github.ref_name }}" "otedama_${VERSION#v}_amd64.deb" --clobber
+        gh release upload "${{ github.ref_name }}" otedama_*_amd64.deb --clobber
 
     - name: Upload RPM package
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
-        gh release upload "${{ github.ref_name }}" "otedama-${VERSION#v}-1.x86_64.rpm" --clobber
+        gh release upload "${{ github.ref_name }}" otedama-*.x86_64.rpm --clobber
 
   checksums:
     name: Publish combined checksums.txt
@@ -210,6 +210,7 @@ jobs:
       - name: Build combined checksums file
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           mkdir -p assets
           gh release download "${{ github.ref_name }}" -p "otedama-*.tar.gz" -D assets --clobber
