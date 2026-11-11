@@ -15,6 +15,8 @@ Real mining runs on **CPU only**. GPUs are merely detected on Linux and are not 
 [![Go Report Card](https://goreportcard.com/badge/github.com/shizukutanaka/Otedama)](https://goreportcard.com/report/github.com/shizukutanaka/Otedama)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/shizukutanaka/Otedama)](go.mod)
 
+全プロジェクトの実測一覧: [玄関ポータル](https://muse.ai/s/xuan-guan-potaru-ja6aqxqxlpxbxnxl/DpY3e_2xwrRyU5918RAV9v0G3UfbMvPX0HeuI-0ab-s)
+
 ---
 
 ## 概要 / Overview
