@@ -8,6 +8,9 @@
 **遊休計算資源を、非カストディで最大収益化する自律型ソフトウェア層。**
 **A non-custodial autonomous arbitration layer for idle compute resources.**
 
+**現在の実体 / What actually ships today**: 実マイニングに対応するのは **CPU のみ**です（Stratum V2/V1 による実ビットコイン採掘）。GPU は Linux 上で検出されるだけで計算には使われず、ASIC は検出されません。現行版が行うのは実採掘とシミュレーション価格による AI 推論見積もりで、複数収益源への裁定配分は設計目標（v4.0 スコープ）です。詳細は下記「概要」と `docs/KNOWN_LIMITATIONS.md` を参照してください。
+Real mining runs on **CPU only**. GPUs are merely detected on Linux and are not used for compute, and ASICs are not detected. Multi-stream arbitration is the design goal (v4.0 scope), not what the current release does.
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/shizukutanaka/Otedama)](https://goreportcard.com/report/github.com/shizukutanaka/Otedama)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/shizukutanaka/Otedama)](go.mod)
