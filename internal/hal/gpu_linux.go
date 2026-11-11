@@ -57,12 +57,18 @@ var drmBasePath = "/sys/class/drm"
 
 // Enumerate returns all GPU devices visible via DRM. If the DRM sysfs
 // tree is absent or empty, Enumerate returns an empty slice with no
-// error, so that the partial-failure policy in Detector applies.
+// error, so that the partial-failure policy in Detector applies. Any
+// other failure to read the tree (permission denied, I/O error, ...) is
+// returned as an error so the Detector can log it rather than silently
+// concluding the machine has no GPUs.
 func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 	entries, err := os.ReadDir(drmBasePath)
 	if err != nil {
-		// DRM not available — not an error, just no GPUs detected.
-		return nil, nil
+		if os.IsNotExist(err) {
+			// DRM not available — not an error, just no GPUs detected.
+			return nil, nil
+		}
+		return nil, fmt.Errorf("hal: gpu_linux: read DRM sysfs %s: %w", drmBasePath, err)
 	}
 
 	var devices []Device

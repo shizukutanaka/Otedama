@@ -432,6 +432,53 @@ func TestGPULinuxDriver_Enumerate_SkipsNonRenderDEntries(t *testing.T) {
 	}
 }
 
+func TestGPULinuxDriver_Enumerate_MissingSysfsTreeReturnsNoError(t *testing.T) {
+	// A nonexistent DRM tree means "no GPU subsystem on this machine",
+	// not a failure: Enumerate must return no devices and no error.
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = filepath.Join(root, "does-not-exist")
+	defer func() { drmBasePath = orig }()
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Errorf("Enumerate on missing sysfs tree returned error: %v", err)
+	}
+	if len(devs) != 0 {
+		t.Errorf("expected 0 devices for missing sysfs tree, got %d", len(devs))
+	}
+}
+
+// TestGPULinuxDriver_Enumerate_UnreadableSysfsReturnsError pins the
+// nilerr fix: Enumerate previously swallowed EVERY os.ReadDir error as
+// "no GPUs", so a permission or I/O failure on the DRM tree was
+// indistinguishable from a machine without a GPU subsystem and the
+// Detector's partial-failure logging never saw it. Pointing drmBasePath
+// at a regular file makes ReadDir fail with ENOTDIR — not a
+// not-exist error — deterministically (unlike chmod-based setups, which
+// root bypasses), so the error must now surface.
+func TestGPULinuxDriver_Enumerate_UnreadableSysfsReturnsError(t *testing.T) {
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = filepath.Join(root, "not-a-directory")
+	defer func() { drmBasePath = orig }()
+
+	if err := os.WriteFile(drmBasePath, []byte("not a sysfs tree"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err == nil {
+		t.Error("Enumerate on unreadable sysfs path returned nil error; " +
+			"non-not-exist ReadDir failures must propagate so Detector can log them")
+	}
+	if len(devs) != 0 {
+		t.Errorf("expected 0 devices on enumeration failure, got %d", len(devs))
+	}
+}
+
 func TestGPULinuxDriver_Enumerate_DeduplicatesCanonicalPaths(t *testing.T) {
 	// Two renderD nodes pointing to the same canonical device path produce
 	// only one Device entry.
