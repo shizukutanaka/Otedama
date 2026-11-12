@@ -765,11 +765,19 @@ func nextFailoverPool(start, n int, degraded map[int]bool) int {
 // ----- Session -----
 
 type sessionOpts struct {
-	poolURL    string
-	user       string
-	workers    []*miner.Worker
-	merged     <-chan miner.Share
-	interval   time.Duration
+	poolURL  string
+	user     string
+	workers  []*miner.Worker
+	merged   <-chan miner.Share
+	interval time.Duration
+	// statsTick, when non-nil, supplies the session's stats ticks instead
+	// of a real-time ticker on opts.interval. Tests use it to drive the
+	// stats branch deterministically: on a heavily oversubscribed CI
+	// runner the real-time ticker's case can go the whole session without
+	// being scheduled after the events the test waits on, which made
+	// tick-published gauges a scheduling lottery (see
+	// TestRunSession_StatsTickAndShareResponses).
+	statsTick  <-chan time.Time
 	dashboard  *tui.Dashboard
 	startTime  time.Time
 	wallet     string
@@ -1005,8 +1013,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// the wire (KNOWN_LIMITATIONS.md §9).
 	var estSats uint64
 	var satsAcc satsAccountant
-	statsTicker := time.NewTicker(opts.interval)
-	defer statsTicker.Stop()
+	statsTick := opts.statsTick
+	if statsTick == nil {
+		ticker := time.NewTicker(opts.interval)
+		defer ticker.Stop()
+		statsTick = ticker.C
+	}
 
 	// Watch for a stalled miner (zero hashrate sustained across samples).
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
@@ -1104,7 +1116,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case <-statsTicker.C:
+		case <-statsTick:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
 			if dropped := totalDropped(opts.workers); dropped != lastDropped {
@@ -1214,11 +1226,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
 					latency.Quantile(0.50), p95, latency.Quantile(0.99),
 				))
-				if opts.m != nil {
-					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
-					opts.m.submitLatencyP95.Set(p95)
-					opts.m.submitLatencyP99.Set(latency.Quantile(0.99))
-				}
+				publishLatencyGauges(opts.m, latency)
 			}
 
 		case pm, ok := <-inCh:
@@ -1363,6 +1371,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 							delete(submitTargets, seq)
 						}
 					}
+					// Publish now, not only on the next stats tick: a
+					// sample has landed, and the tick's scheduling is
+					// not guaranteed (see publishLatencyGauges).
+					publishLatencyGauges(opts.m, latency)
 					n := uint64(pm.msg.SubmitSharesSuccess.NewSubmitsAccepted)
 					if n == 0 || n > settled {
 						// Pool sent no explicit count, or claims more
@@ -1415,6 +1427,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// until some later success.
 				latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
 				delete(submitTimes, e.SequenceNumber)
+				publishLatencyGauges(opts.m, latency)
 				reason := poolproto.SanitizePoolText(e.Error)
 				issued, hadTarget := submitTargets[e.SequenceNumber]
 				delete(submitTargets, e.SequenceNumber)
@@ -1586,8 +1599,12 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// not a per-share tally (KNOWN_LIMITATIONS.md §9).
 	var estSats uint64
 	var satsAcc satsAccountant
-	statsTicker := time.NewTicker(opts.interval)
-	defer statsTicker.Stop()
+	statsTick := opts.statsTick
+	if statsTick == nil {
+		ticker := time.NewTicker(opts.interval)
+		defer ticker.Stop()
+		statsTick = ticker.C
+	}
 
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
 	var hashWindow hashrateWindow
@@ -1672,7 +1689,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
 			}
 
-		case <-statsTicker.C:
+		case <-statsTick:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
 			if dropped := totalDropped(opts.workers); dropped != lastDropped {
@@ -1767,11 +1784,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
 					latency.Quantile(0.50), p95, latency.Quantile(0.99),
 				))
-				if opts.m != nil {
-					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
-					opts.m.submitLatencyP95.Set(p95)
-					opts.m.submitLatencyP99.Set(latency.Quantile(0.99))
-				}
+				publishLatencyGauges(opts.m, latency)
 			}
 
 		case job, ok := <-sess.Jobs():
@@ -1906,14 +1919,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					NTime:      capturedShare.NTime,
 					ExtraNonce: capturedShare.ExtraNonce,
 				})
-				elapsed := float64(time.Since(sendTime).Milliseconds())
+				// Microsecond precision, matching the V2 path: truncating
+				// to whole milliseconds records a literal 0 sample for any
+				// sub-millisecond round trip (the local-pool norm), and a
+				// tracker holding only zeros yields a 0 quantile — the
+				// latency gauges would never publish for a fast pool.
+				elapsed := float64(time.Since(sendTime).Microseconds()) / 1000.0
 				if err != nil {
 					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
 					// Still record the latency on error: a p99 spike caused by
 					// a pool disconnect is a signal worth surfacing, not hiding.
-					if elapsed > 0 {
-						latency.Record(elapsed)
-					}
+					latency.Record(elapsed)
+					publishLatencyGauges(opts.m, latency)
 					return
 				}
 				// A reject is a final response too — settle latency for
@@ -1921,6 +1938,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// SubmitSharesError), or slow pools that answer only with
 				// rejects would skew the percentiles flattering.
 				latency.Record(elapsed)
+				publishLatencyGauges(opts.m, latency)
 				if result.Accepted {
 					opts.log("info", "engine: V1 share accepted")
 					sessAccepted.Add(1)

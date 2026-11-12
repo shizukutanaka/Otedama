@@ -2865,60 +2865,62 @@ func (fp *responsivePool) serve() {
 // TestRunSession_StatsTickAndShareResponses exercises the two largest
 // uncovered regions of runSession: the stats-ticker branch (hashrate,
 // uptime, J/TH, and latency-quantile logging) and the SubmitSharesSuccess /
-// SubmitSharesError inCh handlers. It calls runSession directly with a very
-// short stats interval so the ticker fires many times during the test.
+// SubmitSharesError inCh handlers.
 //
-// This test used to race a fixed real-time window (originally 2s, later
-// widened to 4s): it waited for runSession to return, then checked whether
-// a "submit latency" log line had appeared anywhere in that window. That
-// line is written only from inside the stats-ticker branch, which must win
-// a select slot against two channels (inCh/opts.merged) that are
-// effectively always ready once shares start flowing — under `go test
-// ./...` CPU contention the ticker case could occasionally be starved long
-// enough to miss even a several-second window, despite every individual
-// protocol step completing in milliseconds in isolation (confirmed
-// pre-existing: the same fragile structure existed at commit 2faae1f, and
-// is tracked at RESEARCH_IMPROVEMENTS.md Category 7 item 12). Padding the
-// timeout further showed diminishing returns in testing.
+// This test has failed in three distinct ways, each one a lesson in what
+// a session-level test may not rest on:
 //
-// The first fix attempt — poll the submitLatencyP95 gauge with a bounded
-// retry loop instead of racing one fixed window — was not sufficient,
-// and neither was making the fake pool acknowledge every share but the
-// second (so latency samples are recorded continuously rather than
-// resting on a single ack frame; see the note in responsivePool.serve).
-// The failure recurred on the 2-core Windows CI runner in both
-// directions, because the four signals this test asserts on are
-// published by different mechanisms with different warm-up behaviour:
+//  1. Fixed-window race (original form): it waited for runSession to
+//     return, then checked whether a "submit latency" log line had
+//     appeared in the window. That line is written only from the
+//     stats-ticker branch, which must win a select slot against channels
+//     that are effectively always ready once shares flow.
+//  2. Single-signal poll (first fix): polling only the submitLatencyP95
+//     gauge raced it against the hashrate gauge, whose sliding window is
+//     0 on its first observation by design — if the p95-publishing tick
+//     was the baseline tick, the hashrate assertion failed on a session
+//     that had actually exercised everything.
+//  3. Conjunction latch over a real-time ticker (PR #1424): waiting for
+//     all four signals over the session's own 15s lifetime still failed
+//     on the PR's first Windows CI run (#6336), with ONLY the latency
+//     assertion unmet: the counters had latched, yet submitLatencyP95
+//     was still 0 when the session ended. That combination has exactly
+//     one mechanism. The samples are recorded synchronously by the
+//     SubmitSharesSuccess / SubmitSharesError handlers (run.go), so a
+//     nonzero counter proves a sample exists; and LatencyTracker
+//     .Quantile returns 0 only when the tracker is empty (stats.go), so
+//     a tick executing after the first sample would have published a
+//     nonzero p95. Therefore no stats tick executed after the first
+//     sample landed, for the remaining ~15s: on the 2-core Windows CI
+//     runner — go test ./... with -covermode=atomic instrumenting every
+//     package at once — the session loop's scheduling is too coarse for
+//     a real-time ticker's select slot to be part of a test's
+//     correctness. No wall-clock bound fixes a scheduling lottery; the
+//     dependency itself has to go.
 //
-//   - sharesAccepted / sharesRejected are monotonic counters,
-//     incremented synchronously by the SubmitSharesSuccess /
-//     SubmitSharesError handlers. Both handlers also record a latency
-//     sample as they settle their share, so once either counter is
-//     nonzero at least one sample exists in the tracker.
-//   - The submitLatencyP95 gauge is published only by the stats-ticker
-//     branch, the first tick after a sample exists; once set it never
-//     returns to zero.
-//   - The hashrate gauge is republished by the ticker branch on every
-//     tick from a sliding window whose first observation is 0 by design
-//     (the baseline sample), so it cannot become nonzero until the
-//     second tick after hashing starts.
+// The dependency is removed in the two places it lived:
 //
-// Polling only p95 and cancelling the session the instant it flipped
-// raced those signals against each other: if the p95-publishing tick
-// was the baseline tick, the hashrate gauge was still 0 and the
-// hashrate assertion failed on a test that had actually exercised
-// everything; and the poll's 10s sub-deadline was still a wall-clock
-// guess inside a 15s session, so a runner-level stall could consume
-// the sub-window before the session made progress and the latency
-// assertion failed despite every step working (master run #6335).
+//   - The latency-quantile gauges are now published when a sample is
+//     recorded (publishLatencyGauges, called from both settle handlers),
+//     not only from the stats-tick branch. The gauges are defined as the
+//     quantiles of the recorded samples; the settle path is where a
+//     sample lands, and the submit rate cap (8/s + burst) bounds how
+//     often it can run, so the recomputation stays cheap. The tick keeps
+//     refreshing the same values and still owns the latency log line.
+//     Phase 1 below pins this: it deposits NO ticks at all, so under the
+//     old tick-only publication the p95 gauge could never be set — the
+//     pre-fix code fails this phase deterministically, on any machine,
+//     with no load required.
+//   - The hashrate gauge genuinely cannot be published at settle time:
+//     a windowed rate needs two tick observations (baseline, then
+//     warmed). So the test drives the stats branch itself through
+//     sessionOpts.statsTick — phase 2 deposits ticks until the
+//     warmed-window rate appears — instead of asking a wall-clock timer
+//     to fire inside a session it does not control.
 //
-// The test now waits for the conjunction of all four signals, latching
-// each one as it is observed, over the session's full lifetime: the
-// session ends only once every asserted condition has demonstrably
-// held, so no assertion samples a gauge at an arbitrary instant and
-// none races a sub-window. The deadline that remains is the session's
-// own context bound — the point past which the session cannot run at
-// all — and reaching it reports exactly which signals never fired.
+// What remains wall-clock is only the outer bound (the session context),
+// which now functions purely as a ceiling on total test time: reaching
+// it reports exactly which signals never fired.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -2928,10 +2930,10 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
-	// Generous outer bound: this is a ceiling on total test time, not the
-	// budget the assertions race against (the polling loop below ends the
-	// session as soon as its condition is met, well before this fires in
-	// the normal case).
+	// Outer bound only: a ceiling on total test time, not a window any
+	// assertion races against (the phases below end the session as soon
+	// as their conditions hold, well before this fires in the normal
+	// case).
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -2941,6 +2943,11 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
+
+	// Manual stats ticks: the session consumes exactly the ticks this
+	// test deposits, so the stats branch runs when the test's
+	// preconditions hold — never on a timer's schedule.
+	tickCh := make(chan time.Time, 1)
 
 	runDone := make(chan struct{})
 	go func() {
@@ -2952,20 +2959,19 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 			workers:    []*miner.Worker{w},
 			merged:     merged,
 			interval:   5 * time.Millisecond,
+			statsTick:  tickCh,
 			m:          m,
 			powerWatts: 100.0,
 			log:        func(_, _ string) {},
 		})
 	}()
 
-	// Wait until every signal asserted on below has demonstrably held,
-	// latching each as it is observed (see the comment above the test
-	// for why the signals cannot be sampled at a single instant, and
-	// why the wait is bounded by the session's own lifetime rather
-	// than a shorter guessed window). The counters are monotonic and
-	// the p95 gauge is sticky once set; the hashrate latch records
-	// that the ticker branch published a warmed-window rate at least
-	// once, which is the coverage this test exists to pin.
+	// Phase 1 deposits no ticks: the handler counters and the latency
+	// gauge must latch from the share-settle path alone. Phase 2 then
+	// drives the stats branch by depositing ticks (keeping the
+	// single-slot buffer full) until the hashrate gauge publishes a
+	// warmed-window rate. Each signal is latched as it is observed; the
+	// counters are monotonic and the p95 gauge is sticky once set.
 	var sawAccepted, sawRejected, sawHashrate, sawLatency bool
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
@@ -2981,11 +2987,18 @@ waitLoop:
 			if m.sharesRejected.Value() > 0 {
 				sawRejected = true
 			}
-			if m.hashrate.Value() > 0 {
-				sawHashrate = true
-			}
 			if m.submitLatencyP95.Value() > 0 {
 				sawLatency = true
+			}
+			if sawAccepted && sawRejected && sawLatency {
+				// Phase 2: drive the stats branch.
+				select {
+				case tickCh <- time.Now():
+				default:
+				}
+				if m.hashrate.Value() > 0 {
+					sawHashrate = true
+				}
 			}
 			if sawAccepted && sawRejected && sawHashrate && sawLatency {
 				break waitLoop
@@ -3015,7 +3028,7 @@ waitLoop:
 			m.hashrate.Value())
 	}
 	if !sawLatency {
-		t.Errorf("submitLatencyP95 never became nonzero (now %v); latency-quantile stats-tick path not covered",
+		t.Errorf("submitLatencyP95 never became nonzero (now %v); latency gauges were not published from the share-settle path",
 			m.submitLatencyP95.Value())
 	}
 }
