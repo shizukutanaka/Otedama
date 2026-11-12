@@ -208,7 +208,21 @@ func TestWorker_StatsAfterWork(t *testing.T) {
 		t.Fatal("no share before deadline")
 	}
 
-	stats := w.Stats()
+	// Poll until the clock has advanced: on Windows the monotonic
+	// reading is quantized to the system timer tick (Go reads
+	// KUSER_SHARED_DATA InterruptTime), so Stats called within the
+	// same tick as Start reports Uptime 0 even though the worker has
+	// already hashed and found shares. Switching to the monotonic
+	// clock alone does not fix this; the test must tolerate one tick.
+	var stats Stats
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for {
+		stats = w.Stats()
+		if stats.Uptime > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if stats.HashesTotal == 0 {
 		t.Error("HashesTotal is 0 after running worker")
 	}
