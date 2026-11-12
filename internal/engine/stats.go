@@ -384,7 +384,13 @@ func NewLatencyTracker(size int) *LatencyTracker {
 	return &LatencyTracker{samples: make([]float64, size)}
 }
 
-// Record adds one round-trip sample in milliseconds.
+// Record adds one round-trip sample in milliseconds. Callers convert
+// elapsed durations at full precision (float64(d) /
+// float64(time.Millisecond)): truncating to whole microseconds first
+// would record a literal 0 for a sub-microsecond settle, and a tracker
+// whose samples are all 0 yields a 0 quantile — indistinguishable from
+// no samples at all, so the latency gauges would never publish despite
+// shares settling (the post-#1424 master recurrence, CI run #6339).
 func (l *LatencyTracker) Record(ms float64) {
 	if ms < 0 {
 		return
