@@ -2881,24 +2881,44 @@ func (fp *responsivePool) serve() {
 // is tracked at RESEARCH_IMPROVEMENTS.md Category 7 item 12). Padding the
 // timeout further showed diminishing returns in testing.
 //
-// The fix: actively poll the deterministic signal (the submitLatencyP95
-// gauge becoming nonzero) with a generous but bounded retry loop, instead
-// of passively hoping a fixed window catches it. The test now succeeds as
-// soon as the condition is actually true rather than racing a guess at how
-// long that might take under unknown contention.
+// The first fix attempt — poll the submitLatencyP95 gauge with a bounded
+// retry loop instead of racing one fixed window — was not sufficient,
+// and neither was making the fake pool acknowledge every share but the
+// second (so latency samples are recorded continuously rather than
+// resting on a single ack frame; see the note in responsivePool.serve).
+// The failure recurred on the 2-core Windows CI runner in both
+// directions, because the four signals this test asserts on are
+// published by different mechanisms with different warm-up behaviour:
 //
-// Polling alone did not remove the failure, because starvation of the
-// ticker branch was not the (only) cause: the fake pool acknowledged only
-// the first share, so the whole latency assertion rested on a single
-// sample from a single ack frame, and any delay in processing that one
-// frame past the poll window — as happens under full-suite contention on
-// small CI runners — left no sample at all. (First diagnosed in commit
-// 88a18f5c, where the delay mechanism was submitTimes eviction; the
-// submit rate cap has since made eviction unreachable inside this test,
-// but the single-sample dependency remained, and the failure recurred on
-// the 2-core Windows CI runner.) The pool now acknowledges every share
-// but the second — see the note in responsivePool.serve — so samples are
-// recorded continuously and the poll no longer bets on one frame.
+//   - sharesAccepted / sharesRejected are monotonic counters,
+//     incremented synchronously by the SubmitSharesSuccess /
+//     SubmitSharesError handlers. Both handlers also record a latency
+//     sample as they settle their share, so once either counter is
+//     nonzero at least one sample exists in the tracker.
+//   - The submitLatencyP95 gauge is published only by the stats-ticker
+//     branch, the first tick after a sample exists; once set it never
+//     returns to zero.
+//   - The hashrate gauge is republished by the ticker branch on every
+//     tick from a sliding window whose first observation is 0 by design
+//     (the baseline sample), so it cannot become nonzero until the
+//     second tick after hashing starts.
+//
+// Polling only p95 and cancelling the session the instant it flipped
+// raced those signals against each other: if the p95-publishing tick
+// was the baseline tick, the hashrate gauge was still 0 and the
+// hashrate assertion failed on a test that had actually exercised
+// everything; and the poll's 10s sub-deadline was still a wall-clock
+// guess inside a 15s session, so a runner-level stall could consume
+// the sub-window before the session made progress and the latency
+// assertion failed despite every step working (master run #6335).
+//
+// The test now waits for the conjunction of all four signals, latching
+// each one as it is observed, over the session's full lifetime: the
+// session ends only once every asserted condition has demonstrably
+// held, so no assertion samples a gauge at an arbitrary instant and
+// none races a sub-window. The deadline that remains is the session's
+// own context bound — the point past which the session cannot run at
+// all — and reaching it reports exactly which signals never fired.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -2938,34 +2958,50 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 		})
 	}()
 
-	// Poll for the deterministic signal that the stats-ticker branch has
-	// actually executed with a recorded latency sample, rather than
-	// waiting a fixed duration and hoping. 10s ceiling is itself generous;
-	// in the unstarved case this resolves within milliseconds.
-	deadline := time.After(10 * time.Second)
+	// Wait until every signal asserted on below has demonstrably held,
+	// latching each as it is observed (see the comment above the test
+	// for why the signals cannot be sampled at a single instant, and
+	// why the wait is bounded by the session's own lifetime rather
+	// than a shorter guessed window). The counters are monotonic and
+	// the p95 gauge is sticky once set; the hashrate latch records
+	// that the ticker branch published a warmed-window rate at least
+	// once, which is the coverage this test exists to pin.
+	var sawAccepted, sawRejected, sawHashrate, sawLatency bool
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
-	latencyObserved := false
 waitLoop:
 	for {
 		select {
+		case <-ctx.Done():
+			break waitLoop
 		case <-poll.C:
+			if m.sharesAccepted.Value() > 0 {
+				sawAccepted = true
+			}
+			if m.sharesRejected.Value() > 0 {
+				sawRejected = true
+			}
+			if m.hashrate.Value() > 0 {
+				sawHashrate = true
+			}
 			if m.submitLatencyP95.Value() > 0 {
-				latencyObserved = true
+				sawLatency = true
+			}
+			if sawAccepted && sawRejected && sawHashrate && sawLatency {
 				break waitLoop
 			}
-		case <-deadline:
-			break waitLoop
 		}
 	}
 	cancel() // end the session now that we have what we need (or gave up)
 	<-runDone
 
-	if got := m.sharesAccepted.Value(); got == 0 {
-		t.Error("sharesAccepted == 0; SubmitSharesSuccess handler was not exercised")
+	if !sawAccepted {
+		t.Errorf("sharesAccepted never became nonzero (now %d); SubmitSharesSuccess handler was not exercised",
+			m.sharesAccepted.Value())
 	}
-	if got := m.sharesRejected.Value(); got == 0 {
-		t.Error("sharesRejected == 0; SubmitSharesError handler was not exercised")
+	if !sawRejected {
+		t.Errorf("sharesRejected never became nonzero (now %d); SubmitSharesError handler was not exercised",
+			m.sharesRejected.Value())
 	}
 	// sharesSubmitted counts every real V2 send, so it must be at least as
 	// large as accepted+rejected (every judged share was necessarily sent
@@ -2974,11 +3010,13 @@ waitLoop:
 	if got, want := m.sharesSubmitted.Value(), m.sharesAccepted.Value()+m.sharesRejected.Value(); got < want {
 		t.Errorf("sharesSubmitted = %d, want >= %d (accepted+rejected)", got, want)
 	}
-	if got := m.hashrate.Value(); got == 0 {
-		t.Error("hashrate gauge = 0; stats-tick branch did not run")
+	if !sawHashrate {
+		t.Errorf("hashrate gauge never became nonzero (now %v); stats-tick branch did not publish a warmed-window rate",
+			m.hashrate.Value())
 	}
-	if !latencyObserved {
-		t.Error("submitLatencyP95 never became nonzero within 10s; latency-quantile stats-tick path not covered")
+	if !sawLatency {
+		t.Errorf("submitLatencyP95 never became nonzero (now %v); latency-quantile stats-tick path not covered",
+			m.submitLatencyP95.Value())
 	}
 }
 
