@@ -2507,10 +2507,10 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 // ============================================================================
 
 // responsivePool does a full Stratum V2 handshake, sends a trivially-easy
-// mining job, and then responds to shares: the first share gets a
-// SubmitSharesSuccess, the second gets a SubmitSharesError. It stays open
-// until the client disconnects, which allows multiple stats-tick cycles to
-// run inside runSession.
+// mining job, and then responds to shares: the second share gets a
+// SubmitSharesError and every other share a SubmitSharesSuccess. It stays
+// open until the client disconnects, which allows multiple stats-tick
+// cycles to run inside runSession.
 type responsivePool struct {
 	t           *testing.T
 	ln          net.Listener
@@ -2816,9 +2816,26 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		switch shareCount {
-		case 1:
-			// First share: acknowledge. Exercises SubmitSharesSuccess handler
-			// and the latency-recording path.
+		default:
+			// Every share but the second: acknowledge. Exercises the
+			// SubmitSharesSuccess handler and the latency-recording path.
+			//
+			// This used to acknowledge only the first share, which left
+			// tests depending on the latency path (above all
+			// TestRunSession_StatsTickAndShareResponses) resting on a
+			// single sample from a single ack frame: if that one frame's
+			// processing was delayed past the test's poll window — as
+			// happens under full-suite CPU contention on small CI
+			// runners — no sample was ever recorded and the latency
+			// assertion failed despite the code under test being
+			// correct. (The original incident is recorded in commit
+			// 88a18f5c, where the delay mechanism was submitTimes
+			// eviction; the submit rate cap has since made eviction
+			// unreachable inside these tests, but the single-sample
+			// dependency itself remained.) An ack settles every
+			// outstanding share up to its sequence number, so
+			// acknowledging each share records samples continuously
+			// instead of betting the test on one frame.
 			resp := stratum.SubmitSharesSuccess{
 				ChannelID:          share.ChannelID,
 				LastSequenceNumber: share.SequenceNumber,
@@ -2869,6 +2886,19 @@ func (fp *responsivePool) serve() {
 // of passively hoping a fixed window catches it. The test now succeeds as
 // soon as the condition is actually true rather than racing a guess at how
 // long that might take under unknown contention.
+//
+// Polling alone did not remove the failure, because starvation of the
+// ticker branch was not the (only) cause: the fake pool acknowledged only
+// the first share, so the whole latency assertion rested on a single
+// sample from a single ack frame, and any delay in processing that one
+// frame past the poll window — as happens under full-suite contention on
+// small CI runners — left no sample at all. (First diagnosed in commit
+// 88a18f5c, where the delay mechanism was submitTimes eviction; the
+// submit rate cap has since made eviction unreachable inside this test,
+// but the single-sample dependency remained, and the failure recurred on
+// the 2-core Windows CI runner.) The pool now acknowledges every share
+// but the second — see the note in responsivePool.serve — so samples are
+// recorded continuously and the poll no longer bets on one frame.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
