@@ -3292,6 +3292,25 @@ waitLoop:
 // TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
 // tripwire: a near-impossible share target must produce exactly one warning
 // per episode no matter how many stats ticks run.
+//
+// The "no matter how many ticks" clause has a sharp edge, and it is the
+// reason this test flaked on a loaded macOS runner (fired 2 times): a
+// tick whose hashrate sample is 0 — the window's priming sample, or any
+// interval in which the worker recorded no new hashes — makes
+// publishDifficulty zero the estimated-interval gauge, and the warn
+// latch's else arm read that 0 as "episode over" and re-armed. The next
+// positive-rate tick then warned a second time inside the same episode:
+// the pool's difficulty never changed, only a hashrate sample was
+// missing. The latch now clears only on a measured interval (iv > 0)
+// back under the threshold; iv == 0 means "not measurable this tick"
+// and holds the episode state.
+//
+// The test drives the stats branch through sessionOpts.statsTick and
+// walks the failure deterministically: latch the first warning, hammer
+// ticks until a zero-rate tick provably zeroes the gauge (the pre-fix
+// re-arm condition, observed on the gauge itself), then keep driving
+// ticks and require the count to stay at one. On the pre-fix code the
+// last phase fails deterministically, on any machine, with no load.
 func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -3305,6 +3324,8 @@ func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
+	// Outer bound only: a ceiling on total test time, not a window any
+	// assertion races against.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -3325,58 +3346,95 @@ func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 		warns = append(warns, msg)
 		mu.Unlock()
 	}
+	starveWarns := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, s := range warns {
+			if strings.Contains(s, "between shares") {
+				n++
+			}
+		}
+		return n
+	}
 
+	// Manual stats ticks: the session consumes exactly the ticks this
+	// test deposits — never a real-time timer's schedule.
+	tickCh := make(chan time.Time, 1)
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
 		_ = runSession(ctx, sessionOpts{
-			poolURL:  fp.URL(),
-			user:     "bc1qtest000000000000000000000000000000000",
-			workers:  []*miner.Worker{w},
-			merged:   merged,
-			interval: 5 * time.Millisecond,
-			m:        m,
-			log:      logFn,
+			poolURL:   fp.URL(),
+			user:      "bc1qtest000000000000000000000000000000000",
+			workers:   []*miner.Worker{w},
+			merged:    merged,
+			interval:  5 * time.Millisecond,
+			statsTick: tickCh,
+			m:         m,
+			log:       logFn,
 		})
 	}()
-
-	// First warn should appear quickly once a tick observes the huge
-	// estimated interval; let many more ticks run to prove it stays once.
-	deadline := time.After(10 * time.Second)
-	poll := time.NewTicker(5 * time.Millisecond)
-	defer poll.Stop()
-waitLoop:
-	for {
+	deposit := func() {
 		select {
-		case <-poll.C:
-			mu.Lock()
-			n := len(warns)
-			mu.Unlock()
-			if n > 0 {
-				break waitLoop
-			}
-		case <-deadline:
-			break waitLoop
+		case tickCh <- time.Now():
+		default:
 		}
 	}
-	// A few hundred ms of extra ticks — warn-once is the assertion.
-	time.Sleep(200 * time.Millisecond)
+
+	// Phase 1: drive ticks until the first warning latches.
+	phaseDeadline := time.Now().Add(5 * time.Second)
+	for starveWarns() == 0 && time.Now().Before(phaseDeadline) {
+		deposit()
+		time.Sleep(2 * time.Millisecond)
+	}
+	if starveWarns() == 0 {
+		cancel()
+		<-runDone
+		t.Fatalf("starvation warning never fired; warns=%v", warns)
+	}
+
+	// Phase 2: hammer ticks back-to-back. The tick intervals collapse
+	// far below the single worker thread's hash cadence, so some tick's
+	// window increment is 0, its rate is 0, and publishDifficulty zeroes
+	// the gauge. Observing the gauge at 0 proves a tick ran whose latch
+	// arm saw iv == 0 — the pre-fix re-arm.
+	sawZero := false
+	phaseDeadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(phaseDeadline) {
+		deposit()
+		if m.estimatedShareIntervalSeconds.Value() == 0 {
+			sawZero = true
+			break
+		}
+	}
+	if !sawZero {
+		cancel()
+		<-runDone
+		t.Fatalf("estimated-interval gauge never zeroed; zero-rate tick condition not exercised")
+	}
+
+	// Phase 3: keep driving ticks until the gauge provably returns to a
+	// huge measured interval (a tick reached the warn decision with a
+	// positive rate), then drive many more. The count must stay at one:
+	// on the pre-fix latch, phase 2 re-armed it and this phase's ticks
+	// fire the second warning.
+	phaseDeadline = time.Now().Add(4 * time.Second)
+	for m.estimatedShareIntervalSeconds.Value() <= 3600 && time.Now().Before(phaseDeadline) {
+		deposit()
+		time.Sleep(time.Millisecond)
+	}
+	for i := 0; i < 200; i++ {
+		deposit()
+		time.Sleep(time.Millisecond)
+	}
 	cancel()
 	<-runDone
 
-	mu.Lock()
-	defer mu.Unlock()
-	var starveWarns int
-	for _, w := range warns {
-		if strings.Contains(w, "between shares") {
-			starveWarns++
-		}
-	}
-	if starveWarns == 0 {
+	if n := starveWarns(); n == 0 {
 		t.Errorf("starvation warning never fired; warns=%v", warns)
-	}
-	if starveWarns > 1 {
-		t.Errorf("starvation warning fired %d times, want once per episode", starveWarns)
+	} else if n > 1 {
+		t.Errorf("starvation warning fired %d times, want once per episode", n)
 	}
 }
 

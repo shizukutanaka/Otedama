@@ -1205,7 +1205,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 							"engine: pool difficulty implies ~%.0f min between shares — income is effectively zero; the pool should lower difficulty or retarget",
 							iv/60))
 					}
-				} else {
+				} else if iv > 0 {
+					// A measured interval back under the threshold ends
+					// the episode. iv == 0 is not a measurement:
+					// publishDifficulty zeroes the gauge whenever this
+					// tick's hashrate sample is 0 (the window's priming
+					// sample, or an interval with no new hashes), which
+					// says nothing about the pool's difficulty — letting
+					// it clear the latch re-armed the warning inside the
+					// same episode (the StarvationWarnsOnce flake).
 					starvedWarned = false
 				}
 				// A pool that stops sending jobs starves the same way but
@@ -1775,7 +1783,15 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 							"engine: pool difficulty implies ~%.0f min between shares — income is effectively zero; the pool should lower difficulty or retarget",
 							iv/60))
 					}
-				} else {
+				} else if iv > 0 {
+					// A measured interval back under the threshold ends
+					// the episode. iv == 0 is not a measurement:
+					// publishDifficulty zeroes the gauge whenever this
+					// tick's hashrate sample is 0 (the window's priming
+					// sample, or an interval with no new hashes), which
+					// says nothing about the pool's difficulty — letting
+					// it clear the latch re-armed the warning inside the
+					// same episode (the StarvationWarnsOnce flake).
 					starvedWarned = false
 				}
 			}
