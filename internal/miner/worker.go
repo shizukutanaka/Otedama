@@ -121,7 +121,7 @@ type Worker struct {
 	hashCount  atomic.Uint64
 	shareCount atomic.Uint64
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
-	startTime  atomic.Int64  // UnixNano
+	startTime  atomic.Value  // time.Time, stored by Start; carries a monotonic reading
 	started    atomic.Bool   // guards Start against a second call
 
 	cancel context.CancelFunc
@@ -160,7 +160,7 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 	w.cancel = cancel
 	w.mu.Unlock()
 	close(w.cancelReady)
-	w.startTime.Store(time.Now().UnixNano())
+	w.startTime.Store(time.Now())
 
 	var wg sync.WaitGroup
 	for i := 0; i < w.cfg.Threads; i++ {
@@ -227,10 +227,17 @@ func (w *Worker) HasWork() bool {
 // Stats returns a snapshot of the Worker's performance counters.
 // Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {
-	if w.startTime.Load() == 0 {
+	start, ok := w.startTime.Load().(time.Time)
+	if !ok {
 		return Stats{}
 	}
-	uptime := time.Duration(time.Now().UnixNano() - w.startTime.Load())
+	// Elapsed time is measured on the monotonic clock (time.Since uses
+	// the monotonic reading carried by the stored start time), not by
+	// differencing wall-clock UnixNano readings: on platforms where the
+	// wall clock's resolution or stepping makes two nearby readings
+	// equal, the wall-clock difference reads 0 even though the worker
+	// has been running, which used to surface as Uptime 0 and HashRate 0.
+	uptime := time.Since(start)
 	hashes := w.hashCount.Load()
 	var rate float64
 	if uptime > 0 {
