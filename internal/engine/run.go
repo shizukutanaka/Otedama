@@ -1373,7 +1373,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					var settled uint64
 					for seq, sent := range submitTimes {
 						if seq <= last {
-							latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
+							// Full nanosecond precision: truncating to
+							// whole microseconds first records a literal
+							// 0 sample for a sub-microsecond settle, and
+							// an all-zero tracker publishes nothing (see
+							// LatencyTracker.Record).
+							latency.Record(float64(now.Sub(sent)) / float64(time.Millisecond))
 							delete(submitTimes, seq)
 							settled++
 							delete(submitTargets, seq)
@@ -1433,7 +1438,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// Settle the outstanding submit: an error is the share's
 				// final response too, and leaving the entry would leak it
 				// until some later success.
-				latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
+				latency.Record(float64(time.Since(sent)) / float64(time.Millisecond))
 				delete(submitTimes, e.SequenceNumber)
 				publishLatencyGauges(opts.m, latency)
 				reason := poolproto.SanitizePoolText(e.Error)
@@ -1935,12 +1940,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					NTime:      capturedShare.NTime,
 					ExtraNonce: capturedShare.ExtraNonce,
 				})
-				// Microsecond precision, matching the V2 path: truncating
-				// to whole milliseconds records a literal 0 sample for any
-				// sub-millisecond round trip (the local-pool norm), and a
-				// tracker holding only zeros yields a 0 quantile — the
-				// latency gauges would never publish for a fast pool.
-				elapsed := float64(time.Since(sendTime).Microseconds()) / 1000.0
+				// Full nanosecond precision, matching the V2 path:
+				// truncating to whole milliseconds (or even whole
+				// microseconds) records a literal 0 sample for any
+				// round trip below the truncation grain, and a tracker
+				// holding only zeros yields a 0 quantile — the latency
+				// gauges would never publish for a fast pool.
+				elapsed := float64(time.Since(sendTime)) / float64(time.Millisecond)
 				if err != nil {
 					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
 					// Still record the latency on error: a p99 spike caused by

@@ -2867,7 +2867,7 @@ func (fp *responsivePool) serve() {
 // uptime, J/TH, and latency-quantile logging) and the SubmitSharesSuccess /
 // SubmitSharesError inCh handlers.
 //
-// This test has failed in three distinct ways, each one a lesson in what
+// This test has failed in four distinct ways, each one a lesson in what
 // a session-level test may not rest on:
 //
 //  1. Fixed-window race (original form): it waited for runSession to
@@ -2875,11 +2875,13 @@ func (fp *responsivePool) serve() {
 //     appeared in the window. That line is written only from the
 //     stats-ticker branch, which must win a select slot against channels
 //     that are effectively always ready once shares flow.
+//
 //  2. Single-signal poll (first fix): polling only the submitLatencyP95
 //     gauge raced it against the hashrate gauge, whose sliding window is
 //     0 on its first observation by design — if the p95-publishing tick
 //     was the baseline tick, the hashrate assertion failed on a session
 //     that had actually exercised everything.
+//
 //  3. Conjunction latch over a real-time ticker (PR #1424): waiting for
 //     all four signals over the session's own 15s lifetime still failed
 //     on the PR's first Windows CI run (#6336), with ONLY the latency
@@ -2898,7 +2900,30 @@ func (fp *responsivePool) serve() {
 //     correctness. No wall-clock bound fixes a scheduling lottery; the
 //     dependency itself has to go.
 //
-// The dependency is removed in the two places it lived:
+//  4. Settle-publish recurrence on merged master (this fix): PR #1424's
+//     branch CI was green on every OS, yet the merged master run (#6339)
+//     failed on Windows again, with only the hashrate and latency
+//     assertions unmet — the counters had latched. Two residual paths
+//     could still produce exactly that signature. (a) Value truncation:
+//     the settle paths recorded samples via Microseconds()/1000, so a
+//     sub-microsecond settle became a literal 0.0 ms sample; Quantile
+//     over an all-zero tracker is 0, and publishLatencyGauges publishes
+//     only a positive p95 — so handlers could settle shares all session
+//     (incrementing the counters, which happens after the publish in
+//     the same handler) while the gauge never moved. Recording now
+//     converts at full nanosecond precision, so any real elapsed time
+//     yields a positive sample by construction. (b) Observation race:
+//     the poll loop's latches were the verdict, but the loop exits on
+//     the context deadline without a final observation — state the
+//     session published after the last processed poll tick was
+//     discarded and reported as "never became nonzero". The assertions
+//     now judge the session's quiesced end state, latched after
+//     runSession returns, when every settle that will ever happen has
+//     happened and every publish is final. The hashrate assertion was
+//     collateral in both paths: phase 2 starts only once latency
+//     latches, so a lost latency latch starved it of ticks.
+//
+// The dependency is removed in the places it lived:
 //
 //   - The latency-quantile gauges are now published when a sample is
 //     recorded (publishLatencyGauges, called from both settle handlers),
@@ -2920,7 +2945,8 @@ func (fp *responsivePool) serve() {
 //
 // What remains wall-clock is only the outer bound (the session context),
 // which now functions purely as a ceiling on total test time: reaching
-// it reports exactly which signals never fired.
+// it ends the session, and the assertions judge the quiesced end state,
+// reporting exactly which signals the session never produced.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -2968,13 +2994,43 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 
 	// Phase 1 deposits no ticks: the handler counters and the latency
 	// gauge must latch from the share-settle path alone. Phase 2 then
-	// drives the stats branch by depositing ticks (keeping the
-	// single-slot buffer full) until the hashrate gauge publishes a
-	// warmed-window rate. Each signal is latched as it is observed; the
-	// counters are monotonic and the p95 gauge is sticky once set.
+	// drives the stats branch — a feeder goroutine keeps the
+	// single-slot tick buffer full — until the hashrate gauge publishes
+	// a warmed-window rate. Each signal is latched as it is observed;
+	// the counters are monotonic and the p95 gauge is sticky once set.
+	//
+	// The in-loop latches are not the verdict, though (failure mode 4
+	// in the doc comment): the loop can exit on the context deadline
+	// between the session publishing a signal and the next poll tick
+	// observing it. So once the session has ended, the final values
+	// are latched once more from the quiesced session — counters and
+	// latency gauges are stable at that point by construction — and
+	// the assertions below judge that end state.
 	var sawAccepted, sawRejected, sawHashrate, sawLatency bool
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
+
+	// Phase 2 tick feeder: keeps tickCh full for as long as phase 2
+	// runs, so tick delivery does not depend on the poll goroutine
+	// winning a scheduling slot on a contended runner. Stopped before
+	// the session is cancelled, so it can never block on a session
+	// that has already exited.
+	var feedStop, feedDone chan struct{}
+	startFeeder := func() {
+		feedStop = make(chan struct{})
+		feedDone = make(chan struct{})
+		go func() {
+			defer close(feedDone)
+			for {
+				select {
+				case tickCh <- time.Now():
+				case <-feedStop:
+					return
+				}
+			}
+		}()
+	}
+
 waitLoop:
 	for {
 		select {
@@ -2992,9 +3048,8 @@ waitLoop:
 			}
 			if sawAccepted && sawRejected && sawLatency {
 				// Phase 2: drive the stats branch.
-				select {
-				case tickCh <- time.Now():
-				default:
+				if feedStop == nil {
+					startFeeder()
 				}
 				if m.hashrate.Value() > 0 {
 					sawHashrate = true
@@ -3005,8 +3060,31 @@ waitLoop:
 			}
 		}
 	}
+	if feedStop != nil {
+		close(feedStop)
+		<-feedDone
+	}
 	cancel() // end the session now that we have what we need (or gave up)
 	<-runDone
+
+	// Quiesced final latch: the session goroutine has exited, so every
+	// settle that will ever happen has happened and every publish is
+	// final. The counters are monotonic, the latency gauges only ever
+	// move from 0 to a positive quantile, and the hashrate gauge holds
+	// the last tick's published rate — so these reads are the session's
+	// definitive end state, free of the observation race.
+	if m.sharesAccepted.Value() > 0 {
+		sawAccepted = true
+	}
+	if m.sharesRejected.Value() > 0 {
+		sawRejected = true
+	}
+	if m.submitLatencyP95.Value() > 0 {
+		sawLatency = true
+	}
+	if m.hashrate.Value() > 0 {
+		sawHashrate = true
+	}
 
 	if !sawAccepted {
 		t.Errorf("sharesAccepted never became nonzero (now %d); SubmitSharesSuccess handler was not exercised",
