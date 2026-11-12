@@ -433,6 +433,32 @@ func (l *LatencyTracker) Quantile(q float64) float64 {
 	return cp[idx]
 }
 
+// publishLatencyGauges refreshes the submit-latency quantile gauges from
+// the tracker. It is called from the stats-tick branch and from the
+// share-settle paths (the SubmitSharesSuccess / SubmitSharesError
+// handlers in V2, the submit goroutine in V1) whenever a sample lands.
+//
+// Publishing only from the tick made the gauges hostages to the session
+// loop's scheduling: the tick is one select case competing with pool and
+// share traffic, and on a heavily oversubscribed CI runner a whole
+// session can pass without the tick executing after the first sample —
+// the gauges then read 0 despite samples existing (PR #1424, CI run
+// #6336). The settle path is where a sample lands, so it is the honest
+// place to publish; the submit rate cap (8/s + burst) bounds how often
+// it runs, and a quantile recomputation is a sort of at most 256
+// samples, so the cost stays negligible. The tick keeps refreshing the
+// same values and still owns the periodic latency log line.
+func publishLatencyGauges(m *engineMetrics, latency *LatencyTracker) {
+	if m == nil {
+		return
+	}
+	if p95 := latency.Quantile(0.95); p95 > 0 {
+		m.submitLatencyP50.Set(latency.Quantile(0.50))
+		m.submitLatencyP95.Set(p95)
+		m.submitLatencyP99.Set(latency.Quantile(0.99))
+	}
+}
+
 // HashrateMonitor watches for a stalled miner: a hashrate that has been
 // at or below a floor for several consecutive samples. This is the
 // safety net every comparable miner has (cgminer/Awesome Miner

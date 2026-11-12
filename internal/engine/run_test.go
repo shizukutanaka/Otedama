@@ -2865,40 +2865,62 @@ func (fp *responsivePool) serve() {
 // TestRunSession_StatsTickAndShareResponses exercises the two largest
 // uncovered regions of runSession: the stats-ticker branch (hashrate,
 // uptime, J/TH, and latency-quantile logging) and the SubmitSharesSuccess /
-// SubmitSharesError inCh handlers. It calls runSession directly with a very
-// short stats interval so the ticker fires many times during the test.
+// SubmitSharesError inCh handlers.
 //
-// This test used to race a fixed real-time window (originally 2s, later
-// widened to 4s): it waited for runSession to return, then checked whether
-// a "submit latency" log line had appeared anywhere in that window. That
-// line is written only from inside the stats-ticker branch, which must win
-// a select slot against two channels (inCh/opts.merged) that are
-// effectively always ready once shares start flowing — under `go test
-// ./...` CPU contention the ticker case could occasionally be starved long
-// enough to miss even a several-second window, despite every individual
-// protocol step completing in milliseconds in isolation (confirmed
-// pre-existing: the same fragile structure existed at commit 2faae1f, and
-// is tracked at RESEARCH_IMPROVEMENTS.md Category 7 item 12). Padding the
-// timeout further showed diminishing returns in testing.
+// This test has failed in three distinct ways, each one a lesson in what
+// a session-level test may not rest on:
 //
-// The fix: actively poll the deterministic signal (the submitLatencyP95
-// gauge becoming nonzero) with a generous but bounded retry loop, instead
-// of passively hoping a fixed window catches it. The test now succeeds as
-// soon as the condition is actually true rather than racing a guess at how
-// long that might take under unknown contention.
+//  1. Fixed-window race (original form): it waited for runSession to
+//     return, then checked whether a "submit latency" log line had
+//     appeared in the window. That line is written only from the
+//     stats-ticker branch, which must win a select slot against channels
+//     that are effectively always ready once shares flow.
+//  2. Single-signal poll (first fix): polling only the submitLatencyP95
+//     gauge raced it against the hashrate gauge, whose sliding window is
+//     0 on its first observation by design — if the p95-publishing tick
+//     was the baseline tick, the hashrate assertion failed on a session
+//     that had actually exercised everything.
+//  3. Conjunction latch over a real-time ticker (PR #1424): waiting for
+//     all four signals over the session's own 15s lifetime still failed
+//     on the PR's first Windows CI run (#6336), with ONLY the latency
+//     assertion unmet: the counters had latched, yet submitLatencyP95
+//     was still 0 when the session ended. That combination has exactly
+//     one mechanism. The samples are recorded synchronously by the
+//     SubmitSharesSuccess / SubmitSharesError handlers (run.go), so a
+//     nonzero counter proves a sample exists; and LatencyTracker
+//     .Quantile returns 0 only when the tracker is empty (stats.go), so
+//     a tick executing after the first sample would have published a
+//     nonzero p95. Therefore no stats tick executed after the first
+//     sample landed, for the remaining ~15s: on the 2-core Windows CI
+//     runner — go test ./... with -covermode=atomic instrumenting every
+//     package at once — the session loop's scheduling is too coarse for
+//     a real-time ticker's select slot to be part of a test's
+//     correctness. No wall-clock bound fixes a scheduling lottery; the
+//     dependency itself has to go.
 //
-// Polling alone did not remove the failure, because starvation of the
-// ticker branch was not the (only) cause: the fake pool acknowledged only
-// the first share, so the whole latency assertion rested on a single
-// sample from a single ack frame, and any delay in processing that one
-// frame past the poll window — as happens under full-suite contention on
-// small CI runners — left no sample at all. (First diagnosed in commit
-// 88a18f5c, where the delay mechanism was submitTimes eviction; the
-// submit rate cap has since made eviction unreachable inside this test,
-// but the single-sample dependency remained, and the failure recurred on
-// the 2-core Windows CI runner.) The pool now acknowledges every share
-// but the second — see the note in responsivePool.serve — so samples are
-// recorded continuously and the poll no longer bets on one frame.
+// The dependency is removed in the two places it lived:
+//
+//   - The latency-quantile gauges are now published when a sample is
+//     recorded (publishLatencyGauges, called from both settle handlers),
+//     not only from the stats-tick branch. The gauges are defined as the
+//     quantiles of the recorded samples; the settle path is where a
+//     sample lands, and the submit rate cap (8/s + burst) bounds how
+//     often it can run, so the recomputation stays cheap. The tick keeps
+//     refreshing the same values and still owns the latency log line.
+//     Phase 1 below pins this: it deposits NO ticks at all, so under the
+//     old tick-only publication the p95 gauge could never be set — the
+//     pre-fix code fails this phase deterministically, on any machine,
+//     with no load required.
+//   - The hashrate gauge genuinely cannot be published at settle time:
+//     a windowed rate needs two tick observations (baseline, then
+//     warmed). So the test drives the stats branch itself through
+//     sessionOpts.statsTick — phase 2 deposits ticks until the
+//     warmed-window rate appears — instead of asking a wall-clock timer
+//     to fire inside a session it does not control.
+//
+// What remains wall-clock is only the outer bound (the session context),
+// which now functions purely as a ceiling on total test time: reaching
+// it reports exactly which signals never fired.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -2908,10 +2930,10 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
-	// Generous outer bound: this is a ceiling on total test time, not the
-	// budget the assertions race against (the polling loop below ends the
-	// session as soon as its condition is met, well before this fires in
-	// the normal case).
+	// Outer bound only: a ceiling on total test time, not a window any
+	// assertion races against (the phases below end the session as soon
+	// as their conditions hold, well before this fires in the normal
+	// case).
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -2921,6 +2943,11 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
+
+	// Manual stats ticks: the session consumes exactly the ticks this
+	// test deposits, so the stats branch runs when the test's
+	// preconditions hold — never on a timer's schedule.
+	tickCh := make(chan time.Time, 1)
 
 	runDone := make(chan struct{})
 	go func() {
@@ -2932,40 +2959,62 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 			workers:    []*miner.Worker{w},
 			merged:     merged,
 			interval:   5 * time.Millisecond,
+			statsTick:  tickCh,
 			m:          m,
 			powerWatts: 100.0,
 			log:        func(_, _ string) {},
 		})
 	}()
 
-	// Poll for the deterministic signal that the stats-ticker branch has
-	// actually executed with a recorded latency sample, rather than
-	// waiting a fixed duration and hoping. 10s ceiling is itself generous;
-	// in the unstarved case this resolves within milliseconds.
-	deadline := time.After(10 * time.Second)
+	// Phase 1 deposits no ticks: the handler counters and the latency
+	// gauge must latch from the share-settle path alone. Phase 2 then
+	// drives the stats branch by depositing ticks (keeping the
+	// single-slot buffer full) until the hashrate gauge publishes a
+	// warmed-window rate. Each signal is latched as it is observed; the
+	// counters are monotonic and the p95 gauge is sticky once set.
+	var sawAccepted, sawRejected, sawHashrate, sawLatency bool
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
-	latencyObserved := false
 waitLoop:
 	for {
 		select {
+		case <-ctx.Done():
+			break waitLoop
 		case <-poll.C:
+			if m.sharesAccepted.Value() > 0 {
+				sawAccepted = true
+			}
+			if m.sharesRejected.Value() > 0 {
+				sawRejected = true
+			}
 			if m.submitLatencyP95.Value() > 0 {
-				latencyObserved = true
+				sawLatency = true
+			}
+			if sawAccepted && sawRejected && sawLatency {
+				// Phase 2: drive the stats branch.
+				select {
+				case tickCh <- time.Now():
+				default:
+				}
+				if m.hashrate.Value() > 0 {
+					sawHashrate = true
+				}
+			}
+			if sawAccepted && sawRejected && sawHashrate && sawLatency {
 				break waitLoop
 			}
-		case <-deadline:
-			break waitLoop
 		}
 	}
 	cancel() // end the session now that we have what we need (or gave up)
 	<-runDone
 
-	if got := m.sharesAccepted.Value(); got == 0 {
-		t.Error("sharesAccepted == 0; SubmitSharesSuccess handler was not exercised")
+	if !sawAccepted {
+		t.Errorf("sharesAccepted never became nonzero (now %d); SubmitSharesSuccess handler was not exercised",
+			m.sharesAccepted.Value())
 	}
-	if got := m.sharesRejected.Value(); got == 0 {
-		t.Error("sharesRejected == 0; SubmitSharesError handler was not exercised")
+	if !sawRejected {
+		t.Errorf("sharesRejected never became nonzero (now %d); SubmitSharesError handler was not exercised",
+			m.sharesRejected.Value())
 	}
 	// sharesSubmitted counts every real V2 send, so it must be at least as
 	// large as accepted+rejected (every judged share was necessarily sent
@@ -2974,11 +3023,13 @@ waitLoop:
 	if got, want := m.sharesSubmitted.Value(), m.sharesAccepted.Value()+m.sharesRejected.Value(); got < want {
 		t.Errorf("sharesSubmitted = %d, want >= %d (accepted+rejected)", got, want)
 	}
-	if got := m.hashrate.Value(); got == 0 {
-		t.Error("hashrate gauge = 0; stats-tick branch did not run")
+	if !sawHashrate {
+		t.Errorf("hashrate gauge never became nonzero (now %v); stats-tick branch did not publish a warmed-window rate",
+			m.hashrate.Value())
 	}
-	if !latencyObserved {
-		t.Error("submitLatencyP95 never became nonzero within 10s; latency-quantile stats-tick path not covered")
+	if !sawLatency {
+		t.Errorf("submitLatencyP95 never became nonzero (now %v); latency gauges were not published from the share-settle path",
+			m.submitLatencyP95.Value())
 	}
 }
 
@@ -3241,6 +3292,25 @@ waitLoop:
 // TestRunSession_StarvationWarnsOnce exercises the V2 difficulty-starvation
 // tripwire: a near-impossible share target must produce exactly one warning
 // per episode no matter how many stats ticks run.
+//
+// The "no matter how many ticks" clause has a sharp edge, and it is the
+// reason this test flaked on a loaded macOS runner (fired 2 times): a
+// tick whose hashrate sample is 0 — the window's priming sample, or any
+// interval in which the worker recorded no new hashes — makes
+// publishDifficulty zero the estimated-interval gauge, and the warn
+// latch's else arm read that 0 as "episode over" and re-armed. The next
+// positive-rate tick then warned a second time inside the same episode:
+// the pool's difficulty never changed, only a hashrate sample was
+// missing. The latch now clears only on a measured interval (iv > 0)
+// back under the threshold; iv == 0 means "not measurable this tick"
+// and holds the episode state.
+//
+// The test drives the stats branch through sessionOpts.statsTick and
+// walks the failure deterministically: latch the first warning, hammer
+// ticks until a zero-rate tick provably zeroes the gauge (the pre-fix
+// re-arm condition, observed on the gauge itself), then keep driving
+// ticks and require the count to stay at one. On the pre-fix code the
+// last phase fails deterministically, on any machine, with no load.
 func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -3254,6 +3324,8 @@ func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
+	// Outer bound only: a ceiling on total test time, not a window any
+	// assertion races against.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -3274,58 +3346,95 @@ func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 		warns = append(warns, msg)
 		mu.Unlock()
 	}
+	starveWarns := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, s := range warns {
+			if strings.Contains(s, "between shares") {
+				n++
+			}
+		}
+		return n
+	}
 
+	// Manual stats ticks: the session consumes exactly the ticks this
+	// test deposits — never a real-time timer's schedule.
+	tickCh := make(chan time.Time, 1)
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
 		_ = runSession(ctx, sessionOpts{
-			poolURL:  fp.URL(),
-			user:     "bc1qtest000000000000000000000000000000000",
-			workers:  []*miner.Worker{w},
-			merged:   merged,
-			interval: 5 * time.Millisecond,
-			m:        m,
-			log:      logFn,
+			poolURL:   fp.URL(),
+			user:      "bc1qtest000000000000000000000000000000000",
+			workers:   []*miner.Worker{w},
+			merged:    merged,
+			interval:  5 * time.Millisecond,
+			statsTick: tickCh,
+			m:         m,
+			log:       logFn,
 		})
 	}()
-
-	// First warn should appear quickly once a tick observes the huge
-	// estimated interval; let many more ticks run to prove it stays once.
-	deadline := time.After(10 * time.Second)
-	poll := time.NewTicker(5 * time.Millisecond)
-	defer poll.Stop()
-waitLoop:
-	for {
+	deposit := func() {
 		select {
-		case <-poll.C:
-			mu.Lock()
-			n := len(warns)
-			mu.Unlock()
-			if n > 0 {
-				break waitLoop
-			}
-		case <-deadline:
-			break waitLoop
+		case tickCh <- time.Now():
+		default:
 		}
 	}
-	// A few hundred ms of extra ticks — warn-once is the assertion.
-	time.Sleep(200 * time.Millisecond)
+
+	// Phase 1: drive ticks until the first warning latches.
+	phaseDeadline := time.Now().Add(5 * time.Second)
+	for starveWarns() == 0 && time.Now().Before(phaseDeadline) {
+		deposit()
+		time.Sleep(2 * time.Millisecond)
+	}
+	if starveWarns() == 0 {
+		cancel()
+		<-runDone
+		t.Fatalf("starvation warning never fired; warns=%v", warns)
+	}
+
+	// Phase 2: hammer ticks back-to-back. The tick intervals collapse
+	// far below the single worker thread's hash cadence, so some tick's
+	// window increment is 0, its rate is 0, and publishDifficulty zeroes
+	// the gauge. Observing the gauge at 0 proves a tick ran whose latch
+	// arm saw iv == 0 — the pre-fix re-arm.
+	sawZero := false
+	phaseDeadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(phaseDeadline) {
+		deposit()
+		if m.estimatedShareIntervalSeconds.Value() == 0 {
+			sawZero = true
+			break
+		}
+	}
+	if !sawZero {
+		cancel()
+		<-runDone
+		t.Fatalf("estimated-interval gauge never zeroed; zero-rate tick condition not exercised")
+	}
+
+	// Phase 3: keep driving ticks until the gauge provably returns to a
+	// huge measured interval (a tick reached the warn decision with a
+	// positive rate), then drive many more. The count must stay at one:
+	// on the pre-fix latch, phase 2 re-armed it and this phase's ticks
+	// fire the second warning.
+	phaseDeadline = time.Now().Add(4 * time.Second)
+	for m.estimatedShareIntervalSeconds.Value() <= 3600 && time.Now().Before(phaseDeadline) {
+		deposit()
+		time.Sleep(time.Millisecond)
+	}
+	for i := 0; i < 200; i++ {
+		deposit()
+		time.Sleep(time.Millisecond)
+	}
 	cancel()
 	<-runDone
 
-	mu.Lock()
-	defer mu.Unlock()
-	var starveWarns int
-	for _, w := range warns {
-		if strings.Contains(w, "between shares") {
-			starveWarns++
-		}
-	}
-	if starveWarns == 0 {
+	if n := starveWarns(); n == 0 {
 		t.Errorf("starvation warning never fired; warns=%v", warns)
-	}
-	if starveWarns > 1 {
-		t.Errorf("starvation warning fired %d times, want once per episode", starveWarns)
+	} else if n > 1 {
+		t.Errorf("starvation warning fired %d times, want once per episode", n)
 	}
 }
 
