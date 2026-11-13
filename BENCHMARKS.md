@@ -176,10 +176,11 @@ Numbers above are measured on:
 - **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
 - **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
 
-**Note (session 484):** the published numbers were measured with Go
-1.22, but current master requires Go ≥1.24 (`godebug tlsmlkem` in
-`go.mod` fails to parse on older toolchains), so the reproduce
-commands above must be run with Go 1.24 or newer.
+**Note (session 484, updated 2026-11-13):** the published numbers
+were measured with Go 1.22, but current master requires Go ≥1.26
+(`go 1.26.0` in `go.mod`; the floor was raised from 1.24 on
+2026-11-13 — see the bump record in GODEBUG_NOTES.md), so the
+reproduce commands above must be run with Go 1.26 or newer.
 
 Readers may see different numbers on different hardware; the relative
 rankings should remain stable.
