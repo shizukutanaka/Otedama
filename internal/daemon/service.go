@@ -161,7 +161,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 			configHome = filepath.Join(home, ".config")
 		}
 		dir := filepath.Join(configHome, "systemd", "user")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- shared OS-standard dir (systemd user units); the unit file installed into it is written 0600 and contains only paths and flags, no secrets //nolint:gosec
 			return "", err
 		}
 		return filepath.Join(dir, systemdUnitName), nil
@@ -175,7 +175,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 		configHome = filepath.Join(home, ".config")
 	}
 	dir := filepath.Join(configHome, "systemd", "user")
-	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G703 -- dir is the user's own config home plus constant components ("systemd/user"); no untrusted input reaches this path //nolint:gosec
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G703 G301 -- dir is the user's own config home plus constant components ("systemd/user"); no untrusted input reaches this path, and the unit file installed into it is written 0600 with no secrets //nolint:gosec
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil
@@ -303,7 +303,7 @@ func (m *Manager) launchdPlistPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, "Library", "LaunchAgents")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- shared OS-standard dir (per-user LaunchAgents); the plist installed into it is written 0600 and contains only paths and flags, no secrets //nolint:gosec
 		return "", err
 	}
 	return filepath.Join(dir, launchdLabel+".plist"), nil
@@ -395,7 +395,7 @@ func launchdLogPath(name string) string {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	dir := filepath.Join(home, "Library", "Logs")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- shared OS-standard dir used by all apps; the log files in it are created by launchd, not this code, and ~/Library is 0700 by default on macOS //nolint:gosec
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	return filepath.Join(dir, name)

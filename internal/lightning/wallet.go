@@ -319,13 +319,13 @@ func (wm *WalletManager) save(seed Seed, passphrase string, reader io.Reader) er
 	// Set restrictive permissions before the rename so the final file
 	// is never readable by other users, even momentarily.
 	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup on an error path that already returns the primary error; the temp file is 0600 inside the 0700 data dir, holds only encrypted seed bytes, and stale copies are swept at startup //nolint:gosec
 		return fmt.Errorf("lightning: chmod temp wallet file: %w", err)
 	}
 
 	finalPath := filepath.Join(wm.dataDir, walletFile)
 	if err := os.Rename(tmpPath, finalPath); err != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup on an error path that already returns the primary error; the temp file is 0600 inside the 0700 data dir, holds only encrypted seed bytes, and stale copies are swept at startup //nolint:gosec
 		return fmt.Errorf("lightning: rename wallet file: %w", err)
 	}
 	return nil
