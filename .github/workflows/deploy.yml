@@ -41,10 +41,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -69,10 +69,10 @@ jobs:
       image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       
       - name: Set build date
         id: date
@@ -82,7 +82,7 @@ jobs:
         # Pull requests get a build-only check: a fork's GITHUB_TOKEN is
         # read-only regardless of job permissions, so a push would fail.
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -90,7 +90,7 @@ jobs:
       
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -100,7 +100,7 @@ jobs:
       
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           # Only push/tag events publish; pull_request builds validate the
@@ -123,10 +123,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -138,14 +138,14 @@ jobs:
         run: echo "IMAGE_REF=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')@${{ needs.build.outputs.image-digest }}" >> $GITHUB_ENV
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_REF }}
           format: 'sarif'
           output: 'trivy-results.sarif'
       
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -155,15 +155,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Setup Kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8 # v3
         with:
           version: 'v1.28.0'
       
       - name: Setup Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3
         with:
           version: 'v3.12.0'
       
@@ -177,6 +177,8 @@ jobs:
       
       - name: Deploy to staging
         env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image-digest }}
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
         if: ${{ env.KUBECONFIG_B64 != '' }}
         run: |
@@ -185,8 +187,8 @@ jobs:
             --create-namespace \
             --values ./kubernetes/helm/otedama/values.yaml \
             --values ./kubernetes/helm/otedama/values-staging.yaml \
-            --set image.tag="${{ needs.build.outputs.image-tag }}" \
-            --set image.digest="${{ needs.build.outputs.image-digest }}" \
+            --set image.tag="${IMAGE_TAG}" \
+            --set image.digest="${IMAGE_DIGEST}" \
             --wait \
             --timeout 10m
       
@@ -212,15 +214,15 @@ jobs:
     environment:
       name: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Setup Kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8 # v3
         with:
           version: 'v1.28.0'
       
       - name: Setup Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3
         with:
           version: 'v3.12.0'
       
@@ -243,6 +245,10 @@ jobs:
       
       - name: Deploy to production
         env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.image-digest }}
+          REF_NAME: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
           KUBECONFIG_B64: ${{ secrets.PRODUCTION_KUBECONFIG }}
         if: ${{ env.KUBECONFIG_B64 != '' }}
         run: |
@@ -251,9 +257,9 @@ jobs:
             --create-namespace \
             --values ./kubernetes/helm/otedama/values.yaml \
             --values ./kubernetes/helm/otedama/values-production.yaml \
-            --set image.tag="${{ needs.build.outputs.image-tag }}" \
-            --set image.digest="${{ needs.build.outputs.image-digest }}" \
-            --set-string podAnnotations."kubernetes\.io/change-cause"="Deployment ${{ github.ref_name }} by ${{ github.actor }}" \
+            --set image.tag="${IMAGE_TAG}" \
+            --set image.digest="${IMAGE_DIGEST}" \
+            --set-string podAnnotations."kubernetes\.io/change-cause"="Deployment ${REF_NAME} by ${ACTOR}" \
             --atomic \
             --timeout 15m
       
@@ -300,7 +306,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: ${{ env.SLACK_WEBHOOK_URL != '' }}
-        uses: 8398a7/action-slack@v3
+        uses: 8398a7/action-slack@77eaa4f1c608a7d68b38af4e3f739dcd8cba273e # v3
         with:
           status: custom
           custom_payload: |

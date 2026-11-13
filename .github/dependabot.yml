@@ -14,6 +14,11 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    # Cooldown: wait 7 days after a release before opening a version-update
+    # PR, so yanked or compromised releases surface first. Security updates
+    # are not delayed by cooldown.
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "go"
@@ -41,6 +46,8 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "github-actions"
@@ -53,6 +60,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "docker"
