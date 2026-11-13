@@ -28,7 +28,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
         fetch-depth: 0
 
@@ -57,7 +57,7 @@ jobs:
 
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -93,10 +93,10 @@ jobs:
             suffix: ".exe"
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
@@ -117,13 +117,19 @@ jobs:
 
     - name: Upload Release Asset
       env:
+        REF_NAME: ${{ github.ref_name }}
+        MATRIX_OS: ${{ matrix.os }}
+        MATRIX_ARCH: ${{ matrix.arch }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" --clobber
+      run: gh release upload "${REF_NAME}" "otedama-${MATRIX_OS}-${MATRIX_ARCH}.tar.gz" --clobber
 
     - name: Upload Release Checksum
       env:
+        REF_NAME: ${{ github.ref_name }}
+        MATRIX_OS: ${{ matrix.os }}
+        MATRIX_ARCH: ${{ matrix.arch }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: gh release upload "${{ github.ref_name }}" "otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256" --clobber
+      run: gh release upload "${REF_NAME}" "otedama-${MATRIX_OS}-${MATRIX_ARCH}.tar.gz.sha256" --clobber
 
   build-packages:
     name: Build Distribution Packages
@@ -134,10 +140,10 @@ jobs:
     needs: create-release
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
@@ -185,17 +191,19 @@ jobs:
 
     - name: Upload DEB package
       env:
+        REF_NAME: ${{ github.ref_name }}
+        VERSION: ${{ needs.create-release.outputs.version }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        VERSION=${{ needs.create-release.outputs.version }}
-        gh release upload "${{ github.ref_name }}" otedama_*_amd64.deb --clobber
+        gh release upload "${REF_NAME}" otedama_*_amd64.deb --clobber
 
     - name: Upload RPM package
       env:
+        REF_NAME: ${{ github.ref_name }}
+        VERSION: ${{ needs.create-release.outputs.version }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        VERSION=${{ needs.create-release.outputs.version }}
-        gh release upload "${{ github.ref_name }}" otedama-*.x86_64.rpm --clobber
+        gh release upload "${REF_NAME}" otedama-*.x86_64.rpm --clobber
 
   checksums:
     name: Publish combined checksums.txt
@@ -211,12 +219,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           mkdir -p assets
-          gh release download "${{ github.ref_name }}" -p "otedama-*.tar.gz" -D assets --clobber
+          gh release download "${REF_NAME}" -p "otedama-*.tar.gz" -D assets --clobber
           cd assets
           sha256sum otedama-*.tar.gz > checksums.txt
-          gh release upload "${{ github.ref_name }}" checksums.txt --clobber
+          gh release upload "${REF_NAME}" checksums.txt --clobber
 
   update-homebrew:
     name: Update Homebrew Formula
@@ -226,12 +235,12 @@ jobs:
     if: vars.HOMEBREW_TAP_REPO != ''
     steps:
     - name: Checkout Homebrew tap
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
         repository: ${{ vars.HOMEBREW_TAP_REPO }}
         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     - name: Update Homebrew formula
-      uses: peter-evans/create-pull-request@v5
+      uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
       with:
         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         path: .

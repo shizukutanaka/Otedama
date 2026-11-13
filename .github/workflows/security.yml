@@ -25,24 +25,24 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.x'
           cache: true
       
       # Static Analysis with gosec
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@v2.29.0
+        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
         with:
           args: '-fmt sarif -out gosec-results.sarif -stdout -verbose=text -severity high ./...'
       
       - name: Upload gosec results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: gosec-results.sarif
       
@@ -64,19 +64,19 @@ jobs:
       
       # CodeQL Analysis
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           languages: go
       
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
       
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
       
       # Trivy vulnerability scanner
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -85,7 +85,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
       
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: 'trivy-results.sarif'
       
@@ -102,7 +102,7 @@ jobs:
       # scan the whole history, so the daily run doubles as a
       # full-history audit while push/PR runs stay incremental.
       - name: Scan for secrets with Trufflehog
-        uses: trufflesecurity/trufflehog@v3.97.9
+        uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           path: ./
       
@@ -120,7 +120,7 @@ jobs:
       
       - name: Upload Semgrep results
         if: always() && hashFiles('semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: semgrep.sarif
 
@@ -132,20 +132,20 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Build container image
         run: docker build -t otedama:${{ github.sha }} .
       
       - name: Run Trivy container scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: 'otedama:${{ github.sha }}'
           format: 'sarif'
           output: 'container-scan.sarif'
       
       - name: Upload container scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: 'container-scan.sarif'
       
@@ -156,8 +156,11 @@ jobs:
         # never ran and the job failed without any findings. v7 tracks
         # the current Grype (DB schema v6) and refreshes the DB per run.
         # The floating major tag is deliberate: DB-handling fixes land in
-        # patch releases and must flow in automatically.
-        uses: anchore/scan-action@v7
+        # patch releases and must flow in automatically. This is the one
+        # documented exception to the repo-wide "pin actions to a commit
+        # SHA" policy, so the Semgrep mutable-tag finding is suppressed
+        # for this line only.
+        uses: anchore/scan-action@v7 # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag -- deliberate floating tag; see comment above
         with:
           image: 'otedama:${{ github.sha }}'
           fail-build: true
@@ -170,7 +173,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       
       - name: Check for sensitive data patterns
         run: |
@@ -211,7 +214,7 @@ jobs:
     
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: security-artifacts
       
@@ -229,14 +232,14 @@ jobs:
           echo "- Compliance: ${{ needs.compliance-check.result }}" >> security-report.md
       
       - name: Upload security report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: security-report
           path: security-report.md
       
       - name: Comment PR with security status
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const report = `## Security Scan Results
