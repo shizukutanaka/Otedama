@@ -506,6 +506,10 @@ cosmetic leftover).
   line per file: pin `1.24.x` (or drop `GOTOOLCHAIN=local`). A PR doing
   this was closed without merge — treated here as a pending maintainer
   decision about the pin policy, not as an open bug to re-deliver.
+  **Update (2026-11-13): resolved.** PRs #1428/#1429 raised every CI
+  pin to 1.26.x and the module floor to `go 1.26.0` (see the bump
+  record in GODEBUG_NOTES.md); the description above is retained as
+  the record of the failure signature, not as current state.
 - **`deploy.yml` `deploy-staging`/`deploy-production`** still run
   `helm upgrade --install … ./kubernetes/helm/otedama` against a chart
   path that does not exist (no `kubernetes/` directory; CLAUDE.md's map
@@ -552,7 +556,7 @@ because their target assets don't exist in the tree. `ci-cd.yml` adds
 only noise: every job it would run is also covered (better) elsewhere.
 
 **Workaround:** Read `Test Changed Packages (PR)` and the local gate
-(`go build ./... && go vet ./... && go test ./...` on Go ≥1.24) as the
+(`go build ./... && go vet ./... && go test ./...` on Go ≥1.26) as the
 real signal; ignore the Go-pin red. Do not cut a `v*` tag expecting
 `build-packages` to produce `.deb`/`.rpm`, and do not treat the
 `deploy-*` jobs as deployable infrastructure.
