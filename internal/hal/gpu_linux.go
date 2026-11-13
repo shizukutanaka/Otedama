@@ -171,7 +171,7 @@ func inferModel(devicePath, vendorID string) string {
 // readSysFile reads a sysfs attribute file and returns its content,
 // with leading/trailing whitespace trimmed. Returns empty string on error.
 func readSysFile(path string) string {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) // #nosec G304 -- path is a constant sysfs attribute name ("vendor"/"uevent") joined to a DRM device path enumerated from /sys/class/drm; no untrusted input reaches it //nolint:gosec
 	if err != nil {
 		return ""
 	}

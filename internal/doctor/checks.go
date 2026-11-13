@@ -301,7 +301,7 @@ func checkWallet(dataDir string) Check {
 
 			// Wallet exists — read the public fingerprint file for display.
 			fpPath := filepath.Join(dir, walletFingerprintFile)
-			fp, err := os.ReadFile(fpPath)
+			fp, err := os.ReadFile(fpPath) // #nosec G304 -- constant filename inside the invoking user's own data dir; the file holds a public wallet fingerprint and its content is shape-validated before display //nolint:gosec
 			if err != nil {
 				return Result{
 					Status: StatusPass,
