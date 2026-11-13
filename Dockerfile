@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Install git for go module fetching and ca-certificates for TLS.
 RUN apk add --no-cache git ca-certificates tzdata
