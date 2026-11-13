@@ -1035,7 +1035,7 @@ func isFingerprint(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+		if ('0' > c || c > '9') && ('a' > c || c > 'f') {
 			return false
 		}
 	}

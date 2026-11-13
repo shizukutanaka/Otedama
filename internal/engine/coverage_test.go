@@ -3191,10 +3191,10 @@ func buildV1CoinbaseParts(outs [][]byte) (string, string) {
 	b1.WriteString("07")                     // scriptSig length = 3 + 4
 	var b2 strings.Builder
 	b2.WriteString("ffffffff") // sequence
-	b2.WriteString(fmt.Sprintf("%02x", len(outs)))
+	fmt.Fprintf(&b2, "%02x", len(outs))
 	for _, o := range outs {
 		b2.WriteString("00f2052a01000000") // 50 BTC
-		b2.WriteString(fmt.Sprintf("%02x", len(o)))
+		fmt.Fprintf(&b2, "%02x", len(o))
 		b2.WriteString(hex.EncodeToString(o))
 	}
 	b2.WriteString("00000000") // locktime

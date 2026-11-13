@@ -26,7 +26,7 @@ func loadConfigFile(path string, stderr io.Writer) config.Config {
 	if path == "" {
 		return config.Config{}
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G703 -- path is the invoking user's own config file (--config flag, OTEDAMA_CONFIG, or the platform default); opening it is the tool's purpose //nolint:gosec
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
