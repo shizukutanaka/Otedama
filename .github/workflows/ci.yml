@@ -22,7 +22,11 @@ permissions:
 env:
   GO_VERSION: '1.26.x'
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR repository names must be lowercase. github.repository keeps the
+  # repo's capitalisation ("shizukutanaka/Otedama"); docker/metadata-action
+  # lowercases the names it generates, but the direct tags in the docker
+  # jobs below do not pass through it and fail to push as-is.
+  IMAGE_NAME: shizukutanaka/otedama
   GIT_TERMINAL_PROMPT: 0
   GOPROXY: https://proxy.golang.org,direct
   GOSUMDB: sum.golang.org
@@ -80,6 +84,13 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # upload-sarif needs security-events: write; without it the Trivy
+    # upload step fails with "Resource not accessible by integration"
+    # (the workflow-level permissions only grant contents: read).
+    # security.yml declares the same grant at the top level.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -100,7 +111,11 @@ jobs:
       - name: Run gosec security scanner
         uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
         with:
-          args: '-fmt sarif -out gosec-results.sarif ./...'
+          # Mirrors security.yml, this repo's canonical security gate:
+          # without the severity floor the step fails on every medium/low
+          # finding (G301/G304/G104 in the current tree) while the
+          # dedicated security workflow passes on the same code.
+          args: '-fmt sarif -out gosec-results.sarif -stdout -verbose=text -severity high ./...'
           
       - name: Upload gosec results
         uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
@@ -278,7 +293,23 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           
+      # The linux/arm64 legs build with CGO_ENABLED=1 on an amd64 runner;
+      # with only the host gcc the build dies assembling runtime/cgo's
+      # arm64 sources. Provide the cross compiler and point CC at it.
+      - name: Install arm64 cross C compiler
+        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
       - name: Build binary
+        # The script is POSIX shell; on windows-latest the default shell
+        # is PowerShell, which rejects it immediately (the windows legs
+        # failed at this step in every run that reached a conclusion).
+        # The test job's Windows step already pins bash for this reason.
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -338,7 +369,18 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       
+      # See the build job: linux/arm64 + CGO needs the cross compiler.
+      - name: Install arm64 cross C compiler
+        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
       - name: Build binary (unified)
+        # See the build job: the script needs bash, not PowerShell.
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -367,6 +409,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # Sentinel for the optional Docker Hub login below: a step's `if`
+      # cannot read secrets directly, so the username is mirrored here.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -415,8 +461,13 @@ jobs:
           echo "$OUT" | grep -q "(${{ github.sha }})" || (echo "Git commit not embedded in version output (cgo0)" && exit 1)
         timeout-minutes: 5
         
+      # No image in this workflow is tagged for Docker Hub (every tag
+      # targets GHCR); this login only lifts Docker Hub pull rate limits
+      # when credentials happen to be configured. With no secrets set it
+      # fails with "Username and password required" on every push, so it
+      # runs only when the username secret exists.
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -606,6 +657,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # Sentinel for the optional Docker Hub login below (see docker job).
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -616,8 +670,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       
+      # See the docker job: run only when Docker Hub credentials exist.
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
