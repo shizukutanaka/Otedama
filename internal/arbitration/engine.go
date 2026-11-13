@@ -292,6 +292,35 @@ type DeviceRef struct {
 	Capabilities hal.Capabilities
 }
 
+// validateInput rejects malformed Decide input: a nil Input, an invalid
+// Policy, a negative or non-finite hysteresis margin or minimum-yield
+// floor, and duplicate device IDs.
+func validateInput(in *Input) error {
+	if in == nil {
+		return errors.New("arbitration: nil Input")
+	}
+	if !in.Policy.Valid() {
+		return fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
+	}
+	if in.HysteresisMargin < 0 || math.IsNaN(in.HysteresisMargin) || math.IsInf(in.HysteresisMargin, 0) {
+		return errors.New("arbitration: HysteresisMargin must be non-negative and finite")
+	}
+	if in.MinYieldSatsPerSec < 0 || math.IsNaN(in.MinYieldSatsPerSec) || math.IsInf(in.MinYieldSatsPerSec, 0) {
+		return errors.New("arbitration: MinYieldSatsPerSec must be non-negative and finite")
+	}
+
+	// Reject duplicate device IDs up front, since silently ignoring
+	// duplicates could cause subtle allocation bugs.
+	seen := make(map[string]struct{}, len(in.Devices))
+	for _, d := range in.Devices {
+		if _, dup := seen[d.Identity.ID]; dup {
+			return fmt.Errorf("arbitration: duplicate device ID %q", d.Identity.ID)
+		}
+		seen[d.Identity.ID] = struct{}{}
+	}
+	return nil
+}
+
 // Decide computes the optimal Allocation for the given input.
 //
 // Decide is deterministic: for any two identical inputs, it returns
@@ -305,27 +334,8 @@ type DeviceRef struct {
 // are handled by leaving the affected devices idle, not by returning
 // an error.
 func Decide(in *Input) (*Allocation, error) {
-	if in == nil {
-		return nil, errors.New("arbitration: nil Input")
-	}
-	if !in.Policy.Valid() {
-		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
-	}
-	if in.HysteresisMargin < 0 || math.IsNaN(in.HysteresisMargin) || math.IsInf(in.HysteresisMargin, 0) {
-		return nil, errors.New("arbitration: HysteresisMargin must be non-negative and finite")
-	}
-	if in.MinYieldSatsPerSec < 0 || math.IsNaN(in.MinYieldSatsPerSec) || math.IsInf(in.MinYieldSatsPerSec, 0) {
-		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative and finite")
-	}
-
-	// Reject duplicate device IDs up front, since silently ignoring
-	// duplicates could cause subtle allocation bugs.
-	seen := make(map[string]struct{}, len(in.Devices))
-	for _, d := range in.Devices {
-		if _, dup := seen[d.Identity.ID]; dup {
-			return nil, fmt.Errorf("arbitration: duplicate device ID %q", d.Identity.ID)
-		}
-		seen[d.Identity.ID] = struct{}{}
+	if err := validateInput(in); err != nil {
+		return nil, err
 	}
 
 	// Sort devices by ID for deterministic output order.
@@ -427,7 +437,7 @@ func chooseForDevice(
 	// policies a higher raw yield with a worse rating is correctly treated
 	// as a marginal (or non-existent) gain rather than a reason to switch.
 	if previous.Stream != "" {
-		if held, ok := incumbentHold(dev, candidates, best, bestScore, previous, policy, hysteresis, maxRaw); ok {
+		if held, ok := incumbentHold(dev, candidates, &best, bestScore, previous, policy, hysteresis, maxRaw); ok {
 			return held
 		}
 	}
@@ -478,7 +488,7 @@ func candidateStreams(dev DeviceRef, streams []Stream, minYield float64) (cands 
 func incumbentHold(
 	dev DeviceRef,
 	candidates []streamCandidate,
-	best streamCandidate,
+	best *streamCandidate,
 	bestScore float64,
 	previous *Assignment,
 	policy Policy,

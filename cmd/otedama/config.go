@@ -58,7 +58,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	for _, w := range config.EnvWarnings(nil) {
 		fmt.Fprintf(stderr, "config: warning: %s\n", w)
 	}
-	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
+	cfg, origins := config.ResolveWithOrigins(&fromFile, nil, &f.FlagValues)
 
 	if f.jsonOut {
 		return writeConfigJSON(stdout, stderr, &cfg, origins, f.showOrigin)

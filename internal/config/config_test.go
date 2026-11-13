@@ -540,7 +540,7 @@ func TestValidate_MinYieldSatsPerSec(t *testing.T) {
 
 func TestResolve_MinYieldSatsPerSec_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_MIN_YIELD_SATS_PER_SEC": "12.5"}
-	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	cfg, o := ResolveWithOrigins(&Config{}, env, &FlagValues{})
 	if cfg.MinYieldSatsPerSec != 12.5 {
 		t.Errorf("MinYieldSatsPerSec = %g, want 12.5", cfg.MinYieldSatsPerSec)
 	}
@@ -551,7 +551,7 @@ func TestResolve_MinYieldSatsPerSec_EnvOverride(t *testing.T) {
 
 func TestResolve_MinYieldSatsPerSec_FileOverride(t *testing.T) {
 	fromFile := Config{MinYieldSatsPerSec: 7}
-	cfg, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	cfg, o := ResolveWithOrigins(&fromFile, nil, &FlagValues{})
 	if cfg.MinYieldSatsPerSec != 7 {
 		t.Errorf("MinYieldSatsPerSec = %g, want 7 (from file)", cfg.MinYieldSatsPerSec)
 	}
@@ -673,7 +673,7 @@ func TestValidate_ElectricityPricePerKWh(t *testing.T) {
 
 func TestResolve_ElectricityPricePerKWh_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH": "0.12"}
-	cfg, origins := ResolveWithOrigins(Config{}, env, FlagValues{})
+	cfg, origins := ResolveWithOrigins(&Config{}, env, &FlagValues{})
 	if cfg.ElectricityPricePerKWh != 0.12 {
 		t.Errorf("ElectricityPricePerKWh = %g, want 0.12", cfg.ElectricityPricePerKWh)
 	}
@@ -779,7 +779,7 @@ func TestResolve_DataDirDefaultsToOSPath(t *testing.T) {
 // synthesized OS-default path is not misreported as coming from the file,
 // env, or flag layer.
 func TestResolveWithOrigins_DataDirDefaultOriginStaysDefault(t *testing.T) {
-	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	_, o := ResolveWithOrigins(&Config{}, nil, &FlagValues{})
 	if o.DataDir != OriginDefault {
 		t.Errorf("DataDir origin = %v, want OriginDefault", o.DataDir)
 	}
@@ -859,19 +859,19 @@ func TestResolve_HTTPAddrDefaultsToEmpty(t *testing.T) {
 }
 
 func TestResolveWithOrigins_HTTPAddrOriginTracksLayer(t *testing.T) {
-	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	_, o := ResolveWithOrigins(&Config{}, nil, &FlagValues{})
 	if o.HTTPAddr != OriginDefault {
 		t.Errorf("HTTPAddr origin = %v, want default", o.HTTPAddr)
 	}
-	_, o = ResolveWithOrigins(Config{HTTPAddr: "127.0.0.1:9090"}, nil, FlagValues{})
+	_, o = ResolveWithOrigins(&Config{HTTPAddr: "127.0.0.1:9090"}, nil, &FlagValues{})
 	if o.HTTPAddr != OriginFile {
 		t.Errorf("HTTPAddr origin = %v, want file", o.HTTPAddr)
 	}
-	_, o = ResolveWithOrigins(Config{}, map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}, FlagValues{})
+	_, o = ResolveWithOrigins(&Config{}, map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}, &FlagValues{})
 	if o.HTTPAddr != OriginEnv {
 		t.Errorf("HTTPAddr origin = %v, want env", o.HTTPAddr)
 	}
-	_, o = ResolveWithOrigins(Config{}, nil, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	_, o = ResolveWithOrigins(&Config{}, nil, &FlagValues{HTTPAddr: "127.0.0.1:9999"})
 	if o.HTTPAddr != OriginFlag {
 		t.Errorf("HTTPAddr origin = %v, want flag", o.HTTPAddr)
 	}
@@ -912,7 +912,7 @@ func TestValidate_EmptyPoolURL(t *testing.T) {
 // ============================================================================
 
 func TestResolveWithOrigins_AllDefault(t *testing.T) {
-	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	_, o := ResolveWithOrigins(&Config{}, nil, &FlagValues{})
 	if o.LogLevel != OriginDefault {
 		t.Errorf("LogLevel origin = %v, want default", o.LogLevel)
 	}
@@ -930,7 +930,7 @@ func TestResolveWithOrigins_FromFile(t *testing.T) {
 		DataDir:  "/data",
 		Workers:  WorkerConfig{Name: "rig-01"},
 	}
-	_, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	_, o := ResolveWithOrigins(&fromFile, nil, &FlagValues{})
 	if o.LogLevel != OriginFile {
 		t.Errorf("LogLevel origin = %v, want file", o.LogLevel)
 	}
@@ -949,7 +949,7 @@ func TestResolveWithOrigins_FromFile(t *testing.T) {
 func TestResolveWithOrigins_EnvOverridesFile(t *testing.T) {
 	fromFile := Config{LogLevel: "debug"}
 	env := map[string]string{"OTEDAMA_LOG_LEVEL": "warn"}
-	_, o := ResolveWithOrigins(fromFile, env, FlagValues{})
+	_, o := ResolveWithOrigins(&fromFile, env, &FlagValues{})
 	if o.LogLevel != OriginEnv {
 		t.Errorf("LogLevel origin = %v, want env (env > file)", o.LogLevel)
 	}
@@ -963,7 +963,7 @@ func TestResolveWithOrigins_FlagOverridesEnv(t *testing.T) {
 	flags := FlagValues{
 		BitcoinAddress: "bc1qfromflag00000000000000000000000000000000",
 	}
-	_, o := ResolveWithOrigins(Config{}, env, flags)
+	_, o := ResolveWithOrigins(&Config{}, env, &flags)
 	if o.BitcoinAddress != OriginFlag {
 		t.Errorf("BitcoinAddress origin = %v, want flag (flag > env)", o.BitcoinAddress)
 	}
@@ -979,7 +979,7 @@ func TestResolveWithOrigins_PoolsAndAddressesFromFile(t *testing.T) {
 		BitcoinAddresses: []string{"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"},
 		Pools:            []PoolConfig{{URL: "stratum+v2://pool.example.com:3336"}},
 	}
-	_, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	_, o := ResolveWithOrigins(&fromFile, nil, &FlagValues{})
 	if o.BitcoinAddress != OriginFile {
 		t.Errorf("BitcoinAddress origin = %v, want file", o.BitcoinAddress)
 	}
@@ -1013,7 +1013,7 @@ func TestResolveWithOrigins_ConsistentWithResolve(t *testing.T) {
 	flags := FlagValues{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
 
 	want := Resolve(&fromFile, env, &flags)
-	got, _ := ResolveWithOrigins(fromFile, env, flags)
+	got, _ := ResolveWithOrigins(&fromFile, env, &flags)
 
 	if want.BitcoinAddress != got.BitcoinAddress {
 		t.Errorf("BitcoinAddress mismatch: Resolve=%q ResolveWithOrigins=%q", want.BitcoinAddress, got.BitcoinAddress)
@@ -1049,7 +1049,7 @@ func TestArbitrationHysteresisPct_ResolvePreservesDefault(t *testing.T) {
 
 func TestArbitrationHysteresisPct_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "0.10"}
-	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	cfg, o := ResolveWithOrigins(&Config{}, env, &FlagValues{})
 	if cfg.ArbitrationHysteresisPct != 0.10 {
 		t.Errorf("ArbitrationHysteresisPct = %v, want 0.10", cfg.ArbitrationHysteresisPct)
 	}
@@ -1061,7 +1061,7 @@ func TestArbitrationHysteresisPct_EnvOverride(t *testing.T) {
 func TestArbitrationHysteresisPct_InvalidEnvIgnored(t *testing.T) {
 	// A non-numeric env value must be silently ignored, leaving the default.
 	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "not_a_number"}
-	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	cfg, o := ResolveWithOrigins(&Config{}, env, &FlagValues{})
 	if cfg.ArbitrationHysteresisPct != 0.05 {
 		t.Errorf("invalid env: ArbitrationHysteresisPct = %v, want 0.05 (default)", cfg.ArbitrationHysteresisPct)
 	}
@@ -1072,7 +1072,7 @@ func TestArbitrationHysteresisPct_InvalidEnvIgnored(t *testing.T) {
 
 func TestArbitrationHysteresisPct_FileOverride(t *testing.T) {
 	fromFile := Config{ArbitrationHysteresisPct: 0.15}
-	cfg, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	cfg, o := ResolveWithOrigins(&fromFile, nil, &FlagValues{})
 	if cfg.ArbitrationHysteresisPct != 0.15 {
 		t.Errorf("from file: ArbitrationHysteresisPct = %v, want 0.15", cfg.ArbitrationHysteresisPct)
 	}
@@ -1084,7 +1084,7 @@ func TestArbitrationHysteresisPct_FileOverride(t *testing.T) {
 func TestArbitrationHysteresisPct_EnvOverridesFile(t *testing.T) {
 	fromFile := Config{ArbitrationHysteresisPct: 0.15}
 	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "0.20"}
-	cfg, o := ResolveWithOrigins(fromFile, env, FlagValues{})
+	cfg, o := ResolveWithOrigins(&fromFile, env, &FlagValues{})
 	if cfg.ArbitrationHysteresisPct != 0.20 {
 		t.Errorf("env > file: ArbitrationHysteresisPct = %v, want 0.20", cfg.ArbitrationHysteresisPct)
 	}
@@ -1150,7 +1150,7 @@ func TestEnvWarnings_NilEnvUsesProcessEnv(t *testing.T) {
 func TestResolveWithOrigins_FlagLogLevelOrigin(t *testing.T) {
 	env := map[string]string{"OTEDAMA_LOG_LEVEL": "warn"}
 	flags := FlagValues{LogLevel: "debug"}
-	cfg, o := ResolveWithOrigins(Config{}, env, flags)
+	cfg, o := ResolveWithOrigins(&Config{}, env, &flags)
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want debug (flag overrides env)", cfg.LogLevel)
 	}
@@ -1171,7 +1171,7 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 		PowerWatts:               150.0,
 		ElectricityPricePerKWh:   0.12,
 	}
-	got, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	got, o := ResolveWithOrigins(&fromFile, nil, &FlagValues{})
 
 	if got.ArbitrationHysteresisPct != 0.07 {
 		t.Errorf("ArbitrationHysteresisPct = %v, want 0.07", got.ArbitrationHysteresisPct)
@@ -1233,7 +1233,8 @@ func TestValidate_RejectsNonFinite(t *testing.T) {
 		}
 	}
 	// Sanity: a valid base config still passes.
-	if err := base().Validate(); err != nil {
+	baseCfg := base()
+	if err := baseCfg.Validate(); err != nil {
 		t.Errorf("valid config rejected: %v", err)
 	}
 }

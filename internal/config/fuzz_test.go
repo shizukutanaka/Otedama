@@ -74,7 +74,7 @@ func FuzzResolveNumericEnv(f *testing.F) {
 			t.Fatalf("valid %s=%q produced warnings %v", key, val, warnings)
 		}
 
-		cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+		cfg, o := ResolveWithOrigins(&Config{}, env, &FlagValues{})
 		getVal, getOrg := numericField(key)
 		if getVal == nil {
 			t.Fatalf("no field mapping for %s", key)
