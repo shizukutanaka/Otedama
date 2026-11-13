@@ -168,6 +168,36 @@ func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provide
 	return miningProvider, akashProvider
 }
 
+// stopWorkers stops every miner worker; Run defers it so all exit
+// paths halt hashing.
+func stopWorkers(workers []*miner.Worker) {
+	for _, w := range workers {
+		w.Stop()
+	}
+}
+
+// setupWalletAndWorkers runs Run's first three setup phases in order:
+// Lightning wallet setup, hardware detection, and miner worker startup
+// (one worker per SHA256d-capable device).
+func setupWalletAndWorkers(ctx context.Context, opts *Options, log func(level, msg string)) (wallet string, devices []hal.Device, workers []*miner.Worker, merged <-chan miner.Share, err error) {
+	// Phase 1: Lightning wallet.
+	wallet = setupWallet(opts, log)
+
+	// Phase 2: Hardware detection (CPU + GPU).
+	devices, err = detectDevices(ctx, log)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	log("info", fmt.Sprintf("engine: detected %d device(s)", len(devices)))
+
+	// Phase 3: Miner workers (one per SHA256d-capable device).
+	workers, merged, err = startMinerWorkers(ctx, devices, log)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	return wallet, devices, workers, merged, nil
+}
+
 // setupWallet initializes the optional Lightning wallet. Returns the
 // wallet fingerprint, or an empty string if no wallet was configured
 // or initialisation failed (errors are logged, not propagated, so the

@@ -219,7 +219,7 @@ func checkDataDir(dir string) Check {
 				}
 			}
 			// On Unix, verify the permissions are restrictive (wallet lives here).
-			if runtime.GOOS != "windows" {
+			if runtime.GOOS != goosWindows {
 				perm := info.Mode().Perm()
 				if perm&0o077 != 0 {
 					return Result{
@@ -243,6 +243,14 @@ func checkDataDir(dir string) Check {
 const (
 	walletDatFile         = "wallet.dat"
 	walletFingerprintFile = "wallet.fingerprint"
+)
+
+// goosWindows and goosLinux are the runtime.GOOS values several checks
+// (and their tests) compare against; naming them keeps the comparisons
+// typo-proof.
+const (
+	goosWindows = "windows"
+	goosLinux   = "linux"
 )
 
 // checkWallet verifies that the Lightning wallet is initialized and surfaces
@@ -281,7 +289,7 @@ func checkWallet(dataDir string) Check {
 			// scp/rsync or extracted from a backup tarball lands 0644,
 			// exposing the encrypted seed to other local users even though
 			// the enclosing directory check already covers fresh installs.
-			if runtime.GOOS != "windows" {
+			if runtime.GOOS != goosWindows {
 				if perm := winfo.Mode().Perm(); perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
@@ -807,7 +815,7 @@ func checkHardware() Check {
 			fix := ""
 
 			// On Linux, see if /sys/class/drm exposes a GPU.
-			if runtime.GOOS == "linux" {
+			if runtime.GOOS == goosLinux {
 				if entries, err := os.ReadDir(gpuDRMPath); err == nil {
 					var gpus int
 					for _, e := range entries {
@@ -1027,7 +1035,7 @@ func isFingerprint(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+		if ('0' > c || c > '9') && ('a' > c || c > 'f') {
 			return false
 		}
 	}
@@ -1042,9 +1050,9 @@ func maskAddress(s string) string {
 }
 
 // stripScheme returns the host[:port] portion of a pool URL, or "" if
-// the scheme is not one Otedama recognises. The canonical prefix list
+// the scheme is not one Otedama recognizes. The canonical prefix list
 // lives in poolproto.StripScheme; this adapter only maps its error to
-// "" for diagnostic display, where an unrecognised scheme simply means
+// "" for diagnostic display, where an unrecognized scheme simply means
 // "no dialable host". (This was previously a private copy of the
 // prefix list, which had already drifted: it did not know datum://,
 // so doctor could disagree with the engine about pool reachability.

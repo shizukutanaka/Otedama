@@ -145,7 +145,7 @@ func TestCheckDataDir_CreatesOnFirstRun(t *testing.T) {
 func TestCheckDataDir_Existing(t *testing.T) {
 	dir := t.TempDir()
 	// Make it properly restrictive.
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != goosWindows {
 		_ = os.Chmod(dir, 0o700)
 	}
 	c := checkDataDir(dir)
@@ -156,7 +156,7 @@ func TestCheckDataDir_Existing(t *testing.T) {
 }
 
 func TestCheckDataDir_LaxPermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("Unix permissions not applicable on Windows")
 	}
 	dir := t.TempDir()
@@ -374,9 +374,11 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 func TestReport_Print_SanitizesControlChars(t *testing.T) {
 	r := &Report{
 		Results: []Result{
-			{Name: "Config", Status: StatusFail,
+			{
+				Name: "Config", Status: StatusFail,
 				Detail: "path /tmp/\x1b[2Jbad\u202E missing",
-				Fix:    "re-run \x1b[?25l setup"},
+				Fix:    "re-run \x1b[?25l setup",
+			},
 		},
 	}
 	var buf bytes.Buffer

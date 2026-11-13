@@ -175,7 +175,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 		configHome = filepath.Join(home, ".config")
 	}
 	dir := filepath.Join(configHome, "systemd", "user")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G703 -- dir is the user's own config home plus constant components ("systemd/user"); no untrusted input reaches this path //nolint:gosec
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil

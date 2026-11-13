@@ -227,7 +227,7 @@ func TestEngine_Integration_HandshakeSucceeds(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_ = Run(ctx, Options{
+		_ = Run(ctx, &Options{
 			Config: config.Config{
 				BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 				Pools: []config.PoolConfig{
@@ -312,7 +312,7 @@ func TestEngine_Integration_ReconnectsOnPoolFailure(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_ = Run(ctx, Options{
+		_ = Run(ctx, &Options{
 			Config: config.Config{
 				BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 				Pools: []config.PoolConfig{
@@ -723,7 +723,7 @@ func TestEngineRun_NotReadyWithoutPoolConnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_ = Run(ctx, Options{
+	_ = Run(ctx, &Options{
 		Config: config.Config{
 			BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 			// Port 1 is reserved; the dial is refused immediately, so no

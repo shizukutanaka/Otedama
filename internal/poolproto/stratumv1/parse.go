@@ -53,7 +53,7 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		return poolproto.Job{}, err
 	}
 
-	job, err := decodeNotifyJob(ns)
+	job, err := decodeNotifyJob(&ns)
 	if err != nil {
 		return poolproto.Job{}, err
 	}
@@ -66,7 +66,7 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 // silent wasted work. (The "pool-side merkle" path on poolproto.Job is
 // the V2 NewMiningJob wire field, not V1; V1 builds its own from the
 // negotiated extranonce.)
-func decodeNotifyJob(ns notifyStrings) (poolproto.Job, error) {
+func decodeNotifyJob(ns *notifyStrings) (poolproto.Job, error) {
 	job := poolproto.Job{
 		JobID:      ns.jobID,
 		CleanJobs:  ns.cleanJobs,

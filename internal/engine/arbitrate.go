@@ -160,7 +160,7 @@ func (o *arbitrationLoopOpts) powerFloor() float64 {
 // not run per quote so a provider emitting faster than the interval
 // cannot drive re-allocation churn. Blocks until ctx is canceled or
 // the quote channel is closed.
-func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
+func runArbitrationLoop(ctx context.Context, opts *arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
 	defer ticker.Stop()
 	var prevAlloc *arbitration.Allocation
@@ -178,7 +178,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			key := updateStream(opts.streamsMu, opts.streamMap, &q)
 			lastQuoteAt[key] = quoteFreshness(q.At, time.Now())
 		case <-ticker.C:
-			prevAlloc = arbitrationTick(&opts, lastQuoteAt, prevAlloc)
+			prevAlloc = arbitrationTick(opts, lastQuoteAt, prevAlloc)
 		}
 	}
 }

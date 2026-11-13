@@ -214,7 +214,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if err := engine.Run(ctx, engine.Options{
+	if err := engine.Run(ctx, &engine.Options{
 		Config:                   cfg,
 		Output:                   stdout,
 		NoTUI:                    f.noTUI,
