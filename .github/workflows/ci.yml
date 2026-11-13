@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.24.x'
+  GO_VERSION: '1.26.x'
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   GIT_TERMINAL_PROMPT: 0
@@ -111,7 +111,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.24.x']
+        go: ['1.26.x']
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -149,7 +149,7 @@ jobs:
         timeout-minutes: 15
         
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.24.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
@@ -157,12 +157,12 @@ jobs:
           name: codecov-umbrella
           
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.24.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
         run: |
           go tool cover -html=coverage.out -o coverage.html
           
       - name: Upload coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.24.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report

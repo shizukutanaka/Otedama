@@ -1,17 +1,22 @@
 module github.com/shizukutanaka/Otedama
 
-go 1.24.0
+go 1.26.0
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS
 //                  handshakes (default-on Go 1.24+). Renamed from the Go 1.23
 //                  draft knob tlskyber when X25519Kyber768 was standardized.
+//   tlssecpmlkem=0 — keep the Go 1.26 default-off behavior for the
+//                  SECP256r1MLKEM768 hybrid group: the go 1.26 directive
+//                  would otherwise flip it on silently. Enabling it is a
+//                  deliberate future step; see GODEBUG_NOTES.md.
 //   panicnil=0   — keep Go 1.21+ behavior of panicking on nil panic value.
 //   randautoseed=1 — math/rand v1 auto-seed (Go 1.20+ default).
 godebug (
 	panicnil=0
 	randautoseed=1
 	tlsmlkem=1
+	tlssecpmlkem=0
 )
 
 require (
@@ -25,7 +30,7 @@ require (
 	// implementation; required for the wallet KDF (AES-256-GCM key
 	// derivation in internal/lightning). BSD-3-Clause, actively
 	// maintained by the Go team. ADR-003 budget: stdlib + x/crypto + yaml.
-	golang.org/x/crypto v0.48.0
+	golang.org/x/crypto v0.59.0
 )
 
 // golang.org/x/sys is used by internal/tui to query the live terminal
@@ -33,4 +38,4 @@ require (
 // the frozen syscall package cannot express either portably. BSD
 // licensed, maintained by the Go team, already in the module graph as
 // an x/crypto dependency (no new modules added).
-require golang.org/x/sys v0.41.0
+require golang.org/x/sys v0.50.0

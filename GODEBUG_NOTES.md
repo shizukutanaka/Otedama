@@ -30,19 +30,32 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.24.0
+go 1.26.0
 
 godebug (
     panicnil=0
     randautoseed=1
     tlsmlkem=1
+    tlssecpmlkem=0
 )
 ```
 
-**Why a single `go` line:** `go 1.24.0` declares the language semantics
+**Why a single `go` line:** `go 1.26.0` declares the language semantics
 Otedama's source assumes and doubles as the minimum toolchain — an
 older Go refuses the module outright under `GOTOOLCHAIN=local`, and
-the pinned `godebug tlsmlkem` would fail to parse below 1.24 anyway.
+the pinned `godebug tlsmlkem` would fail to parse below 1.24 anyway
+(likewise `tlssecpmlkem` below 1.26).
+
+**Bump record (2026-11-13):** 1.24.0 → 1.26.0, ahead of the usual
+6–12-month lag. This bump is security-driven, not schedule-driven:
+Go 1.24 is EOL, and its final patch release still carries stdlib
+vulnerabilities rated High/Critical that are fixed only in
+1.25.x/1.26.x, which kept the Security Scan "Container" gate (Grype,
+severity-cutoff high) red on master. The same PR raises
+`golang.org/x/crypto` to v0.59.0 and `golang.org/x/sys` to v0.50.0,
+moves the Dockerfile builder to `golang:1.26-alpine`, and moves the
+CI `GO_VERSION`/matrix pins to 1.26.x (ci.yml and test.yml run with
+`GOTOOLCHAIN: local`, so the pins must match the directive).
 There is no `toolchain` line to drift apart from this floor. (The
 file previously carried `go 1.22` + `toolchain go1.24.0`; the split
 was collapsed once the language minimum caught up with the toolchain
@@ -64,6 +77,15 @@ As of 2026-04-30:
   renamed `tlsmlkem` in Go 1.24 when the construction was
   standardized; our `toolchain go1.24.0` therefore requires the new
   name (the old name is an "unknown godebug" build error on 1.24).
+
+- **`tlssecpmlkem=0`** — added 2026-11-13 with the `go 1.26`
+  directive bump. Go 1.26 introduced this knob for the
+  SECP256r1MLKEM768 hybrid key exchange, defaulting to on for
+  modules at `go 1.26` or later (off under earlier directives).
+  Bumping the directive would therefore have silently widened the
+  TLS key-exchange groups Otedama offers. The pin keeps the
+  pre-bump behavior (X25519MLKEM768 via `tlsmlkem=1` only) until
+  enabling the SECP hybrid is a deliberate, reviewed step.
 
 - **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
   a synthetic non-nil error from `panic(nil)`, rather than reverting
