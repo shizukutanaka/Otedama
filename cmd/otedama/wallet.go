@@ -160,12 +160,12 @@ func cmdWalletVerify(args []string, stdin io.Reader, stdout, stderr io.Writer) i
 // the wallet.fingerprint file written at creation (no decryption needed) and
 // falling back to unlocking wallet.dat with passphrase when the file is absent.
 func walletFingerprint(dataDir, passphrase string, wl *lightning.WordList) (string, error) {
-	if raw, err := os.ReadFile(lightning.FingerprintFilePath(dataDir)); err == nil { //nolint:gosec // path built from the user-owned datadir flag by design
+	if raw, err := os.ReadFile(lightning.FingerprintFilePath(dataDir)); err == nil { // #nosec G703 -- path built from the user-owned datadir flag by design //nolint:gosec
 		return string(raw), nil
 	}
 	// Stat first: NewWalletManager's contract is "create when absent", which
 	// a verification command must never trigger.
-	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { //nolint:gosec // path built from the user-owned datadir flag by design
+	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { // #nosec G703 -- path built from the user-owned datadir flag by design //nolint:gosec
 		return "", fmt.Errorf("no wallet found under %s", dataDir)
 	}
 	if passphrase == "" {
@@ -192,7 +192,7 @@ func cmdWalletChangePassphrase(args []string, stdout, stderr io.Writer) int {
 	// Stat first: NewWalletManager creates a wallet when wallet.dat is
 	// absent, which would silently rotate a brand-new empty wallet instead
 	// of the user's real one.
-	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { //nolint:gosec // path built from the user-owned datadir flag by design
+	if _, err := os.Stat(lightning.WalletFilePath(dataDir)); err != nil { // #nosec G703 -- path built from the user-owned datadir flag by design //nolint:gosec
 		fmt.Fprintf(stderr, "otedama: no wallet found at %s\n",
 			lightning.WalletFilePath(dataDir))
 		return exitRuntime
