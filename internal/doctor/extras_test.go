@@ -619,7 +619,7 @@ func TestCheckNetwork_LocalListener_Passes(t *testing.T) {
 // ============================================================================
 
 func TestCheckHardware_GPUDetected(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != goosLinux {
 		t.Skip("GPU detection only runs on Linux")
 	}
 	dir := t.TempDir()
@@ -644,7 +644,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 }
 
 func TestCheckHardware_EmptyDRMDir_NoGPU(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != goosLinux {
 		t.Skip("GPU detection only runs on Linux")
 	}
 	dir := t.TempDir() // empty dir — no renderD* entries
@@ -730,7 +730,7 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 // because the directory itself is fine. The file-mode check must Warn with
 // a chmod fix.
 func TestCheckWallet_GroupReadableWalletDat_Warns(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("permission bits are not meaningful on Windows")
 	}
 	dir := t.TempDir()
@@ -755,7 +755,7 @@ func TestCheckWallet_GroupReadableWalletDat_Warns(t *testing.T) {
 }
 
 func TestCheckWallet_OwnerOnlyWalletDat_StillShowsFingerprint(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("permission bits are not meaningful on Windows")
 	}
 	dir := t.TempDir()
@@ -1673,7 +1673,7 @@ func TestAddressKind_KnownP2WSH(t *testing.T) {
 // os.Stat returns an error that is NOT os.IsNotExist (ENOTDIR) when a path
 // component is a regular file. The check must report Fail "cannot stat".
 func TestCheckDataDir_StatErrorNotNotExist_Fails(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("stat error kinds under a regular file differ on Windows")
 	}
 	f, err := os.CreateTemp(t.TempDir(), "blocker")
@@ -1696,7 +1696,7 @@ func TestCheckDataDir_StatErrorNotNotExist_Fails(t *testing.T) {
 // os.Stat on the wallet path returns ENOTDIR (path under a regular file),
 // which is neither IsNotExist nor nil, so the check reports Fail.
 func TestCheckWallet_StatErrorNotNotExist_Fails(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		t.Skip("stat error kinds under a regular file differ on Windows")
 	}
 	f, err := os.CreateTemp(t.TempDir(), "blocker")
@@ -1719,7 +1719,7 @@ func TestCheckWallet_StatErrorNotNotExist_Fails(t *testing.T) {
 // and os.UserHomeDir fails (HOME unset), the check skips. On non-Linux the
 // home lookup may use other sources, so this is gated to Linux.
 func TestCheckDataDir_NoHome_Skips(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != goosLinux {
 		t.Skip("UserHomeDir error path is HOME-driven only on Linux")
 	}
 	t.Setenv("HOME", "")
@@ -1732,7 +1732,7 @@ func TestCheckDataDir_NoHome_Skips(t *testing.T) {
 // TestCheckWallet_NoHome_Skips covers checks.go:252-254 — empty dataDir with
 // HOME unset makes os.UserHomeDir fail, so the wallet check skips.
 func TestCheckWallet_NoHome_Skips(t *testing.T) {
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != goosLinux {
 		t.Skip("UserHomeDir error path is HOME-driven only on Linux")
 	}
 	t.Setenv("HOME", "")

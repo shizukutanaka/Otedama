@@ -276,7 +276,7 @@ func (s *session) dispatch(line []byte) {
 	}
 	// Response (has id, no method).
 	if msg.Method == "" && msg.ID != nil {
-		s.handleResponse(msg)
+		s.handleResponse(&msg)
 		return
 	}
 	// Notification or request from pool. Every pool-initiated method is
@@ -359,7 +359,7 @@ func (s *session) flushPreAuth() {
 }
 
 // handleResponse matches a response to its pending call and delivers it.
-func (s *session) handleResponse(msg rpcMessage) {
+func (s *session) handleResponse(msg *rpcMessage) {
 	id := msg.uintID()
 	s.pendingMu.Lock()
 	ch, ok := s.pending[id]

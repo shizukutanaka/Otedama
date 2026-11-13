@@ -158,7 +158,7 @@ func (f *HashrateFetcher) Fetch(ctx context.Context) error {
 	wg.Wait()
 	close(results)
 
-	var vals []float64
+	vals := make([]float64, 0, len(f.sources))
 	for v := range results {
 		vals = append(vals, v)
 	}

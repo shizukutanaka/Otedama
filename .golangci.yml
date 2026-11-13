@@ -147,6 +147,15 @@ issues:
       linters:
         - misspell
 
+    # The i18n message catalogs hold non-English UI strings (Spanish,
+    # French, ...). The US-locale misspell checker false-positives on
+    # correct foreign words (es "detectaron"/"momento", fr
+    # "appareil"/"connexion"); those strings are translations, not
+    # typos, and must never be "corrected" into English.
+    - path: internal/i18n/messages/
+      linters:
+        - misspell
+
 # Severity — which issues block the PR.
 severity:
   default-severity: warning

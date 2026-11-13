@@ -212,7 +212,7 @@ func TestEngine_HandshakeAndMine(t *testing.T) {
 	// Run with limited reconnect attempts so the test completes.
 	runDone := make(chan error, 1)
 	go func() {
-		runDone <- Run(ctx, Options{
+		runDone <- Run(ctx, &Options{
 			Config:               cfg,
 			Clock:                clock.NewFake(time.Now()),
 			Logger:               logger,
@@ -273,7 +273,7 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 		Pools:          []config.PoolConfig{{URL: fp.URL()}},
 	}
 	go func() {
-		_ = Run(ctx, Options{
+		_ = Run(ctx, &Options{
 			Config:               cfg,
 			Clock:                clock.NewFake(time.Now()),
 			Logger:               func(_, _ string) {},
@@ -1737,7 +1737,7 @@ func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 	// content. Strip the static lines so only dynamic log content is
 	// scanned; a genuine leak reproduces mnemonic words in messages that
 	// interpolate them.
-	var dynamic []string
+	dynamic := make([]string, 0, len(logs))
 	for _, line := range logs {
 		if line == "wallet: new wallet created — back up your recovery phrase" ||
 			strings.HasPrefix(line, "wallet: fingerprint ") {
@@ -2278,7 +2278,7 @@ func TestRunArbitrationLoop_ContextCancelExits(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -2304,7 +2304,7 @@ func TestRunArbitrationLoop_ClosedQuoteChannelExits(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -2342,7 +2342,7 @@ func TestRunArbitrationLoop_PublishesForegoneGauge(t *testing.T) {
 		log:       func(_, _ string) {},
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	quoteCh <- provider.Quote{
 		ProviderID:       "mining.stratum",
@@ -2392,7 +2392,7 @@ func TestRunArbitrationLoop_PublishesDevicesIdleGauge(t *testing.T) {
 		minYield:  2000, // floor above the quote below
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	quoteCh <- provider.Quote{
 		ProviderID:       "mining.stratum",
@@ -2440,7 +2440,7 @@ func TestRunArbitrationLoop_LogsIdleTransition(t *testing.T) {
 		minYield:  2000,
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	quoteCh <- provider.Quote{
 		ProviderID:       "mining.stratum",
@@ -2481,7 +2481,7 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 		log:       func(_, _ string) {},
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	quoteCh <- provider.Quote{
 		ProviderID: "mining.stratum",
@@ -2979,7 +2979,7 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	go func() {
 		defer close(runDone)
 		// powerWatts > 0 exercises the J/TH branch inside the stats tick.
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:    fp.URL(),
 			user:       "bc1qtest000000000000000000000000000000000",
 			workers:    []*miner.Worker{w},
@@ -3013,7 +3013,7 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	// Phase 2 tick feeder: keeps tickCh full for as long as phase 2
 	// runs, so tick delivery does not depend on the poll goroutine
 	// winning a scheduling slot on a contended runner. Stopped before
-	// the session is cancelled, so it can never block on a session
+	// the session is canceled, so it can never block on a session
 	// that has already exited.
 	var feedStop, feedDone chan struct{}
 	startFeeder := func() {
@@ -3141,7 +3141,7 @@ func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:  fp.URL(),
 			user:     "bc1qtest000000000000000000000000000000000",
 			workers:  []*miner.Worker{w},
@@ -3226,7 +3226,7 @@ func TestRunSession_CurtailmentSilencesJob(t *testing.T) {
 		logMu.Unlock()
 	}
 
-	_ = runSession(ctx, sessionOpts{
+	_ = runSession(ctx, &sessionOpts{
 		poolURL:     fp.URL(),
 		user:        "bc1qtest000000000000000000000000000000000",
 		workers:     []*miner.Worker{w},
@@ -3319,7 +3319,7 @@ func TestRunSession_JobStallWarnsOnce(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:  fp.URL(),
 			user:     "bc1qtest000000000000000000000000000000000",
 			workers:  []*miner.Worker{w},
@@ -3442,7 +3442,7 @@ func TestRunSession_StarvationWarnsOnce(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:   fp.URL(),
 			user:      "bc1qtest000000000000000000000000000000000",
 			workers:   []*miner.Worker{w},
@@ -3630,7 +3630,7 @@ func TestRunSession_BatchAcceptCreditsPoolCount(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:  "stratum+v2://" + addr,
 			user:     "bc1qtest000000000000000000000000000000000",
 			workers:  []*miner.Worker{w},
@@ -3688,7 +3688,7 @@ func TestRunSessionV2_FutureSeqAcceptIgnored(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:  fp.URL(),
 			user:     "bc1qtest000000000000000000000000000000000",
 			workers:  []*miner.Worker{w},
@@ -3772,7 +3772,7 @@ func TestRunSessionV2_FutureSeqRejectIgnored(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:    fp.URL(),
 			user:       "bc1qtest000000000000000000000000000000000",
 			workers:    []*miner.Worker{w},
@@ -3861,7 +3861,7 @@ func TestRunSessionV2_DuplicateRejectIgnored(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSession(ctx, sessionOpts{
+		_ = runSession(ctx, &sessionOpts{
 			poolURL:    fp.URL(),
 			user:       "bc1qtest000000000000000000000000000000000",
 			workers:    []*miner.Worker{w},
@@ -3908,6 +3908,19 @@ waitLoop:
 	}
 }
 
+// handshakeErr runs handshake and returns only its error, discarding the
+// negotiated channel values. The error-path handshake tests assert on the
+// error alone; spelling the discard out once here keeps each of their
+// call sites from repeating a `_, _, _, err :=` declaration. handshake
+// returns zero values on every error path, so nothing is lost.
+func handshakeErr(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) error {
+	channelID, groupChannelID, target, err := handshake(conn, dec, poolURL, user, workers, nominalHashrate)
+	_ = channelID
+	_ = groupChannelID
+	_ = target
+	return err
+}
+
 // TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
 // the TCP connection but never answers SetupConnection makes handshake
 // return within handshakeTimeout instead of blocking forever.
@@ -3930,7 +3943,7 @@ func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
 
 	dec := stratum.NewDecoder(client)
 	start := time.Now()
-	_, _, _, err := handshake(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
+	err := handshakeErr(client, dec, "stratum+tcp://pool.example:3333", "user", nil, 0)
 	if err == nil {
 		t.Fatal("handshake should fail against a silent peer")
 	}
@@ -4073,7 +4086,7 @@ func TestRunSessionV2_CloseChannelEndsSession(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
 
-	err := runSession(ctx, sessionOpts{
+	err := runSession(ctx, &sessionOpts{
 		poolURL:    fp.URL(),
 		user:       "bc1qtest000000000000000000000000000000000",
 		workers:    []*miner.Worker{w},
@@ -4116,7 +4129,7 @@ func TestRunSessionV2_GroupCloseChannelEndsSession(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
 
-	err := runSession(ctx, sessionOpts{
+	err := runSession(ctx, &sessionOpts{
 		poolURL:    fp.URL(),
 		user:       "bc1qtest000000000000000000000000000000000",
 		workers:    []*miner.Worker{w},
@@ -4161,7 +4174,7 @@ func TestRunSessionV2_UnknownMsgTypeWarnedOnce(t *testing.T) {
 
 	var logMu sync.Mutex
 	var logged []string
-	err := runSession(ctx, sessionOpts{
+	err := runSession(ctx, &sessionOpts{
 		poolURL:    fp.URL(),
 		user:       "bc1qtest000000000000000000000000000000000",
 		workers:    []*miner.Worker{w},
@@ -4217,7 +4230,7 @@ func TestRunSessionV2_MisplacedMsgTypeWarnedOnce(t *testing.T) {
 
 	var logMu sync.Mutex
 	var logged []string
-	err := runSession(ctx, sessionOpts{
+	err := runSession(ctx, &sessionOpts{
 		poolURL:    fp.URL(),
 		user:       "bc1qtest000000000000000000000000000000000",
 		workers:    []*miner.Worker{w},

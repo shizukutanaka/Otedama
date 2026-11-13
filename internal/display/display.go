@@ -3,7 +3,7 @@
 // Package display holds tiny shared rendering helpers for values that
 // appear in both command output and logs. It exists so a value renders
 // identically wherever it is shown; helpers here must stay free of any
-// domain behaviour beyond formatting.
+// domain behavior beyond formatting.
 package display
 
 import "strings"

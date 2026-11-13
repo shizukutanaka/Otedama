@@ -329,7 +329,7 @@ func TestRunArbitrationLoop_TickerHappyPath(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -389,7 +389,7 @@ func TestRunArbitrationLoop_PopulatesActivitySnapshot(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -452,7 +452,7 @@ func TestRunArbitrationLoop_TickerDecideError(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -520,7 +520,7 @@ func TestRunArbitrationLoop_HysteresisPctIsUsed(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -633,7 +633,7 @@ func TestRunArbitrationLoop_PowerFloorIdlesDevice(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runArbitrationLoop(ctx, opts)
+		runArbitrationLoop(ctx, &opts)
 		close(done)
 	}()
 
@@ -719,7 +719,7 @@ func TestUpdateWork_InvalidPrevNBitsNoShareTarget_IsNoOp(t *testing.T) {
 
 func TestRunSession_BadPoolURL(t *testing.T) {
 	ctx := context.Background()
-	err := runSession(ctx, sessionOpts{
+	err := runSession(ctx, &sessionOpts{
 		poolURL:  "http://not-stratum.example.com",
 		log:      func(_, _ string) {},
 		interval: time.Second,
@@ -768,7 +768,7 @@ func TestRunSession_V2TLSSchemeAttemptsRealTLS(t *testing.T) {
 		mu.Unlock()
 	}
 
-	err = runSession(ctx, sessionOpts{
+	err = runSession(ctx, &sessionOpts{
 		poolURL:  "stratum+v2tls://" + ln.Addr().String(),
 		log:      logFn,
 		interval: time.Second,
@@ -818,7 +818,7 @@ func TestRunSession_PlainV2SchemeWarnsAboutNoEncryption(t *testing.T) {
 		mu.Unlock()
 	}
 
-	_ = runSession(ctx, sessionOpts{
+	_ = runSession(ctx, &sessionOpts{
 		poolURL:  "stratum+v2://" + ln.Addr().String(),
 		log:      logFn,
 		interval: time.Second,
@@ -848,7 +848,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -868,7 +868,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -892,7 +892,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -916,7 +916,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -949,7 +949,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -973,7 +973,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -998,7 +998,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -1027,7 +1027,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -1055,7 +1055,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -1077,7 +1077,7 @@ func TestHandshake_VersionOutOfRange(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool negotiates version outside declared range")
 	}
@@ -1099,7 +1099,7 @@ func TestHandshake_UnhonoredSetupFlags(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when pool requires unoffered flags")
 	}
@@ -1127,7 +1127,7 @@ func TestHandshake_WrongChannelReqID(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
+	err := handshakeErr(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel response echoes a foreign req_id")
 	}
@@ -1170,7 +1170,7 @@ func TestRunReconnectLoop_MultiPool_Failover(t *testing.T) {
 		log:            log,
 	}
 
-	runReconnectLoop(ctx, r) //nolint:errcheck
+	runReconnectLoop(ctx, &r) //nolint:errcheck
 
 	logMu.Lock()
 	joined := fmt.Sprint(logs)
@@ -1219,7 +1219,7 @@ func TestRunReconnectLoop_MultiAddr_Failover(t *testing.T) {
 		log:            log,
 	}
 
-	runReconnectLoop(ctx, r) //nolint:errcheck
+	runReconnectLoop(ctx, &r) //nolint:errcheck
 
 	logMu.Lock()
 	joined := fmt.Sprint(logs)
@@ -1374,7 +1374,7 @@ func TestRunSessionV1_StarvationWarnsOnce(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSessionV1(ctx, sessionOpts{
+		_ = runSessionV1(ctx, &sessionOpts{
 			poolURL:  "stratum+tcp://" + addr,
 			user:     "worker.1",
 			workers:  []*miner.Worker{w},
@@ -1428,7 +1428,7 @@ func TestRunSessionV1_PoolClosesAfterHandshake(t *testing.T) {
 	merged := make(chan miner.Share)
 	defer close(merged)
 
-	err := runSessionV1(ctx, sessionOpts{
+	err := runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + addr,
 		user:     "worker.1",
 		workers:  nil,
@@ -1450,7 +1450,7 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	defer close(merged)
 
 	connected := false
-	err := runSessionV1(ctx, sessionOpts{
+	err := runSessionV1(ctx, &sessionOpts{
 		poolURL:     "stratum+tcp://" + addr,
 		user:        "worker.1",
 		workers:     nil,
@@ -1517,7 +1517,7 @@ func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
 		mu.Unlock()
 	}
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + addr,
 		user:     "worker.1",
 		workers:  nil,
@@ -1586,7 +1586,7 @@ func captureAuthorizePassword(t *testing.T, poolPassword string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + ln.Addr().String(),
 		user:         "worker.1",
 		merged:       merged,
@@ -1656,7 +1656,7 @@ func TestRunSessionV1_StatsTicker(t *testing.T) {
 	defer cancel()
 
 	workers := []*miner.Worker{miner.NewWorker(miner.WorkerConfig{Threads: 1})}
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		workers:  workers,
@@ -1697,7 +1697,7 @@ func TestRunSessionV1_ContextCancelled(t *testing.T) {
 	merged := make(chan miner.Share)
 	defer close(merged)
 
-	err = runSessionV1(ctx, sessionOpts{
+	err = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -1774,7 +1774,7 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	}()
 
 	// Call via runSession (V1 URL) to cover the V1 dispatch in runSession.
-	_ = runSession(ctx, sessionOpts{
+	_ = runSession(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "worker.1",
 		merged:   merged,
@@ -1853,7 +1853,7 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 		}
 	}()
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -1940,7 +1940,7 @@ func TestRunSessionV1_TransitionRejectBenign(t *testing.T) {
 		}
 	}()
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -2018,7 +2018,7 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -2121,7 +2121,7 @@ func TestRunSessionV1_TLSCAFileUnreadable(t *testing.T) {
 	merged := make(chan miner.Share)
 	close(merged)
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:   "stratum+tcp://" + addr,
 		user:      "test",
 		merged:    merged,
@@ -2168,7 +2168,7 @@ func TestRunSessionV1_TLSCAFileReadable(t *testing.T) {
 	merged := make(chan miner.Share)
 	close(merged)
 
-	err = runSessionV1(ctx, sessionOpts{
+	err = runSessionV1(ctx, &sessionOpts{
 		poolURL:   "stratum+tcp://" + addr,
 		user:      "test",
 		merged:    merged,
@@ -2198,7 +2198,7 @@ func TestRunSessionV1_DialError(t *testing.T) {
 	merged := make(chan miner.Share)
 	close(merged)
 
-	err = runSessionV1(ctx, sessionOpts{
+	err = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + addr,
 		user:     "test",
 		merged:   merged,
@@ -2226,7 +2226,7 @@ func TestRunSessionV1_PowerWattsInStatsTick(t *testing.T) {
 	defer w.Stop()
 
 	m := newEngineMetrics(metrics.NewRegistry())
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:    "stratum+tcp://" + addr,
 		user:       "w",
 		workers:    []*miner.Worker{w},
@@ -2257,7 +2257,7 @@ func TestRunSessionV1_DashboardUpdated(t *testing.T) {
 	dash.Start()
 	defer dash.Stop()
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:   "stratum+tcp://" + addr,
 		user:      "w",
 		workers:   []*miner.Worker{w},
@@ -2310,7 +2310,7 @@ func TestRunArbitrationLoop_StaleStreamPruning(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	go func() { runArbitrationLoop(ctx, opts); close(done) }()
+	go func() { runArbitrationLoop(ctx, &opts); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(400 * time.Millisecond):
@@ -2363,7 +2363,7 @@ func TestRunArbitrationLoop_SwitchMetrics(t *testing.T) {
 		log:       func(_, _ string) {},
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	// Wait for first tick (assigns cpu-0 → streamA, sets prevAlloc).
 	time.Sleep(40 * time.Millisecond)
@@ -2425,7 +2425,7 @@ func TestRunArbitrationLoop_HoldMetrics(t *testing.T) {
 		log:       func(_, _ string) {},
 	}
 
-	go runArbitrationLoop(ctx, opts)
+	go runArbitrationLoop(ctx, &opts)
 
 	// Wait for first tick (assigns cpu-0 → streamA at yield=300).
 	time.Sleep(40 * time.Millisecond)
@@ -2463,7 +2463,7 @@ func TestRunSession_DashboardUpdated(t *testing.T) {
 
 	dash := tui.NewDashboard(io.Discard)
 
-	_ = runSession(ctx, sessionOpts{
+	_ = runSession(ctx, &sessionOpts{
 		poolURL:   fp.URL(),
 		user:      "test.1",
 		merged:    merged,
@@ -2496,7 +2496,7 @@ func TestRunSession_AcceptanceRateWarning(t *testing.T) {
 	var logMu sync.Mutex
 	var logLines []string
 
-	_ = runSession(ctx, sessionOpts{
+	_ = runSession(ctx, &sessionOpts{
 		poolURL:  fp.URL(),
 		user:     "test.1",
 		merged:   merged,
@@ -2535,7 +2535,7 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	var logMu sync.Mutex
 	var logLines []string
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:     "stratum+tcp://" + addr,
 		user:        "w",
 		merged:      merged,
@@ -2609,7 +2609,7 @@ func TestRunSessionV1_OpaqueJobID(t *testing.T) {
 	var logLines []string
 	m := newEngineMetrics(metrics.NewRegistry())
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -2693,7 +2693,7 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	var logLines []string
 	m := newEngineMetrics(metrics.NewRegistry())
 
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:  "stratum+tcp://" + ln.Addr().String(),
 		user:     "w",
 		merged:   merged,
@@ -2753,7 +2753,7 @@ func TestRunSessionV1_JobStallWarnsOnce(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		_ = runSessionV1(ctx, sessionOpts{
+		_ = runSessionV1(ctx, &sessionOpts{
 			poolURL:  poolURL,
 			user:     "bc1qtest000000000000000000000000000000000",
 			workers:  []*miner.Worker{w},
@@ -2917,7 +2917,7 @@ func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
 		log:            log,
 	}
 
-	runReconnectLoop(ctx, r) //nolint:errcheck
+	runReconnectLoop(ctx, &r) //nolint:errcheck
 
 	logMu.Lock()
 	defer logMu.Unlock()
@@ -3036,7 +3036,7 @@ func TestNominalMiningHashrate(t *testing.T) {
 // clear error rather than dial an OCEAN-style pool and emit binary SV2
 // frames — which would only surface as a confusing handshake timeout.
 func TestRunSession_UnimplementedSchemeFailsFast(t *testing.T) {
-	err := runSession(context.Background(), sessionOpts{
+	err := runSession(context.Background(), &sessionOpts{
 		poolURL:  "datum://ocean.example.com:3334",
 		log:      func(_, _ string) {},
 		interval: time.Second,
@@ -3177,7 +3177,7 @@ func TestChannelIDOf(t *testing.T) {
 	}
 }
 
-// buildV1CoinbaseParts serialises a minimal coinbase transaction and
+// buildV1CoinbaseParts serializes a minimal coinbase transaction and
 // splits it at the extranonce gap into the notify's coinb1/coinb2 halves.
 // The scriptSig is exactly en1(3 bytes: "c0ffee") + en2(4 bytes), so the
 // halves reassemble to a well-formed transaction the payout verifier can
@@ -3249,7 +3249,7 @@ func TestRunSessionV1_TIDESPayoutMissingWarns(t *testing.T) {
 	defer close(merged)
 
 	var warns int32
-	err := runSessionV1(ctx, sessionOpts{
+	err := runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + addr,
 		user:         "worker.1",
 		merged:       merged,
@@ -3282,7 +3282,7 @@ func TestRunSessionV1_TIDESPayoutPresentNoWarn(t *testing.T) {
 	defer close(merged)
 
 	var warns int32
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + addr,
 		user:         "worker.1",
 		merged:       merged,
@@ -3311,7 +3311,7 @@ func TestRunSessionV1_FPPSPayoutCheckSkipped(t *testing.T) {
 	defer close(merged)
 
 	var warns int32
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + addr,
 		user:         "worker.1",
 		merged:       merged,
@@ -3343,7 +3343,7 @@ func TestRunSessionV1_TIDESPayoutEvasionWarns(t *testing.T) {
 	defer close(merged)
 
 	var warns int32
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + addr,
 		user:         "worker.1",
 		merged:       merged,
@@ -3370,7 +3370,7 @@ func TestRunSessionV1_TIDESBadAddressWarns(t *testing.T) {
 	defer close(merged)
 
 	var warns int32
-	_ = runSessionV1(ctx, sessionOpts{
+	_ = runSessionV1(ctx, &sessionOpts{
 		poolURL:      "stratum+tcp://" + addr,
 		user:         "worker.1",
 		merged:       merged,

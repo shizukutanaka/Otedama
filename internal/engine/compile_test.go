@@ -66,7 +66,7 @@ func TestRun_FailsWithoutDevices_QuickPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	err := Run(ctx, Options{
+	err := Run(ctx, &Options{
 		Config: config.Config{
 			BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 			Pools: []config.PoolConfig{
