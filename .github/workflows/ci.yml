@@ -305,6 +305,11 @@ jobs:
           echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
       - name: Build binary
+        # The script is POSIX shell; on windows-latest the default shell
+        # is PowerShell, which rejects it immediately (the windows legs
+        # failed at this step in every run that reached a conclusion).
+        # The test job's Windows step already pins bash for this reason.
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -374,6 +379,8 @@ jobs:
           echo "CC=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
       - name: Build binary (unified)
+        # See the build job: the script needs bash, not PowerShell.
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
