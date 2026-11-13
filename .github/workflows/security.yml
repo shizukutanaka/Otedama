@@ -137,7 +137,14 @@ jobs:
           sarif_file: 'container-scan.sarif'
       
       - name: Run Grype vulnerability scanner
-        uses: anchore/scan-action@v3
+        # v3 bundled Grype v0.74.4, whose cached vulnerability DB went
+        # stale ("db could not be loaded: the vulnerability database was
+        # built 35 weeks ago (max allowed age is 5 days)"), so the scan
+        # never ran and the job failed without any findings. v7 tracks
+        # the current Grype (DB schema v6) and refreshes the DB per run.
+        # The floating major tag is deliberate: DB-handling fixes land in
+        # patch releases and must flow in automatically.
+        uses: anchore/scan-action@v7
         with:
           image: 'otedama:${{ github.sha }}'
           fail-build: true
