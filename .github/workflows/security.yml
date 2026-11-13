@@ -47,10 +47,14 @@ jobs:
           sarif_file: gosec-results.sarif
       
       # Dependency vulnerability scanning
-      - name: Run Nancy vulnerability scanner
-        run: |
-          go install github.com/sonatype-nexus-community/nancy/v2@v2.1.0
-          go list -json -deps ./... | nancy sleuth
+      # Nancy was removed: it queries the Sonatype OSS Index API, which
+      # now requires authentication, so the step failed with
+      # "guide API request failed: 401 Unauthorized" before scanning
+      # anything, and every later step in this job (govulncheck, CodeQL,
+      # Trivy, Trufflehog, license check, Semgrep) never ran. Dependency
+      # vulnerabilities are covered by govulncheck directly below (the
+      # official Go vulnerability database) plus Grype/Trivy in the
+      # container-scan job, so Nancy was redundant.
       
       # Go vulnerability database scan (the CLAUDE.md three-layer requirement)
       - name: Run govulncheck
