@@ -347,7 +347,7 @@ type Origins struct {
 // Resolve does not perform validation of the resulting Config; call
 // Config.Validate separately once all layers have been combined.
 func Resolve(fromFile *Config, env map[string]string, flags *FlagValues) Config {
-	cfg, _ := ResolveWithOrigins(*fromFile, env, *flags)
+	cfg, _ := ResolveWithOrigins(fromFile, env, flags)
 	return cfg
 }
 
@@ -414,7 +414,7 @@ func EnvWarnings(env map[string]string) []string {
 // ResolveWithOrigins is identical to Resolve but also returns an Origins
 // value indicating which layer provided each Config field. This powers
 // "otedama config show --origin".
-func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues) (Config, Origins) {
+func ResolveWithOrigins(fromFile *Config, env map[string]string, flags *FlagValues) (Config, Origins) {
 	cfg := Defaults()
 	var o Origins
 
@@ -439,7 +439,7 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 
 // applyFileLayer applies layer 1: config file values override defaults
 // where set.
-func applyFileLayer(cfg *Config, o *Origins, fromFile Config) {
+func applyFileLayer(cfg *Config, o *Origins, fromFile *Config) {
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
 		o.BitcoinAddress = OriginFile
@@ -554,7 +554,7 @@ func applyEnvLayer(cfg *Config, o *Origins, env map[string]string) {
 
 // applyFlagLayer applies layer 3: command-line flags override environment
 // variables.
-func applyFlagLayer(cfg *Config, o *Origins, flags FlagValues) {
+func applyFlagLayer(cfg *Config, o *Origins, flags *FlagValues) {
 	if flags.BitcoinAddress != "" {
 		cfg.BitcoinAddress = flags.BitcoinAddress
 		o.BitcoinAddress = OriginFlag
@@ -624,7 +624,7 @@ func DefaultDataDir() string {
 // Validation errors are returned as a single error that may describe
 // multiple problems at once, so that users can fix them in one edit
 // rather than one error per run.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	var issues []string
 	issues = c.appendAddressIssues(issues)
 	issues = c.appendLogIssues(issues)
@@ -638,7 +638,7 @@ func (c Config) Validate() error {
 }
 
 // appendAddressIssues reports missing or malformed payout addresses.
-func (c Config) appendAddressIssues(issues []string) []string {
+func (c *Config) appendAddressIssues(issues []string) []string {
 	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
 		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
 	} else if c.BitcoinAddress != "" {
@@ -659,7 +659,7 @@ func (c Config) appendAddressIssues(issues []string) []string {
 }
 
 // appendLogIssues reports invalid log_level / log_format values.
-func (c Config) appendLogIssues(issues []string) []string {
+func (c *Config) appendLogIssues(issues []string) []string {
 	switch c.LogLevel {
 	case "debug", logLevelInfo, "warn", "error":
 		// ok
@@ -682,7 +682,7 @@ func (c Config) appendLogIssues(issues []string) []string {
 }
 
 // appendPoolIssues reports invalid pool URL and payout_scheme values.
-func (c Config) appendPoolIssues(issues []string) []string {
+func (c *Config) appendPoolIssues(issues []string) []string {
 	for i, p := range c.Pools {
 		if p.URL == "" {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
@@ -700,7 +700,7 @@ func (c Config) appendPoolIssues(issues []string) []string {
 }
 
 // appendNumericIssues reports non-finite or out-of-range numeric fields.
-func (c Config) appendNumericIssues(issues []string) []string {
+func (c *Config) appendNumericIssues(issues []string) []string {
 	// NaN/±Inf must be rejected explicitly: comparisons like `x < 0` are
 	// false for NaN, so a non-finite value would otherwise sail through
 	// every range check and poison the arbitration math downstream.
