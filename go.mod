@@ -1,6 +1,6 @@
 module github.com/shizukutanaka/Otedama
 
-go 1.26.0
+go 1.26.11
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS

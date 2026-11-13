@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.26.x'
+  GO_VERSION: '1.26.11'
   DOCKER_REGISTRY: ghcr.io
   # GHCR repository names must be lowercase. github.repository keeps the
   # repo's capitalisation ("shizukutanaka/Otedama"); docker/metadata-action
@@ -129,7 +129,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.26.x']
+        go: ['1.26.11']
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -167,7 +167,7 @@ jobs:
         timeout-minutes: 15
         
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.11'
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           file: ./coverage.out
@@ -175,12 +175,12 @@ jobs:
           name: codecov-umbrella
           
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.11'
         run: |
           go tool cover -html=coverage.out -o coverage.html
           
       - name: Upload coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.26.11'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-report
