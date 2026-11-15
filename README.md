@@ -49,19 +49,17 @@ Go 1.26以上（go.mod が `go 1.26.0` を直接宣言。2026-11-13 に 1.24.0 �
 
 ### インストール / Installation
 
+現在、実際に使えるインストール方法はソースからのビルドのみです（必要環境は上記の通り Go 1.26以上）。
+
 ```bash
-# ソースからビルド
 git clone https://github.com/shizukutanaka/Otedama.git
 cd Otedama
 make build
-
-# または、リリースバイナリをダウンロード
-curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
-# （訂正 session 493: `install.sh` はリリース資産としてアップロードされていない——
-# release.yml が上げるのは otedama-<os>-<arch>.tar.gz のみなので、
-# releases/latest/download/install.sh は 404 でした。スクリプト自体は
-# GitHub Releases から該当 tar.gz をダウンロードします）
 ```
+
+GitHub Releases には現在バイナリ資産が添付されていないため、リリースバイナリのダウンロードや `install.sh` を使うワンライナーは利用できません（資産が公開され次第、この節に手順を戻します）。
+
+Installation is source-build only for now (Go 1.26+, see Requirements above): no binary assets are currently attached to GitHub Releases, so release downloads and the `install.sh` one-liner do not work.
 
 ### 最小設定での起動 / Running with Minimal Configuration
 
