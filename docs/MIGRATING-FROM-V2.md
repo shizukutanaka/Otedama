@@ -87,14 +87,19 @@ under `[payout]`. Copy the address — you will paste it into v3.
 
 ### 4. Install v3
 
+Build from source — currently the only installation method that
+works. No binary assets are attached to any GitHub Release, so the
+`install.sh` one-liner and release downloads do not work (the binary
+instructions will be restored here once assets are actually
+published).
+
 ```bash
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+git clone https://github.com/shizukutanaka/Otedama.git
+cd Otedama
+make build
 ```
 
-Or download from [releases][releases] and verify the artifact per
-`VERIFY.md` (source rebuild — release signing is not live yet).
-
-[releases]: https://github.com/shizukutanaka/Otedama/releases
+Requires Go 1.26+ (see the README's Installation section).
 
 ### 5. Verify with doctor
 

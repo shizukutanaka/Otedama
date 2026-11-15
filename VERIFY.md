@@ -1,15 +1,19 @@
 # Verifying Otedama Release Artifacts
 
 > **Status: the signed-release pipeline described below is not yet live.**
-> The current `release.yml` workflow ships per-asset `<name>.tar.gz.sha256`
-> sidecars plus an aggregate `checksums.txt` (sessions 1664/1699), and the
-> `ci.yml` tag job also publishes `checksums.txt` (session 1698) — all useful
-> for transit-corruption checks — but **no cosign signatures or SBOMs**. The `.goreleaser.yaml`
+> The current `release.yml` workflow is set up to ship per-asset
+> `<name>.tar.gz.sha256` sidecars plus an aggregate `checksums.txt`
+> (sessions 1664/1699), and the `ci.yml` tag job likewise (session 1698) —
+> all useful for transit-corruption checks — but **no cosign signatures
+> or SBOMs**. The `.goreleaser.yaml`
 > config that would generate them exists but is not wired into CI. The
 > separate `ci-cd.yml` tag job may attach an **unsigned** plain
 > `checksums.txt` (what `install.sh` checks) — that only detects transit
-> corruption, not tampering at the source. Until a release actually ships
-> signed assets, the only provenance check is rebuilding from source (see
+> corruption, not tampering at the source. **As of this writing, no
+> published release has any assets attached at all**, so none of the
+> download-based verification below can be performed today; until a
+> release actually ships assets, the only provenance check is rebuilding
+> from source (see
 > "Verifying the source matches the release"). Do not trust a downloaded
 > artifact you cannot verify.
 
@@ -19,9 +23,11 @@ today.
 
 ## What to verify
 
-For each release, up to four artifacts can be verified. Today only the
-first two exist; items 3–4 ship only once the goreleaser pipeline is
-wired into CI.
+For each release, up to four artifacts can be verified once assets
+are actually published. None of them are attached to any currently
+published release; items 1–2 ship with the current workflows once a
+release carries assets, and items 3–4 ship only once the goreleaser
+pipeline is wired into CI.
 
 1. The **binary** itself. Asset names differ by pipeline: today's
    `release.yml` uploads `otedama-<os>-<arch>.tar.gz`; the intended
@@ -35,10 +41,13 @@ wired into CI.
 4. The **SBOM** files (`*.sbom.cyclonedx.json` and `*.sbom.spdx.json`)
    listing every dependency — **not yet shipped**.
 
-## Verification that works today (unsigned pipeline)
+## Verification for unsigned releases (once assets are published)
 
-The current `release.yml` uploads unsigned archives plus `checksums.txt`
-and per-asset `.sha256` sidecars. Checksums detect transit corruption
+Once a release actually carries assets, the current `release.yml` flow
+attaches unsigned archives plus `checksums.txt`
+and per-asset `.sha256` sidecars. No published release has any assets
+attached today, so the commands below cannot be run yet — until then,
+use the source-rebuild check. Checksums detect transit corruption
 but cannot prove provenance — obtain them from the release page directly
 and treat a mismatch as a do-not-run signal:
 
@@ -211,7 +220,7 @@ but is not infallible. If `cosign verify-blob` fails with network errors:
 Once signing ships, the checksums file will be multiply protected:
 signed by Sigstore, recorded in the public Rekor transparency log,
 included in the GitHub release page, and reproducible from source.
-Today it has only the release-page and rebuild paths.
+Today no release carries any assets, so only the rebuild path exists.
 
 ## Reporting verification failures
 
