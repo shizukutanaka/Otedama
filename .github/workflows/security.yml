@@ -36,10 +36,17 @@ jobs:
           cache: true
       
       # Static Analysis with gosec
+      # gosec is installed with this job's Go toolchain instead of
+      # the securego/gosec Docker action: the action's pinned image
+      # bundles Go 1.26.5 with GOTOOLCHAIN=local, which cannot load
+      # this module (go.mod requires go >= 1.26.11), so the step
+      # failed before scanning anything. Same install pattern as
+      # govulncheck below; the gosec version and the scan
+      # arguments are unchanged.
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
-        with:
-          args: '-fmt sarif -out gosec-results.sarif -stdout -verbose=text -severity high ./...'
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          gosec -fmt sarif -out gosec-results.sarif -stdout -verbose=text -severity high ./...
       
       - name: Upload gosec results
         uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3

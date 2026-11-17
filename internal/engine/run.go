@@ -2729,7 +2729,8 @@ func v1JobWireID(jobID string) uint32 {
 		return uint32(n) //nolint:gosec // bounded by ParseUint bitSize 32
 	}
 	h := fnv.New32a()
-	h.Write([]byte(jobID)) //nolint:errcheck // hash.Hash Write never fails
+	// #nosec G104 -- hash.Hash Write never fails
+	h.Write([]byte(jobID)) //nolint:errcheck
 	return h.Sum32()
 }
 

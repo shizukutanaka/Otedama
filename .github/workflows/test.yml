@@ -119,14 +119,17 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         
+    # Mirrors security.yml, this repo's canonical security gate:
+    # gosec is installed with the job's Go toolchain (see
+    # security.yml for why the Docker action cannot be used),
+    # and without the severity floor the step fails on every
+    # medium/low finding (G301/G304/G104 in the current tree)
+    # while the dedicated security workflow passes on the
+    # same code.
     - name: Run Gosec Security Scanner
-      uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
-      with:
-        # Mirrors security.yml, this repo's canonical security gate:
-        # without the severity floor the step fails on every medium/low
-        # finding (G301/G304/G104 in the current tree) while the
-        # dedicated security workflow passes on the same code.
-        args: '-fmt json -out security-report.json -severity high ./...'
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+        gosec -fmt json -out security-report.json -severity high ./...
         
     - name: Upload security report
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
