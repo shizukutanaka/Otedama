@@ -20,6 +20,12 @@
 #
 # This script never requires root, never downloads from untrusted URLs,
 # and fails fast with a clear error on any verification failure.
+#
+# NOTE: GitHub Releases do not currently carry binary assets (see the
+# Installation section of README.md), so for now this installer cannot
+# succeed — a source build is the only working installation path. The
+# download/verification logic below is kept intact so the installer
+# works unchanged once release assets are published.
 
 set -euo pipefail
 
@@ -66,6 +72,15 @@ require tar
 # would never evaluate the right-hand side.)
 command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
     || die "missing required command: sha256sum or shasum"
+
+# ---------- Current availability notice ----------
+
+# GitHub Releases have no binary assets yet, so the download below is
+# expected to fail with "no release asset matched" for the time being.
+# Say so up front instead of letting the candidate loop speak first.
+log "note: GitHub Releases do not currently include binary assets, so this"
+log "note: installer cannot succeed yet. For now, install from source"
+log "note: (see the Installation section of README.md)."
 
 # ---------- OS + arch detection ----------
 
