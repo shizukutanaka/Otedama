@@ -259,7 +259,8 @@ func (d *Dashboard) render(s *Stats) {
 	d.writeLine(&sb, "", cols)
 	d.writeLine(&sb, d.footer(s, cols), cols)
 
-	io.WriteString(d.w, sb.String()) // #nosec G104 -- a failed terminal write is unrecoverable; next tick rewrites anyway //nolint:errcheck
+	// #nosec G104 -- a failed terminal write is unrecoverable; next tick rewrites anyway
+	io.WriteString(d.w, sb.String()) //nolint:errcheck
 }
 
 func (d *Dashboard) header(cols int) string {
