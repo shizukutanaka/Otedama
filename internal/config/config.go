@@ -45,13 +45,22 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
 
-// DefaultPoolURL is the built-in fallback Stratum V2 pool, used when the
-// user has configured no pools of their own. It is the single source of
-// truth for that endpoint: the engine (defaultPoolURL/poolURLs), the CLI
-// startup banner, and the doctor reachability check all reference this
-// constant rather than repeating the literal, so the default can never
-// drift out of sync between subsystems.
-const DefaultPoolURL = "stratum+v2://stratum.braiins.com:3336"
+// DefaultPoolURL is the built-in fallback pool, used when the user has
+// configured no pools of their own. It is the single source of truth for
+// that endpoint: the engine (defaultPoolURL/poolURLs), the CLI startup
+// banner, and the doctor reachability check all reference this constant
+// rather than repeating the literal, so the default can never drift out of
+// sync between subsystems.
+//
+// The zero-config contract (`otedama run --bitcoin-address X`) needs a pool
+// that accepts a bare payout address as the username (no account), speaks
+// a transport the engine actually implements, and encrypts it. public-pool.io
+// is an open-source solo pool: Stratum V1 over TLS, the address is the
+// username, and a found block's coinbase pays that address directly (0% fee
+// below 50 TH/s). The previous default, a plaintext stratum+v2:// endpoint,
+// never answered SetupConnection because the engine does not speak Noise NX
+// (docs/KNOWN_LIMITATIONS.md §2), so zero-config runs hashed nothing.
+const DefaultPoolURL = "stratum+tls://public-pool.io:4333"
 
 // Config is the complete runtime configuration for Otedama.
 //

@@ -32,6 +32,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the usual backoff. Disconnect-only pools are unaffected; marks come
   solely from judged share acceptance.
 
+### Fixed
+
+- **Zero-config `otedama run --bitcoin-address …` now actually mines.**
+  The built-in default pool was `stratum+v2://stratum.braiins.com:3336`;
+  the engine speaks plaintext SV2 there (Noise NX is not wired —
+  KNOWN_LIMITATIONS §2) and the pool never answered SetupConnection, so
+  every zero-config run looped on `setup response: i/o timeout` with
+  0 H/s. `config.DefaultPoolURL` is now `stratum+tls://public-pool.io:4333`
+  (open-source solo pool, Stratum V1 over verified TLS, payout address as
+  username, coinbase pays that address directly, 0% fee below 50 TH/s).
+  Solo means reward only if this machine finds a block — configure an
+  FPPS/PPLNS/TIDES pool under `pools:` for steady payouts.
+
 ### Fixed (session 2657 — stale claims in the 3.0.0-alpha.1 entry)
 
 Historical entry corrections (the alpha entry itself is preserved; these

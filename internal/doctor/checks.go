@@ -581,7 +581,7 @@ func checkPoolEncryption(cfg *config.Config) Check {
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
 			if len(cfg.Pools) == 0 {
-				// The built-in default pool uses an encrypted (stratum+v2://) URL.
+				// The built-in default pool uses an encrypted (stratum+tls://) URL.
 				return Result{Status: StatusSkip, Detail: "using built-in default pool (encrypted)"}
 			}
 			var plaintext []string

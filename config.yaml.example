@@ -51,10 +51,13 @@ bitcoin_address: ""
 #
 pools:
   # (Correction, session 2693: the prior example host
-  # "public.stratum.slushpool.com" no longer resolves — NXDOMAIN. The
-  # documented Braiins Pool Stratum V2 endpoint is stratum.braiins.com,
-  # whose :3336 port answers TCP today; verified resolving and open.)
-  - url: "stratum+v2://stratum.braiins.com:3336"
+  # "public.stratum.slushpool.com" no longer resolves — NXDOMAIN.)
+  # (Correction, 2026-11-19: stratum.braiins.com:3336 answers TCP but never
+  # replies to plaintext SetupConnection — it expects the Noise handshake
+  # the engine does not perform yet — so it never delivered a job. This
+  # entry is now the built-in default: public-pool.io, an open-source solo
+  # pool over TLS that takes the payout address as the username.)
+  - url: "stratum+tls://public-pool.io:4333"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.

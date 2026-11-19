@@ -71,9 +71,9 @@ otedama run --bitcoin-address bc1q...
 otedama run --config /path/to/config.yaml
 ```
 
-初回起動時、Otedamaはローカルハードウェアを自動検出し、設定されたプールへの接続を試みます（プール未設定時は組み込みの既定プール1つにフォールバック——「主要機能」節で述べた通り、これは複数プールの推奨リストではありません）。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます（BIP-39シードの暗号化保管のみで、決済処理は行いません）。設定不要で稼働する設計を目指していますが、Bitcoin アドレスの指定だけは省略できません（非カストディ設計のため）。
+初回起動時、Otedamaはローカルハードウェアを自動検出し、設定されたプールへの接続を試みます（プール未設定時は組み込みの既定プール1つにフォールバック——「主要機能」節で述べた通り、これは複数プールの推奨リストではありません）。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます（BIP-39シードの暗号化保管のみで、決済処理は行いません）。設定不要で稼働する設計を目指していますが、Bitcoin アドレスの指定だけは省略できません（非カストディ設計のため）。組み込みの既定プールは `stratum+tls://public-pool.io:4333`（オープンソースのソロプール、TLS 暗号化、アカウント不要でアドレスがそのままユーザー名、手数料 0%）です。ソロのため報酬はこのマシンがブロックを見つけた場合のみ全額がアドレスへ直接支払われます。安定した払い出しが必要なら `pools:` に FPPS/PPLNS/TIDES のプールを設定してください。
 
-On first launch, Otedama auto-detects local hardware and attempts to connect to your configured pool(s), falling back to a single built-in default pool if none are configured (not a curated multi-pool list — see "Core Features" above). If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run (this only encrypts and stores a BIP-39 seed at rest; it does not process payments). The product aims for zero-config operation, but the Bitcoin address must always be supplied (this is inherent to the non-custodial design).
+On first launch, Otedama auto-detects local hardware and attempts to connect to your configured pool(s), falling back to a single built-in default pool if none are configured (not a curated multi-pool list — see "Core Features" above). If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run (this only encrypts and stores a BIP-39 seed at rest; it does not process payments). The product aims for zero-config operation, but the Bitcoin address must always be supplied (this is inherent to the non-custodial design). The built-in default pool is `stratum+tls://public-pool.io:4333` (open-source solo pool, TLS, no account — the address is the username, 0% fee). Being solo, it pays the full block reward straight to your address only if this machine finds a block; configure an FPPS/PPLNS/TIDES pool under `pools:` for steady payouts.
 
 ## コマンド一覧 / Command Reference
 
