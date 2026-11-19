@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -343,8 +344,63 @@ func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
 	if got == "" {
 		t.Error("default pool URL is empty")
 	}
-	if got[:11] != "stratum+v2:" {
-		t.Errorf("default pool URL should be stratum+v2: scheme, got %q", got)
+	if got != config.DefaultPoolURL {
+		t.Errorf("got %q, want config.DefaultPoolURL %q", got, config.DefaultPoolURL)
+	}
+}
+
+// TestDefaultPool_ZeroConfigContract pins what `otedama run
+// --bitcoin-address X` needs from the built-in pool: an encrypted transport
+// the engine actually implements end to end. Plaintext stratum+v2:// is
+// excluded because real SV2 pools require the Noise handshake, which the
+// live connect path does not perform (KNOWN_LIMITATIONS §2) — the previous
+// default sat in a SetupConnection timeout loop and never hashed.
+func TestDefaultPool_ZeroConfigContract(t *testing.T) {
+	u := config.DefaultPoolURL
+	switch poolproto.FromURL(u) {
+	case poolproto.ProtocolStratumV1TLS, poolproto.ProtocolStratumV2TLS:
+	default:
+		t.Fatalf("DefaultPoolURL %q must use stratum+tls:// or stratum+v2tls://", u)
+	}
+	if _, err := poolproto.Lookup(poolproto.FromURL(u)); err != nil {
+		t.Fatalf("no dialer registered for DefaultPoolURL %q: %v", u, err)
+	}
+	cfg := config.Config{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		Pools:          []config.PoolConfig{{URL: u}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("DefaultPoolURL %q fails config validation: %v", u, err)
+	}
+	if got := poolURLs(&config.Config{}); len(got) != 1 || got[0] != u {
+		t.Fatalf("poolURLs(no pools) = %v, want [%q]", got, u)
+	}
+}
+
+// TestDefaultPool_LiveFirstJob dials the real built-in pool with only a
+// payout address and requires a mining job. It needs the network, so it
+// runs only with OTEDAMA_LIVE_POOL=1.
+func TestDefaultPool_LiveFirstJob(t *testing.T) {
+	if os.Getenv("OTEDAMA_LIVE_POOL") != "1" {
+		t.Skip("set OTEDAMA_LIVE_POOL=1 to dial the real default pool")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	sess, err := poolproto.DialURL(ctx, config.DefaultPoolURL, &poolproto.Credentials{
+		User:     "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		Password: "x",
+	})
+	if err != nil {
+		t.Fatalf("DialURL(%q): %v", config.DefaultPoolURL, err)
+	}
+	defer sess.Close()
+	select {
+	case _, ok := <-sess.Jobs():
+		if !ok {
+			t.Fatal("session ended before the first job")
+		}
+	case <-ctx.Done():
+		t.Fatal("no job from the default pool within 90s")
 	}
 }
 
