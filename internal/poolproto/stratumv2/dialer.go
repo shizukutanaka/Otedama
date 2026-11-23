@@ -143,6 +143,19 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}, nil
 }
 
+// ----- connection -----
+
+type connection struct {
+	raw             net.Conn
+	remoteAddr      string
+	protocol        poolproto.ProtocolID
+	user            string
+	nominalHashrate func() float32
+
+	closeOnce sync.Once
+	closed    atomic.Bool
+}
+
 func (conn *connection) setup(dec *stratum.Decoder) error {
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
@@ -215,19 +228,6 @@ func (conn *connection) openMiningChannel(dec *stratum.Decoder) (*stratum.OpenMi
 			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
 	return msg.OpenMiningChannelSuccess, nil
-}
-
-// ----- connection -----
-
-type connection struct {
-	raw             net.Conn
-	remoteAddr      string
-	protocol        poolproto.ProtocolID
-	user            string
-	nominalHashrate func() float32
-
-	closeOnce sync.Once
-	closed    atomic.Bool
 }
 
 func (c *connection) RemoteAddr() string             { return c.remoteAddr }
