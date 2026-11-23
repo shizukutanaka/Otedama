@@ -126,7 +126,24 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 
 	dec := stratum.NewDecoder(conn.raw)
 
-	// SetupConnection.
+	if err := conn.setup(dec); err != nil {
+		return nil, err
+	}
+	channel, err := conn.openMiningChannel(dec)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	return &session{
+		conn:    conn,
+		dec:     dec,
+		channel: *channel,
+		ctx:     ctx,
+		cancel:  cancel,
+	}, nil
+}
+
+func (conn *connection) setup(dec *stratum.Decoder) error {
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
@@ -138,34 +155,36 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		DeviceID:        "cpu",
 	}
 	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
+		return fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
 	f, err := dec.ReadFrame()
 	if err != nil {
-		return nil, fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
+		return fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
 	}
 	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if msg.SetupConnectionError != nil {
-		return nil, &Rejection{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
+		return &Rejection{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
 	}
 	if msg.SetupConnectionSuccess == nil {
-		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
+		return fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
-		return nil, fmt.Errorf("stratumv2: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
+		return fmt.Errorf("stratumv2: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
 	}
 	// SetupConnectionSuccess.flags is the subset of the offered flags the
 	// server requires. We offer none, so any nonzero value demands a
 	// feature we cannot honor — reject rather than silently ignore.
 	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
-		return nil, fmt.Errorf("%w: pool requires flags 0x%08x outside offered set 0x%08x",
+		return fmt.Errorf("%w: pool requires flags 0x%08x outside offered set 0x%08x",
 			poolproto.ErrHandshakeFailed, msg.SetupConnectionSuccess.Flags, sc.Flags)
 	}
+	return nil
+}
 
-	// OpenMiningChannel.
+func (conn *connection) openMiningChannel(dec *stratum.Decoder) (*stratum.OpenMiningChannelSuccess, error) {
 	omc := stratum.OpenMiningChannel{
 		ReqID:     1,
 		User:      conn.user,
@@ -177,11 +196,11 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
-	f, err = dec.ReadFrame()
+	f, err := dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read OpenMiningChannel response: %w", err)
 	}
-	msg, err = stratum.DispatchFrame(f)
+	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
 		return nil, err
 	}
@@ -195,15 +214,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: channel response echoes req_id %d, sent %d",
 			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	return &session{
-		conn:    conn,
-		dec:     dec,
-		channel: *msg.OpenMiningChannelSuccess,
-		ctx:     ctx,
-		cancel:  cancel,
-	}, nil
+	return msg.OpenMiningChannelSuccess, nil
 }
 
 // ----- connection -----
