@@ -345,12 +345,16 @@ type Credentials struct {
 	// Password is the pool password, often "x" or empty.
 	Password string
 
+	// NominalHashrate, when set, supplies the rate in hashes/second at
+	// SV2 channel open, after the connection and setup exchanges.
+	NominalHashrate func() float32
+
 	// PoolPubKey is the pool's static public key (SV2 Noise NX). For
 	// pinning. Empty disables pinning (SV1, or trust-on-first-use).
 	PoolPubKey []byte
 
 	// TLSRootCAsPEM is an optional PEM bundle of additional certificate
-	// authorities to trust for a stratum+tls:// connection, on top of the
+	// authorities to trust for a TLS pool connection, on top of the
 	// system root store. It lets a private-CA or self-signed pool be verified
 	// instead of failing. Empty means "system roots only". It never disables
 	// verification.

@@ -63,9 +63,9 @@ mean it provides no real security today, and the engine's actual pool
 connection never uses it in the first place:
 
 1. **The engine's live connect path never calls it at all.**
-   `internal/engine/run.go`'s `runSession` — the code that actually runs
-   when you `otedama run` against a `stratum+v2://` pool — dials a plain
-   `net.Dialer` and speaks Stratum V2 in the clear. `NewHandshakeInitiator`
+   When you run `otedama run` against a `stratum+v2://` pool, the engine
+   uses the `poolproto/stratumv2` dialer, which opens a plain TCP
+   connection and speaks Stratum V2 in the clear. `NewHandshakeInitiator`
    and `EncryptedConn` are fully unit-tested but have zero callers outside
    `internal/stratum`'s own test files. A user connecting to
    `stratum+v2://` gets no transport encryption, full stop — not a
@@ -129,14 +129,16 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 ---
 
-## ~~3. Engine connects to pools directly; poolproto not yet wired in~~ ✅ RESOLVED (session 91)
+## ~~3. Engine connects to pools directly; poolproto not yet wired in~~ ✅ RESOLVED
 
-**Resolution:** `internal/engine/run.go` now dispatches Stratum V1 URLs
-(`stratum+tcp://`, `stratum+tls://`) through `poolproto.DialURL` via the new
-`runSessionV1` function. The blank import
-`_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"` in
-`cmd/otedama/run.go` fires dialer registration at startup. Stratum V2 URLs
-continue to use the existing inline `handshake` path.
+**Resolution:** `runSessionV1` and `runSessionV2` in
+`internal/engine/run.go` both use `poolproto.DialURL`: V1 for
+`stratum+tcp://` and `stratum+tls://`, V2 for `stratum+v2://` and
+`stratum+v2tls://`. The V2 adapter handles dialing, setup, channel open,
+message reads, and share writes. Its protocol-specific session exposes
+ordered channel messages and sequenced submissions so the engine
+retains job activation, target updates, share accounting, and reconnect
+policy. This does not enable Noise NX (see §2).
 
 **Integration progress (all steps complete):**
 - ✅ Step 1 (session 37): URL-scheme parsing unified into `poolproto.knownSchemes`.
@@ -146,6 +148,7 @@ continue to use the existing inline `handshake` path.
   (`mining.subscribe` + `mining.authorize`); `runSessionV1` added to engine;
   blank import registers the V1 dialer. The `poolproto` abstraction is now
   load-bearing for V1 connections at runtime.
+- ✅ Step 3c: V2 engine sessions wired through the registered V2 dialer.
 
 ---
 
@@ -395,7 +398,7 @@ wired into `DispatchFrame`. The engine's session loop implements the SV2
 activation semantics: a job is mined only once both the job and its chain
 tip are known (a job without `min_ntime` is a *future job* held until the
 `SetNewPrevHash` naming it arrives); `SetNewPrevHash` invalidates every
-other outstanding job; `handshake()` returns the channel's initial share
+other outstanding job; the V2 adapter provides the channel's initial share
 target, `SetTarget` updates it live, and `miner.Work.Target` is always the
 pool-assigned share target (falling back to the network target only if
 the pool assigned none). `miner.Share` now carries the exact `Version` of
@@ -409,10 +412,9 @@ future job is emitted only after its `SetNewPrevHash`, with `Version`/
 `PrevHash`/`NBits`/`NTime` all populated from the right message; Encode/
 Decode round-trip tests for the new and corrected message types.
 
-**Note:** this fixes the engine's inline SV2 path (`internal/engine/run.go`,
-the one actually used today per §3 above) and mirrors the same fix into
-the `internal/poolproto/stratumv2` adapter so it does not regress once
-wired in. A related, lower-severity gap remains open and is tracked in
+**Note:** the engine retains these SV2 mining semantics now that its
+session uses the `internal/poolproto/stratumv2` adapter (see §3).
+A related, lower-severity gap remains open and is tracked in
 `docs/RESEARCH_IMPROVEMENTS.md` Category 10 item 2: clamping the channel
 target to `max_target` on every vardiff update, which is moot for now
 since Otedama never sends a `max_target` preference to the pool in the

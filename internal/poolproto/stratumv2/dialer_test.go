@@ -6,7 +6,7 @@ package stratumv2
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"math"
 	"net"
@@ -30,6 +30,440 @@ func TestDialer_Protocol(t *testing.T) {
 	if got := tlsDialer.Protocol(); got != poolproto.ProtocolStratumV2TLS {
 		t.Errorf("TLS Protocol() = %q, want %q", got, poolproto.ProtocolStratumV2TLS)
 	}
+}
+
+// ============================================================================
+// sendMsg — encode error and WrapMessage error
+// ============================================================================
+
+// errEncoder always returns an encode error.
+type errEncoder struct{}
+
+func (e *errEncoder) Encode() ([]byte, error) {
+	return nil, errors.New("injected encode error")
+}
+
+// emptyEncoder returns an empty payload; with isChannel=true this triggers
+// WrapMessage's "channel message requires payload >= MinimumChannelPayload" error.
+type emptyEncoder struct{}
+
+func (e *emptyEncoder) Encode() ([]byte, error) { return []byte{}, nil }
+
+func TestSendMsg_EncodeErrorContext(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	err := sendMsg(clientConn, stratum.MsgSetupConnection, false, &errEncoder{})
+	if err == nil {
+		t.Error("sendMsg with errEncoder should return error")
+	}
+	if !strings.Contains(err.Error(), "encode") {
+		t.Errorf("error = %q, want 'encode' substring", err.Error())
+	}
+}
+
+func TestSendMsg_ShortChannelPayload(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	// isChannel=true with empty payload → WrapMessage validation fails
+	// (channel message requires ≥4 bytes for channel_id prefix).
+	err := sendMsg(clientConn, stratum.MsgSubmitSharesStandard, true, &emptyEncoder{})
+	if err == nil {
+		t.Error("sendMsg with empty channel payload should return wrap error")
+	}
+	if !strings.Contains(err.Error(), "wrap") {
+		t.Errorf("error = %q, want 'wrap' substring", err.Error())
+	}
+}
+
+// ============================================================================
+// negotiation — error paths via net.Pipe fake servers
+// ============================================================================
+
+// TestHandshake_WriteSetupConnFails covers line 613–615: conn.Write fails
+// inside sendMsg for SetupConnection because the server closed immediately.
+func TestHandshake_WriteSetupConnFails(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	serverConn.Close() // closed before any read; client Write will fail
+	err := handshakeErr(clientConn)
+	clientConn.Close()
+	if err == nil {
+		t.Error("handshake: expected error when server pipe closed immediately")
+	}
+}
+
+// TestHandshake_ReadSetupResponseFails covers line 617–619: server reads
+// the setup frame then closes without sending a response.
+func TestHandshake_ReadSetupResponseFails(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	go func() {
+		buf := make([]byte, 4096)
+		serverConn.Read(buf) //nolint:errcheck
+		serverConn.Close()
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when server closes after setup frame")
+	}
+}
+
+// TestHandshake_SetupResponseDecodeError covers line 621–623: server sends
+// a MsgSetupConnectionSuccess with a payload that is too short to decode.
+func TestHandshake_SetupResponseDecodeError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		buf := make([]byte, 4096)
+		serverConn.Read(buf) //nolint:errcheck
+		// Send MsgSetupConnectionSuccess with only 2 bytes (< 6 required).
+		// DecodeSetupConnectionSuccess will fail → DispatchFrame returns error.
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, []byte{0x02, 0x00})
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
+	}
+}
+
+// TestHandshake_SetupConnectionError covers line 624–626: pool sends a
+// SetupConnectionError → handshake returns a *fatalError.
+func TestHandshake_SetupConnectionError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		buf := make([]byte, 4096)
+		serverConn.Read(buf) //nolint:errcheck
+		sce := stratum.SetupConnectionError{Flags: 0, Error: "unsupported version"}
+		payload, _ := sce.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionError, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error on SetupConnectionError")
+	}
+	var rejection *Rejection
+	if !errors.As(err, &rejection) {
+		t.Errorf("SetupConnectionError should produce Rejection, got %T: %v", err, err)
+	}
+}
+
+// TestHandshake_UnexpectedSetupResponse covers line 627–629: the response
+// to SetupConnection is neither success nor error (OpenMiningChannelSuccess == nil).
+// The handshake loop hits the "unexpected msg" branch.
+func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		buf := make([]byte, 4096)
+		serverConn.Read(buf) //nolint:errcheck
+		// Send a valid SetupConnectionSuccess but then a second one instead of
+		// the expected OpenMiningChannel flow — here we deliberately send
+		// an OpenMiningChannelError which is recognized but sets neither
+		// SetupConnectionSuccess nor SetupConnectionError.
+		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasNtimeStart: true, NtimeStart: 0x60000000, Version: 0x20000000}
+		payload, _ := job.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error on unexpected setup response")
+	}
+}
+
+// TestHandshake_OpenMiningChannelWriteFails covers line 640–642: sendMsg for
+// OpenMiningChannel fails because the server closed after sending setup success.
+func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // consume SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		serverConn.Close()     // close AFTER sending success so the client can read it
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when server closes after setup success")
+	}
+}
+
+// TestHandshake_ReadChannelResponseFails covers line 644–646: server reads
+// OpenMiningChannel then closes without sending a channel response.
+func TestHandshake_ReadChannelResponseFails(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
+		serverConn.Close()
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when server closes after OMC")
+	}
+}
+
+// TestHandshake_ChannelResponseDecodeError covers line 648–650: server sends
+// a malformed OpenMiningChannelSuccess payload.
+func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
+		// Send MsgOpenMiningChannelSuccess with only 2 bytes (truncated payload).
+		f2, _ := stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, []byte{0x01, 0x00})
+		data2, _ := stratum.EncodeFrame(f2)
+		serverConn.Write(data2) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
+	}
+}
+
+// TestHandshake_ChannelOpenFailed covers line 651–653: pool responds to
+// OpenMiningChannel with something other than OpenMiningChannelSuccess.
+func TestHandshake_ChannelOpenFailed(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
+		// Send the same SetupConnectionSuccess again instead of OMC success.
+		// DispatchFrame sets SetupConnectionSuccess, not OpenMiningChannelSuccess.
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when channel open response is wrong type")
+	}
+}
+
+func TestHandshake_VersionOutOfRange(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 3}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when pool negotiates version outside declared range")
+	}
+}
+
+func TestHandshake_UnhonoredSetupFlags(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2, Flags: 0x1}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when pool requires unoffered flags")
+	}
+}
+
+func TestHandshake_WrongChannelReqID(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		sDec.ReadFrame() //nolint:errcheck // SetupConnection
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		serverConn.Write(data) //nolint:errcheck
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: 99, ChannelID: 1}
+		payload2, _ := omcs.Encode()
+		f2, _ := stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload2)
+		data2, _ := stratum.EncodeFrame(f2)
+		serverConn.Write(data2) //nolint:errcheck
+	}()
+
+	err := handshakeErr(clientConn)
+	if err == nil {
+		t.Error("handshake: expected error when channel response echoes a foreign req_id")
+	}
+}
+
+func negotiatePipe(client net.Conn) (poolproto.Session, error) {
+	ctx := context.Background()
+	dialer := makeDialer(client)
+	conn, err := dialer.Dial(ctx, "stratum+v2://pool.example:3333", &poolproto.Credentials{User: "user"})
+	if err != nil {
+		return nil, err
+	}
+	sess, err := dialer.Negotiate(ctx, conn)
+	if err != nil {
+		_ = conn.Close()
+	}
+	return sess, err
+}
+
+func handshakeErr(client net.Conn) error {
+	sess, err := negotiatePipe(client)
+	if err == nil {
+		_ = sess.Close()
+	}
+	return err
+}
+
+// TestHandshake_SilentPeer_TimesOut verifies that a pool which accepts
+// the TCP connection but never answers SetupConnection makes handshake
+// return within handshakeTimeout instead of blocking forever.
+func TestHandshake_SilentPeer_TimesOut(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	client, server := net.Pipe()
+	defer server.Close()
+	// Drain reads but never respond — the peer is alive yet silent.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	start := time.Now()
+	err := handshakeErr(client)
+	if err == nil {
+		t.Fatal("handshake should fail against a silent peer")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("handshake blocked %v, want <5s", elapsed)
+	}
+}
+
+// TestHandshake_DeadlineCleared verifies the handshake deadline is
+// removed on return so steady-state session reads stay unbounded.
+func TestHandshake_DeadlineCleared(t *testing.T) {
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	client, server := net.Pipe()
+	defer server.Close()
+
+	go func() {
+		// Answer SetupConnection and OpenMiningChannel minimally.
+		dec := stratum.NewDecoder(server)
+		_, _ = dec.ReadFrame()
+		payload, _ := (&stratum.SetupConnectionSuccess{UsedVersion: 2}).Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+		_, _ = dec.ReadFrame()
+		omcSucc := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 3}
+		payload, _ = omcSucc.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		_, _ = server.Write(encoded)
+	}()
+
+	sess, err := negotiatePipe(client)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	defer sess.Close()
+	negotiated := sess.(*session)
+	if chanID := negotiated.Channel().ChannelID; chanID != 3 {
+		t.Errorf("chanID = %d, want 3", chanID)
+	}
+	// Post-handshake reads must not inherit the deadline: a blocking read
+	// with no incoming frame should still be blocked after ~150ms.
+	readErr := make(chan error, 1)
+	go func() {
+		_, err := negotiated.dec.ReadFrame()
+		readErr <- err
+	}()
+	select {
+	case err := <-readErr:
+		t.Fatalf("post-handshake read failed before the connection closed: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	_ = sess.Close()
+	<-readErr
 }
 
 func TestDialer_Dial_ParsesScheme(t *testing.T) {
@@ -1266,21 +1700,9 @@ func TestDialer_V2TLS_ConnectsToTrustedServer(t *testing.T) {
 	defer srv.Close()
 	addr := strings.TrimPrefix(srv.URL, "https://")
 
-	pool := x509.NewCertPool()
-	pool.AddCert(srv.Certificate())
-
-	// Inject a dialFn that performs the same TLS handshake the production
-	// path does — but against the test server's CA bundle. This keeps the
-	// dialer under test deciding *whether* TLS applies while avoiding real
-	// DNS/PKI.
-	d := &Dialer{
-		useTLS: true,
-		dialFn: func(ctx context.Context, address string) (net.Conn, error) {
-			cfg := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
-			return (&tls.Dialer{Config: cfg}).DialContext(ctx, "tcp", address)
-		},
-	}
-	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{User: "u"})
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	d := &Dialer{useTLS: true}
+	conn, err := d.Dial(context.Background(), "stratum+v2tls://"+addr, &poolproto.Credentials{User: "u", TLSRootCAsPEM: ca})
 	if err != nil {
 		t.Fatalf("trusted v2tls dial failed: %v", err)
 	}
