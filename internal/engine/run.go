@@ -31,13 +31,11 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"math/big"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -53,6 +51,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/poolproto/stratumv2"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
@@ -88,21 +87,6 @@ var arbitrationInterval = 30 * time.Second
 // revenue the same way extreme difficulty does, but without rejects. It is a
 // var (not const) so tests can shrink it to milliseconds.
 var jobStallWarnAfter = 10 * time.Minute
-
-// poolSilenceTimeout bounds how long the V2 read loop tolerates a
-// completely silent connection. The V1 path gets the same protection from
-// its 5-minute per-line read deadline (stratumv1.go); without one here a
-// half-open connection that never sends another frame would pin the
-// engine to a dead pool forever — the stall warn fires but the session
-// never ends, so failover could never happen. 30 minutes sits well beyond
-// inter-block silence while still bounding a wedged connection.
-var poolSilenceTimeout = 30 * time.Minute
-
-// poolDialTimeout bounds a single pool dial attempt — TCP connect for
-// plaintext, connect + TLS handshake for TLS schemes. A blackholed
-// endpoint without it stalls each failover hop for the OS connect
-// timeout (~127s on Linux). Var so tests can shrink it.
-var poolDialTimeout = 15 * time.Second
 
 // yieldFailoverMinJudged is how many shares a session must have judged
 // (accepted + rejected) before its acceptance rate is trusted enough to
@@ -973,12 +957,7 @@ type poolMsg struct {
 // drops or ctx is canceled. Returns the error that ended the session
 // (nil if ctx was canceled cleanly).
 //
-// Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
-// poolproto.DialURL so the protocol abstraction is load-bearing for V1.
-// The Stratum V2 path keeps the existing inline framing: the
-// poolproto/stratumv2 dialer exists (KNOWN_LIMITATIONS §3, resolved), but
-// bridging it into the engine's session loop is a separate piece of work
-// still pending.
+// Both Stratum versions establish sessions through poolproto.DialURL.
 func runSession(ctx context.Context, opts *sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
 	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
@@ -998,24 +977,39 @@ func runSession(ctx context.Context, opts *sessionOpts) error {
 			opts.poolURL, proto)
 	}
 
+	return runSessionV2(ctx, opts, proto)
+}
+
+func runSessionV2(ctx context.Context, opts *sessionOpts, proto poolproto.ProtocolID) error {
 	host, err := parseHost(opts.poolURL)
 	if err != nil {
 		return fmt.Errorf("engine: bad pool URL %q: %w", poolproto.StripUserinfo(opts.poolURL), err)
 	}
-
-	conn, err := dialPoolConn(ctx, opts, proto, host)
-	if err != nil {
-		return err
+	creds := poolproto.Credentials{
+		User: opts.user,
+		NominalHashrate: func() float32 {
+			return channelHashrate(opts.workers, opts.nominalHashrate)
+		},
 	}
-	defer conn.Close()
+	if proto == poolproto.ProtocolStratumV2TLS {
+		creds.TLSRootCAsPEM = readPoolCAs(opts)
+	} else {
+		opts.log("warn", "engine: connecting over plaintext Stratum V2 — no transport encryption "+
+			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
+			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
+	}
+	session, err := poolproto.DialURL(ctx, opts.poolURL, &creds)
+	if err != nil {
+		return fmt.Errorf("engine: %w", err)
+	}
+	defer session.Close()
+	sess, ok := session.(stratumv2.MiningSession)
+	if !ok {
+		return fmt.Errorf("engine: pool session does not support SV2 channel messages")
+	}
+	channel := sess.Channel()
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
-
-	dec := stratum.NewDecoder(conn)
-	chanID, groupID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers, opts.nominalHashrate)
-	if err != nil {
-		return err
-	}
-	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
+	opts.log("info", fmt.Sprintf("engine: channel %d opened", channel.ChannelID))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
 	}
@@ -1023,88 +1017,26 @@ func runSession(ctx context.Context, opts *sessionOpts) error {
 		opts.onConnected()
 	}
 
-	// Spawn reader goroutine.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	inCh := make(chan poolMsg, 32)
-	go readPoolFrames(ctx, conn, dec, inCh)
+	go readPoolMessages(ctx, sess, inCh)
 
-	s := newV2Session(ctx, opts, conn, chanID, groupID, shareTarget)
+	s := newV2Session(ctx, opts, sess, channel.ChannelID, channel.GroupChannelID, miner.Hash(channel.Target))
 	defer s.finish()
 	return s.run(inCh)
 }
 
-// dialPoolConn establishes the Stratum V2 transport connection for a
-// v2:// or v2tls:// pool: a certificate-verified TLS connection for
-// v2tls:// — never a silent plaintext downgrade — and plaintext TCP
-// otherwise.
-func dialPoolConn(ctx context.Context, opts *sessionOpts, proto poolproto.ProtocolID, host string) (net.Conn, error) {
-	if proto == poolproto.ProtocolStratumV2TLS {
-		// A configured v2tls:// pool gets an actual, certificate-verified
-		// TLS connection — never a silent plaintext downgrade (see
-		// docs/KNOWN_LIMITATIONS.md §2). Mirrors the identical fix already
-		// applied to stratumv1's stratum+tls:// scheme.
-		var tlsCfg *tls.Config
-		if opts.tlsCAFile != "" {
-			if pem, rerr := os.ReadFile(opts.tlsCAFile); rerr != nil {
-				opts.log("warn", fmt.Sprintf("engine: cannot read tls_ca_file %q: %v; using system roots only",
-					opts.tlsCAFile, rerr))
-			} else if cfg, cerr := stratum.TLSConfigWithExtraCAs(pem); cerr != nil {
-				return nil, fmt.Errorf("engine: %w", cerr)
-			} else {
-				tlsCfg = cfg
-			}
-		}
-		// Bound the TCP connect + TLS handshake so a blackholed endpoint
-		// cannot hold the failover hop hostage (same 15s bound the
-		// poolproto dialers and the V2 handshake deadline use).
-		dialCtx, dialCancel := context.WithTimeout(ctx, poolDialTimeout)
-		conn, err := stratum.DialTLS(dialCtx, host, tlsCfg)
-		dialCancel()
-		if err != nil {
-			return nil, fmt.Errorf("engine: TLS dial %s: %w", host, err)
-		}
-		return conn, nil
-	}
-	// Plaintext Stratum V2: no transport encryption today (§2 — the
-	// Noise NX handshake exists but the engine's connect path never
-	// invokes it). Encryption for this scheme awaits the secp256k1
-	// dependency decision (ADR-011); use stratum+v2tls:// for
-	// confidentiality in the meantime.
-	opts.log("warn", "engine: connecting over plaintext Stratum V2 — no transport encryption "+
-		"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
-		"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
-	var d net.Dialer
-	d.Timeout = poolDialTimeout
-	conn, err := d.DialContext(ctx, "tcp", host)
-	if err != nil {
-		return nil, fmt.Errorf("engine: dial %s: %w", host, err)
-	}
-	return conn, nil
-}
-
-// readPoolFrames is the SV2 session's reader goroutine: it decodes
-// frames from conn and forwards them to inCh until a read fails or ctx
-// is canceled, closing inCh on exit.
-func readPoolFrames(ctx context.Context, conn net.Conn, dec *stratum.Decoder, inCh chan<- poolMsg) {
+func readPoolMessages(ctx context.Context, sess stratumv2.MiningSession, inCh chan<- poolMsg) {
 	defer close(inCh)
 	for {
-		// Generous per-frame read deadline, same idea as the V1
-		// loop's 5-minute bound: a zombie connection that stays
-		// open but goes silent ends the session so the reconnect
-		// loop can fail over — without it the engine would hash
-		// stale work on a dead pool indefinitely.
-		_ = conn.SetReadDeadline(time.Now().Add(poolSilenceTimeout))
-		f, err := dec.ReadFrame()
-		if err != nil {
-			select {
-			case inCh <- poolMsg{err: err}:
-			case <-ctx.Done():
-			}
-			return
-		}
-		msg, err := stratum.DispatchFrame(f)
+		msg, err := sess.ReadMessage()
 		select {
 		case inCh <- poolMsg{msg: msg, err: err}:
 		case <-ctx.Done():
+			return
+		}
+		if err != nil {
 			return
 		}
 	}
@@ -1144,7 +1076,7 @@ const submitTimesCap = 1024
 type v2Session struct {
 	ctx  context.Context
 	opts *sessionOpts
-	conn net.Conn
+	pool stratumv2.MiningSession
 
 	chanID      uint32
 	groupID     uint32
@@ -1226,11 +1158,11 @@ type v2Session struct {
 	havePrev    bool
 }
 
-func newV2Session(ctx context.Context, opts *sessionOpts, conn net.Conn, chanID, groupID uint32, shareTarget miner.Hash) *v2Session {
+func newV2Session(ctx context.Context, opts *sessionOpts, pool stratumv2.MiningSession, chanID, groupID uint32, shareTarget miner.Hash) *v2Session {
 	s := &v2Session{
 		ctx:           ctx,
 		opts:          opts,
-		conn:          conn,
+		pool:          pool,
 		chanID:        chanID,
 		groupID:       groupID,
 		shareTarget:   shareTarget,
@@ -1774,7 +1706,7 @@ func (s *v2Session) onShare(share *miner.Share, ok bool) (done bool, err error) 
 		// these fields, so any mismatch means a rejected share.
 		NVersion: share.Version,
 	}
-	if err := sendMsg(s.conn, stratum.MsgSubmitSharesStandard, true, &sub); err != nil {
+	if err := s.pool.SubmitStandard(&sub); err != nil {
 		return true, fmt.Errorf("engine: submit share: %w", err)
 	}
 	if opts.m != nil {
@@ -1829,14 +1761,7 @@ func runSessionV1(ctx context.Context, opts *sessionOpts) error {
 	// dialer can verify a private-CA/self-signed certificate. An unreadable
 	// file degrades to system-roots verification (which will cleanly fail for a
 	// private-CA pool) — it never falls back to plaintext.
-	if opts.tlsCAFile != "" {
-		if pem, rerr := os.ReadFile(opts.tlsCAFile); rerr != nil {
-			opts.log("warn", fmt.Sprintf("engine: cannot read tls_ca_file %q: %v; using system roots only",
-				opts.tlsCAFile, rerr))
-		} else {
-			creds.TLSRootCAsPEM = pem
-		}
-	}
+	creds.TLSRootCAsPEM = readPoolCAs(opts)
 	sess, err := poolproto.DialURL(ctx, opts.poolURL, &creds)
 	if err != nil {
 		return fmt.Errorf("engine: %w", err)
@@ -2384,82 +2309,20 @@ func accumulateEstSats(opts *sessionOpts, satsAcc *satsAccountant, currentHashRa
 	return uint64(satsAcc.observe(time.Now(), expectedYieldRate, currentHashRate > 0 && !stalled))
 }
 
-// ----- Handshake -----
-
-// handshake performs the SV2 SetupConnection + OpenMiningChannel exchange
-// and returns the opened channel ID and the pool-assigned initial share
-// target (OpenMiningChannelSuccess.Target). The share target is what
-// workers must grind to: it is far easier than the block target, and a hash
-// meeting it is exactly what the pool credits. A zero target means the pool
-// did not assign one; the caller falls back to the block target.
-// handshakeTimeout bounds the SV2 SetupConnection + OpenMiningChannel
-// exchange. Var so tests can shrink it.
-var handshakeTimeout = 15 * time.Second
-
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, uint32, miner.Hash, error) {
-	host, _ := parseHost(poolURL)
-	// Bound the entire handshake: a peer that accepts the connection but
-	// never answers SetupConnection would otherwise hold the failover
-	// loop forever. The deadline is cleared before returning so the
-	// session's steady-state reads are unbounded.
-	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
-	defer func() { _ = conn.SetDeadline(time.Time{}) }()
-	if err := exchangeSetupConnection(conn, dec, host); err != nil {
-		return 0, 0, miner.Hash{}, err
+// readPoolCAs leaves system-root verification in place if the bundle can't be read.
+func readPoolCAs(opts *sessionOpts) []byte {
+	if opts.tlsCAFile == "" {
+		return nil
 	}
-	return openMiningChannel(conn, dec, user, workers, nominalHashrate)
+	pem, err := os.ReadFile(opts.tlsCAFile)
+	if err != nil {
+		opts.log("warn", fmt.Sprintf("engine: cannot read tls_ca_file %q: %v; using system roots only", opts.tlsCAFile, err))
+		return nil
+	}
+	return pem
 }
 
-// exchangeSetupConnection sends the SV2 SetupConnection frame and
-// validates the pool's response: the exchange must succeed, the
-// negotiated version must stay inside the declared range, and the pool
-// must not require flags outside the offered set.
-func exchangeSetupConnection(conn net.Conn, dec *stratum.Decoder, host string) error {
-	sc := stratum.SetupConnection{
-		Protocol:        stratum.MiningProtocol,
-		MinVersion:      2,
-		MaxVersion:      2,
-		Endpoint:        host,
-		Vendor:          "Otedama",
-		HardwareVersion: "v3.0.0",
-		Firmware:        "main",
-		DeviceID:        "cpu",
-	}
-	if err := sendMsg(conn, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return err
-	}
-	f, err := dec.ReadFrame()
-	if err != nil {
-		return fmt.Errorf("engine: setup response: %w", err)
-	}
-	msg, err := stratum.DispatchFrame(f)
-	if err != nil {
-		return err
-	}
-	if msg.SetupConnectionError != nil {
-		return &fatalError{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
-	}
-	if msg.SetupConnectionSuccess == nil {
-		return fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
-	}
-	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
-		return fmt.Errorf("engine: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
-	}
-	// SetupConnectionSuccess.flags is the subset of offered flags the server
-	// requires. We offer none, so any nonzero value is unhonorable — fail
-	// closed rather than silently proceed (sv2-apps #695 class).
-	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
-		return fmt.Errorf("engine: pool requires flags 0x%08x outside offered set 0x%08x",
-			msg.SetupConnectionSuccess.Flags, sc.Flags)
-	}
-	return nil
-}
-
-// openMiningChannel sends the OpenMiningChannel request (declaring the
-// workers' live hashrate, or the nominal estimate while it is still
-// zero) and validates the pool's response, returning the opened channel
-// ID, group channel ID, and the pool-assigned share target.
-func openMiningChannel(conn net.Conn, dec *stratum.Decoder, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, uint32, miner.Hash, error) {
+func channelHashrate(workers []*miner.Worker, nominalHashrate float64) float32 {
 	var hashRate float32
 	for _, w := range workers {
 		hashRate += float32(w.Stats().HashRate)
@@ -2472,37 +2335,7 @@ func openMiningChannel(conn net.Conn, dec *stratum.Decoder, user string, workers
 	if hashRate <= 0 {
 		hashRate = float32(nominalHashrate)
 	}
-	omc := stratum.OpenMiningChannel{
-		ReqID:           1,
-		User:            user,
-		NominalHashrate: hashRate,
-		MaxTarget:       stratum.MaxTargetUnconstrained,
-	}
-	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
-		return 0, 0, miner.Hash{}, err
-	}
-	f, err := dec.ReadFrame()
-	if err != nil {
-		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
-	}
-	msg, err := stratum.DispatchFrame(f)
-	if err != nil {
-		return 0, 0, miner.Hash{}, err
-	}
-	if msg.OpenMiningChannelError != nil {
-		return 0, 0, miner.Hash{}, &fatalError{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
-	}
-	if msg.OpenMiningChannelSuccess == nil {
-		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
-	}
-	if msg.OpenMiningChannelSuccess.ReqID != omc.ReqID {
-		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel response echoes req_id %d, sent %d",
-			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
-	}
-	omcs := msg.OpenMiningChannelSuccess
-	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
-	// map directly.
-	return omcs.ChannelID, omcs.GroupChannelID, miner.Hash(omcs.Target), nil
+	return hashRate
 }
 
 // ----- Shared helpers -----
@@ -2551,28 +2384,6 @@ func misplacedMsgType(m *stratum.Message) (uint8, bool) {
 		return stratum.MsgSubmitSharesStandard, true
 	}
 	return 0, false
-}
-
-type encodable interface{ Encode() ([]byte, error) }
-
-func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error {
-	payload, err := enc.Encode()
-	if err != nil {
-		return fmt.Errorf("engine: encode 0x%02X: %w", msgType, err)
-	}
-	f, err := stratum.WrapMessage(msgType, isChannel, payload)
-	if err != nil {
-		return fmt.Errorf("engine: wrap 0x%02X: %w", msgType, err)
-	}
-	data, err := stratum.EncodeFrame(f)
-	if err != nil {
-		return err
-	}
-	// A wedged/half-open socket must not block the session loop forever:
-	// fail the write, let the reconnect loop take over.
-	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	_, err = conn.Write(data)
-	return err
 }
 
 // updateWork points every worker at the given job, hashed against the
@@ -2760,7 +2571,8 @@ func parseHost(url string) (string, error) {
 
 func isFatal(err error) bool {
 	var fe *fatalError
-	return errors.As(err, &fe)
+	var rejection *stratumv2.Rejection
+	return errors.As(err, &fe) || errors.As(err, &rejection)
 }
 
 type fatalError struct{ msg string }

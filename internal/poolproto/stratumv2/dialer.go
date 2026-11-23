@@ -65,30 +65,38 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credenti
 	defer cancel()
 	dialFn := d.dialFn
 	if dialFn == nil {
-		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-			if d.useTLS {
-				// A stratum+v2tls:// scheme must produce a certificate-verified
-				// TLS transport — never a silent plaintext downgrade. nil config
-				// = system roots, TLS 1.2+, ServerName from the dial address
-				// (stratum.DialTLS never falls back to plaintext).
-				return stratum.DialTLS(ctx, address, nil)
+		if d.useTLS {
+			cfg, err := stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)
+			if err != nil {
+				return nil, err
 			}
-			var dialer net.Dialer
-			return dialer.DialContext(ctx, "tcp", address)
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				conn, err := stratum.DialTLS(ctx, address, cfg)
+				if err != nil {
+					return nil, fmt.Errorf("TLS dial: %w", err)
+				}
+				return conn, nil
+			}
+		} else {
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", address)
+			}
 		}
 	}
 	raw, err := dialFn(dctx, address)
 	if err != nil && errors.Is(err, context.DeadlineExceeded) {
-		err = fmt.Errorf("dial timeout after %s", dialTimeout)
+		err = fmt.Errorf("dial timeout after %s: %w", dialTimeout, err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
 	return &connection{
-		raw:        raw,
-		remoteAddr: address,
-		protocol:   d.Protocol(),
-		user:       creds.User,
+		raw:             raw,
+		remoteAddr:      address,
+		protocol:        d.Protocol(),
+		user:            creds.User,
+		nominalHashrate: creds.NominalHashrate,
 	}, nil
 }
 
@@ -99,6 +107,12 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credenti
 // reconnect loop inside it) forever.
 var handshakeTimeout = 15 * time.Second
 
+// Rejection is an explicit refusal of connection setup or channel open.
+type Rejection struct{ reason string }
+
+func (e *Rejection) Error() string { return e.reason }
+func (e *Rejection) Unwrap() error { return poolproto.ErrHandshakeFailed }
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -107,14 +121,29 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: Negotiate received non-V2 connection: %T", c)
 	}
 
-	// Bound the handshake reads; cleared on return since the session read
-	// loop is governed by Close/ctx, not deadlines.
-	_ = conn.raw.SetReadDeadline(time.Now().Add(handshakeTimeout))
-	defer func() { _ = conn.raw.SetReadDeadline(time.Time{}) }()
+	_ = conn.raw.SetDeadline(time.Now().Add(handshakeTimeout))
+	defer func() { _ = conn.raw.SetDeadline(time.Time{}) }()
 
 	dec := stratum.NewDecoder(conn.raw)
 
-	// SetupConnection.
+	if err := conn.setup(dec); err != nil {
+		return nil, err
+	}
+	channel, err := conn.openMiningChannel(dec)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	return &session{
+		conn:    conn,
+		dec:     dec,
+		channel: *channel,
+		ctx:     ctx,
+		cancel:  cancel,
+	}, nil
+}
+
+func (conn *connection) setup(dec *stratum.Decoder) error {
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
@@ -126,50 +155,57 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		DeviceID:        "cpu",
 	}
 	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
+		return fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
 	f, err := dec.ReadFrame()
 	if err != nil {
-		return nil, fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
+		return fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
 	}
 	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if msg.SetupConnectionError != nil {
-		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
+		return &Rejection{fmt.Sprintf("pool rejected: %q", msg.SetupConnectionError.Error)}
 	}
 	if msg.SetupConnectionSuccess == nil {
-		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
+		return fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
+	}
+	if v := msg.SetupConnectionSuccess.UsedVersion; v < sc.MinVersion || v > sc.MaxVersion {
+		return fmt.Errorf("stratumv2: pool negotiated version %d outside declared range [%d, %d]", v, sc.MinVersion, sc.MaxVersion)
 	}
 	// SetupConnectionSuccess.flags is the subset of the offered flags the
 	// server requires. We offer none, so any nonzero value demands a
 	// feature we cannot honor — reject rather than silently ignore.
 	if msg.SetupConnectionSuccess.Flags&^sc.Flags != 0 {
-		return nil, fmt.Errorf("%w: pool requires flags 0x%08x outside offered set 0x%08x",
+		return fmt.Errorf("%w: pool requires flags 0x%08x outside offered set 0x%08x",
 			poolproto.ErrHandshakeFailed, msg.SetupConnectionSuccess.Flags, sc.Flags)
 	}
+	return nil
+}
 
-	// OpenMiningChannel.
+func (conn *connection) openMiningChannel(dec *stratum.Decoder) (*stratum.OpenMiningChannelSuccess, error) {
 	omc := stratum.OpenMiningChannel{
-		ReqID:           1,
-		User:            conn.user,
-		NominalHashrate: 0, // engine updates real hashrate later
-		MaxTarget:       stratum.MaxTargetUnconstrained,
+		ReqID:     1,
+		User:      conn.user,
+		MaxTarget: stratum.MaxTargetUnconstrained,
+	}
+	if conn.nominalHashrate != nil {
+		omc.NominalHashrate = conn.nominalHashrate()
 	}
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
-	f, err = dec.ReadFrame()
+	f, err := dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read OpenMiningChannel response: %w", err)
 	}
-	msg, err = stratum.DispatchFrame(f)
+	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
 		return nil, err
 	}
 	if msg.OpenMiningChannelError != nil {
-		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
+		return nil, &Rejection{fmt.Sprintf("pool rejected channel open: %q", msg.OpenMiningChannelError.Error)}
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during channel open", f.Header.MsgType)
@@ -178,24 +214,17 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: channel response echoes req_id %d, sent %d",
 			msg.OpenMiningChannelSuccess.ReqID, omc.ReqID)
 	}
-
-	sess := &session{
-		conn:   conn,
-		dec:    dec,
-		chanID: msg.OpenMiningChannelSuccess.ChannelID,
-		jobsCh: make(chan poolproto.Job, 8),
-	}
-	sess.start(ctx)
-	return sess, nil
+	return msg.OpenMiningChannelSuccess, nil
 }
 
 // ----- connection -----
 
 type connection struct {
-	raw        net.Conn
-	remoteAddr string
-	protocol   poolproto.ProtocolID
-	user       string
+	raw             net.Conn
+	remoteAddr      string
+	protocol        poolproto.ProtocolID
+	user            string
+	nominalHashrate func() float32
 
 	closeOnce sync.Once
 	closed    atomic.Bool
@@ -215,6 +244,19 @@ func (c *connection) Close() error {
 
 // ----- session -----
 
+// MiningSession exposes the ordered SV2 messages and sequenced shares
+// needed for channel state, retargets, and batched share acknowledgments.
+// Use ReadMessage from a single reader, instead of Session.Jobs.
+type MiningSession interface {
+	poolproto.Session
+	Channel() stratum.OpenMiningChannelSuccess
+	ReadMessage() (stratum.Message, error)
+	SubmitStandard(*stratum.SubmitSharesStandard) error
+}
+
+// Bound reads from half-open pools that stop sending any frames.
+const poolSilenceTimeout = 30 * time.Minute
+
 // pendingCap bounds the read loop's outstanding-job map: a hostile or buggy
 // pool flooding distinct job IDs without rotating the tip would otherwise
 // grow memory without limit. 64 is far above legitimate churn; eviction is
@@ -223,23 +265,31 @@ func (c *connection) Close() error {
 const pendingCap = 64
 
 type session struct {
-	conn   *connection
-	dec    *stratum.Decoder
-	chanID uint32
-	jobsCh chan poolproto.Job
+	conn    *connection
+	dec     *stratum.Decoder
+	channel stratum.OpenMiningChannelSuccess
+	ctx     context.Context
+	cancel  context.CancelFunc
+	jobsCh  chan poolproto.Job
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
 	startOnce sync.Once
 }
 
-// start launches the read loop that decodes NewMiningJob frames and
-// forwards them onto jobsCh. The loop exits on read error, ctx
-// cancellation, or connection close, closing jobsCh on the way out.
-func (s *session) start(ctx context.Context) {
-	s.startOnce.Do(func() {
-		go s.readLoop(ctx)
-	})
+func (s *session) Channel() stratum.OpenMiningChannelSuccess { return s.channel }
+
+func (s *session) readFrame() (stratum.Frame, error) {
+	_ = s.conn.raw.SetReadDeadline(time.Now().Add(poolSilenceTimeout))
+	return s.dec.ReadFrame()
+}
+
+func (s *session) ReadMessage() (stratum.Message, error) {
+	f, err := s.readFrame()
+	if err != nil {
+		return stratum.Message{}, err
+	}
+	return stratum.DispatchFrame(f)
 }
 
 func (s *session) readLoop(ctx context.Context) {
@@ -247,8 +297,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SV2 job/tip state lives in the assembler: a job is emittable only
 	// once both NewMiningJob (merkle root + version) and SetNewPrevHash
 	// (prev-hash + nBits + ntime) are known. Future jobs (no ntime_start)
-	// wait for the SetNewPrevHash that names them. Mirrors the engine's
-	// inline loop.
+	// wait for the SetNewPrevHash that names them.
 	a := &sv2JobAssembler{pending: make(map[uint32]*stratum.NewMiningJob)}
 	a.emit = func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
@@ -273,7 +322,7 @@ func (s *session) readLoop(ctx context.Context) {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
 		}
-		f, err := s.dec.ReadFrame()
+		f, err := s.readFrame()
 		if err != nil {
 			return
 		}
@@ -292,8 +341,7 @@ func (s *session) readLoop(ctx context.Context) {
 			}
 		}
 		// Note: SetTarget (share difficulty) has no carrier on
-		// poolproto.Job; the engine's inline V2 loop handles it. This
-		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
+		// poolproto.Job; the engine consumes ordered messages instead.
 	}
 }
 
@@ -344,32 +392,35 @@ func (a *sv2JobAssembler) onSetNewPrevHash(p *stratum.SetNewPrevHash) bool {
 	return a.emit(named, ntime, true)
 }
 
-// Jobs returns the channel of incoming jobs.
-func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+// Jobs starts and returns the protocol-agnostic job stream.
+func (s *session) Jobs() <-chan poolproto.Job {
+	s.startOnce.Do(func() {
+		s.jobsCh = make(chan poolproto.Job, 8)
+		go s.readLoop(s.ctx)
+	})
+	return s.jobsCh
+}
 
-// Submit sends a share upstream. The verdict is read by the engine's
-// frame loop today; this adapter performs a best-effort synchronous
-// submit and returns a provisional accepted result (the authoritative
-// accept/reject arrives asynchronously via SubmitSharesSuccess/Error
-// frames, which the engine already handles). When the full integration
-// lands, this becomes a request/response correlation.
+// Submit returns provisional success after writing a share. Callers
+// needing authoritative asynchronous verdicts use the MiningSession view.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	jobID := parseJobID(sub.JobID)
 	ss := stratum.SubmitSharesStandard{
-		ChannelID:      s.chanID,
+		ChannelID:      s.channel.ChannelID,
 		SequenceNumber: 0,
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,
 		NVersion:       sub.Version,
 	}
-	// SubmitSharesStandard is a channel message: the channel_msg bit must
-	// be set in the frame header (the engine's inline path already does
-	// this; the two paths previously disagreed).
-	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
+	if err := s.SubmitStandard(&ss); err != nil {
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
 	return poolproto.ShareResult{Accepted: true}, nil
+}
+
+func (s *session) SubmitStandard(sub *stratum.SubmitSharesStandard) error {
+	return sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, sub)
 }
 
 // SuggestedDifficulty returns the current target difficulty.
@@ -378,7 +429,10 @@ func (s *session) SuggestedDifficulty() float64 {
 }
 
 // Close terminates the session's underlying connection.
-func (s *session) Close() error { return s.conn.Close() }
+func (s *session) Close() error {
+	s.cancel()
+	return s.conn.Close()
+}
 
 // ----- helpers -----
 
@@ -386,7 +440,7 @@ func (s *session) Close() error { return s.conn.Close() }
 var (
 	_ poolproto.Dialer     = (*Dialer)(nil)
 	_ poolproto.Connection = (*connection)(nil)
-	_ poolproto.Session    = (*session)(nil)
+	_ MiningSession        = (*session)(nil)
 )
 
 // encodable is satisfied by every Stratum V2 message type (they all
@@ -410,11 +464,11 @@ var writeTimeout = 10 * time.Second
 func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	payload, err := enc.Encode()
 	if err != nil {
-		return err
+		return fmt.Errorf("stratumv2: encode 0x%02X: %w", msgType, err)
 	}
 	f, err := stratum.WrapMessage(msgType, isChannel, payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("stratumv2: wrap 0x%02X: %w", msgType, err)
 	}
 	data, err := stratum.EncodeFrame(f)
 	if err != nil {
@@ -430,8 +484,7 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 // parseJobID converts the unified ShareSubmission string into the U32 the
 // V2 wire expects. V2 job IDs are numeric per spec, so strict ParseUint —
 // Sscanf(%d) silently truncates ("1a" → 1), colliding with a real ID.
-// Garbage yields 0, matching the prior contract for the adapter path the
-// engine does not currently call (it emits SubmitSharesStandard inline).
+// Garbage yields 0.
 func parseJobID(s string) uint32 {
 	n, _ := strconv.ParseUint(s, 10, 32)
 	return uint32(n) //nolint:gosec // bounded by ParseUint bitSize 32
@@ -442,10 +495,3 @@ func parseJobID(s string) uint32 {
 func float64FromBits(bits uint64) float64 {
 	return math.Float64frombits(bits)
 }
-
-// Compile-time assertions.
-var (
-	_ poolproto.Dialer     = (*Dialer)(nil)
-	_ poolproto.Connection = (*connection)(nil)
-	_ poolproto.Session    = (*session)(nil)
-)
