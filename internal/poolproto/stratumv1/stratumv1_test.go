@@ -1366,8 +1366,10 @@ func TestDialer_Dial_UnreachableHost_TimesOut(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	// 198.51.100.1 is TEST-NET-2 (RFC 5737) — routable nowhere.
-	_, err := d.Dial(ctx, "stratum+tcp://198.51.100.1:39999", &poolproto.Credentials{})
+	// Loopback port 0 can never have a listener. RFC 5737 documentation
+	// addresses are not a reliable unreachable fixture in environments whose
+	// outbound non-loopback TCP path is proxy-intercepted.
+	_, err := d.Dial(ctx, "stratum+tcp://127.0.0.1:0", &poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial to unreachable host should fail")
 	}

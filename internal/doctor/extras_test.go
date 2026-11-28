@@ -349,8 +349,10 @@ func TestReport_Print_NoFixLine_WhenPassing(t *testing.T) {
 func TestCheckPoolReachability_UnreachableReturnsFail(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{
-			// RFC 5737 TEST-NET-1 is non-routable — guaranteed to be unreachable.
-			{URL: "stratum+v2://192.0.2.1:9999"},
+			// Loopback port 0 can never have a listener. Unlike RFC 5737
+			// documentation addresses, this remains unreachable in test
+			// environments whose outbound non-loopback TCP is proxy-intercepted.
+			{URL: "stratum+v2://127.0.0.1:0"},
 		},
 	}
 	c := checkPoolReachability(&cfg)
@@ -1889,8 +1891,7 @@ func TestCheckPoolReachability_PartialOutageWarns(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{
 			{URL: "stratum+v2://" + ln.Addr().String()},
-			// RFC 5737 TEST-NET-1 — guaranteed unreachable.
-			{URL: "stratum+v2://192.0.2.1:9999"},
+			{URL: "stratum+v2://127.0.0.1:0"},
 		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
